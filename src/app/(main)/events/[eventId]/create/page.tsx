@@ -504,7 +504,7 @@ export default function EventCreation() {
   };
 
   const basicsStep = (
-    <div className="px-6 pt-4 h-full">
+    <div className="px-6 pt-4 h-full overflow-y-auto minimal-scrollbar">
       <MetadataSection
         eventData={eventData}
         setEventData={setEventData}

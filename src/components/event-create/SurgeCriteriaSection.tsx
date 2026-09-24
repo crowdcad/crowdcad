@@ -31,8 +31,8 @@ export default function SurgeCriteriaSection({ eventData, setEventData, inputCla
   };
 
   return (
-    <div className="space-y-4">
-      <div className="max-w-xs">
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div>
         <Input
           type="number"
           data-testid="surge-limit-input"
@@ -64,7 +64,7 @@ export default function SurgeCriteriaSection({ eventData, setEventData, inputCla
         />
       </div>
 
-      <div className="max-w-xs pt-1">
+      <div>
         <Input
           type="number"
           data-testid="pending-transport-surge-input"
@@ -94,8 +94,8 @@ export default function SurgeCriteriaSection({ eventData, setEventData, inputCla
         />
       </div>
 
-      <div className="max-w-xs pt-1">
-        <div className={`inline-flex items-center gap-1 text-medium mb-1.5 ${inputClassNames.label}`}>
+      <div>
+        <div className={`inline-flex items-center gap-1 text-medium -mt-[5px] mb-[7px] ${inputClassNames.label}`}>
           Unassigned Call Time
           <Tooltip content="How long a call can sit with no team assigned before a surge alert fires. Default 2:00 (minutes:seconds)." placement="top">
             <CircleHelp className="w-3.5 h-3.5 text-surface-faint" />

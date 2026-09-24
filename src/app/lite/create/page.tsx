@@ -536,7 +536,7 @@ function LiteCreateContent() {
   const hasRequiredBasics = !!eventDraft.name.trim() && !!eventDraft.date;
 
   const basicsStep = (
-    <div className="px-6 pt-4 h-full">
+    <div className="px-6 pt-4 h-full overflow-y-auto minimal-scrollbar">
       <MetadataSection
         eventData={sectionData}
         setEventData={
