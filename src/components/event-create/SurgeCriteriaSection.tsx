@@ -15,6 +15,32 @@ type Props = {
   };
 };
 
+// A single label style shared by all three columns below, rendered above the
+// input(s) as a plain block rather than via HeroUI's `Input` `label` prop.
+// The Unassigned Call Time column needs one label spanning two inputs, which
+// `label`/`labelPlacement="outside"` can't do — rendering all three columns'
+// labels this same way (instead of mixing HeroUI's label for two columns and
+// a hand-rolled one for the third) keeps the spacing identical everywhere,
+// so the columns line up without needing per-column offset tweaks.
+function FieldLabel({
+  text,
+  tooltip,
+  className,
+}: {
+  text: string;
+  tooltip: string;
+  className: string;
+}) {
+  return (
+    <div className={`inline-flex items-center gap-1 text-medium mb-1.5 ${className}`}>
+      {text}
+      <Tooltip content={tooltip} placement="top">
+        <CircleHelp className="w-3.5 h-3.5 text-surface-faint" />
+      </Tooltip>
+    </div>
+  );
+}
+
 export default function SurgeCriteriaSection({ eventData, setEventData, inputClassNames }: Props) {
   const unassignedCallSurgeSeconds = eventData.unassignedCallSurgeSeconds ?? 120;
   const unassignedMinutes = Math.floor(unassignedCallSurgeSeconds / 60);
@@ -33,18 +59,14 @@ export default function SurgeCriteriaSection({ eventData, setEventData, inputCla
   return (
     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
       <div>
+        <FieldLabel
+          text="Surge Limit"
+          tooltip="Percent of teams on calls at which the dispatch board's surge display turns red."
+          className={inputClassNames.label}
+        />
         <Input
           type="number"
           data-testid="surge-limit-input"
-          label={
-            <span className="inline-flex items-center gap-1">
-              Surge Limit
-              <Tooltip content="Percent of teams on calls at which the dispatch board's surge display turns red." placement="top">
-                <CircleHelp className="w-3.5 h-3.5 text-surface-faint" />
-              </Tooltip>
-            </span>
-          }
-          labelPlacement="outside"
           variant="flat"
           color="default"
           placeholder="70"
@@ -65,18 +87,14 @@ export default function SurgeCriteriaSection({ eventData, setEventData, inputCla
       </div>
 
       <div>
+        <FieldLabel
+          text="Patients Pending Transport"
+          tooltip="Number of patients marked Pending transport (combining Calls and Clinic) at which a surge alert fires."
+          className={inputClassNames.label}
+        />
         <Input
           type="number"
           data-testid="pending-transport-surge-input"
-          label={
-            <span className="inline-flex items-center gap-1">
-              Patients Pending Transport
-              <Tooltip content="Number of patients marked Pending transport (combining Calls and Clinic) at which a surge alert fires." placement="top">
-                <CircleHelp className="w-3.5 h-3.5 text-surface-faint" />
-              </Tooltip>
-            </span>
-          }
-          labelPlacement="outside"
           variant="flat"
           color="default"
           placeholder="3"
@@ -95,12 +113,11 @@ export default function SurgeCriteriaSection({ eventData, setEventData, inputCla
       </div>
 
       <div>
-        <div className={`inline-flex items-center gap-1 text-medium -mt-[5px] mb-[7px] ${inputClassNames.label}`}>
-          Unassigned Call Time
-          <Tooltip content="How long a call can sit with no team assigned before a surge alert fires. Default 2:00 (minutes:seconds)." placement="top">
-            <CircleHelp className="w-3.5 h-3.5 text-surface-faint" />
-          </Tooltip>
-        </div>
+        <FieldLabel
+          text="Unassigned Call Time"
+          tooltip="How long a call can sit with no team assigned before a surge alert fires. Default 2:00 (minutes:seconds)."
+          className={inputClassNames.label}
+        />
         <div className="flex items-center gap-2">
           <Input
             type="number"
