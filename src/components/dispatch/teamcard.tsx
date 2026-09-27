@@ -1,142 +1,31 @@
-// teamcard.tsx — REPLACE component export with this version
 'use client';
 
-import React, {useEffect, useMemo, useState, useRef} from 'react';
-import {
-  Card, CardHeader, CardBody, Dropdown, DropdownTrigger, DropdownMenu, DropdownItem,
-  Select, SelectItem, Autocomplete, AutocompleteItem, Button
-} from '@heroui/react';
-import {ChevronDown, ChevronUp, MapPin, MoreVertical, Map as MapIcon} from 'lucide-react';
-import type {Event, Staff} from '@/app/types';
-import TrackingTextEntry from '@/components/dispatch/trackingtextentry';
-import { deriveTeamVisualStatus, getStatusColor } from '@/lib/statusColors';
+import React, { useState } from 'react';
+import { Card, CardHeader, CardBody } from '@heroui/react';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 import DispatchMotionCell from './motioncell';
-import StatusLabel from './statuslabel';
-import EquipmentTypeIcon, { getEquipmentStatusWord } from './equipmenttypeicon';
 import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
-import { getEventClinics } from '@/lib/clinics';
-import { getEquipmentIconType } from '@/lib/equipmentIcon';
+import { useMMSS } from '@/hooks/useMMSS';
+import {
+  type TeamCardProps,
+  useTeamStatusModel,
+  TeamControlsRow,
+  TeamMapButton,
+  TeamActionsMenu,
+  TeamMemberList,
+  TeamActivityLog,
+} from './teamcardparts';
 
-type TeamCardProps = {
-  staff: Staff;
-  event: Event;
-  sinceMs?: number;
-  onStatusChange: (staff: Staff, newStatus: string, clinicId?: string) => void;
-  onLocationChange: (staff: Staff, newLocation: string) => void;
-  onEdit?: (staff: Staff) => void;
-  onDelete?: (teamName: string) => void;
-  onRefreshPost?: (teamName: string) => void;
-  updateEvent: (updates: Partial<Event>) => Promise<void>;
-  /** Opens the Add Call modal pre-filled with this team/supervisor as the assigned team. */
-  onNewCall?: (teamName: string) => void;
-  /** Whether the venue has a map uploaded — gates the "view on map" button. */
-  hasVenueMap?: boolean;
-  onViewOnMap?: (teamName: string) => void;
-  /** Whether this team's current location is an actual pin on the map — the button still shows, but disabled, when it's a free-text/non-post value like Roaming or an unrecognized location. */
-  canLocateOnMap?: boolean;
-};
-
-function useMMSS(since?: number) {
-  const [elapsed, setElapsed] = useState(0);
-  useEffect(() => {
-    if (!since) return;
-    const tick = () => setElapsed(Math.floor((Date.now() - since) / 1000));
-    tick();
-    const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
-  }, [since]);
-  const mm = String(Math.floor(elapsed / 60)).padStart(2, '0');
-  const ss = String(elapsed % 60).padStart(2, '0');
-  return `${mm}:${ss}`;
-}
-
-function formatMemberLine(member: string, t: (key: string) => string) {
-  const isLead = member.includes('(Lead)');
-  const withoutLead = member.replace(/\s*\(Lead\)\s*/g, '').trim();
-  const certMatches = [...withoutLead.matchAll(/\[(.+?)\]/g)].map(match => match[1]).filter(Boolean);
-  const name = withoutLead.replace(/\s*\[.+?\]/g, '').trim();
-  const certText = certMatches.map(cert => `[${cert}]`).join(' ');
-  const leadText = isLead ? ` [${t('Lead')}]` : '';
-  return `${name}${certText ? ` ${certText}` : ''}${leadText}`.trim();
-}
-
-export default function TeamCard({
-  staff, event, sinceMs,
-  onStatusChange, onLocationChange,
-  onEdit, onDelete, onRefreshPost, onNewCall, updateEvent,
-  hasVenueMap, onViewOnMap, canLocateOnMap,
-}: TeamCardProps) {
+// Standard team card: name + timer header, status/location controls always
+// visible, members and activity log revealed on expand. See
+// teamcard-condensed.tsx for the compact layout; shared pieces live in
+// teamcardparts.tsx.
+export default function TeamCard(props: TeamCardProps) {
+  const { staff, event, sinceMs, onStatusChange, onLocationChange, updateEvent, hasVenueMap } = props;
   const { t } = useDispatchTerms();
   const [expanded, setExpanded] = useState(false);
-  // Persistent local state for log text — never goes null to prevent flicker
-  const [logText, setLogText] = useState(() => {
-    if (staff.log && staff.log.length > 0) {
-      return staff.log.map(entry => entry.message).join('\n');
-    }
-    return '';
-  });
-  const logFocusedRef = useRef(false);
-  const lastValidLocation = useRef<string | undefined>(undefined);
-  // Sync log text from props when not focused (prevents overwriting user edits)
-  useEffect(() => {
-    if (!logFocusedRef.current) {
-      const newText = staff.log && staff.log.length > 0
-        ? staff.log.map(entry => entry.message).join('\n')
-        : '';
-      setLogText(newText);
-    }
-  }, [staff.log]);
-  useEffect(() => {
-    if (staff.location && staff.location !== 'Clinic') {
-      lastValidLocation.current = staff.location;
-    }
-  }, [staff.location]);
-  const [locationInput, setLocationInput] = useState(staff.location || '');
-  useEffect(() => {
-    setLocationInput(staff.location || '');
-  }, [staff.location]);
-  const memberLines = useMemo(() => {
-    const members = Array.isArray(staff.members) ? staff.members : [];
-    return members
-      .filter((member): member is string => typeof member === 'string' && member.trim().length > 0)
-      .map(member => formatMemberLine(member, t));
-  }, [staff.members, t]);
   const timer = useMMSS(sinceMs);
-
-  const [showClinicPicker, setShowClinicPicker] = useState(false);
-  const clinics = getEventClinics(event.clinics);
-
-  // Status options
-  const activeCall = event.calls?.find(c =>
-    c.assignedTeam?.includes(staff.team) && !['Resolved','Delivered','Refusal','NMM'].includes(c.status)
-  );
-  const isOnAnyActiveCall = !!activeCall;
-
-  const isOnEq = !!event.calls?.some(c =>
-    c.equipmentTeams?.includes(staff.team) && !['Resolved','Delivered Eq','Refusal','NMM'].includes(c.status)
-  ) || ['En Route Eq', 'Assisting'].includes(staff.status);
-
-  const statusOptions = isOnEq
-    ? ['En Route Eq', 'Assisting', 'Delivered Eq']
-    : isOnAnyActiveCall
-      ? ['En Route', 'On Scene', 'Transporting', 'Pending Transport']
-      : ['Available', 'On Break', 'In Clinic'];
-
-  // Equipment this team/supervisor is actually running — same icon
-  // convention as the call tracker's team chip (see equipmenttypeicon.tsx).
-  const teamEquipment = isOnEq
-    ? (event.eventEquipment || []).filter(eq => eq.assignedTeam === staff.team)
-    : [];
-  const teamEquipmentNames = teamEquipment.map(eq => eq.name).join(', ');
-  const teamEquipmentIconType = teamEquipment[0] ? getEquipmentIconType(teamEquipment[0].name) : null;
-
-  const postOptions: string[] = React.useMemo(() => {
-    const base: string[] = ['Clinic']; // Only Clinic, not Transporting
-    const posts = (event.venue?.posts || []).map(p => (typeof p === 'string' ? p : p.name));
-    return Array.from(new Set([...base, ...posts]));
-  }, [event.venue?.posts]);
-
-  const statusTone = getStatusColor(deriveTeamVisualStatus(staff.status, event, staff.team));
+  const model = useTeamStatusModel(staff, event);
 
   return (
     <Card
@@ -155,282 +44,34 @@ export default function TeamCard({
           </div>
         </div>
 
-        {/* Right section: Timer and Menu aligned horizontally at top */}
         <div className="absolute top-3 right-3 flex items-center gap-2">
           <div className="text-surface-light/70">
             {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
           </div>
-
-          {hasVenueMap && (
-            <button
-              type="button"
-              disabled={!canLocateOnMap}
-              onClick={(e) => {
-                e.stopPropagation();
-                if (!canLocateOnMap) return;
-                onViewOnMap?.(staff.team);
-              }}
-              className="p-0 m-0 border-0 bg-transparent text-surface-light hover:text-status-blue transition-colors cursor-pointer flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-surface-light"
-              aria-label="View on map"
-              title={canLocateOnMap ? 'View on map' : `${staff.location || 'This location'} isn't on the map`}
-            >
-              <MapIcon className="h-4 w-4" />
-            </button>
-          )}
-
-          {/* Timer */}
+          {hasVenueMap && <TeamMapButton {...props} />}
           <div className="text-[15px] sm:text-base font-semibold text-surface-light tabular-nums">
             {timer}
           </div>
-
-          {/* 3-dot menu - native button with no background effects */}
-          <div
-            onClick={e => e.stopPropagation()}
-            onKeyDown={e => e.stopPropagation()}
-          >
-            <Dropdown placement="bottom-end" offset={6}>
-              <DropdownTrigger>
-                <button
-                  className="p-0 m-0 border-0 bg-transparent text-surface-light hover:text-status-blue transition-colors cursor-pointer flex items-center justify-center"
-                  aria-label="Team actions"
-                  type="button"
-                >
-                  <MoreVertical className="h-4 w-4" />
-                </button>
-              </DropdownTrigger>
-            <DropdownMenu
-              aria-label="Team actions"
-              itemClasses={{ base: 'px-3 py-2 text-sm text-surface-light rounded-xl' }}
-              onAction={(key) => {
-                if (key === 'refresh') onRefreshPost?.(staff.team);
-                if (key === 'newCall') onNewCall?.(staff.team);
-                if (key === 'edit') onEdit?.(staff);
-                if (key === 'delete') onDelete?.(staff.team);
-              }}
-            >
-              <DropdownItem key="newCall">{t('New Call')}</DropdownItem>
-              <DropdownItem key="refresh">{t('Refresh Post')}</DropdownItem>
-              <DropdownItem key="edit">{t('Edit')}</DropdownItem>
-              <DropdownItem key="delete" className="text-status-red">{t('Delete')}</DropdownItem>
-            </DropdownMenu>
-          </Dropdown>
-        </div>
+          <TeamActionsMenu {...props} />
         </div>
       </CardHeader>
 
-      {/* BODY (collapsed/expanded). Same bg, no extra borders, no extra gap */}
       <CardBody className="px-4 pb-3 pt-0">
-        {/* Controls row */}
-        <div className="flex items-center gap-3">
-          {/* Status */}
-          <div onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()} className="min-w-0 flex-[1]">
-            {showClinicPicker ? (
-              <Dropdown
-                isOpen
-                onOpenChange={(isOpen) => {
-                  if (!isOpen) setShowClinicPicker(false);
-                }}
-              >
-                <DropdownTrigger>
-                  <Button
-                    size="sm"
-                    className={`w-full min-w-0 justify-start ${statusTone.fillClass} text-surface-light border ${statusTone.borderClass} rounded-full transition-colors`}
-                  >
-                    {t('Select clinic')}
-                  </Button>
-                </DropdownTrigger>
-                <DropdownMenu
-                  aria-label="Select destination clinic"
-                  onAction={(key) => {
-                    setShowClinicPicker(false);
-                    onStatusChange(staff, 'Transporting', key as string);
-                  }}
-                >
-                  {clinics.map((clinic) => (
-                    <DropdownItem key={clinic.id}>{clinic.name}</DropdownItem>
-                  ))}
-                </DropdownMenu>
-              </Dropdown>
-            ) : (
-            <Select
-              aria-label="Status"
-              selectedKeys={new Set([staff.status ?? ''])}
-              onSelectionChange={(keys) => {
-                const val = Array.from(keys as Set<string>)[0] || '';
-                if (val) {
-                  if (val === 'Available') {
-                    const targetLocation =
-                      staff.originalPost ||
-                      event.pendingAssignments?.[staff.team]?.post ||
-                      lastValidLocation.current;
+        <TeamControlsRow
+          staff={staff}
+          event={event}
+          model={model}
+          onStatusChange={onStatusChange}
+          onLocationChange={onLocationChange}
+        />
 
-                    if (targetLocation && targetLocation !== staff.location) {
-                      onLocationChange(staff, targetLocation);
-                    } else if (staff.location === 'Clinic') {
-                      onLocationChange(staff, '');
-                    }
-                  }
-                  if (val === 'Transporting' && clinics.length > 1) {
-                    setShowClinicPicker(true);
-                    return;
-                  }
-                  onStatusChange(staff, val, val === 'Transporting' ? clinics[0]?.id : undefined);
-                }
-              }}
-              renderValue={(items) => {
-                const key = items[0]?.key as string | undefined;
-                if (!key) return null;
-                if ((key === 'Delivered Eq' || key === 'En Route Eq') && teamEquipmentIconType) {
-                  return (
-                    <span className="inline-flex items-center gap-1 min-w-0">
-                      <span className="truncate">{getEquipmentStatusWord(key)}</span>
-                      <EquipmentTypeIcon type={teamEquipmentIconType} />
-                    </span>
-                  );
-                }
-                // Icon-aware for any other status (Transporting, Pending
-                // Transport, etc. — see STATUS_ICONS); the destination clinic
-                // name lives in the log now, not the pill.
-                return <StatusLabel status={key} text={t(key)} />;
-              }}
-              classNames={{
-                base: 'min-w-0',
-                trigger: `${statusTone.fillClass} text-surface-light border ${statusTone.borderClass} rounded-full transition-colors`
-              }}
-            >
-              {statusOptions.map((s) => (
-                <SelectItem key={s}>
-                  {(s === 'Delivered Eq' || s === 'En Route Eq') && teamEquipmentNames
-                    ? `${s === 'En Route Eq' ? 'En Route -' : 'Delivered'} ${teamEquipmentNames}`
-                    : t(s)}
-                </SelectItem>
-              ))}
-            </Select>
-            )}
-          </div>
-          {/* Location */}
-          <div onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()} className="min-w-0 flex-[1.5]">
-            <Autocomplete
-              aria-label="Location"
-              startContent={(
-                <span className="flex h-[18px] w-[18px] shrink-0 items-center justify-center">
-                  <MapPin className="h-[18px] w-[18px] shrink-0 text-surface-faint" />
-                </span>
-              )}
-              inputValue={locationInput}
-              onInputChange={(val) => {
-                // Update local state as user types - makes it editable
-                setLocationInput(val);
-              }}
-              onSelectionChange={(key) => {
-                // Handle dropdown selection - updates immediately
-                if (key) {
-                  onLocationChange(staff, key as string);
-                }
-              }}
-              onKeyDown={(e) => {
-                // Handle Enter key for custom values
-                if (e.key === 'Enter') {
-                  const value = locationInput.trim();
-                  if (value && value !== staff.location) {
-                    onLocationChange(staff, value);
-                  }
-                }
-              }}
-              onBlur={() => {
-                // Handle clicking away for custom values
-                const value = locationInput.trim();
-                if (value && value !== staff.location) {
-                  onLocationChange(staff, value);
-                } else if (!value) {
-                  // If cleared, update parent
-                  onLocationChange(staff, '');
-                }
-              }}
-              allowsCustomValue
-              className="min-w-0"
-              classNames={{
-                base: 'min-w-0 data-[focus-visible=true]:outline-none data-[focus=true]:outline-none',
-                // HeroUI lays the clear (x) button out as a real flex sibling
-                // of the input (not an overlay), so its width — reserved even
-                // while invisible pre-hover — was eating into the input's own
-                // width well before the text reached the dropdown chevron.
-                // Taking it out of flow and overlaying it instead frees that
-                // space for text, which can now run underneath it exactly
-                // like the "clear" button does everywhere else in this app.
-                clearButton: 'absolute end-6 top-1/2 -translate-y-1/2',
-              }}
-              inputProps={{
-                classNames: {
-                  inputWrapper: 'bg-surface-deep text-surface-light border border-surface-liner rounded-full pl-3 group-data-[focus-visible=true]:ring-0 group-data-[focus-visible=true]:ring-offset-0 data-[focus-visible=true]:ring-0 data-[focus-visible=true]:ring-offset-0 focus-within:ring-0 focus:ring-0',
-                  input: 'bg-surface-deep pl-1 pe-0 !pe-0 w-full min-w-0 truncate data-[has-end-content=true]:pe-0 group-data-[has-end-content=true]:pe-0 data-[focus-visible=true]:ring-0 focus:ring-0 focus-visible:ring-0 outline-none focus:outline-none data-[focus=true]:outline-none'
-                }
-              }}
-            >
-              {postOptions.map(p => (
-                <AutocompleteItem key={p}>{t(p)}</AutocompleteItem>
-              ))}
-            </Autocomplete>
-          </div>
-        </div>
-
-        {/* Expanded section — animated in normal flow */}
         <DispatchMotionCell isOpen={expanded} animate={true} className="mt-3" overflowVisibleWhenOpen>
-          <div
-            onClick={e => e.stopPropagation()}
-            aria-hidden={!expanded}
-          >
+          <div onClick={e => e.stopPropagation()} aria-hidden={!expanded}>
             <div className="text-xs font-bold text-surface-light mb-1">{t('Team')}</div>
-            <div className="space-y-1 mb-3">
-              {memberLines.map((line, index) => (
-                <div key={`${staff.team}-member-${index}`} className="text-xs text-surface-faint truncate">
-                  {line}
-                </div>
-              ))}
-              {memberLines.length === 0 && (
-                <div className="text-xs text-surface-faint italic">{t('No members')}</div>
-              )}
-            </div>
+            <TeamMemberList staff={staff} className="space-y-1 mb-3" />
 
             <div className="text-xs font-bold text-surface-light mb-1">{t('Activity Log')}</div>
-            <TrackingTextEntry
-              mode="log"
-              value={logText}
-              onChange={(e) => {
-                setLogText(e.target.value);
-              }}
-              onBlur={async () => {
-                logFocusedRef.current = false;
-                const text = logText;
-                // Convert text back to log entries
-                const lines = text.split('\n').filter(line => line.trim());
-                const newLog = lines.map(line => ({
-                  timestamp: Date.now(),
-                  message: line
-                }));
-                
-                const updatedStaff = event.staff.map(s => 
-                  s.team === staff.team ? { ...s, log: newLog } : s
-                );
-                await updateEvent({ staff: updatedStaff });
-              }}
-              onFocus={() => {
-                logFocusedRef.current = true;
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  const now = new Date();
-                  const hhmm = now.getHours().toString().padStart(2, '0') + now.getMinutes().toString().padStart(2, '0');
-                  setLogText(prev => prev + `\n${hhmm} - `);
-                }
-              }}
-              minRows={4}
-              maxRows={5}
-              variant="flat"
-              placeholder={t('No log entries')}
-              className="min-w-0"
-            />
+            <TeamActivityLog staff={staff} event={event} updateEvent={updateEvent} />
           </div>
         </DispatchMotionCell>
       </CardBody>
