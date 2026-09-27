@@ -12,7 +12,7 @@ import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
 // every render — so every Firestore snapshot unmounted/remounted them and
 // could close an open dropdown mid-interaction. Keep them at module scope.
 
-export type TeamSortMode = 'availability' | 'asc' | 'desc';
+import type { TeamSortMode } from '@/lib/teamSort';
 export type CardViewMode = 'normal' | 'condensed';
 export type LeftPanelTab = 'teams' | 'supervisors' | 'equipment';
 

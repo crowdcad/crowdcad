@@ -23,7 +23,6 @@ import { useLiteMode } from '@/lib/LiteContext';
 import { deleteLiteEvent, getLiteEvent, saveLiteEvent } from '@/lib/liteEventStore';
 import { Map as MapIcon, Users, BriefcaseMedical, HousePlus } from "lucide-react";
 import { FaWalkieTalkie } from "react-icons/fa6";
-import TeamWidget from '@/components/dispatch/teamwidget';
 import DispatchMotionCell from '@/components/dispatch/motioncell';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { CallTrackingTable } from '@/components/dispatch/calltracking';
@@ -34,11 +33,12 @@ import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/componen
 import DebugModal from '@/components/modals/debugmodal';
 import { ShieldAlert } from 'lucide-react';
 import { Select, SelectItem, Tabs, Tab, Button, Tooltip } from "@heroui/react"
-import EquipmentCard from '@/components/dispatch/equipmentcard';
 import AvailabilitySurgeStrip from '@/components/dispatch/availabilitysurgestrip';
 import SurgeToggleButton from '@/components/dispatch/surgetogglebutton';
 import PanelTab from '@/components/dispatch/paneltab';
+import DuplicateCallModal from '@/components/modals/event/duplicatecallmodal';
 import { CallSortButton, CallZoneFilterButton, TeamActionButtonGroup, type LeftPanelTab } from '@/components/dispatch/dispatchcontrols';
+import { TeamList, SupervisorList, EquipmentList, type TeamListProps, type SupervisorListProps, type EquipmentListProps } from '@/components/dispatch/leftpanellists';
 import { TrackingInsightsRow } from '@/components/dispatch/trackinginsights';
 import { getTeamAvailabilitySummary, getSurgeLimitPercent, isSurging, getPendingTransportSurgeThreshold, getUnassignedCallSurgeSeconds, countPendingTransport } from '@/lib/teamAvailability';
 import LoadingScreen from '@/components/ui/loading-screen';
@@ -51,7 +51,10 @@ import { sortActiveCalls, type CallSortMode } from '@/lib/callSort';
 import { useDispatchVocabulary } from '@/hooks/useDispatchVocabulary';
 import { DispatchVocabularyProvider } from '@/lib/dispatchVocabulary/context';
 import { isEventEnded } from '@/lib/eventStatus';
-import { formatLogTimestampForCsv } from '@/lib/csvFormat';
+import { buildLogSummaryCsv } from '@/lib/csvFormat';
+import { downloadTextFile } from '@/lib/downloadFile';
+import { formatAgeSex, parseAgeSex } from '@/lib/ageSex';
+import { getActivePostingTime } from '@/lib/postingTimes';
 
 interface DispatchRoutePageProps {
   params: Promise<{ eventId: string }>;
@@ -79,7 +82,6 @@ interface DispatchRoutePageProps {
 
 const LEFT_PANEL_TABS: LeftPanelTab[] = ['teams', 'supervisors', 'equipment'];
 
-const AUTO_POST_SYNC = false;
 
 export default function DispatchPage({ params }: DispatchRoutePageProps) {
   const [event, setEvent] = useState<Event | undefined>(undefined);
@@ -923,47 +925,6 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     setEditingCell(null);
   }
 
-  const formatAgeSex = (age?: string | number, gender?: string) => {
-    return [
-      typeof age === 'number' ? String(age) : age?.trim(),
-      gender?.trim()
-    ]
-      .filter(Boolean)
-      .join('/');
-  };
-
-  const parseAgeSex = (val: string): { age: string; gender: string } => {
-    // Don't remove all spaces - keep the original formatting
-    // Only capitalize letters that immediately follow numbers
-    let processed = val;
-    
-    // Replace pattern: digit followed optionally by space(s) followed by lowercase letter
-    // Capitalize only the letter that immediately follows the number (with optional space)
-    processed = processed.replace(/(\d)\s*([a-z])/g, (match, digit, letter) => {
-      return digit + letter.toUpperCase();
-    });
-    
-    // Now parse the result
-    const parts = processed.split(/[,\-\/]/).filter(Boolean);
-
-    let age = '', gender = '';
-    if (parts.length === 1) {
-      if (/\d/.test(parts[0])) {
-        age = parts[0];
-      } else {
-        gender = parts[0];
-      }
-    } else if (parts.length >= 2) {
-      for (const p of parts) {
-        if (!age && /\d/.test(p)) {
-          age = p;
-        } else if (!gender) {
-          gender = p;
-        }
-      }
-    }
-    return { age, gender };
-  };
 
   const handleSupervisorStatusChange = useCallback((supervisor: Staff, newStatus: string) => {
     // "at <location>" gives the log entry real context (which call this
@@ -2571,48 +2532,6 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     await updateEvent({ calls: updatedCalls });
   };
 
-  const handleScheduledPostAssignment = useCallback(
-    async (time: string, assignments: { [post: string]: string }) => {
-      if (!event) return;
-
-      // Update each team's location and log
-      let updatedStaff = [...event.staff];
-      const pendingAssignments = event.pendingAssignments ? { ...event.pendingAssignments } : {};
-
-      Object.entries(assignments).forEach(([post, teamName]) => {
-        if (!teamName) return;
-        updatedStaff = updatedStaff.map(staff => {
-          if (staff.team === teamName) {
-            const isBusy = ['En Route', 'On Scene', 'Transporting', 'In Clinic'].includes(staff.status);
-            if (isBusy) {
-              // Store the pending assignment for this team — applied once they
-              // leave their current status (e.g. return from clinic), instead
-              // of silently relocating a team still at the clinic.
-              pendingAssignments[teamName] = { post, time };
-              return staff; // Do not update location or log yet
-            } else {
-              // Update location and log immediately
-              return addTeamLog({ ...staff, location: post }, `Available to ${post} at scheduled time ${time}`);
-            }
-          }
-          return staff;
-        });
-      });
-
-      // Write updates once
-      await updateEvent({
-        staff: updatedStaff,
-        postAssignments: {
-          ...postAssignments,
-          [time]: assignments,
-        },
-        pendingAssignments,
-      });
-
-      notifyPostAssignmentChange(`Scheduled posting change for ${time}`, assignments);
-    },
-    [event, postAssignments, updateEvent, addTeamLog]
-  );
  
   // Tracks when a team entered its current status, in ms since epoch
   const [teamTimers, setTeamTimers] = useState<{ [team: string]: number }>({});
@@ -2773,193 +2692,8 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     });
   }, [event?.staff, event?.supervisor, staffSignature]);
 
-  const [nextPostingTime, setNextPostingTime] = useState<string | null>(null);
+  const getCurrentActiveTime = useCallback(() => getActivePostingTime(event?.postingTimes), [event?.postingTimes]);
 
-  const computeNextPostingTime = useCallback((current: string, times: string[]): string | null => {
-    if (!times.length) return null;
-
-    // Validate current time format (must be 4-digit HHmm)
-    if (current.length !== 4 || isNaN(parseInt(current))) {
-      console.error(`Invalid current time format: ${current}`);
-      return null;
-    }
-    const currentMins = parseInt(current.substring(0,2)) * 60 + parseInt(current.substring(2));
-
-    // Process and validate times
-    const validTimes = times
-      .map(t => {
-        // Handle both HH:mm and HHmm formats
-        let hours: string, minutes: string;
-        
-        if (t.includes(':')) {
-          [hours, minutes] = t.split(':');
-        } else if (t.length === 3 || t.length === 4) {
-          // Pad to 4 digits for HHmm format
-          const padded = t.padStart(4, '0');
-          hours = padded.substring(0,2);
-          minutes = padded.substring(2,4);
-        } else {
-          console.warn(`Skipping invalid time format: ${t}`);
-          return null;
-        }
-
-        // Validate numerical values
-        const hoursNum = parseInt(hours);
-        const minutesNum = parseInt(minutes);
-        
-        if (isNaN(hoursNum) || isNaN(minutesNum) || 
-            hoursNum < 0 || hoursNum > 23 || 
-            minutesNum < 0 || minutesNum > 59) {
-          console.warn(`Skipping invalid time: ${t}`);
-          return null;
-        }
-
-        return {
-          time: t,
-          minutes: hoursNum * 60 + minutesNum
-        };
-      })
-      .filter(t => t !== null)
-      .sort((a, b) => a.minutes - b.minutes);
-
-    if (validTimes.length === 0) return null;
-
-    // Find next valid time
-    for (const { minutes, time } of validTimes) {
-      if (minutes > currentMins) return time;
-    }
-
-    // Wrap to first time next day
-    return validTimes.length > 0 ? validTimes[0].time : null;
-  }, []);
- 
-  const parseTimeToMinutes = useCallback((timeStr: string): number | null => {
-    // Handle HH:mm format
-    if (timeStr.includes(':')) {
-      const [hours, minutes] = timeStr.split(':').map(Number);
-      if (!isNaN(hours) && !isNaN(minutes)) 
-        return hours * 60 + minutes;
-    }
-    
-    // Handle HHmm format
-    const cleanTime = timeStr.padStart(4, '0');
-    const hours = parseInt(cleanTime.substring(0, 2));
-    const minutes = parseInt(cleanTime.substring(2, 4));
-    
-    if (!isNaN(hours) && !isNaN(minutes) && hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59) 
-      return hours * 60 + minutes;
-    
-    console.warn(`Invalid time format: ${timeStr}`);
-    return null;
-  }, []);
-
-  const triggeredToday = useRef(new Set());
-  const [lastTriggerDate, setLastTriggerDate] = useState(new Date().toDateString());
-
-  useEffect(() => {
-    if (!AUTO_POST_SYNC) return; // new, disables auto post
-    console.log('useEffect: schedule interval tick');
-
-    if (!event || !nextPostingTime) return;
-    
-    const interval = setInterval(() => {
-      const now = new Date();
-      const today = now.toDateString();
-      const hhmm = now.getHours().toString().padStart(2, '0') + now.getMinutes().toString().padStart(2, '0');
-
-      console.log(`[Schedule Check] Current time: ${hhmm}, Next posting time: ${nextPostingTime}`);
-
-      // Reset triggered set at midnight
-      if (today !== lastTriggerDate) {
-        triggeredToday.current = new Set();
-        setLastTriggerDate(today);
-        console.log('[Schedule Check] Reset triggered times for new day');
-      }
-
-      const nextTotalMins = parseTimeToMinutes(nextPostingTime);
-      const currentTotalMins = parseTimeToMinutes(hhmm);
-
-      console.log(`[Schedule Check] Current minutes: ${currentTotalMins}, Next minutes: ${nextTotalMins}`);
-
-      if (nextTotalMins === null || currentTotalMins === null) return;
-
-      // Check if we should trigger
-      if (currentTotalMins >= nextTotalMins && !triggeredToday.current.has(nextPostingTime)) {
-        console.log(`[Schedule Check] TRIGGERING scheduled assignment for ${nextPostingTime}`);
-        
-        // Do the scheduled assignment
-        const assignments = postAssignments[nextPostingTime] || {};
-        handleScheduledPostAssignment(nextPostingTime, assignments);
-
-        triggeredToday.current.add(nextPostingTime);
-
-        // Advance to next posting time (wraps to first if at end)
-        const newNextTime = computeNextPostingTime(hhmm, event.postingTimes || []);
-        console.log(`[Schedule Check] Advanced to next posting time: ${newNextTime}`);
-        setNextPostingTime(newNextTime);
-      } else {
-        console.log(`[Schedule Check] Not triggering - either in future (${currentTotalMins < nextTotalMins}) or already triggered (${triggeredToday.current.has(nextPostingTime)})`);
-      }
-    }, 10000);
-
-    return () => clearInterval(interval);
-  }, [event, nextPostingTime, postAssignments, lastTriggerDate, handleScheduledPostAssignment, computeNextPostingTime, parseTimeToMinutes]);
-
-  const getCurrentActiveTime = useCallback(() => {
-    if (!event?.postingTimes?.length) return null;
-    
-    const now = new Date();
-    const currentHHMM = now.getHours().toString().padStart(2, '0') + now.getMinutes().toString().padStart(2, '0');
-    
-    // Use the same logic as computeNextPostingTime to stay consistent
-    const nextTime = computeNextPostingTime(currentHHMM, event.postingTimes);
-    
-    // If we have a next time, find the current active period
-    if (nextTime) {
-      const currentMins = parseTimeToMinutes(currentHHMM);
-      const allValidTimes = event.postingTimes
-        .map(t => ({ time: t, minutes: parseTimeToMinutes(t) }))
-        .filter(t => t.minutes !== null)
-        .sort((a, b) => a.minutes! - b.minutes!);
-      
-      // Find the most recent time that has passed
-      let activeTime = allValidTimes[0]?.time;
-      for (const t of allValidTimes) {
-        if (currentMins !== null && t.minutes !== null && currentMins >= t.minutes) {
-          activeTime = t.time;
-        }
-      }
-      
-      // However, if we're past all times for today, highlight the next upcoming time
-      const nextTimeMins = parseTimeToMinutes(nextTime);
-      const lastValidTime = allValidTimes[allValidTimes.length - 1];
-      if (currentMins !== null && nextTimeMins !== null && lastValidTime?.minutes !== null && currentMins > lastValidTime.minutes) {
-        // We're past all times, so highlight the next time (which is the first time tomorrow)
-        return nextTime;
-      } 
-      return activeTime;
-    }
-    
-    return null;
-  }, [event?.postingTimes, parseTimeToMinutes, computeNextPostingTime]);
-
-  useEffect(() => {
-    if (event?.postingTimes?.length) {
-      const now = new Date();
-      const hhmm = now.getHours().toString().padStart(2, '0') + 
-                  now.getMinutes().toString().padStart(2, '0');
-      const nextTime = computeNextPostingTime(hhmm, event.postingTimes);
-      setNextPostingTime(nextTime);
-      
-      console.log(`Current time: ${hhmm}`);
-      console.log(`All posting times:`, event.postingTimes);
-      console.log(`Next posting time computed: ${nextTime}`);
-      
-      // Also compute and log the current active time
-      const activeTime = getCurrentActiveTime();
-      console.log(`Current active time for highlighting: ${activeTime}`);
-    }
-  }, [event?.postingTimes, getCurrentActiveTime, computeNextPostingTime]);
 
   // Find the currently "active" posting time and then
   // set each team's location to the post they are assigned to for that time.
@@ -3151,51 +2885,13 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     });
   }
 
-  const formatSummaryTimestamp = useCallback((timestamp: number): string => {
-    return formatLogTimestampForCsv(timestamp);
-  }, []);
-
-  const generateSummaryCSVData = useCallback((): string => {
-    if (!event) return '';
-
-    const csvRows: string[] = [];
-    csvRows.push('Log Type,Team/Call ID,Timestamp,Message');
-
-    event.staff.forEach((team) => {
-      (team.log || []).forEach((entry: TeamLogEntry) => {
-        const message = (entry.message || '').replace(/"/g, '""');
-        csvRows.push(`Staff,${team.team},${formatSummaryTimestamp(entry.timestamp)},"${message}"`);
-      });
-    });
-
-    event.calls.forEach((call) => {
-      (call.log || []).forEach((entry: CallLogEntry) => {
-        const message = (entry.message || '').replace(/"/g, '""');
-        csvRows.push(`Call,${call.id},${formatSummaryTimestamp(entry.timestamp)},"${message}"`);
-      });
-    });
-
-    return csvRows.join('\n');
-  }, [event, formatSummaryTimestamp]);
-
   const handleExportSummaryCsv = useCallback(() => {
-    const csvContent = generateSummaryCSVData();
-    if (!csvContent) {
+    if (!event) {
       toast.info('No summary logs to export yet.');
       return;
     }
-
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.setAttribute('download', `${event?.name || eventId || 'LiteEvent'}_Summary.csv`);
-    document.body.appendChild(anchor);
-    anchor.click();
-    document.body.removeChild(anchor);
-    URL.revokeObjectURL(url);
-  }, [event?.name, eventId, generateSummaryCSVData]);
+    downloadTextFile(`${event.name || eventId || 'LiteEvent'}_Summary.csv`, buildLogSummaryCsv(event), 'text/csv;charset=utf-8;');
+  }, [event, eventId]);
 
   const handleClearLiteEvent = useCallback(async () => {
     if (!isLiteMode || !eventId) return;
@@ -3664,6 +3360,48 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     setContextMenu(null);
   };
 
+  // Props shared by the desktop sidebar and mobile tab copies of each list.
+  const sharedTeamListProps = {
+    event,
+    callDisplayNumberMap,
+    teamTimers,
+    updateEvent,
+    cardViewMode,
+    hasVenueMap: hasVenueMapImage,
+    knownMapLocations,
+    onRefreshTeamPost: refreshTeamFromSchedule,
+    onNewCall: (teamName: string) => openAddCallModal({ assignedTeam: teamName }),
+  };
+  const teamListProps: TeamListProps = {
+    ...sharedTeamListProps,
+    sortMode: teamSortMode,
+    onStatusChange: handleStatusChange,
+    onLocationChange: handleLocationChange,
+    onEditTeam: handleEditTeam,
+    onDeleteTeam: handleDeleteTeam,
+    onViewOnMap: viewTeamOnMap,
+  };
+  const supervisorListProps: SupervisorListProps = {
+    ...sharedTeamListProps,
+    onStatusChange: handleSupervisorStatusChange,
+    onLocationChange: handleSupervisorLocationChange,
+    onEditSupervisor: handleEditSupervisor,
+    onDeleteSupervisor: handleDeleteSupervisor,
+    onViewOnMap: viewSupervisorOnMap,
+  };
+  const equipmentListProps: EquipmentListProps = {
+    event,
+    items: getEquipmentItems(),
+    updateEvent,
+    hasVenueMap: hasVenueMapImage,
+    knownMapLocations,
+    onStatusChange: handleEquipmentStatusChange,
+    onLocationChange: handleEquipmentLocationChange,
+    onMarkReady: handleEquipmentMarkReady,
+    onDelete: handleEquipmentDelete,
+    onViewOnMap: viewEquipmentOnMap,
+  };
+
   // Plain render function (not a component) so the toolbar keeps its
   // identity across renders — see dispatchcontrols.tsx.
   const renderTeamActions = (selectedTab: LeftPanelTab) => (
@@ -4125,142 +3863,17 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
 
                       {/* TEAMS CONTENT */}
                       {selectedLeftTab === 'teams' && (
-                        <div className="dispatch-shell-list">
-                          {[...(event?.staff || [])]
-                            .sort((a, b) => {
-                              const statusRank = (status: string) => {
-                                if (status === 'Available' || status === 'Available') return 0;
-                                if (['In Clinic', 'On Break'].includes(status)) return 1;
-                                if (['En Route', 'On Scene', 'Transporting'].includes(status)) return 2;
-                                return 3;
-                              };
-                              if (teamSortMode === 'availability') {
-                                const rA = statusRank(a.status), rB = statusRank(b.status);
-                                return rA !== rB ? rA - rB : a.team.localeCompare(b.team, undefined, { numeric: true });
-                              }
-                              if (teamSortMode === 'asc') {
-                                return a.team.localeCompare(b.team, undefined, { numeric: true });
-                              }
-                              if (teamSortMode === 'desc') {
-                                return b.team.localeCompare(a.team, undefined, { numeric: true });
-                              }
-                              return 0;
-                            })
-                            .map(staff => (
-                              <TeamWidget
-                                key={staff.team}
-                                staff={staff}
-                                event={event}
-                                callDisplayNumberMap={callDisplayNumberMap}
-                                teamTimers={teamTimers}
-                                onStatusChange={handleStatusChange}
-                                onLocationChange={handleLocationChange}
-                                onEditTeam={handleEditTeam}
-                                onDeleteTeam={handleDeleteTeam}
-                                onRefreshTeamPost={refreshTeamFromSchedule}
-                                onNewCall={(teamName) => openAddCallModal({ assignedTeam: teamName })}
-                                updateEvent={updateEvent}
-                                cardViewMode={cardViewMode}
-                                hasVenueMap={hasVenueMapImage}
-                                onViewOnMap={viewTeamOnMap}
-                                knownMapLocations={knownMapLocations}
-                              />
-                            ))}
-                          {(!event?.staff || event.staff.length === 0) && (
-                            <div className="text-center text-surface-light/50 py-8">
-                              {t('No teams available')}
-                            </div>
-                          )}
-                        </div>
+                        <TeamList {...teamListProps} emptyText={t('No teams available')} />
                       )}
 
                       {/* SUPERVISORS CONTENT */}
                       {selectedLeftTab === 'supervisors' && (
-                        <div className="dispatch-shell-list">
-                          {event?.supervisor && event.supervisor.length > 0 ? (
-                            event.supervisor
-                              .sort((a, b) => a.team.localeCompare(b.team, undefined, { numeric: true }))
-                              .map(supervisor => {
-                                const supervisorAsStaff: Staff = {
-                                  team: supervisor.team,
-                                  location: supervisor.location,
-                                  status: supervisor.status,
-                                  members: [supervisor.member],
-                                  log: supervisor.log,
-                                  originalPost: supervisor.originalPost
-                                };
-                                
-                                return (
-                                  <TeamWidget
-                                    key={supervisor.team}
-                                    staff={supervisorAsStaff}
-                                    event={event}
-                                    callDisplayNumberMap={callDisplayNumberMap}
-                                    teamTimers={teamTimers}
-                                    onStatusChange={handleSupervisorStatusChange}
-                                    onLocationChange={handleSupervisorLocationChange}
-                                    onEditTeam={(staff) => {
-                                      const correspondingSupervisor = event.supervisor?.find(s => s.team === staff.team);
-                                      if (correspondingSupervisor) {
-                                        handleEditSupervisor(correspondingSupervisor);
-                                      }
-                                    }}
-                                    onDeleteTeam={handleDeleteSupervisor}
-                                    onRefreshTeamPost={refreshTeamFromSchedule}
-                                    onNewCall={(teamName) => openAddCallModal({ assignedTeam: teamName })}
-                                    updateEvent={updateEvent}
-                                    cardViewMode={cardViewMode}
-                                    hasVenueMap={hasVenueMapImage}
-                                    onViewOnMap={viewSupervisorOnMap}
-                                    knownMapLocations={knownMapLocations}
-                                  />
-                                );
-                              })
-                          ) : (
-                            <div className="text-center text-surface-light/50 py-8">
-                              No supervisors assigned
-                            </div>
-                          )}
-                        </div>
+                        <SupervisorList {...supervisorListProps} emptyText="No supervisors assigned" />
                       )}
 
                       {/* EQUIPMENT CONTENT */}
                       {selectedLeftTab === 'equipment' && (
-                        <div className="dispatch-shell-list">
-                          {(event?.venue?.equipment?.length || event?.eventEquipment?.length) ? (
-                            <>
-                              {/* Sort equipment: active calls at bottom */}
-                              {getEquipmentItems()
-                                .sort((a, b) => {
-                                  const aOnCall = a.status !== 'Available' ? 1 : 0;
-                                  const bOnCall = b.status !== 'Available' ? 1 : 0;
-                                  return aOnCall - bOnCall; // Available first, on-call at bottom
-                                })
-                                .map((equipmentItem) => (
-                                  <EquipmentCard
-                                    key={equipmentItem.name}
-                                    equipment={equipmentItem}
-                                    event={event!}
-                                    onStatusChange={handleEquipmentStatusChange}
-                                    onLocationChange={handleEquipmentLocationChange}
-                                    onMarkReady={handleEquipmentMarkReady}
-                                    onDelete={handleEquipmentDelete}
-                                    updateEvent={updateEvent}
-                                    hasVenueMap={hasVenueMapImage}
-                                    onViewOnMap={viewEquipmentOnMap}
-                                    canLocateOnMap={
-                                      !!(equipmentItem.currentLocation || equipmentItem.stagingLocation) &&
-                                      knownMapLocations.has((equipmentItem.currentLocation || equipmentItem.stagingLocation) as string)
-                                    }
-                                  />
-                                ))}
-                            </>
-                          ) : (
-                            <div className="text-center text-surface-light/50 py-8">
-                              {t('No equipment configured')}
-                            </div>
-                          )}
-                        </div>
+                        <EquipmentList {...equipmentListProps} emptyText={t('No equipment configured')} />
                       )}
 
                     </div>
@@ -4509,99 +4122,13 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
                   <div>
                     {mobileTeamsSubTab === 'teams' && (
                     <div className={cardViewMode === 'condensed' ? 'space-y-1.5' : 'space-y-3'}>
-                      <div className="dispatch-shell-list">
-                        {[...(event?.staff || [])]
-                          .sort((a, b) => {
-                            const statusRank = (status: string) => {
-                              if (status === 'Available' || status === 'Available') return 0;
-                              if (['In Clinic', 'On Break'].includes(status)) return 1;
-                              if (['En Route', 'On Scene', 'Transporting'].includes(status)) return 2;
-                              return 3;
-                            };
-                            if (teamSortMode === 'availability') {
-                              const rA = statusRank(a.status), rB = statusRank(b.status);
-                              return rA !== rB ? rA - rB : a.team.localeCompare(b.team, undefined, { numeric: true });
-                            }
-                            if (teamSortMode === 'asc') return a.team.localeCompare(b.team, undefined, { numeric: true });
-                            if (teamSortMode === 'desc') return b.team.localeCompare(a.team, undefined, { numeric: true });
-                            return 0;
-                          })
-                          .map(staff => (
-                            <TeamWidget
-                              key={staff.team}
-                              staff={staff}
-                              event={event}
-                              callDisplayNumberMap={callDisplayNumberMap}
-                              teamTimers={teamTimers}
-                              onStatusChange={handleStatusChange}
-                              onLocationChange={handleLocationChange}
-                              onEditTeam={handleEditTeam}
-                              onDeleteTeam={handleDeleteTeam}
-                              onRefreshTeamPost={refreshTeamFromSchedule}
-                              onNewCall={(teamName) => openAddCallModal({ assignedTeam: teamName })}
-                              updateEvent={updateEvent}
-                              cardViewMode={cardViewMode}
-                                hasVenueMap={hasVenueMapImage}
-                                onViewOnMap={viewTeamOnMap}
-                                knownMapLocations={knownMapLocations}
-                            />
-                          ))}
-                        {(!event?.staff || event.staff.length === 0) && (
-                          <div className="text-center text-surface-light/50 py-8">
-                            {t('No teams added yet')}
-                          </div>
-                        )}
-                      </div>
+                      <TeamList {...teamListProps} emptyText={t('No teams added yet')} />
                     </div>
                     )}
                   </div>
 
                   {mobileTeamsSubTab === 'supervisors' && (
-                    <div>
-                      <div className="dispatch-shell-list">
-                        {event?.supervisor && event.supervisor.length > 0 ? (
-                        event.supervisor
-                          .sort((a, b) => a.team.localeCompare(b.team, undefined, { numeric: true }))
-                          .map(supervisor => {
-                            const supervisorAsStaff: Staff = {
-                              team: supervisor.team,
-                              location: supervisor.location,
-                              status: supervisor.status,
-                              members: [supervisor.member],
-                              log: supervisor.log,
-                              originalPost: supervisor.originalPost
-                            };
-                            return (
-                              <TeamWidget
-                                key={supervisor.team}
-                                staff={supervisorAsStaff}
-                                event={event}
-                                callDisplayNumberMap={callDisplayNumberMap}
-                                teamTimers={teamTimers}
-                                onStatusChange={handleSupervisorStatusChange}
-                                onLocationChange={handleSupervisorLocationChange}
-                                onEditTeam={(staff) => {
-                                  const correspondingSupervisor = event.supervisor?.find(s => s.team === staff.team);
-                                  if (correspondingSupervisor) handleEditSupervisor(correspondingSupervisor);
-                                }}
-                                onDeleteTeam={handleDeleteSupervisor}
-                                onRefreshTeamPost={refreshTeamFromSchedule}
-                                onNewCall={(teamName) => openAddCallModal({ assignedTeam: teamName })}
-                                updateEvent={updateEvent}
-                                cardViewMode={cardViewMode}
-                                hasVenueMap={hasVenueMapImage}
-                                onViewOnMap={viewSupervisorOnMap}
-                                knownMapLocations={knownMapLocations}
-                              />
-                            );
-                          })
-                        ) : (
-                          <div className="text-center text-surface-light/50 py-8">
-                            {t('No supervisors added yet')}
-                          </div>
-                        )}
-                      </div>
-                    </div>
+                    <SupervisorList {...supervisorListProps} emptyText={t('No supervisors added yet')} />
                   )}
                 </div>
               </Tab>
@@ -4611,38 +4138,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
                 <div className="space-y-6 pb-20">
                   <div>
                     <div className="space-y-3">
-                      {(event?.venue?.equipment?.length || event?.eventEquipment?.length) ? (
-                        <div className="dispatch-shell-list">
-                          {getEquipmentItems()
-                            .sort((a, b) => {
-                              const aOnCall = a.status !== 'Available' ? 1 : 0;
-                              const bOnCall = b.status !== 'Available' ? 1 : 0;
-                              return aOnCall - bOnCall;
-                            })
-                            .map((equipmentItem) => (
-                              <EquipmentCard
-                                key={equipmentItem.name}
-                                equipment={equipmentItem}
-                                event={event!}
-                                onStatusChange={handleEquipmentStatusChange}
-                                onLocationChange={handleEquipmentLocationChange}
-                                onMarkReady={handleEquipmentMarkReady}
-                                onDelete={handleEquipmentDelete}
-                                updateEvent={updateEvent}
-                                hasVenueMap={hasVenueMapImage}
-                                onViewOnMap={viewEquipmentOnMap}
-                                canLocateOnMap={
-                                  !!(equipmentItem.currentLocation || equipmentItem.stagingLocation) &&
-                                  knownMapLocations.has((equipmentItem.currentLocation || equipmentItem.stagingLocation) as string)
-                                }
-                              />
-                            ))}
-                        </div>
-                      ) : (
-                        <div className="text-center text-surface-light/50 py-8">
-                          {t('No equipment configured')}
-                        </div>
-                      )}
+                      <EquipmentList {...equipmentListProps} emptyText={t('No equipment configured')} />
                     </div>
                   </div>
                 </div>
@@ -4807,64 +4303,13 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
       )}
 
       {showDuplicateModal && selectedDuplicateCallId && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 z-[100] flex items-center justify-center" onClick={() => setShowDuplicateModal(false)}>
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="bg-surface-deepest border border-surface-liner text-surface-light rounded-lg p-6 w-full max-w-2xl shadow-xl space-y-4"
-          >
-            <h2 className="text-2xl font-bold text-surface mb-4">Select Original Call</h2>
-            <p className="text-surface-light mb-4">
-              Call #{callDisplayNumberMap.get(selectedDuplicateCallId)} is a duplicate of which call?
-            </p>
-            <div className="max-h-80 overflow-y-auto border border-surface-liner rounded">
-              <table className="w-full text-sm">
-                <thead className="bg-surface-deep sticky top-0">
-                  <tr>
-                    <th className="px-3 py-2 text-left text-surface-light">Call #</th>
-                    <th className="px-3 py-2 text-left text-surface-light">Chief Complaint</th>
-                    <th className="px-3 py-2 text-left text-surface-light">Age</th>
-                    <th className="px-3 py-2 text-left text-surface-light">Sex</th>
-                    <th className="px-3 py-2 text-left text-surface-light">Location</th>
-                    <th className="px-3 py-2 text-left text-surface-light">Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {event?.calls
-                    .filter(call => call.id !== selectedDuplicateCallId && !["Delivered", "Refusal", "NMM", "Resolved"].includes(call.status))
-                    .sort((a, b) => parseInt(a.id) - parseInt(b.id))
-                    .map(call => (
-                      <tr key={call.id} className="border-b border-surface-liner hover:bg-surface-deep">
-                        <td className="px-3 py-2">{callDisplayNumberMap.get(call.id)}</td>
-                        <td className="px-3 py-2">{call.chiefComplaint || 'N/A'}</td>
-                        <td className="px-3 py-2">{call.age || 'N/A'}</td>
-                        <td className="px-3 py-2">{call.gender || 'N/A'}</td>
-                        <td className="px-3 py-2">{call.location || 'N/A'}</td>
-                        <td className="px-3 py-2">
-                          <Button
-                            onClick={() => handleResolveDuplicate(selectedDuplicateCallId, call.id)}
-                            className="px-3 py-1 bg-status-red hover:bg-status-red/80 text-surface-light rounded text-sm"
-                          >
-                            Select
-                          </Button>
-                        </td>
-                      </tr>
-                    ))}
-                </tbody>
-              </table>
-            </div>
-            {event?.calls.filter(call => call.id !== selectedDuplicateCallId && !["Delivered", "Refusal", "NMM", "Resolved"].includes(call.status)).length === 0 && (
-              <p className="text-surface-light text-center py-4">No active calls available to mark as original.</p>
-            )}
-            <div className="flex justify-end gap-2 mt-4">
-              <Button
-                onClick={() => setShowDuplicateModal(false)}
-                className="px-4 py-2 rounded bg-surface-deep hover:bg-surface-liner text-surface-light"
-              >
-                Cancel
-              </Button>
-            </div>
-          </div>
-        </div>
+        <DuplicateCallModal
+          duplicateCallId={selectedDuplicateCallId}
+          calls={event.calls}
+          callDisplayNumberMap={callDisplayNumberMap}
+          onSelectOriginal={handleResolveDuplicate}
+          onClose={() => setShowDuplicateModal(false)}
+        />
       )}
     </DispatchVocabularyProvider>
   );
