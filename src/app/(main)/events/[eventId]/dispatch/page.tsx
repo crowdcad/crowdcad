@@ -37,6 +37,7 @@ import { Select, SelectItem, Tabs, Tab, Button, Dropdown, DropdownTrigger, Dropd
 import EquipmentCard from '@/components/dispatch/equipmentcard';
 import AvailabilitySurgeStrip from '@/components/dispatch/availabilitysurgestrip';
 import SurgeToggleButton from '@/components/dispatch/surgetogglebutton';
+import PanelTab from '@/components/dispatch/paneltab';
 import { TrackingInsightsRow } from '@/components/dispatch/trackinginsights';
 import { getTeamAvailabilitySummary, getSurgeLimitPercent, isSurging, getPendingTransportSurgeThreshold, getUnassignedCallSurgeSeconds } from '@/lib/teamAvailability';
 import LoadingScreen from '@/components/ui/loading-screen';
@@ -4579,38 +4580,29 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
                   <div className="w-full flex flex-col flex-1 min-h-0">
                     <div className="relative z-30 mx-1.5 pb-0 flex items-start justify-between gap-1 h-10 shrink-0">
                       <div className="flex items-end gap-1 min-w-0">
-                        <button
-                          type="button"
-                          onClick={() => setSelectedRightTab('calls')}
-                          className={`tab-chrome relative h-10 px-4 text-[15px] sm:text-base font-semibold rounded-t-[20px] rounded-b-none transition-colors ${selectedRightTab === 'calls' ? "tab-active bg-surface-deep text-surface-light after:content-[''] after:absolute after:left-0 after:right-0 after:top-full after:h-3 after:bg-surface-deep" : 'bg-transparent border-0 text-surface-faint hover:text-surface-light'}`}
-                          aria-pressed={selectedRightTab === 'calls'}
-                        >
+                        <PanelTab active={selectedRightTab === 'calls'} onSelect={() => setSelectedRightTab('calls')}>
                           {dispatchZones.length > 0 ? callZoneFilterLabel : t('Calls')} ({getActiveCallsForZoneSelection(callZoneFilter).length})
-                        </button>
+                        </PanelTab>
 
                         {clinics.map((clinic) => (
-                          <button
+                          <PanelTab
                             key={clinic.id}
-                            type="button"
-                            onClick={() => setSelectedRightTab(clinic.id)}
-                            className={`tab-chrome relative h-10 px-4 text-[15px] sm:text-base font-semibold rounded-t-[20px] rounded-b-none transition-colors ${selectedRightTab === clinic.id ? "tab-active bg-surface-deep text-surface-light after:content-[''] after:absolute after:left-0 after:right-0 after:top-full after:h-3 after:bg-surface-deep" : 'bg-transparent border-0 text-surface-faint hover:text-surface-light'}`}
-                            aria-pressed={selectedRightTab === clinic.id}
+                            active={selectedRightTab === clinic.id}
+                            onSelect={() => setSelectedRightTab(clinic.id)}
                           >
                             {clinic.name} ({getClinicCalls(clinic.id).filter(c => !c.outcome).length})
-                          </button>
+                          </PanelTab>
                         ))}
 
                         {hasVenueMapImage && (
                           <Tooltip content={`${t('Map')} (Alt+M)`} placement="top">
-                            <button
-                              type="button"
-                              onClick={() => setSelectedRightTab('map')}
-                              className={`tab-chrome relative h-10 px-4 text-[15px] sm:text-base font-semibold rounded-t-[20px] rounded-b-none transition-colors ${selectedRightTab === 'map' ? "tab-active bg-surface-deep text-surface-light after:content-[''] after:absolute after:left-0 after:right-0 after:top-full after:h-3 after:bg-surface-deep" : 'bg-transparent border-0 text-surface-faint hover:text-surface-light'}`}
-                              aria-pressed={selectedRightTab === 'map'}
+                            <PanelTab
+                              active={selectedRightTab === 'map'}
+                              onSelect={() => setSelectedRightTab('map')}
                               aria-label={t('Map')}
                             >
                               <MapIcon className="h-4 w-4" />
-                            </button>
+                            </PanelTab>
                           </Tooltip>
                         )}
                       </div>
