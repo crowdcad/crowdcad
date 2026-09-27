@@ -55,6 +55,7 @@ import { buildLogSummaryCsv } from '@/lib/csvFormat';
 import { downloadTextFile } from '@/lib/downloadFile';
 import { formatAgeSex, parseAgeSex } from '@/lib/ageSex';
 import { getActivePostingTime } from '@/lib/postingTimes';
+import { stampStatusSince, deriveStatusSinceFromLogs } from '@/lib/teamStatusSince';
 
 interface DispatchRoutePageProps {
   params: Promise<{ eventId: string }>;
@@ -313,8 +314,10 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
           return;
         }
 
-        const updates =
-          typeof updateInput === 'function' ? updateInput(currentEvent) : updateInput;
+        const updates = stampStatusSince(
+          currentEvent,
+          typeof updateInput === 'function' ? updateInput(currentEvent) : updateInput
+        );
 
         const nextEvent = {
           ...currentEvent,
@@ -351,7 +354,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
           updates = updateInput;
         }
 
-        tx.update('events', eventId, removeUndefinedDeep(updates));
+        tx.update('events', eventId, removeUndefinedDeep(stampStatusSince(currentEvent, updates)));
       });
     } catch (error) {
       if (error instanceof Error && error.message === 'EVENT_ENDED') {
@@ -2540,68 +2543,12 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
   // Cache last known "status since" per team derived from logs to avoid using Date.now() except on true status change
   const lastStatusSince = useRef<{ [team: string]: number }>({});
 
-  // Helper: derive the most recent timestamp when this team entered its current status from its log
-  // Helper: derive most recent timestamp when this team entered current status OR location
-  function deriveStatusSinceFromLog(team: Staff): number | null {
-    if (!team?.log?.length) return null;
-    const currentStatus = team.status;
-    const currentLocation = team.location;
-
-    for (let i = team.log.length - 1; i >= 0; i--) {
-      const entry = team.log[i];
-      const msg = entry.message || '';
-
-      // Case 1: Status change matches current status. handleStatusChange logs
-      // "<team> set to <status>"; the supervisor path and older entries log
-      // "status changed to <status>" — match either wording.
-      if (
-        (msg.includes(`${team.team} set to`) || msg.includes('status changed to')) &&
-        msg.toLowerCase().includes(currentStatus.toLowerCase())
-      ) {
-        return entry.timestamp || null;
-      }
-
-      // Case 2: Post/location change matches current post
-      if (
-        msg.includes('Post changed to') &&
-        msg.toLowerCase().includes(currentLocation.toLowerCase())
-      ) {
-        return entry.timestamp || null;
-      }
-    }
-    return null;
-  }
-
   const staffSignature = useMemo(() => {
     if (!event?.staff) return '';
     return event.staff
       .map(t => `${t.team}|${t.status}|${t.location}`)
       .join(',');
   }, [event?.staff]);
-
-  function deriveStatusSinceFromLogSupervisor(supervisor: Supervisor): number | null {
-    if (!supervisor?.log?.length) return null;
-    
-    const currentStatus = supervisor.status;
-    const currentLocation = supervisor.location;
-    
-    for (let i = supervisor.log.length - 1; i >= 0; i--) {
-      const entry = supervisor.log[i];
-      const msg = entry.message;
-      
-      // Case 1: Status change matches current status
-      if (msg.includes('status changed to') && msg.toLowerCase().includes(currentStatus.toLowerCase())) {
-        return entry.timestamp;
-      }
-      
-      // Case 2: Post/location change matches current post
-      if (msg.includes('Post changed to') && msg.toLowerCase().includes(currentLocation.toLowerCase())) {
-        return entry.timestamp;
-      }
-    }
-    
-    return null;
-  }
 
   useEffect(() => {
     if (!event?.staff && !event?.supervisor) return;
@@ -2624,7 +2571,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
         
         if (!hadEntry) {
           lastTeamStatus.current[key] = combinedKey;
-          const fromLog = deriveStatusSinceFromLog(team);
+          const fromLog = team.statusSince ?? deriveStatusSinceFromLogs(team, event.calls);
           const seeded = typeof fromLog === 'number' ? fromLog : 
                       typeof updated[key] === 'number' ? updated[key] : Date.now();
           updated[key] = seeded;
@@ -2634,14 +2581,16 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
         
         if (lastKey !== combinedKey) {
           lastTeamStatus.current[key] = combinedKey;
-          const fromLog = deriveStatusSinceFromLog(team);
+          const fromLog = team.statusSince ?? deriveStatusSinceFromLogs(team, event.calls);
           const newSince = typeof fromLog === 'number' ? fromLog : Date.now();
           updated[key] = newSince;
           lastStatusSince.current[key] = newSince;
         } else {
-          const cached = lastStatusSince.current[key];
+          // A stored statusSince (e.g. from another dispatcher's write) wins over the cache.
+          const cached = team.statusSince ?? lastStatusSince.current[key];
           if (typeof cached === 'number') {
             updated[key] = cached;
+            lastStatusSince.current[key] = cached;
           }
         }
       });
@@ -2657,7 +2606,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
         
         if (!hadEntry) {
           lastTeamStatus.current[key] = combinedKey;
-          const fromLog = deriveStatusSinceFromLogSupervisor(supervisor);
+          const fromLog = supervisor.statusSince ?? deriveStatusSinceFromLogs(supervisor, event.calls);
           const seeded = typeof fromLog === 'number' ? fromLog : 
                       typeof updated[key] === 'number' ? updated[key] : Date.now();
           updated[key] = seeded;
@@ -2667,14 +2616,15 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
         
         if (lastKey !== combinedKey) {
           lastTeamStatus.current[key] = combinedKey;
-          const fromLog = deriveStatusSinceFromLogSupervisor(supervisor);
+          const fromLog = supervisor.statusSince ?? deriveStatusSinceFromLogs(supervisor, event.calls);
           const newSince = typeof fromLog === 'number' ? fromLog : Date.now();
           updated[key] = newSince;
           lastStatusSince.current[key] = newSince;
         } else {
-          const cached = lastStatusSince.current[key];
+          const cached = supervisor.statusSince ?? lastStatusSince.current[key];
           if (typeof cached === 'number') {
             updated[key] = cached;
+            lastStatusSince.current[key] = cached;
           }
         }
       });
@@ -2690,7 +2640,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
       
       return updated;
     });
-  }, [event?.staff, event?.supervisor, staffSignature]);
+  }, [event?.staff, event?.supervisor, event?.calls, staffSignature]);
 
   const getCurrentActiveTime = useCallback(() => getActivePostingTime(event?.postingTimes), [event?.postingTimes]);
 
