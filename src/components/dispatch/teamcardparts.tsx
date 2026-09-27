@@ -19,6 +19,7 @@ import EquipmentTypeIcon, { getEquipmentStatusWord } from './equipmenttypeicon';
 import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
 import { getEventClinics } from '@/lib/clinics';
 import { getEquipmentIconType, type EquipmentIconType } from '@/lib/equipmentIcon';
+import { textToLog } from '@/lib/logText';
 
 export type TeamCardProps = {
   staff: Staff;
@@ -394,11 +395,9 @@ export function TeamActivityLog({
       onChange={(e) => setLogText(e.target.value)}
       onBlur={async () => {
         logFocusedRef.current = false;
-        // Convert text back to log entries.
-        const newLog = logText
-          .split('\n')
-          .filter(line => line.trim())
-          .map(line => ({ timestamp: Date.now(), message: line }));
+        // Convert text back to log entries, keeping unchanged lines' timestamps.
+        const newLog = textToLog(logText, staff.log);
+        if (!newLog) return;
         const updatedStaff = event.staff.map(s => (s.team === staff.team ? { ...s, log: newLog } : s));
         await updateEvent({ staff: updatedStaff });
       }}

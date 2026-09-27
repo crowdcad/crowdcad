@@ -12,6 +12,7 @@ import TrackingTextEntry from '@/components/dispatch/trackingtextentry';
 import DispatchMotionCell from '@/components/dispatch/motioncell';
 import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
 import { useMMSS } from '@/hooks/useMMSS';
+import { textToLog } from '@/lib/logText';
 
 /** Enter/exit animation for the dispatch tables' and cards' HeroUI dropdowns. */
 export const dropdownMotionProps = {
@@ -171,11 +172,9 @@ export function CallNotesAndLog({
             onChange={(e) => setLogText(e.target.value)}
             onBlur={async () => {
               logFocusedRef.current = false;
-              const newLog = logText
-                .split('\n')
-                .filter(line => line.trim())
-                .map(line => ({ timestamp: Date.now(), message: line }));
-              await saveCall({ log: newLog });
+              // Keep unchanged lines' timestamps — the call timer counts from the first entry.
+              const newLog = textToLog(logText, call.log);
+              if (newLog) await saveCall({ log: newLog });
             }}
             onFocus={() => {
               logFocusedRef.current = true;

@@ -37,6 +37,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { dropdownMotionProps } from './trackingcardparts';
+import { textToLog } from '@/lib/logText';
 
 // Define EditableCallField type locally
 type EditableCallField = keyof Call | 'ageSex';
@@ -1573,11 +1574,9 @@ export const CallTrackingTable: React.FC<CallTrackingTableProps> = ({
                         const callNow = event?.calls.find((currentCall: Call) => currentCall.id === call.id);
                         if (!callNow) return;
 
-                        const lines = text.split('\n').filter((line) => line.trim());
-                        const newLog: LogEntry[] = lines.map((line) => ({
-                          timestamp: Date.now(),
-                          message: line,
-                        }));
+                        // Keep unchanged lines' timestamps — the call timer counts from the first entry.
+                        const newLog = textToLog(text, callNow.log);
+                        if (!newLog) return;
 
                         const updatedCall = { ...callNow, log: newLog };
                         const updated = event!.calls.map((currentCall: Call) =>

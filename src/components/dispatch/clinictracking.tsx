@@ -21,6 +21,7 @@ import { isClinicCallResolved } from '@/lib/clinics';
 import { sortActiveCalls } from '@/lib/callSort';
 import CallIndicatorIcons from './callindicatoricons';
 import { dropdownMotionProps } from './trackingcardparts';
+import { textToLog } from '@/lib/logText';
 
 type EditableCallField = keyof Call | 'ageSex';
 
@@ -573,12 +574,9 @@ export default function ClinicTrackingTable({
                                   const callNow = event?.calls.find((c: Call) => c.id === call.id);
                                   if (!callNow) return;
                                   
-                                  // Convert text back to log entries
-                                  const lines = text.split('\n').filter(line => line.trim());
-                                  const newLog: CallLogEntry[] = lines.map(line => ({
-                                    timestamp: Date.now(),
-                                    message: line
-                                  }));
+                                  // Keep unchanged lines' timestamps — the call timer counts from the first entry.
+                                  const newLog = textToLog(text, callNow.log);
+                                  if (!newLog) return;
                                   
                                   const updatedCall = { ...callNow, log: newLog };
                                   const updated = event!.calls.map((c: Call) => 
