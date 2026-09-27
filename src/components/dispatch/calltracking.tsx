@@ -69,9 +69,7 @@ interface CallTrackingTableProps {
   handleRemoveTeamFromCall: (callId: string, team: string) => Promise<void>;
   handleAddTeamToCall: (callId: string, team: string) => Promise<void>;
   handleRevertDetachment: (callId: string, team: string) => void;
-  getCallRowClass: (call: Call) => string;
   formatAgeSex: (age?: string | number, gender?: string) => string;
-  TableColGroup: React.ComponentType;
 }
 
 interface LogEntry {
@@ -87,6 +85,19 @@ const dropdownMotionProps = {
 } as const;
 
 const DETAILS_CLOSE_ANIMATION_MS = 320;
+
+// Call #, Chief Complaint, A/S, Location, Team (flex), row actions (kebab
+// menu + priority/pin indicator icons).
+const TableColGroup = () => (
+  <colgroup>
+    <col style={{ width: '4rem' }} />
+    <col style={{ width: '11rem' }} />
+    <col style={{ width: '4rem' }} />
+    <col style={{ width: '11rem' }} />
+    <col />
+    <col style={{ width: '4.5rem' }} />
+  </colgroup>
+);
 
 export const CallTrackingTable: React.FC<CallTrackingTableProps> = ({
   event,
@@ -116,9 +127,7 @@ export const CallTrackingTable: React.FC<CallTrackingTableProps> = ({
   handleRemoveTeamFromCall,
   handleAddTeamToCall,
   handleRevertDetachment,
-  getCallRowClass,
   formatAgeSex,
-  TableColGroup,
 }) => {
   // const ButtonRefs = useRef<Record<string, HTMLElement | null>>({});
   const [closingCallId, setClosingCallId] = React.useState<string | null>(null);
