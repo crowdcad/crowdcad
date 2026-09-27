@@ -4,7 +4,9 @@ import React from 'react';
 import { Textarea } from '@heroui/react';
 import { cn } from '@/lib/utils';
 
-type TrackingTextEntryProps = React.ComponentProps<typeof Textarea> & {
+// 'key' is omitted: it's never a real prop, and when root type-checks this file
+// with core's own node_modules present, the two @types/react copies disagree on it.
+type TrackingTextEntryProps = Omit<React.ComponentProps<typeof Textarea>, 'key'> & {
   mode: 'note' | 'log';
   maxRows: number;
 };
