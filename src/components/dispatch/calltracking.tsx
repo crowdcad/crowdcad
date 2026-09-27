@@ -36,6 +36,7 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { dropdownMotionProps } from './trackingcardparts';
 
 // Define EditableCallField type locally
 type EditableCallField = keyof Call | 'ageSex';
@@ -79,12 +80,6 @@ interface LogEntry {
   message: string;
 }
 
-const dropdownMotionProps = {
-  initial: { opacity: 0, y: -8, scale: 0.98 },
-  animate: { opacity: 1, y: 0, scale: 1 },
-  exit: { opacity: 0, y: -8, scale: 0.98 },
-  transition: { duration: 0.16, ease: 'easeOut' },
-} as const;
 
 const DETAILS_CLOSE_ANIMATION_MS = 320;
 

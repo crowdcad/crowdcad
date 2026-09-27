@@ -20,6 +20,7 @@ import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
 import { isClinicCallResolved } from '@/lib/clinics';
 import { sortActiveCalls } from '@/lib/callSort';
 import CallIndicatorIcons from './callindicatoricons';
+import { dropdownMotionProps } from './trackingcardparts';
 
 type EditableCallField = keyof Call | 'ageSex';
 
@@ -47,12 +48,6 @@ interface ClinicTrackingTableProps {
   formatAgeSex: (age?: string | number, gender?: string) => string;
 }
 
-const dropdownMotionProps = {
-  initial: { opacity: 0, y: -8, scale: 0.98 },
-  animate: { opacity: 1, y: 0, scale: 1 },
-  exit: { opacity: 0, y: -8, scale: 0.98 },
-  transition: { duration: 0.16, ease: 'easeOut' },
-} as const;
 
 const DETAILS_CLOSE_ANIMATION_MS = 320;
 

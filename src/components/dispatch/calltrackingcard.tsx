@@ -1,9 +1,9 @@
 // calltrackingcard.tsx
 'use client';
 
-import React, { useEffect, useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
-  Card, CardHeader, CardBody, Input, Chip, Button,
+  Card, CardHeader, CardBody, Chip, Button,
   Dropdown, DropdownTrigger, DropdownMenu, DropdownItem, Autocomplete, AutocompleteItem
 } from '@heroui/react';
 import { Plus, MoreVertical, RotateCw } from 'lucide-react';
@@ -17,16 +17,14 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import type { Event, Call, DetachedTeam } from '@/app/types';
-import TrackingTextEntry from '@/components/dispatch/trackingtextentry';
-import DispatchMotionCell from '@/components/dispatch/motioncell';
 import StatusLabel, { getMenuLabel } from '@/components/dispatch/statuslabel';
 import EquipmentTypeIcon, { getEquipmentStatusWord } from '@/components/dispatch/equipmenttypeicon';
 import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
 import { getEventClinics, isCallResolved, getVenueLocationOptions } from '@/lib/clinics';
 import { getEquipmentIconType } from '@/lib/equipmentIcon';
 import { getStatusColor } from '@/lib/statusColors';
-import { useMMSS } from '@/hooks/useMMSS';
 import CallIndicatorIcons from './callindicatoricons';
+import { dropdownMotionProps, useCallTimer, useSyncedLocationInput, CallAgeSexComplaintRow, CallNotesAndLog, cardFieldClassNames, blurOnEnter } from './trackingcardparts';
 
 type CallTrackingCardProps = {
   call: Call;
@@ -49,12 +47,6 @@ type CallTrackingCardProps = {
   updateEvent: (updates: Partial<Event>) => Promise<void>;
 };
 
-const dropdownMotionProps = {
-  initial: { opacity: 0, y: -8, scale: 0.98 },
-  animate: { opacity: 1, y: 0, scale: 1 },
-  exit: { opacity: 0, y: -8, scale: 0.98 },
-  transition: { duration: 0.16, ease: 'easeOut' },
-} as const;
 
 export default function CallTrackingCard({
   call,
@@ -84,58 +76,8 @@ export default function CallTrackingCard({
   // both of which need a destination clinic recorded when more than one exists.
   const [clinicPickStatus, setClinicPickStatus] = useState<string>('Transporting');
   const [expanded, setExpanded] = useState(false);
-  const [locationInput, setLocationInput] = useState(call.location || '');
-  const [ageSexInput, setAgeSexInput] = useState(formatAgeSex(call.age, call.gender) || '');
-  const [chiefComplaintInput, setChiefComplaintInput] = useState(call.chiefComplaint || '');
-  // Persistent local state for notes and log — never goes null to prevent flicker
-  const [notesText, setNotesText] = useState(call.notes || '');
-  const notesFocusedRef = useRef(false);
-  const [logText, setLogText] = useState(() => {
-    if (call.log && call.log.length > 0) {
-      return call.log.map((entry: {timestamp: number; message: string}) => entry.message).join('\n');
-    }
-    return '';
-  });
-  const logFocusedRef = useRef(false);
-
-  useEffect(() => {
-    setLocationInput(call.location || '');
-  }, [call.location]);
-
-  useEffect(() => {
-    setAgeSexInput(formatAgeSex(call.age, call.gender) || '');
-  }, [call.age, call.gender, formatAgeSex]);
-
-  useEffect(() => {
-    setChiefComplaintInput(call.chiefComplaint || '');
-  }, [call.chiefComplaint]);
-
-  // Sync notes from props when not focused
-  useEffect(() => {
-    if (!notesFocusedRef.current) {
-      setNotesText(call.notes || '');
-    }
-  }, [call.notes]);
-
-  // Sync log from props when not focused
-  useEffect(() => {
-    if (!logFocusedRef.current) {
-      const newText = call.log && call.log.length > 0
-        ? call.log.map((entry: {timestamp: number; message: string}) => entry.message).join('\n')
-        : '';
-      setLogText(newText);
-    }
-  }, [call.log]);
-
-  // Get call creation timestamp for timer
-  const callTimestamp = useMemo(() => {
-    if (call.log && call.log.length > 0) {
-      return call.log[0].timestamp;
-    }
-    return Date.now();
-  }, [call.log]);
-
-  const timer = useMMSS(callTimestamp);
+  const [locationInput, setLocationInput] = useSyncedLocationInput(call);
+  const timer = useCallTimer(call);
 
   // Detached-team pill label — 'Delivered Eq' shows the equipment's own
   // icon, using the equipmentNames captured at detach time (the equipment
@@ -281,19 +223,10 @@ export default function CallTrackingCard({
                 onLocationChange(call.id, locationInput);
               }
             }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                (e.target as HTMLInputElement).blur();
-              }
-            }}
+            onKeyDown={blurOnEnter}
             allowsCustomValue
             variant="flat"
-            inputProps={{
-              classNames: {
-                input: "text-surface-light bg-surface-deep outline-none focus:outline-none data-[focus=true]:outline-none",
-                inputWrapper: "bg-surface-deep shadow-none border border-surface-liner hover:bg-surface-liner group-data-[focus=true]:bg-surface-deep"
-              }
-            }}
+            inputProps={{ classNames: cardFieldClassNames }}
             className="flex-1"
           >
             {locationOptions.map((loc) => (
@@ -303,52 +236,12 @@ export default function CallTrackingCard({
         </div>
 
         {/* Row 2: Age/Sex (1/4) + Chief Complaint (3/4) */}
-        <div className="flex gap-2">
-          <Input
-            label="Age/Sex"
-            labelPlacement="inside"
-            value={ageSexInput}
-            onChange={(e) => setAgeSexInput(e.target.value)}
-            onBlur={() => {
-              if (ageSexInput !== formatAgeSex(call.age, call.gender)) {
-                onAgeSexChange(call.id, ageSexInput);
-              }
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                (e.target as HTMLInputElement).blur();
-              }
-            }}
-            variant="flat"
-            classNames={{
-              input: "text-surface-light bg-surface-deep outline-none focus:outline-none data-[focus=true]:outline-none",
-              inputWrapper: "bg-surface-deep shadow-none border border-surface-liner hover:bg-surface-liner group-data-[focus=true]:bg-surface-deep"
-            }}
-            className="w-1/4"
-          />
-          <Input
-            label="Chief Complaint"
-            labelPlacement="inside"
-            value={chiefComplaintInput}
-            onChange={(e) => setChiefComplaintInput(e.target.value)}
-            onBlur={() => {
-              if (chiefComplaintInput !== call.chiefComplaint) {
-                onChiefComplaintChange(call.id, chiefComplaintInput);
-              }
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                (e.target as HTMLInputElement).blur();
-              }
-            }}
-            variant="flat"
-            classNames={{
-              input: "text-surface-light bg-surface-deep outline-none focus:outline-none data-[focus=true]:outline-none",
-              inputWrapper: "bg-surface-deep shadow-none border border-surface-liner hover:bg-surface-liner group-data-[focus=true]:bg-surface-deep"
-            }}
-            className="flex-1"
-          />
-        </div>
+        <CallAgeSexComplaintRow
+          call={call}
+          formatAgeSex={formatAgeSex}
+          onAgeSexChange={onAgeSexChange}
+          onChiefComplaintChange={onChiefComplaintChange}
+        />
 
         {/* Row 3: Team tags + Add button */}
         <div className="flex flex-wrap items-center gap-2">
@@ -682,90 +575,13 @@ export default function CallTrackingCard({
           </Dropdownmenu>
         </div>
 
-        {/* Expanded section: Notes and Log */}
-        <DispatchMotionCell isOpen={expanded} animate overflowVisibleWhenOpen>
-          <div
-            className="pt-3 border-t border-surface-liner space-y-3"
-            onClick={e => e.stopPropagation()}
-            aria-hidden={!expanded}
-          >
-            {/* Notes - NO LOG ENTRY */}
-            <div className="text-sm text-surface-light">
-              <div className="font-semibold mb-1">Notes</div>
-              <TrackingTextEntry
-                mode="note"
-                value={notesText}
-                onChange={(e) => {
-                  setNotesText(e.target.value);
-                }}
-                onBlur={async () => {
-                  notesFocusedRef.current = false;
-                  const text = notesText;
-                  if ((call.notes || '') !== text) {
-                    const updatedCall = { ...call, notes: text };
-                    const updated = event.calls.map((c: Call) => 
-                      c.id === call.id ? updatedCall : c
-                    );
-                    await updateEvent({ calls: updated });
-                  }
-                }}
-                onFocus={() => {
-                  notesFocusedRef.current = true;
-                }}
-                minRows={2}
-                maxRows={3}
-                variant="flat"
-                placeholder="Add notes"
-                className="min-w-0"
-              />
-            </div>
-
-            {/* Log - Editable Textarea */}
-            <div className="text-sm text-surface-light">
-              <div className="font-semibold mb-1">Log for Call #{callDisplayNumber}:</div>
-              <TrackingTextEntry
-                mode="log"
-                value={logText}
-                onChange={(e) => {
-                  setLogText(e.target.value);
-                }}
-                onBlur={async () => {
-                  logFocusedRef.current = false;
-                  const text = logText;
-                  
-                  // Convert text back to log entries
-                  const lines = text.split('\n').filter(line => line.trim());
-                  const newLog = lines.map(line => ({
-                    timestamp: Date.now(),
-                    message: line
-                  }));
-                  
-                  const updatedCall = { ...call, log: newLog };
-                  const updated = event.calls.map((c: Call) => 
-                    c.id === call.id ? updatedCall : c
-                  );
-                  await updateEvent({ calls: updated });
-                }}
-                onFocus={() => {
-                  logFocusedRef.current = true;
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    const now = new Date();
-                    const hhmm = now.getHours().toString().padStart(2, '0') + now.getMinutes().toString().padStart(2, '0');
-                    setLogText(prev => prev + `\n${hhmm} - `);
-                  }
-                }}
-                minRows={4}
-                maxRows={5}
-                variant="flat"
-                placeholder="No log entries"
-                className="min-w-0"
-              />
-            </div>
-          </div>
-        </DispatchMotionCell>
+        <CallNotesAndLog
+          call={call}
+          callDisplayNumber={callDisplayNumber}
+          event={event}
+          updateEvent={updateEvent}
+          expanded={expanded}
+        />
       </CardBody>
     </Card>
   );
