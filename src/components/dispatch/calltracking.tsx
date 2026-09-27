@@ -70,6 +70,8 @@ interface CallTrackingTableProps {
   handleAddTeamToCall: (callId: string, team: string) => Promise<void>;
   handleRevertDetachment: (callId: string, team: string) => void;
   formatAgeSex: (age?: string | number, gender?: string) => string;
+  /** Overrides the default column widths. Must be a stable (module-scope) component. */
+  TableColGroup?: React.ComponentType;
 }
 
 interface LogEntry {
@@ -88,7 +90,7 @@ const DETAILS_CLOSE_ANIMATION_MS = 320;
 
 // Call #, Chief Complaint, A/S, Location, Team (flex), row actions (kebab
 // menu + priority/pin indicator icons).
-const TableColGroup = () => (
+const DefaultTableColGroup = () => (
   <colgroup>
     <col style={{ width: '4rem' }} />
     <col style={{ width: '11rem' }} />
@@ -128,6 +130,7 @@ export const CallTrackingTable: React.FC<CallTrackingTableProps> = ({
   handleAddTeamToCall,
   handleRevertDetachment,
   formatAgeSex,
+  TableColGroup = DefaultTableColGroup,
 }) => {
   // const ButtonRefs = useRef<Record<string, HTMLElement | null>>({});
   const [closingCallId, setClosingCallId] = React.useState<string | null>(null);
