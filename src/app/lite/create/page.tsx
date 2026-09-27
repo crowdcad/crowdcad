@@ -18,6 +18,7 @@ import SupervisorStaffingSection from '@/components/event-create/SupervisorStaff
 import PostingScheduleSection from '@/components/event-create/PostingScheduleSection';
 import { EquipmentSelectionSection, PostsSelectionSection } from '@/components/event-create/PostsEquipmentSection';
 import { WizardShell, StepProgress, ReviewColumns, type WizardStep, type ReviewColumn } from '@/components/wizard';
+import { countLabel, eventConfigReviewFields, staffReviewFields, postScheduleReviewValue, getStepNavigation } from '@/components/wizard/eventReview';
 import AddTeamModal, { TeamDraft, TeamMemberDraft } from '@/components/modals/event/addteammodal';
 import AddSupervisorModal from '@/components/modals/event/addsupervisormodal';
 import BulkImportModal from '@/components/modals/event/bulkimportmodal';
@@ -795,28 +796,27 @@ function LiteCreateContent() {
       id: 'basics',
       label: 'Event Configuration',
       fields: [
-        { label: 'Event name', value: eventDraft.name.trim() || '(untitled)' },
-        { label: 'Date', value: eventDraft.date ? new Date(eventDraft.date).toLocaleDateString() : '—' },
-        { label: 'Start / End time', value: `${formatTimeValue(scheduleFrom)} – ${formatTimeValue(scheduleTo)}` },
-        { label: 'Surge limit', value: `${eventDraft.surgeLimitPercent ?? 70}%` },
-        { label: 'Pending transport surge', value: `${eventDraft.pendingTransportSurgeThreshold ?? 3} patients` },
-        {
-          label: 'Unassigned call surge',
-          value: `${Math.floor((eventDraft.unassignedCallSurgeSeconds ?? 120) / 60)}:${String((eventDraft.unassignedCallSurgeSeconds ?? 120) % 60).padStart(2, '0')}`,
-        },
+        ...eventConfigReviewFields({
+          name: eventDraft.name,
+          date: eventDraft.date,
+          scheduleFrom,
+          scheduleTo,
+          surgeLimitPercent: eventDraft.surgeLimitPercent,
+          pendingTransportSurgeThreshold: eventDraft.pendingTransportSurgeThreshold,
+          unassignedCallSurgeSeconds: eventDraft.unassignedCallSurgeSeconds,
+        }),
       ],
     },
     {
       id: 'locations',
       label: 'Locations',
-      fields: [{ label: 'Locations', value: `${allPosts.length} location${allPosts.length === 1 ? '' : 's'}` }],
+      fields: [{ label: 'Locations', value: countLabel(allPosts.length, 'location') }],
     },
     {
       id: 'teams',
       label: 'Staff Assignments',
       fields: [
-        { label: 'Teams', value: `${eventDraft.staff.length} team${eventDraft.staff.length === 1 ? '' : 's'}` },
-        { label: 'Supervisors', value: `${eventDraft.supervisor.length} supervisor${eventDraft.supervisor.length === 1 ? '' : 's'}` },
+        ...staffReviewFields(eventDraft.staff.length, eventDraft.supervisor.length),
       ],
     },
     ...(hasVenueEquipment
@@ -825,7 +825,7 @@ function LiteCreateContent() {
             id: 'equipment',
             label: 'Equipment',
             fields: [
-              { label: 'Equipment', value: `${eventDraft.eventEquipment.length} item${eventDraft.eventEquipment.length === 1 ? '' : 's'}` },
+              { label: 'Equipment', value: countLabel(eventDraft.eventEquipment.length, 'item') },
             ],
           },
         ]
@@ -836,9 +836,7 @@ function LiteCreateContent() {
       fields: [
         {
           label: 'Post schedule',
-          value: postsEnabled
-            ? `${eventDraft.eventPosts.length} post${eventDraft.eventPosts.length === 1 ? '' : 's'} · ${scheduleChips.length} repost time${scheduleChips.length === 1 ? '' : 's'}`
-            : 'Not enabled',
+          value: postScheduleReviewValue(postsEnabled, eventDraft.eventPosts.length, scheduleChips.length),
         },
       ],
     },
@@ -862,15 +860,7 @@ function LiteCreateContent() {
     { id: 'review', label: 'Review', component: reviewStep, isComplete: hasRequiredBasics },
   ];
 
-  const stepIdx = STEP_ORDER.indexOf(currentStepId as (typeof STEP_ORDER)[number]);
-  const isFirstStep = stepIdx <= 0;
-  const isLastStep = stepIdx === STEP_ORDER.length - 1;
-  const goNext = () => {
-    if (stepIdx >= 0 && stepIdx < STEP_ORDER.length - 1) setCurrentStepId(STEP_ORDER[stepIdx + 1]);
-  };
-  const goBack = () => {
-    if (stepIdx > 0) setCurrentStepId(STEP_ORDER[stepIdx - 1]);
-  };
+  const { isFirstStep, isLastStep, goNext, goBack } = getStepNavigation(STEP_ORDER, currentStepId, setCurrentStepId);
 
   const backButton = !isFirstStep && (
     <Button variant="flat" size="md" onPress={goBack} className="px-6">
