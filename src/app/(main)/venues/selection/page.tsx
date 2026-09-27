@@ -1,4 +1,5 @@
 'use client';
+import { formatEventDate } from '@/lib/eventDate';
 
 import { useRouter } from 'next/navigation';
 import React, { useEffect, useState, useMemo } from 'react';
@@ -577,7 +578,7 @@ export default function VenueSelection() {
                             <div className="space-y-1 text-sm text-surface-light">
                               <div className="flex items-center gap-2">
                                 <Calendar className="w-4 h-4" />
-                                {new Date(event.date).toLocaleDateString()}
+                                {formatEventDate(event.date)}
                               </div>
                               <div className="flex items-center gap-2">
                                 <Users className="w-4 h-4" />
@@ -919,7 +920,7 @@ export default function VenueSelection() {
                                   <td className="px-4 py-3 text-surface-light">
                                     <div className="flex items-center gap-2">
                                       <Calendar className="w-4 h-4 flex-shrink-0" />
-                                      <span className="truncate">{new Date(event.date).toLocaleDateString()}</span>
+                                      <span className="truncate">{formatEventDate(event.date)}</span>
                                     </div>
                                   </td>
                                   <td className="px-4 py-3 text-surface-light">

@@ -3,6 +3,7 @@
 
 import type { Time } from '@internationalized/date';
 import { formatTimeValue } from '@/lib/scheduleUtils';
+import { formatEventDate } from '@/lib/eventDate';
 import type { ReviewField } from './ReviewColumns';
 
 /** "1 team", "3 teams". */
@@ -31,7 +32,7 @@ export function eventConfigReviewFields(opts: {
   return [
     { label: 'Event name', value: opts.name?.trim() || '(untitled)' },
     ...(opts.includeVenue ? [{ label: 'Venue', value: opts.venueName || '(none)' }] : []),
-    { label: 'Date', value: opts.date ? new Date(opts.date).toLocaleDateString() : '—' },
+    { label: 'Date', value: formatEventDate(opts.date, '—') },
     { label: 'Start / End time', value: `${formatTimeValue(opts.scheduleFrom)} – ${formatTimeValue(opts.scheduleTo)}` },
     { label: 'Surge limit', value: `${opts.surgeLimitPercent ?? 70}%` },
     { label: 'Pending transport surge', value: `${opts.pendingTransportSurgeThreshold ?? 3} patients` },
