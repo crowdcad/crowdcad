@@ -95,7 +95,7 @@ module.exports = {
 
         /* ── Radix / shadcn-ui primitives (CSS-variable based) ── */
         // These power the few shadcn components still in use
-        // (dropdown-menu, resizable, context-menu, sheet, tooltip, etc.)
+        // (dropdown-menu, resizable)
         card: {
           DEFAULT:    'hsl(var(--card))',
           foreground: 'hsl(var(--card-foreground))',
