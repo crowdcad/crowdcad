@@ -8,21 +8,20 @@ Overview
 
 Directory highlights
 
-- `src/components/ui/` — small reusable primitives. Examples:
-  - `button.tsx` — stylized Button component used across the app.
-  - `input.tsx` — form Input with consistent styling and validation helpers.
-  - `sidebar.tsx`, `tooltip.tsx`, `sheet.tsx` — UI patterns for layout and overlays.
+- `src/components/ui/` — the few shadcn/Radix primitives still in use (`dropdown-menu.tsx`, `resizable.tsx`) plus shared chrome (`loading-screen.tsx`, `codesnippet.tsx`, map pan/zoom controls — see below). Most UI uses HeroUI components directly; don't add a local wrapper for a HeroUI component unless several call sites need the same customization.
 
 - `src/components/modals/` — modal dialogs grouped by feature:
   - `modals/auth/loginmodal.tsx` — login flow modal.
   - `modals/event/quickcallmodal.tsx` — quick new-call modal used in dispatch.
   - Naming pattern: `*modal.tsx`.
 
-- `src/components/dispatch/` — feature-specific UI used on the dispatch dashboard:
-  - `teamcard.tsx`, `calltrackingcard.tsx`, `clinictrackingcard.tsx` — cards and tracking widgets.
-  - `trackingtablebase.tsx` — shared table scaffold used by both call and clinic tracking.
-  - `trackingtextentry.tsx` — shared inline text field for dispatch and team-card updates.
-  - `motioncell.tsx` — reusable animated cell wrapper used for row transitions.
+- `src/components/dispatch/` — feature-specific UI used on the dispatch dashboard (`src/app/(main)/events/[eventId]/dispatch/page.tsx`, which Lite mode reuses as-is):
+  - Left panel: `leftpanellists.tsx` (`TeamList` / `SupervisorList` / `EquipmentList`, rendered by both the desktop sidebar and the mobile tabs), `teamwidget.tsx` (picks the card variant), `teamcard.tsx` / `teamcard-condensed.tsx` (two layouts over the shared pieces in `teamcardparts.tsx`), `equipmentcard.tsx`, `availabilitysurgestrip.tsx`.
+  - Toolbars: `dispatchcontrols.tsx` (`CallSortButton`, `CallZoneFilterButton`, `TeamActionButtonGroup`), `paneltab.tsx` (the folder-style Calls/Clinic/Map tabs), `surgetogglebutton.tsx`.
+  - Right panel: `calltracking.tsx` / `clinictracking.tsx` (desktop tables over `trackingtablebase.tsx`), `calltrackingdetails.tsx`, `trackinginsights.tsx`, `venuemaptab.tsx`.
+  - Mobile cards: `calltrackingcard.tsx` / `clinictrackingcard.tsx`, sharing `trackingcardparts.tsx` (age/sex + complaint row, notes + log section, timer, `dropdownMotionProps`).
+  - Small shared pieces: `statuslabel.tsx`, `callindicatoricons.tsx`, `pendingcallchip.tsx`, `equipmenttypeicon.tsx`, `trackingtextentry.tsx` (notes/log textarea), `motioncell.tsx` (animated expand/collapse wrapper — stays mounted while collapsed, so child state survives).
+  - `clinicwalkupmodal.tsx` — clinic walk-up intake.
 
 - `src/components/event-create/` — event creation sections used by the event create page:
   - metadata, staffing, posting schedule, and posts/equipment are split into focused components rather than a single page-local block.
@@ -30,10 +29,10 @@ Directory highlights
 - `src/components/venue-management/` — venue management sections used by the venue editor:
   - layer controls, marker placement UI, upload handling, and equipment management are separated into dedicated components.
 
-- `src/components/wizard/` — the shared step/wizard shell used by both venue creation and event creation. See "Wizard step shell" below.
+- `src/components/wizard/` — the shared step/wizard shell used by both venue creation and event creation. See "Wizard step shell" below. `eventReview.ts` holds the review-step summaries and back/next navigation shared by the cloud and Lite event wizards.
 
 - `src/components/layout/` — layout-level components (global navigation, header):
-  - `appnavbar.tsx` — top navigation used in `layout.tsx`.
+  - `appnavbar.tsx` (cloud) and `litenavbar.tsx` (Lite mode) — top navigation; both are `h-14`. Shared pieces (live clock, theme toggle, mobile account menu, lazy login modal) live in `navbarshared.tsx`.
 
 - `src/components/ui/` also contains shared interaction chrome used by multiple pages:
   - `map-pan-surface.tsx` — reusable pan/wheel surface for map canvases.
@@ -119,6 +118,9 @@ export default function ExampleModal({ open, onClose }) {
 Tips
 
 - Keep components small and focused — prefer composition over large monolithic components.
+- **Never declare a component inside another component's body** (`const Foo = () => <.../>` inside a page, then `<Foo />`). React sees a new component type every render and remounts it — on the dispatch page that means every Firestore snapshot, which closes open dropdowns and drops local state. Put it at module scope and pass props, or use a plain render function called as `{renderFoo()}`.
+- When two variants of a component (desktop/mobile, cloud/Lite, normal/condensed) need the same control or logic, extract it to a shared `*parts.tsx` / `*shared.tsx` module next to them rather than copying it — copies drift (see `teamcardparts.tsx`, `trackingcardparts.tsx`, `navbarshared.tsx`).
+- Pure data helpers (sorting, formatting, parsing, CSV) belong in `src/lib/` as plain functions, not as closures inside a page.
 - Reuse primitives from `src/components/ui` rather than adding duplicated styles.
 - Reuse shared map controls and viewport wrappers from `src/components/ui` before creating page-specific zoom/pan implementations.
 - Reuse shared dispatch primitives (`trackingtablebase.tsx`, `trackingtextentry.tsx`, `motioncell.tsx`) before adding table/entry logic directly inside call or clinic cards.
@@ -129,7 +131,7 @@ Where to find examples
 - Wizard step shell: `src/components/wizard/WizardShell.tsx`, `src/components/wizard/StepProgress.tsx` — consumed by `src/app/(main)/venues/management/page.client.tsx` and `src/app/(main)/events/[eventId]/create/page.tsx`.
 - Modal example: `src/components/modals/event/venuemapmodal.tsx`
 - Dispatch card examples: `src/components/dispatch/teamcard.tsx`, `src/components/dispatch/calltrackingcard.tsx`, `src/components/dispatch/clinictrackingcard.tsx`
-- Shared dispatch primitive examples: `src/components/dispatch/trackingtablebase.tsx`, `src/components/dispatch/trackingtextentry.tsx`
-- UI primitives: `src/components/ui/button.tsx`, `input.tsx`
+- Shared dispatch primitive examples: `src/components/dispatch/trackingtablebase.tsx`, `src/components/dispatch/trackingtextentry.tsx`, `src/components/dispatch/teamcardparts.tsx`
+- UI primitives: `src/components/ui/dropdown-menu.tsx`, `src/components/ui/map-zoom-controls.tsx`
 
 If you need a component added to a shared export index, open a small PR and reference this doc.

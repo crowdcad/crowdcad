@@ -93,6 +93,7 @@ npm run test:e2e:pocketbase # PocketBase-backed E2E
 ```
 
 - Add or update `.feature`/step-definition coverage under `tests/e2e/` for new features when possible.
+- Follow the code-structure conventions in `docs/COMPONENTS.md` ("Tips"): no components declared inside other components, shared `*parts.tsx` modules instead of copy-pasted variants, and pure helpers in `src/lib/`.
 
 ## Documentation contributions
 

@@ -65,6 +65,15 @@ export function getPendingTransportSurgeThreshold(event: Event): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : DEFAULT_PENDING_TRANSPORT_SURGE_THRESHOLD;
 }
 
+/**
+ * Patients waiting on an ambulance: calls-side "Pending Transport" status plus
+ * clinic-side "Pending Transport" outcome. Compared against
+ * getPendingTransportSurgeThreshold.
+ */
+export function countPendingTransport(event: Event): number {
+  return (event.calls || []).filter(c => c.outcome === 'Pending Transport' || c.status === 'Pending Transport').length;
+}
+
 /** Seconds an unassigned ("Pending") call may sit before a surge alert fires. Defaults to 120 (2:00) when unset. */
 export function getUnassignedCallSurgeSeconds(event: Event): number {
   const value = event.unassignedCallSurgeSeconds;

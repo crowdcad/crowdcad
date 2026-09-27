@@ -21,9 +21,8 @@ import { useAdmin } from '@/hooks/useAdmin';
 import { useCertifications } from '@/hooks/useCertifications';
 import { useLiteMode } from '@/lib/LiteContext';
 import { deleteLiteEvent, getLiteEvent, saveLiteEvent } from '@/lib/liteEventStore';
-import { Plus, RotateCw, ArrowDownWideNarrow, Rows2, Rows4, Map as MapIcon, Users, BriefcaseMedical, HousePlus, ListFilter } from "lucide-react";
+import { Map as MapIcon, Users, BriefcaseMedical, HousePlus } from "lucide-react";
 import { FaWalkieTalkie } from "react-icons/fa6";
-import TeamWidget from '@/components/dispatch/teamwidget';
 import DispatchMotionCell from '@/components/dispatch/motioncell';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { CallTrackingTable } from '@/components/dispatch/calltracking';
@@ -33,12 +32,15 @@ import ClinicTrackingCard from '@/components/dispatch/clinictrackingcard';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable"
 import DebugModal from '@/components/modals/debugmodal';
 import { ShieldAlert } from 'lucide-react';
-import { Select, SelectItem, Tabs, Tab, Button, Dropdown, DropdownTrigger, DropdownMenu, DropdownItem, Tooltip } from "@heroui/react"
-import EquipmentCard from '@/components/dispatch/equipmentcard';
+import { Select, SelectItem, Tabs, Tab, Button, Tooltip } from "@heroui/react"
 import AvailabilitySurgeStrip from '@/components/dispatch/availabilitysurgestrip';
 import SurgeToggleButton from '@/components/dispatch/surgetogglebutton';
+import PanelTab from '@/components/dispatch/paneltab';
+import DuplicateCallModal from '@/components/modals/event/duplicatecallmodal';
+import { CallSortButton, CallZoneFilterButton, TeamActionButtonGroup, type LeftPanelTab } from '@/components/dispatch/dispatchcontrols';
+import { TeamList, SupervisorList, EquipmentList, type TeamListProps, type SupervisorListProps, type EquipmentListProps } from '@/components/dispatch/leftpanellists';
 import { TrackingInsightsRow } from '@/components/dispatch/trackinginsights';
-import { getTeamAvailabilitySummary, getSurgeLimitPercent, isSurging, getPendingTransportSurgeThreshold, getUnassignedCallSurgeSeconds } from '@/lib/teamAvailability';
+import { getTeamAvailabilitySummary, getSurgeLimitPercent, isSurging, getPendingTransportSurgeThreshold, getUnassignedCallSurgeSeconds, countPendingTransport } from '@/lib/teamAvailability';
 import LoadingScreen from '@/components/ui/loading-screen';
 import { normalizeLiteDraftToEvent, removeUndefinedDeep, toLiteDraftFromEvent } from '@/lib/liteEventAdapters';
 import { getRowStatusClass } from '@/lib/statusColors';
@@ -49,7 +51,11 @@ import { sortActiveCalls, type CallSortMode } from '@/lib/callSort';
 import { useDispatchVocabulary } from '@/hooks/useDispatchVocabulary';
 import { DispatchVocabularyProvider } from '@/lib/dispatchVocabulary/context';
 import { isEventEnded } from '@/lib/eventStatus';
-import { formatLogTimestampForCsv } from '@/lib/csvFormat';
+import { buildLogSummaryCsv } from '@/lib/csvFormat';
+import { downloadTextFile } from '@/lib/downloadFile';
+import { formatAgeSex, parseAgeSex } from '@/lib/ageSex';
+import { getActivePostingTime } from '@/lib/postingTimes';
+import { stampStatusSince, deriveStatusSinceFromLogs } from '@/lib/teamStatusSince';
 
 interface DispatchRoutePageProps {
   params: Promise<{ eventId: string }>;
@@ -75,7 +81,8 @@ interface DispatchRoutePageProps {
 //   );
 // }
 
-const AUTO_POST_SYNC = false;
+const LEFT_PANEL_TABS: LeftPanelTab[] = ['teams', 'supervisors', 'equipment'];
+
 
 export default function DispatchPage({ params }: DispatchRoutePageProps) {
   const [event, setEvent] = useState<Event | undefined>(undefined);
@@ -117,13 +124,13 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     wasSurgingRef.current = surging;
   }, [event, t]);
 
+  // Shared by the surge toast below and the surge auto-activation effect
+  // further down — both compare it against the same configurable threshold.
+  const pendingTransportCount = useMemo(() => (event ? countPendingTransport(event) : 0), [event]);
+
   const wasPendingTransportSurgingRef = useRef(false);
   useEffect(() => {
     if (!event) return;
-    // Combines calls-side "Pending" (status) with clinic-side "Pending Transport"
-    // (outcome) — both mark a patient waiting on an ambulance, so they count
-    // toward the same configurable threshold.
-    const pendingTransportCount = (event.calls || []).filter(c => c.outcome === 'Pending Transport' || c.status === 'Pending Transport').length;
     const surging = pendingTransportCount >= getPendingTransportSurgeThreshold(event);
     if (surging && !wasPendingTransportSurgingRef.current) {
       toast.warning(`${t('Surge alert: multiple clinic calls pending transport')} (${pendingTransportCount})`, {
@@ -136,7 +143,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
       });
     }
     wasPendingTransportSurgingRef.current = surging;
-  }, [event, t]);
+  }, [event, pendingTransportCount, t]);
 
   // Pending-call alarm: fires once per call, the moment it's been sitting
   // Pending (no assigned team) for 1+ minute. Unlike the surge-percent
@@ -307,8 +314,10 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
           return;
         }
 
-        const updates =
-          typeof updateInput === 'function' ? updateInput(currentEvent) : updateInput;
+        const updates = stampStatusSince(
+          currentEvent,
+          typeof updateInput === 'function' ? updateInput(currentEvent) : updateInput
+        );
 
         const nextEvent = {
           ...currentEvent,
@@ -345,7 +354,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
           updates = updateInput;
         }
 
-        tx.update('events', eventId, removeUndefinedDeep(updates));
+        tx.update('events', eventId, removeUndefinedDeep(stampStatusSince(currentEvent, updates)));
       });
     } catch (error) {
       if (error instanceof Error && error.message === 'EVENT_ENDED') {
@@ -599,26 +608,6 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     setShowAddEquipmentModal(true);
   }, []);
 
-  // at top of the component (with other hooks)
-  const [, setShowAddMenu] = useState(false);
-  const addMenuRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const onClickOutside = (e: MouseEvent) => {
-      if (addMenuRef.current && !addMenuRef.current.contains(e.target as Node)) {
-        setShowAddMenu(false);
-      }
-    };
-    const onEsc = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setShowAddMenu(false);
-    };
-    document.addEventListener('mousedown', onClickOutside);
-    document.addEventListener('keydown', onEsc);
-    return () => {
-      document.removeEventListener('mousedown', onClickOutside);
-      document.removeEventListener('keydown', onEsc);
-    };
-  }, []);
 
 
   const handleSaveNewSupervisor = useCallback(async () => {
@@ -939,47 +928,6 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     setEditingCell(null);
   }
 
-  const formatAgeSex = (age?: string | number, gender?: string) => {
-    return [
-      typeof age === 'number' ? String(age) : age?.trim(),
-      gender?.trim()
-    ]
-      .filter(Boolean)
-      .join('/');
-  };
-
-  const parseAgeSex = (val: string): { age: string; gender: string } => {
-    // Don't remove all spaces - keep the original formatting
-    // Only capitalize letters that immediately follow numbers
-    let processed = val;
-    
-    // Replace pattern: digit followed optionally by space(s) followed by lowercase letter
-    // Capitalize only the letter that immediately follows the number (with optional space)
-    processed = processed.replace(/(\d)\s*([a-z])/g, (match, digit, letter) => {
-      return digit + letter.toUpperCase();
-    });
-    
-    // Now parse the result
-    const parts = processed.split(/[,\-\/]/).filter(Boolean);
-
-    let age = '', gender = '';
-    if (parts.length === 1) {
-      if (/\d/.test(parts[0])) {
-        age = parts[0];
-      } else {
-        gender = parts[0];
-      }
-    } else if (parts.length >= 2) {
-      for (const p of parts) {
-        if (!age && /\d/.test(p)) {
-          age = p;
-        } else if (!gender) {
-          gender = p;
-        }
-      }
-    }
-    return { age, gender };
-  };
 
   const handleSupervisorStatusChange = useCallback((supervisor: Staff, newStatus: string) => {
     // "at <location>" gives the log entry real context (which call this
@@ -1942,7 +1890,6 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
   const [callZoneFilter, setCallZoneFilter] = useState<Set<string>>(new Set(['all']));
   // Controlled so picking "All Calls" can close the dropdown itself while
   // picking a zone leaves it open for further multi-select picks.
-  const [isCallZoneFilterOpen, setIsCallZoneFilterOpen] = useState(false);
   const [mobileTeamsSubTab, setMobileTeamsSubTab] = useState<'teams' | 'supervisors'>('teams');
   const [mobileActiveTab, setMobileActiveTab] = useState<string>('teams');
   const [mobileSelectedClinicId, setMobileSelectedClinicId] = useState<string>('');
@@ -1992,7 +1939,16 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
       if (e.key === 'Escape') {
         setShowQuickCallForm(false);
       }
+      // Bare Tab cycles the left sidebar tabs, unless focus is in a control
+      // that should get normal tab navigation.
+      if (e.key === 'Tab' && !e.ctrlKey && !e.altKey && !e.metaKey) {
+        const active = document.activeElement;
+        if (active && ['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'].includes(active.tagName)) return;
+        e.preventDefault();
+        setSelectedLeftTab((current) => LEFT_PANEL_TABS[(LEFT_PANEL_TABS.indexOf(current as LeftPanelTab) + 1) % LEFT_PANEL_TABS.length]);
+      }
     };
+    // Single keydown listener for all page-level hotkeys.
     window.addEventListener('keydown', handleHotkey);
     return () => window.removeEventListener('keydown', handleHotkey);
   }, []);
@@ -2579,48 +2535,6 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     await updateEvent({ calls: updatedCalls });
   };
 
-  const handleScheduledPostAssignment = useCallback(
-    async (time: string, assignments: { [post: string]: string }) => {
-      if (!event) return;
-
-      // Update each team's location and log
-      let updatedStaff = [...event.staff];
-      const pendingAssignments = event.pendingAssignments ? { ...event.pendingAssignments } : {};
-
-      Object.entries(assignments).forEach(([post, teamName]) => {
-        if (!teamName) return;
-        updatedStaff = updatedStaff.map(staff => {
-          if (staff.team === teamName) {
-            const isBusy = ['En Route', 'On Scene', 'Transporting', 'In Clinic'].includes(staff.status);
-            if (isBusy) {
-              // Store the pending assignment for this team — applied once they
-              // leave their current status (e.g. return from clinic), instead
-              // of silently relocating a team still at the clinic.
-              pendingAssignments[teamName] = { post, time };
-              return staff; // Do not update location or log yet
-            } else {
-              // Update location and log immediately
-              return addTeamLog({ ...staff, location: post }, `Available to ${post} at scheduled time ${time}`);
-            }
-          }
-          return staff;
-        });
-      });
-
-      // Write updates once
-      await updateEvent({
-        staff: updatedStaff,
-        postAssignments: {
-          ...postAssignments,
-          [time]: assignments,
-        },
-        pendingAssignments,
-      });
-
-      notifyPostAssignmentChange(`Scheduled posting change for ${time}`, assignments);
-    },
-    [event, postAssignments, updateEvent, addTeamLog]
-  );
  
   // Tracks when a team entered its current status, in ms since epoch
   const [teamTimers, setTeamTimers] = useState<{ [team: string]: number }>({});
@@ -2629,68 +2543,12 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
   // Cache last known "status since" per team derived from logs to avoid using Date.now() except on true status change
   const lastStatusSince = useRef<{ [team: string]: number }>({});
 
-  // Helper: derive the most recent timestamp when this team entered its current status from its log
-  // Helper: derive most recent timestamp when this team entered current status OR location
-  function deriveStatusSinceFromLog(team: Staff): number | null {
-    if (!team?.log?.length) return null;
-    const currentStatus = team.status;
-    const currentLocation = team.location;
-
-    for (let i = team.log.length - 1; i >= 0; i--) {
-      const entry = team.log[i];
-      const msg = entry.message || '';
-
-      // Case 1: Status change matches current status. handleStatusChange logs
-      // "<team> set to <status>"; the supervisor path and older entries log
-      // "status changed to <status>" — match either wording.
-      if (
-        (msg.includes(`${team.team} set to`) || msg.includes('status changed to')) &&
-        msg.toLowerCase().includes(currentStatus.toLowerCase())
-      ) {
-        return entry.timestamp || null;
-      }
-
-      // Case 2: Post/location change matches current post
-      if (
-        msg.includes('Post changed to') &&
-        msg.toLowerCase().includes(currentLocation.toLowerCase())
-      ) {
-        return entry.timestamp || null;
-      }
-    }
-    return null;
-  }
-
   const staffSignature = useMemo(() => {
     if (!event?.staff) return '';
     return event.staff
       .map(t => `${t.team}|${t.status}|${t.location}`)
       .join(',');
   }, [event?.staff]);
-
-  function deriveStatusSinceFromLogSupervisor(supervisor: Supervisor): number | null {
-    if (!supervisor?.log?.length) return null;
-    
-    const currentStatus = supervisor.status;
-    const currentLocation = supervisor.location;
-    
-    for (let i = supervisor.log.length - 1; i >= 0; i--) {
-      const entry = supervisor.log[i];
-      const msg = entry.message;
-      
-      // Case 1: Status change matches current status
-      if (msg.includes('status changed to') && msg.toLowerCase().includes(currentStatus.toLowerCase())) {
-        return entry.timestamp;
-      }
-      
-      // Case 2: Post/location change matches current post
-      if (msg.includes('Post changed to') && msg.toLowerCase().includes(currentLocation.toLowerCase())) {
-        return entry.timestamp;
-      }
-    }
-    
-    return null;
-  }
 
   useEffect(() => {
     if (!event?.staff && !event?.supervisor) return;
@@ -2713,7 +2571,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
         
         if (!hadEntry) {
           lastTeamStatus.current[key] = combinedKey;
-          const fromLog = deriveStatusSinceFromLog(team);
+          const fromLog = team.statusSince ?? deriveStatusSinceFromLogs(team, event.calls);
           const seeded = typeof fromLog === 'number' ? fromLog : 
                       typeof updated[key] === 'number' ? updated[key] : Date.now();
           updated[key] = seeded;
@@ -2723,14 +2581,16 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
         
         if (lastKey !== combinedKey) {
           lastTeamStatus.current[key] = combinedKey;
-          const fromLog = deriveStatusSinceFromLog(team);
+          const fromLog = team.statusSince ?? deriveStatusSinceFromLogs(team, event.calls);
           const newSince = typeof fromLog === 'number' ? fromLog : Date.now();
           updated[key] = newSince;
           lastStatusSince.current[key] = newSince;
         } else {
-          const cached = lastStatusSince.current[key];
+          // A stored statusSince (e.g. from another dispatcher's write) wins over the cache.
+          const cached = team.statusSince ?? lastStatusSince.current[key];
           if (typeof cached === 'number') {
             updated[key] = cached;
+            lastStatusSince.current[key] = cached;
           }
         }
       });
@@ -2746,7 +2606,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
         
         if (!hadEntry) {
           lastTeamStatus.current[key] = combinedKey;
-          const fromLog = deriveStatusSinceFromLogSupervisor(supervisor);
+          const fromLog = supervisor.statusSince ?? deriveStatusSinceFromLogs(supervisor, event.calls);
           const seeded = typeof fromLog === 'number' ? fromLog : 
                       typeof updated[key] === 'number' ? updated[key] : Date.now();
           updated[key] = seeded;
@@ -2756,14 +2616,15 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
         
         if (lastKey !== combinedKey) {
           lastTeamStatus.current[key] = combinedKey;
-          const fromLog = deriveStatusSinceFromLogSupervisor(supervisor);
+          const fromLog = supervisor.statusSince ?? deriveStatusSinceFromLogs(supervisor, event.calls);
           const newSince = typeof fromLog === 'number' ? fromLog : Date.now();
           updated[key] = newSince;
           lastStatusSince.current[key] = newSince;
         } else {
-          const cached = lastStatusSince.current[key];
+          const cached = supervisor.statusSince ?? lastStatusSince.current[key];
           if (typeof cached === 'number') {
             updated[key] = cached;
+            lastStatusSince.current[key] = cached;
           }
         }
       });
@@ -2779,195 +2640,10 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
       
       return updated;
     });
-  }, [event?.staff, event?.supervisor, staffSignature]);
+  }, [event?.staff, event?.supervisor, event?.calls, staffSignature]);
 
-  const [nextPostingTime, setNextPostingTime] = useState<string | null>(null);
+  const getCurrentActiveTime = useCallback(() => getActivePostingTime(event?.postingTimes), [event?.postingTimes]);
 
-  const computeNextPostingTime = useCallback((current: string, times: string[]): string | null => {
-    if (!times.length) return null;
-
-    // Validate current time format (must be 4-digit HHmm)
-    if (current.length !== 4 || isNaN(parseInt(current))) {
-      console.error(`Invalid current time format: ${current}`);
-      return null;
-    }
-    const currentMins = parseInt(current.substring(0,2)) * 60 + parseInt(current.substring(2));
-
-    // Process and validate times
-    const validTimes = times
-      .map(t => {
-        // Handle both HH:mm and HHmm formats
-        let hours: string, minutes: string;
-        
-        if (t.includes(':')) {
-          [hours, minutes] = t.split(':');
-        } else if (t.length === 3 || t.length === 4) {
-          // Pad to 4 digits for HHmm format
-          const padded = t.padStart(4, '0');
-          hours = padded.substring(0,2);
-          minutes = padded.substring(2,4);
-        } else {
-          console.warn(`Skipping invalid time format: ${t}`);
-          return null;
-        }
-
-        // Validate numerical values
-        const hoursNum = parseInt(hours);
-        const minutesNum = parseInt(minutes);
-        
-        if (isNaN(hoursNum) || isNaN(minutesNum) || 
-            hoursNum < 0 || hoursNum > 23 || 
-            minutesNum < 0 || minutesNum > 59) {
-          console.warn(`Skipping invalid time: ${t}`);
-          return null;
-        }
-
-        return {
-          time: t,
-          minutes: hoursNum * 60 + minutesNum
-        };
-      })
-      .filter(t => t !== null)
-      .sort((a, b) => a.minutes - b.minutes);
-
-    if (validTimes.length === 0) return null;
-
-    // Find next valid time
-    for (const { minutes, time } of validTimes) {
-      if (minutes > currentMins) return time;
-    }
-
-    // Wrap to first time next day
-    return validTimes.length > 0 ? validTimes[0].time : null;
-  }, []);
- 
-  const parseTimeToMinutes = useCallback((timeStr: string): number | null => {
-    // Handle HH:mm format
-    if (timeStr.includes(':')) {
-      const [hours, minutes] = timeStr.split(':').map(Number);
-      if (!isNaN(hours) && !isNaN(minutes)) 
-        return hours * 60 + minutes;
-    }
-    
-    // Handle HHmm format
-    const cleanTime = timeStr.padStart(4, '0');
-    const hours = parseInt(cleanTime.substring(0, 2));
-    const minutes = parseInt(cleanTime.substring(2, 4));
-    
-    if (!isNaN(hours) && !isNaN(minutes) && hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59) 
-      return hours * 60 + minutes;
-    
-    console.warn(`Invalid time format: ${timeStr}`);
-    return null;
-  }, []);
-
-  const triggeredToday = useRef(new Set());
-  const [lastTriggerDate, setLastTriggerDate] = useState(new Date().toDateString());
-
-  useEffect(() => {
-    if (!AUTO_POST_SYNC) return; // new, disables auto post
-    console.log('useEffect: schedule interval tick');
-
-    if (!event || !nextPostingTime) return;
-    
-    const interval = setInterval(() => {
-      const now = new Date();
-      const today = now.toDateString();
-      const hhmm = now.getHours().toString().padStart(2, '0') + now.getMinutes().toString().padStart(2, '0');
-
-      console.log(`[Schedule Check] Current time: ${hhmm}, Next posting time: ${nextPostingTime}`);
-
-      // Reset triggered set at midnight
-      if (today !== lastTriggerDate) {
-        triggeredToday.current = new Set();
-        setLastTriggerDate(today);
-        console.log('[Schedule Check] Reset triggered times for new day');
-      }
-
-      const nextTotalMins = parseTimeToMinutes(nextPostingTime);
-      const currentTotalMins = parseTimeToMinutes(hhmm);
-
-      console.log(`[Schedule Check] Current minutes: ${currentTotalMins}, Next minutes: ${nextTotalMins}`);
-
-      if (nextTotalMins === null || currentTotalMins === null) return;
-
-      // Check if we should trigger
-      if (currentTotalMins >= nextTotalMins && !triggeredToday.current.has(nextPostingTime)) {
-        console.log(`[Schedule Check] TRIGGERING scheduled assignment for ${nextPostingTime}`);
-        
-        // Do the scheduled assignment
-        const assignments = postAssignments[nextPostingTime] || {};
-        handleScheduledPostAssignment(nextPostingTime, assignments);
-
-        triggeredToday.current.add(nextPostingTime);
-
-        // Advance to next posting time (wraps to first if at end)
-        const newNextTime = computeNextPostingTime(hhmm, event.postingTimes || []);
-        console.log(`[Schedule Check] Advanced to next posting time: ${newNextTime}`);
-        setNextPostingTime(newNextTime);
-      } else {
-        console.log(`[Schedule Check] Not triggering - either in future (${currentTotalMins < nextTotalMins}) or already triggered (${triggeredToday.current.has(nextPostingTime)})`);
-      }
-    }, 10000);
-
-    return () => clearInterval(interval);
-  }, [event, nextPostingTime, postAssignments, lastTriggerDate, handleScheduledPostAssignment, computeNextPostingTime, parseTimeToMinutes]);
-
-  const getCurrentActiveTime = useCallback(() => {
-    if (!event?.postingTimes?.length) return null;
-    
-    const now = new Date();
-    const currentHHMM = now.getHours().toString().padStart(2, '0') + now.getMinutes().toString().padStart(2, '0');
-    
-    // Use the same logic as computeNextPostingTime to stay consistent
-    const nextTime = computeNextPostingTime(currentHHMM, event.postingTimes);
-    
-    // If we have a next time, find the current active period
-    if (nextTime) {
-      const currentMins = parseTimeToMinutes(currentHHMM);
-      const allValidTimes = event.postingTimes
-        .map(t => ({ time: t, minutes: parseTimeToMinutes(t) }))
-        .filter(t => t.minutes !== null)
-        .sort((a, b) => a.minutes! - b.minutes!);
-      
-      // Find the most recent time that has passed
-      let activeTime = allValidTimes[0]?.time;
-      for (const t of allValidTimes) {
-        if (currentMins !== null && t.minutes !== null && currentMins >= t.minutes) {
-          activeTime = t.time;
-        }
-      }
-      
-      // However, if we're past all times for today, highlight the next upcoming time
-      const nextTimeMins = parseTimeToMinutes(nextTime);
-      const lastValidTime = allValidTimes[allValidTimes.length - 1];
-      if (currentMins !== null && nextTimeMins !== null && lastValidTime?.minutes !== null && currentMins > lastValidTime.minutes) {
-        // We're past all times, so highlight the next time (which is the first time tomorrow)
-        return nextTime;
-      } 
-      return activeTime;
-    }
-    
-    return null;
-  }, [event?.postingTimes, parseTimeToMinutes, computeNextPostingTime]);
-
-  useEffect(() => {
-    if (event?.postingTimes?.length) {
-      const now = new Date();
-      const hhmm = now.getHours().toString().padStart(2, '0') + 
-                  now.getMinutes().toString().padStart(2, '0');
-      const nextTime = computeNextPostingTime(hhmm, event.postingTimes);
-      setNextPostingTime(nextTime);
-      
-      console.log(`Current time: ${hhmm}`);
-      console.log(`All posting times:`, event.postingTimes);
-      console.log(`Next posting time computed: ${nextTime}`);
-      
-      // Also compute and log the current active time
-      const activeTime = getCurrentActiveTime();
-      console.log(`Current active time for highlighting: ${activeTime}`);
-    }
-  }, [event?.postingTimes, getCurrentActiveTime, computeNextPostingTime]);
 
   // Find the currently "active" posting time and then
   // set each team's location to the post they are assigned to for that time.
@@ -3159,51 +2835,13 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     });
   }
 
-  const formatSummaryTimestamp = useCallback((timestamp: number): string => {
-    return formatLogTimestampForCsv(timestamp);
-  }, []);
-
-  const generateSummaryCSVData = useCallback((): string => {
-    if (!event) return '';
-
-    const csvRows: string[] = [];
-    csvRows.push('Log Type,Team/Call ID,Timestamp,Message');
-
-    event.staff.forEach((team) => {
-      (team.log || []).forEach((entry: TeamLogEntry) => {
-        const message = (entry.message || '').replace(/"/g, '""');
-        csvRows.push(`Staff,${team.team},${formatSummaryTimestamp(entry.timestamp)},"${message}"`);
-      });
-    });
-
-    event.calls.forEach((call) => {
-      (call.log || []).forEach((entry: CallLogEntry) => {
-        const message = (entry.message || '').replace(/"/g, '""');
-        csvRows.push(`Call,${call.id},${formatSummaryTimestamp(entry.timestamp)},"${message}"`);
-      });
-    });
-
-    return csvRows.join('\n');
-  }, [event, formatSummaryTimestamp]);
-
   const handleExportSummaryCsv = useCallback(() => {
-    const csvContent = generateSummaryCSVData();
-    if (!csvContent) {
+    if (!event) {
       toast.info('No summary logs to export yet.');
       return;
     }
-
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.setAttribute('download', `${event?.name || eventId || 'LiteEvent'}_Summary.csv`);
-    document.body.appendChild(anchor);
-    anchor.click();
-    document.body.removeChild(anchor);
-    URL.revokeObjectURL(url);
-  }, [event?.name, eventId, generateSummaryCSVData]);
+    downloadTextFile(`${event.name || eventId || 'LiteEvent'}_Summary.csv`, buildLogSummaryCsv(event), 'text/csv;charset=utf-8;');
+  }, [event, eventId]);
 
   const handleClearLiteEvent = useCallback(async () => {
     if (!isLiteMode || !eventId) return;
@@ -3303,28 +2941,6 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     };
   }, [isLiteMode, handleClearLiteEvent, handleExportSummaryCsv, eventEnded, goToSummary, canEndEvent]);
 
-  // Tab cycling for left sidebar tabs
-  useEffect(() => {
-    const tabs = ['teams', 'supervisors', 'equipment'];
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Tab') {
-        const activeElement = document.activeElement;
-        if (activeElement && ['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'].includes(activeElement.tagName)) {
-          return; // Let normal tab behavior happen
-        }
-        event.preventDefault();
-        const currentIndex = tabs.indexOf(selectedLeftTab);
-        const nextIndex = (currentIndex + 1) % tabs.length;
-        setSelectedLeftTab(tabs[nextIndex]);
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [selectedLeftTab]);
-
   useEffect(() => {
     if (isLiteMode) return;
 
@@ -3392,7 +3008,6 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
   const wasPendingTransportAboveThresholdRef = useRef(false);
   useEffect(() => {
     if (!event || isEventEnded(event)) return;
-    const pendingTransportCount = (event.calls || []).filter(c => c.outcome === 'Pending Transport' || c.status === 'Pending Transport').length;
     const aboveThreshold = pendingTransportCount >= getPendingTransportSurgeThreshold(event);
 
     if (aboveThreshold && !wasPendingTransportAboveThresholdRef.current && !event.manualSurgeActive) {
@@ -3401,7 +3016,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
       );
     }
     wasPendingTransportAboveThresholdRef.current = aboveThreshold;
-  }, [event, updateEvent]);
+  }, [event, pendingTransportCount, updateEvent]);
 
   // Same auto-activation again, for the unassigned-call-time threshold —
   // polls wall-clock time (rather than reacting to `event` changes) since
@@ -3685,27 +3300,6 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     }
   };
 
-  const COLW = {
-    CALLNO: '4rem',   // Call #
-    CC:     '11rem',  // Chief Complaint
-    AS:     '4rem',   // A/S
-    LOC:    '11rem',  // Location
-    ACTION: '4.5rem', // Row actions (kebab menu + priority/pin indicator icons)
-  };
-
-  function TableColGroup() {
-    return (
-      <colgroup>
-        <col style={{ width: COLW.CALLNO }} />
-        <col style={{ width: COLW.CC }} />
-        <col style={{ width: COLW.AS }} />
-        <col style={{ width: COLW.LOC }} />
-        <col />
-        <col style={{ width: COLW.ACTION }} />
-      </colgroup>
-    );
-  }
-
   const handleDeleteCall = async (callId: string) => {
     if (!event) return;
 
@@ -3716,272 +3310,63 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     setContextMenu(null);
   };
 
-  // Sort control for the Calls list — same circular icon-button treatment as
-  // TeamActionButtonGroup's sort dropdown below. On mobile it's sized up
-  // (larger radius + icon) to match how the adjacent Add Call pill also
-  // grows there (its text-base override vs. desktop's smaller default).
-  const CallSortButton = ({ large }: { large?: boolean }) => (
-    <Tooltip content={t('Sort calls')} placement="top">
-      <div>
-        <Dropdown classNames={{ content: 'min-w-[140px] w-[140px] max-w-[140px]' }}>
-          <DropdownTrigger>
-            <Button
-              isIconOnly
-              size={large ? 'md' : 'sm'}
-              variant="flat"
-              className={`rounded-full bg-surface-deep border border-surface-liner hover:bg-surface-liner ${large ? 'h-10 w-10 min-w-10' : ''}`}
-              aria-label={t('Sort calls')}
-            >
-              <ArrowDownWideNarrow className={large ? 'h-6 w-6' : 'h-5 w-5'} />
-            </Button>
-          </DropdownTrigger>
-          <DropdownMenu aria-label={t('Sort calls')}>
-            <DropdownItem
-              key="newest"
-              onClick={() => setCallSortMode('newest')}
-              className={callSortMode === 'newest' ? 'bg-surface-liner' : ''}
-            >
-              {t('Newest')}
-            </DropdownItem>
-            <DropdownItem
-              key="oldest"
-              onClick={() => setCallSortMode('oldest')}
-              className={callSortMode === 'oldest' ? 'bg-surface-liner' : ''}
-            >
-              {t('Oldest')}
-            </DropdownItem>
-            <DropdownItem
-              key="pending"
-              onClick={() => setCallSortMode('pending')}
-              className={callSortMode === 'pending' ? 'bg-surface-liner' : ''}
-            >
-              {t('Pending')}
-            </DropdownItem>
-          </DropdownMenu>
-        </Dropdown>
-      </div>
-    </Tooltip>
-  );
+  // Props shared by the desktop sidebar and mobile tab copies of each list.
+  const sharedTeamListProps = {
+    event,
+    callDisplayNumberMap,
+    teamTimers,
+    updateEvent,
+    cardViewMode,
+    hasVenueMap: hasVenueMapImage,
+    knownMapLocations,
+    onRefreshTeamPost: refreshTeamFromSchedule,
+    onNewCall: (teamName: string) => openAddCallModal({ assignedTeam: teamName }),
+  };
+  const teamListProps: TeamListProps = {
+    ...sharedTeamListProps,
+    sortMode: teamSortMode,
+    onStatusChange: handleStatusChange,
+    onLocationChange: handleLocationChange,
+    onEditTeam: handleEditTeam,
+    onDeleteTeam: handleDeleteTeam,
+    onViewOnMap: viewTeamOnMap,
+  };
+  const supervisorListProps: SupervisorListProps = {
+    ...sharedTeamListProps,
+    onStatusChange: handleSupervisorStatusChange,
+    onLocationChange: handleSupervisorLocationChange,
+    onEditSupervisor: handleEditSupervisor,
+    onDeleteSupervisor: handleDeleteSupervisor,
+    onViewOnMap: viewSupervisorOnMap,
+  };
+  const equipmentListProps: EquipmentListProps = {
+    event,
+    items: getEquipmentItems(),
+    updateEvent,
+    hasVenueMap: hasVenueMapImage,
+    knownMapLocations,
+    onStatusChange: handleEquipmentStatusChange,
+    onLocationChange: handleEquipmentLocationChange,
+    onMarkReady: handleEquipmentMarkReady,
+    onDelete: handleEquipmentDelete,
+    onViewOnMap: viewEquipmentOnMap,
+  };
 
-  // Replaces one tab per dispatch zone with a single dropdown, styled like
-  // CallSortButton, that both switches which zone's calls the table shows
-  // and multi-selects across zones. "All Calls" is exclusive with every
-  // zone — picking it clears any zone selection (and the zones read as
-  // disabled while it's active); picking a zone drops "All Calls" and
-  // multi-selects normally; clearing the last selected zone falls back to
-  // "All Calls" so the filter can never end up selecting nothing.
-  const CallZoneFilterButton = () => (
-    <Tooltip content={t('Filter by zone')} placement="top">
-      <div>
-        <Dropdown
-          classNames={{ content: 'min-w-[180px]' }}
-          isOpen={isCallZoneFilterOpen}
-          onOpenChange={setIsCallZoneFilterOpen}
-        >
-          <DropdownTrigger>
-            <Button
-              size="sm"
-              variant="flat"
-              className="rounded-full bg-surface-deep border border-surface-liner hover:bg-surface-liner px-3 gap-1.5 max-w-[220px]"
-              aria-label={t('Filter by zone')}
-            >
-              <ListFilter className="h-4 w-4 shrink-0" />
-              <span className="truncate">{callZoneFilterLabel}</span>
-            </Button>
-          </DropdownTrigger>
-          <DropdownMenu
-            aria-label={t('Filter by zone')}
-            selectionMode="multiple"
-            closeOnSelect={false}
-            selectedKeys={callZoneFilter}
-            onSelectionChange={(keys) => {
-              // Stays open for repeated zone picks (closeOnSelect={false});
-              // only closes itself once "All Calls" is picked, same as if
-              // the user had clicked away.
-              if (applyCallZoneSelectionChange(keys)) setIsCallZoneFilterOpen(false);
-            }}
-          >
-            <DropdownItem key="all" className={callZoneFilter.has('all') ? 'font-semibold' : ''}>
-              {t('All Calls')}
-            </DropdownItem>
-            <>
-              {dispatchZones.map((zone) => (
-                <DropdownItem
-                  key={zone.id}
-                  className={callZoneFilter.has('all') ? 'opacity-50' : ''}
-                >
-                  {zone.name}
-                </DropdownItem>
-              ))}
-            </>
-          </DropdownMenu>
-        </Dropdown>
-      </div>
-    </Tooltip>
-  );
-
-  const TeamActionButtonGroup = ({
-    selectedTab,
-  }: {
-    selectedTab: 'teams' | 'supervisors' | 'equipment';
-  }) => (
-    <div className="flex items-center gap-1 p-1 rounded-full bg-surface-deep border border-surface-liner">
-      <Tooltip
-        content={
-          selectedTab === 'teams'
-            ? t('Add Team')
-            : selectedTab === 'supervisors'
-              ? t('Add Supervisor')
-              : t('Add Equipment')
-        }
-        placement="top"
-      >
-        <div>
-          <Dropdown>
-            <DropdownTrigger>
-              <Button
-                isIconOnly
-                size="sm"
-                variant="flat"
-                className="rounded-full bg-transparent hover:bg-surface-liner"
-                aria-label="Add Team or Supervisor"
-              >
-                <Plus className="h-5 w-5" />
-              </Button>
-            </DropdownTrigger>
-            <DropdownMenu
-              aria-label="Team Actions"
-              onAction={(key) => {
-                if (key === 'team') {
-                  handleAddNewTeam();
-                } else if (key === 'supervisor') {
-                  handleAddNewSupervisor();
-                } else if (key === 'equipment') {
-                  handleAddNewEquipment();
-                }
-              }}
-            >
-              <DropdownItem key="team">{t('Add Team')}</DropdownItem>
-              <DropdownItem key="supervisor">{t('Add Supervisor')}</DropdownItem>
-              <DropdownItem key="equipment">{t('Add Equipment')}</DropdownItem>
-            </DropdownMenu>
-          </Dropdown>
-        </div>
-      </Tooltip>
-
-      <Tooltip
-        content={selectedTab === 'teams' ? 'Refresh all team posts from schedule' : 'Update all locations'}
-        placement="top"
-      >
-        <div>
-          <Button
-            isIconOnly
-            size="sm"
-            variant="flat"
-            className="rounded-full bg-transparent hover:bg-surface-liner"
-            onPress={refreshAllPostsFromSchedule}
-            aria-label="Update all posts"
-            isDisabled={selectedTab === 'supervisors' || selectedTab === 'equipment' || !((event.postingTimes?.length ?? 0) > 0)}
-          >
-            <RotateCw className="h-5 w-5" />
-          </Button>
-        </div>
-      </Tooltip>
-
-      <Tooltip content="Sort and view options" placement="top">
-        <div>
-          <Dropdown
-            classNames={{
-              content: 'min-w-[140px] w-[140px] max-w-[140px]',
-            }}
-          >
-            <DropdownTrigger>
-              <Button
-                isIconOnly
-                size="sm"
-                variant="flat"
-                className="rounded-full bg-transparent hover:bg-surface-liner"
-                aria-label="Sort teams"
-              >
-                <ArrowDownWideNarrow className="h-5 w-5" />
-              </Button>
-            </DropdownTrigger>
-            <DropdownMenu
-              aria-label="Sort and view options"
-            >
-              <DropdownItem
-                key="view-toggle"
-                isReadOnly
-                className="cursor-default hover:bg-transparent px-0 py-0"
-                textValue="View toggle"
-              >
-                <Tabs
-                  selectedKey={cardViewMode}
-                  onSelectionChange={(key) => setCardViewMode(key as 'normal' | 'condensed')}
-                  size="sm"
-                  fullWidth
-                  classNames={{
-                    tabList: 'gap-0 w-full bg-surface-deep p-0.5 rounded-lg',
-                    tab: 'h-7 data-[selected=true]:text-surface-light data-[hover=true]:opacity-100 transition-colors',
-                    cursor: 'bg-surface-liner',
-                  }}
-                >
-                  <Tab
-                    key="normal"
-                    title={
-                      <Tooltip content="Standard card view with full details" placement="top">
-                        <div className="flex items-center gap-1 pointer-events-none">
-                          <Rows2 className="h-4 w-4" />
-                        </div>
-                      </Tooltip>
-                    }
-                  />
-                  <Tab
-                    key="condensed"
-                    title={
-                      <Tooltip content="Compact card view for more teams on screen" placement="top">
-                        <div className="flex items-center gap-1 pointer-events-none">
-                          <Rows4 className="h-4 w-4" />
-                        </div>
-                      </Tooltip>
-                    }
-                  />
-                </Tabs>
-              </DropdownItem>
-              <DropdownItem
-                key="divider"
-                isReadOnly
-                className="p-0 m-0 h-px bg-surface-liner cursor-default"
-                textValue="divider"
-              >
-                <div className="h-px" />
-              </DropdownItem>
-              <DropdownItem
-                key="asc"
-                onClick={() => setTeamSortMode('asc')}
-                className={teamSortMode === 'asc' ? 'bg-surface-liner' : ''}
-              >
-                Ascending
-              </DropdownItem>
-              <DropdownItem
-                key="desc"
-                onClick={() => setTeamSortMode('desc')}
-                className={teamSortMode === 'desc' ? 'bg-surface-liner' : ''}
-              >
-                Descending
-              </DropdownItem>
-              <DropdownItem
-                key="availability"
-                onClick={() => setTeamSortMode('availability')}
-                className={teamSortMode === 'availability' ? 'bg-surface-liner' : ''}
-              >
-                Availability
-              </DropdownItem>
-            </DropdownMenu>
-          </Dropdown>
-        </div>
-      </Tooltip>
-    </div>
+  // Plain render function (not a component) so the toolbar keeps its
+  // identity across renders — see dispatchcontrols.tsx.
+  const renderTeamActions = (selectedTab: LeftPanelTab) => (
+    <TeamActionButtonGroup
+      selectedTab={selectedTab}
+      onAddTeam={handleAddNewTeam}
+      onAddSupervisor={handleAddNewSupervisor}
+      onAddEquipment={handleAddNewEquipment}
+      onRefreshPosts={refreshAllPostsFromSchedule}
+      hasPostingTimes={(event.postingTimes?.length ?? 0) > 0}
+      cardViewMode={cardViewMode}
+      onCardViewModeChange={setCardViewMode}
+      teamSortMode={teamSortMode}
+      onTeamSortModeChange={setTeamSortMode}
+    />
   );
 
   // Rendered once, above the mobile <Tabs>, inside the same sticky container
@@ -4009,7 +3394,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
             <SelectItem key="teams">{t('Teams')}</SelectItem>
             <SelectItem key="supervisors">{t('Supervisors')}</SelectItem>
           </Select>
-          <TeamActionButtonGroup selectedTab={mobileTeamsSubTab} />
+          {renderTeamActions(mobileTeamsSubTab)}
         </>
       );
     }
@@ -4017,7 +3402,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
       return (
         <>
           <h2 className="text-xl font-bold text-surface-light">{t('Equipment')}</h2>
-          <TeamActionButtonGroup selectedTab="equipment" />
+          {renderTeamActions('equipment')}
         </>
       );
     }
@@ -4052,7 +3437,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
             <h2 className="text-xl font-bold text-surface-light">{t('Calls')}</h2>
           )}
           <div className="flex items-center gap-1.5">
-            <CallSortButton large />
+            <CallSortButton large sortMode={callSortMode} onSortModeChange={setCallSortMode} />
             <Tooltip content={t('Add Call')} placement="top">
               {/* Same pill treatment as TeamActionButtonGroup (p-1 + a
                   transparent inner button) so this single-button header
@@ -4417,7 +3802,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
                       <SelectItem key="equipment">{t('Equipment')}</SelectItem>
                     </Select>
 
-                    <TeamActionButtonGroup selectedTab={selectedLeftTab as 'teams' | 'supervisors' | 'equipment'} />
+                    {renderTeamActions(selectedLeftTab as LeftPanelTab)}
                   </div>
 
                   {event && <div className="shrink-0"><AvailabilitySurgeStrip event={event} /></div>}
@@ -4428,142 +3813,17 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
 
                       {/* TEAMS CONTENT */}
                       {selectedLeftTab === 'teams' && (
-                        <div className="dispatch-shell-list">
-                          {[...(event?.staff || [])]
-                            .sort((a, b) => {
-                              const statusRank = (status: string) => {
-                                if (status === 'Available' || status === 'Available') return 0;
-                                if (['In Clinic', 'On Break'].includes(status)) return 1;
-                                if (['En Route', 'On Scene', 'Transporting'].includes(status)) return 2;
-                                return 3;
-                              };
-                              if (teamSortMode === 'availability') {
-                                const rA = statusRank(a.status), rB = statusRank(b.status);
-                                return rA !== rB ? rA - rB : a.team.localeCompare(b.team, undefined, { numeric: true });
-                              }
-                              if (teamSortMode === 'asc') {
-                                return a.team.localeCompare(b.team, undefined, { numeric: true });
-                              }
-                              if (teamSortMode === 'desc') {
-                                return b.team.localeCompare(a.team, undefined, { numeric: true });
-                              }
-                              return 0;
-                            })
-                            .map(staff => (
-                              <TeamWidget
-                                key={staff.team}
-                                staff={staff}
-                                event={event}
-                                callDisplayNumberMap={callDisplayNumberMap}
-                                teamTimers={teamTimers}
-                                onStatusChange={handleStatusChange}
-                                onLocationChange={handleLocationChange}
-                                onEditTeam={handleEditTeam}
-                                onDeleteTeam={handleDeleteTeam}
-                                onRefreshTeamPost={refreshTeamFromSchedule}
-                                onNewCall={(teamName) => openAddCallModal({ assignedTeam: teamName })}
-                                updateEvent={updateEvent}
-                                cardViewMode={cardViewMode}
-                                hasVenueMap={hasVenueMapImage}
-                                onViewOnMap={viewTeamOnMap}
-                                knownMapLocations={knownMapLocations}
-                              />
-                            ))}
-                          {(!event?.staff || event.staff.length === 0) && (
-                            <div className="text-center text-surface-light/50 py-8">
-                              {t('No teams available')}
-                            </div>
-                          )}
-                        </div>
+                        <TeamList {...teamListProps} emptyText={t('No teams available')} />
                       )}
 
                       {/* SUPERVISORS CONTENT */}
                       {selectedLeftTab === 'supervisors' && (
-                        <div className="dispatch-shell-list">
-                          {event?.supervisor && event.supervisor.length > 0 ? (
-                            event.supervisor
-                              .sort((a, b) => a.team.localeCompare(b.team, undefined, { numeric: true }))
-                              .map(supervisor => {
-                                const supervisorAsStaff: Staff = {
-                                  team: supervisor.team,
-                                  location: supervisor.location,
-                                  status: supervisor.status,
-                                  members: [supervisor.member],
-                                  log: supervisor.log,
-                                  originalPost: supervisor.originalPost
-                                };
-                                
-                                return (
-                                  <TeamWidget
-                                    key={supervisor.team}
-                                    staff={supervisorAsStaff}
-                                    event={event}
-                                    callDisplayNumberMap={callDisplayNumberMap}
-                                    teamTimers={teamTimers}
-                                    onStatusChange={handleSupervisorStatusChange}
-                                    onLocationChange={handleSupervisorLocationChange}
-                                    onEditTeam={(staff) => {
-                                      const correspondingSupervisor = event.supervisor?.find(s => s.team === staff.team);
-                                      if (correspondingSupervisor) {
-                                        handleEditSupervisor(correspondingSupervisor);
-                                      }
-                                    }}
-                                    onDeleteTeam={handleDeleteSupervisor}
-                                    onRefreshTeamPost={refreshTeamFromSchedule}
-                                    onNewCall={(teamName) => openAddCallModal({ assignedTeam: teamName })}
-                                    updateEvent={updateEvent}
-                                    cardViewMode={cardViewMode}
-                                    hasVenueMap={hasVenueMapImage}
-                                    onViewOnMap={viewSupervisorOnMap}
-                                    knownMapLocations={knownMapLocations}
-                                  />
-                                );
-                              })
-                          ) : (
-                            <div className="text-center text-surface-light/50 py-8">
-                              No supervisors assigned
-                            </div>
-                          )}
-                        </div>
+                        <SupervisorList {...supervisorListProps} emptyText="No supervisors assigned" />
                       )}
 
                       {/* EQUIPMENT CONTENT */}
                       {selectedLeftTab === 'equipment' && (
-                        <div className="dispatch-shell-list">
-                          {(event?.venue?.equipment?.length || event?.eventEquipment?.length) ? (
-                            <>
-                              {/* Sort equipment: active calls at bottom */}
-                              {getEquipmentItems()
-                                .sort((a, b) => {
-                                  const aOnCall = a.status !== 'Available' ? 1 : 0;
-                                  const bOnCall = b.status !== 'Available' ? 1 : 0;
-                                  return aOnCall - bOnCall; // Available first, on-call at bottom
-                                })
-                                .map((equipmentItem) => (
-                                  <EquipmentCard
-                                    key={equipmentItem.name}
-                                    equipment={equipmentItem}
-                                    event={event!}
-                                    onStatusChange={handleEquipmentStatusChange}
-                                    onLocationChange={handleEquipmentLocationChange}
-                                    onMarkReady={handleEquipmentMarkReady}
-                                    onDelete={handleEquipmentDelete}
-                                    updateEvent={updateEvent}
-                                    hasVenueMap={hasVenueMapImage}
-                                    onViewOnMap={viewEquipmentOnMap}
-                                    canLocateOnMap={
-                                      !!(equipmentItem.currentLocation || equipmentItem.stagingLocation) &&
-                                      knownMapLocations.has((equipmentItem.currentLocation || equipmentItem.stagingLocation) as string)
-                                    }
-                                  />
-                                ))}
-                            </>
-                          ) : (
-                            <div className="text-center text-surface-light/50 py-8">
-                              {t('No equipment configured')}
-                            </div>
-                          )}
-                        </div>
+                        <EquipmentList {...equipmentListProps} emptyText={t('No equipment configured')} />
                       )}
 
                     </div>
@@ -4579,38 +3839,29 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
                   <div className="w-full flex flex-col flex-1 min-h-0">
                     <div className="relative z-30 mx-1.5 pb-0 flex items-start justify-between gap-1 h-10 shrink-0">
                       <div className="flex items-end gap-1 min-w-0">
-                        <button
-                          type="button"
-                          onClick={() => setSelectedRightTab('calls')}
-                          className={`tab-chrome relative h-10 px-4 text-[15px] sm:text-base font-semibold rounded-t-[20px] rounded-b-none transition-colors ${selectedRightTab === 'calls' ? "tab-active bg-surface-deep text-surface-light after:content-[''] after:absolute after:left-0 after:right-0 after:top-full after:h-3 after:bg-surface-deep" : 'bg-transparent border-0 text-surface-faint hover:text-surface-light'}`}
-                          aria-pressed={selectedRightTab === 'calls'}
-                        >
+                        <PanelTab active={selectedRightTab === 'calls'} onSelect={() => setSelectedRightTab('calls')}>
                           {dispatchZones.length > 0 ? callZoneFilterLabel : t('Calls')} ({getActiveCallsForZoneSelection(callZoneFilter).length})
-                        </button>
+                        </PanelTab>
 
                         {clinics.map((clinic) => (
-                          <button
+                          <PanelTab
                             key={clinic.id}
-                            type="button"
-                            onClick={() => setSelectedRightTab(clinic.id)}
-                            className={`tab-chrome relative h-10 px-4 text-[15px] sm:text-base font-semibold rounded-t-[20px] rounded-b-none transition-colors ${selectedRightTab === clinic.id ? "tab-active bg-surface-deep text-surface-light after:content-[''] after:absolute after:left-0 after:right-0 after:top-full after:h-3 after:bg-surface-deep" : 'bg-transparent border-0 text-surface-faint hover:text-surface-light'}`}
-                            aria-pressed={selectedRightTab === clinic.id}
+                            active={selectedRightTab === clinic.id}
+                            onSelect={() => setSelectedRightTab(clinic.id)}
                           >
                             {clinic.name} ({getClinicCalls(clinic.id).filter(c => !c.outcome).length})
-                          </button>
+                          </PanelTab>
                         ))}
 
                         {hasVenueMapImage && (
                           <Tooltip content={`${t('Map')} (Alt+M)`} placement="top">
-                            <button
-                              type="button"
-                              onClick={() => setSelectedRightTab('map')}
-                              className={`tab-chrome relative h-10 px-4 text-[15px] sm:text-base font-semibold rounded-t-[20px] rounded-b-none transition-colors ${selectedRightTab === 'map' ? "tab-active bg-surface-deep text-surface-light after:content-[''] after:absolute after:left-0 after:right-0 after:top-full after:h-3 after:bg-surface-deep" : 'bg-transparent border-0 text-surface-faint hover:text-surface-light'}`}
-                              aria-pressed={selectedRightTab === 'map'}
+                            <PanelTab
+                              active={selectedRightTab === 'map'}
+                              onSelect={() => setSelectedRightTab('map')}
                               aria-label={t('Map')}
                             >
                               <MapIcon className="h-4 w-4" />
-                            </button>
+                            </PanelTab>
                           </Tooltip>
                         )}
                       </div>
@@ -4639,8 +3890,15 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
                               ]}
                             />
                             <div className="flex items-center gap-1.5">
-                              {dispatchZones.length > 1 && <CallZoneFilterButton />}
-                              <CallSortButton />
+                              {dispatchZones.length > 1 && (
+                                <CallZoneFilterButton
+                                  label={callZoneFilterLabel}
+                                  zones={dispatchZones}
+                                  selection={callZoneFilter}
+                                  onSelectionChange={applyCallZoneSelectionChange}
+                                />
+                              )}
+                              <CallSortButton sortMode={callSortMode} onSortModeChange={setCallSortMode} />
                               <Tooltip content={`${t('Add Call')} (Ctrl+Enter)`} placement="top">
                                 <div>
                                   <Button
@@ -4688,9 +3946,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
                             handleRemoveTeamFromCall={handleRemoveTeamFromCall}
                             handleAddTeamToCall={handleAddTeamToCall}
                             handleRevertDetachment={handleRevertDetachment}
-                            getCallRowClass={getCallRowClass}
                             formatAgeSex={formatAgeSex}
-                            TableColGroup={TableColGroup}
                           />
                         </div>
                       </div>
@@ -4816,99 +4072,13 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
                   <div>
                     {mobileTeamsSubTab === 'teams' && (
                     <div className={cardViewMode === 'condensed' ? 'space-y-1.5' : 'space-y-3'}>
-                      <div className="dispatch-shell-list">
-                        {[...(event?.staff || [])]
-                          .sort((a, b) => {
-                            const statusRank = (status: string) => {
-                              if (status === 'Available' || status === 'Available') return 0;
-                              if (['In Clinic', 'On Break'].includes(status)) return 1;
-                              if (['En Route', 'On Scene', 'Transporting'].includes(status)) return 2;
-                              return 3;
-                            };
-                            if (teamSortMode === 'availability') {
-                              const rA = statusRank(a.status), rB = statusRank(b.status);
-                              return rA !== rB ? rA - rB : a.team.localeCompare(b.team, undefined, { numeric: true });
-                            }
-                            if (teamSortMode === 'asc') return a.team.localeCompare(b.team, undefined, { numeric: true });
-                            if (teamSortMode === 'desc') return b.team.localeCompare(a.team, undefined, { numeric: true });
-                            return 0;
-                          })
-                          .map(staff => (
-                            <TeamWidget
-                              key={staff.team}
-                              staff={staff}
-                              event={event}
-                              callDisplayNumberMap={callDisplayNumberMap}
-                              teamTimers={teamTimers}
-                              onStatusChange={handleStatusChange}
-                              onLocationChange={handleLocationChange}
-                              onEditTeam={handleEditTeam}
-                              onDeleteTeam={handleDeleteTeam}
-                              onRefreshTeamPost={refreshTeamFromSchedule}
-                              onNewCall={(teamName) => openAddCallModal({ assignedTeam: teamName })}
-                              updateEvent={updateEvent}
-                              cardViewMode={cardViewMode}
-                                hasVenueMap={hasVenueMapImage}
-                                onViewOnMap={viewTeamOnMap}
-                                knownMapLocations={knownMapLocations}
-                            />
-                          ))}
-                        {(!event?.staff || event.staff.length === 0) && (
-                          <div className="text-center text-surface-light/50 py-8">
-                            {t('No teams added yet')}
-                          </div>
-                        )}
-                      </div>
+                      <TeamList {...teamListProps} emptyText={t('No teams added yet')} />
                     </div>
                     )}
                   </div>
 
                   {mobileTeamsSubTab === 'supervisors' && (
-                    <div>
-                      <div className="dispatch-shell-list">
-                        {event?.supervisor && event.supervisor.length > 0 ? (
-                        event.supervisor
-                          .sort((a, b) => a.team.localeCompare(b.team, undefined, { numeric: true }))
-                          .map(supervisor => {
-                            const supervisorAsStaff: Staff = {
-                              team: supervisor.team,
-                              location: supervisor.location,
-                              status: supervisor.status,
-                              members: [supervisor.member],
-                              log: supervisor.log,
-                              originalPost: supervisor.originalPost
-                            };
-                            return (
-                              <TeamWidget
-                                key={supervisor.team}
-                                staff={supervisorAsStaff}
-                                event={event}
-                                callDisplayNumberMap={callDisplayNumberMap}
-                                teamTimers={teamTimers}
-                                onStatusChange={handleSupervisorStatusChange}
-                                onLocationChange={handleSupervisorLocationChange}
-                                onEditTeam={(staff) => {
-                                  const correspondingSupervisor = event.supervisor?.find(s => s.team === staff.team);
-                                  if (correspondingSupervisor) handleEditSupervisor(correspondingSupervisor);
-                                }}
-                                onDeleteTeam={handleDeleteSupervisor}
-                                onRefreshTeamPost={refreshTeamFromSchedule}
-                                onNewCall={(teamName) => openAddCallModal({ assignedTeam: teamName })}
-                                updateEvent={updateEvent}
-                                cardViewMode={cardViewMode}
-                                hasVenueMap={hasVenueMapImage}
-                                onViewOnMap={viewSupervisorOnMap}
-                                knownMapLocations={knownMapLocations}
-                              />
-                            );
-                          })
-                        ) : (
-                          <div className="text-center text-surface-light/50 py-8">
-                            {t('No supervisors added yet')}
-                          </div>
-                        )}
-                      </div>
-                    </div>
+                    <SupervisorList {...supervisorListProps} emptyText={t('No supervisors added yet')} />
                   )}
                 </div>
               </Tab>
@@ -4918,38 +4088,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
                 <div className="space-y-6 pb-20">
                   <div>
                     <div className="space-y-3">
-                      {(event?.venue?.equipment?.length || event?.eventEquipment?.length) ? (
-                        <div className="dispatch-shell-list">
-                          {getEquipmentItems()
-                            .sort((a, b) => {
-                              const aOnCall = a.status !== 'Available' ? 1 : 0;
-                              const bOnCall = b.status !== 'Available' ? 1 : 0;
-                              return aOnCall - bOnCall;
-                            })
-                            .map((equipmentItem) => (
-                              <EquipmentCard
-                                key={equipmentItem.name}
-                                equipment={equipmentItem}
-                                event={event!}
-                                onStatusChange={handleEquipmentStatusChange}
-                                onLocationChange={handleEquipmentLocationChange}
-                                onMarkReady={handleEquipmentMarkReady}
-                                onDelete={handleEquipmentDelete}
-                                updateEvent={updateEvent}
-                                hasVenueMap={hasVenueMapImage}
-                                onViewOnMap={viewEquipmentOnMap}
-                                canLocateOnMap={
-                                  !!(equipmentItem.currentLocation || equipmentItem.stagingLocation) &&
-                                  knownMapLocations.has((equipmentItem.currentLocation || equipmentItem.stagingLocation) as string)
-                                }
-                              />
-                            ))}
-                        </div>
-                      ) : (
-                        <div className="text-center text-surface-light/50 py-8">
-                          {t('No equipment configured')}
-                        </div>
-                      )}
+                      <EquipmentList {...equipmentListProps} emptyText={t('No equipment configured')} />
                     </div>
                   </div>
                 </div>
@@ -5114,64 +4253,13 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
       )}
 
       {showDuplicateModal && selectedDuplicateCallId && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 z-[100] flex items-center justify-center" onClick={() => setShowDuplicateModal(false)}>
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="bg-surface-deepest border border-surface-liner text-surface-light rounded-lg p-6 w-full max-w-2xl shadow-xl space-y-4"
-          >
-            <h2 className="text-2xl font-bold text-surface mb-4">Select Original Call</h2>
-            <p className="text-surface-light mb-4">
-              Call #{callDisplayNumberMap.get(selectedDuplicateCallId)} is a duplicate of which call?
-            </p>
-            <div className="max-h-80 overflow-y-auto border border-surface-liner rounded">
-              <table className="w-full text-sm">
-                <thead className="bg-surface-deep sticky top-0">
-                  <tr>
-                    <th className="px-3 py-2 text-left text-surface-light">Call #</th>
-                    <th className="px-3 py-2 text-left text-surface-light">Chief Complaint</th>
-                    <th className="px-3 py-2 text-left text-surface-light">Age</th>
-                    <th className="px-3 py-2 text-left text-surface-light">Sex</th>
-                    <th className="px-3 py-2 text-left text-surface-light">Location</th>
-                    <th className="px-3 py-2 text-left text-surface-light">Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {event?.calls
-                    .filter(call => call.id !== selectedDuplicateCallId && !["Delivered", "Refusal", "NMM", "Resolved"].includes(call.status))
-                    .sort((a, b) => parseInt(a.id) - parseInt(b.id))
-                    .map(call => (
-                      <tr key={call.id} className="border-b border-surface-liner hover:bg-surface-deep">
-                        <td className="px-3 py-2">{callDisplayNumberMap.get(call.id)}</td>
-                        <td className="px-3 py-2">{call.chiefComplaint || 'N/A'}</td>
-                        <td className="px-3 py-2">{call.age || 'N/A'}</td>
-                        <td className="px-3 py-2">{call.gender || 'N/A'}</td>
-                        <td className="px-3 py-2">{call.location || 'N/A'}</td>
-                        <td className="px-3 py-2">
-                          <Button
-                            onClick={() => handleResolveDuplicate(selectedDuplicateCallId, call.id)}
-                            className="px-3 py-1 bg-status-red hover:bg-status-red/80 text-surface-light rounded text-sm"
-                          >
-                            Select
-                          </Button>
-                        </td>
-                      </tr>
-                    ))}
-                </tbody>
-              </table>
-            </div>
-            {event?.calls.filter(call => call.id !== selectedDuplicateCallId && !["Delivered", "Refusal", "NMM", "Resolved"].includes(call.status)).length === 0 && (
-              <p className="text-surface-light text-center py-4">No active calls available to mark as original.</p>
-            )}
-            <div className="flex justify-end gap-2 mt-4">
-              <Button
-                onClick={() => setShowDuplicateModal(false)}
-                className="px-4 py-2 rounded bg-surface-deep hover:bg-surface-liner text-surface-light"
-              >
-                Cancel
-              </Button>
-            </div>
-          </div>
-        </div>
+        <DuplicateCallModal
+          duplicateCallId={selectedDuplicateCallId}
+          calls={event.calls}
+          callDisplayNumberMap={callDisplayNumberMap}
+          onSelectOriginal={handleResolveDuplicate}
+          onClose={() => setShowDuplicateModal(false)}
+        />
       )}
     </DispatchVocabularyProvider>
   );

@@ -124,21 +124,33 @@
   animation-delay: var(--delay, 0ms);
 }
 
+/* Folder-style tabs sitting on top of a panel (dispatch Calls/Clinic/Map).
+   This is the single source of the tab's shape — don't add rounded-* or bg-*
+   utilities on the element, or active/inactive states end up with different
+   radii and visibly layer during the switch. The ::after strip bridges the
+   tab into the panel below it and inherits the tab's background so the two
+   always change together. */
 .tab-chrome {
   position: relative;
   isolation: isolate;
   overflow: visible;
-  --tab-chrome-top-radius: var(--radius);
+  border-radius: var(--radius) var(--radius) 0 0;
 }
 
 .tab-chrome.tab-active {
   background: hsl(var(--surface-bg-1));
   color: hsl(var(--surface-text-strong));
   z-index: 30;
-  border-top-left-radius: var(--tab-chrome-top-radius);
-  border-top-right-radius: var(--tab-chrome-top-radius);
-  border-bottom-left-radius: 0;
-  border-bottom-right-radius: 0;
+}
+
+.tab-chrome.tab-active::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  height: 0.75rem;
+  background: inherit;
 }
 
 .dispatch-shell-list > .dispatch-shell-card + .dispatch-shell-card {

@@ -11,7 +11,7 @@ import { syncClinicsFromVenue } from '@/lib/clinics';
 import { syncDispatchZonesFromVenue } from '@/lib/zones';
 import MapZoomControls from '@/components/ui/map-zoom-controls';
 import { useScheduleGeneration } from '@/hooks/useScheduleGeneration';
-import { scheduleTimesToWindow, formatTimeValue } from '@/lib/scheduleUtils';
+import { scheduleTimesToWindow } from '@/lib/scheduleUtils';
 import { useCertifications } from '@/hooks/useCertifications';
 import MetadataSection from '@/components/event-create/MetadataSection';
 import TeamStaffingSection from '@/components/event-create/TeamStaffingSection';
@@ -19,6 +19,7 @@ import SupervisorStaffingSection from '@/components/event-create/SupervisorStaff
 import PostingScheduleSection from '@/components/event-create/PostingScheduleSection';
 import { EquipmentSelectionSection, PostsSelectionSection } from '@/components/event-create/PostsEquipmentSection';
 import { WizardShell, StepProgress, ReviewColumns, type WizardStep, type ReviewColumn } from '@/components/wizard';
+import { countLabel, eventConfigReviewFields, staffReviewFields, postScheduleReviewValue, getStepNavigation } from '@/components/wizard/eventReview';
 import { stripUndefined } from '@/lib/utils';
 import AddTeamModal, { TeamDraft } from '@/components/modals/event/addteammodal';
 import AddSupervisorModal from '@/components/modals/event/addsupervisormodal';
@@ -610,24 +611,24 @@ export default function EventCreation() {
       id: 'basics',
       label: 'Event Configuration',
       fields: [
-        { label: 'Event name', value: eventData.name?.trim() || '(untitled)' },
-        { label: 'Venue', value: eventData.venue?.name || '(none)' },
-        { label: 'Date', value: eventData.date ? new Date(eventData.date).toLocaleDateString() : '—' },
-        { label: 'Start / End time', value: `${formatTimeValue(scheduleFrom)} – ${formatTimeValue(scheduleTo)}` },
-        { label: 'Surge limit', value: `${eventData.surgeLimitPercent ?? 70}%` },
-        { label: 'Pending transport surge', value: `${eventData.pendingTransportSurgeThreshold ?? 3} patients` },
-        {
-          label: 'Unassigned call surge',
-          value: `${Math.floor((eventData.unassignedCallSurgeSeconds ?? 120) / 60)}:${String((eventData.unassignedCallSurgeSeconds ?? 120) % 60).padStart(2, '0')}`,
-        },
+        ...eventConfigReviewFields({
+          name: eventData.name,
+          includeVenue: true,
+          venueName: eventData.venue?.name,
+          date: eventData.date,
+          scheduleFrom,
+          scheduleTo,
+          surgeLimitPercent: eventData.surgeLimitPercent,
+          pendingTransportSurgeThreshold: eventData.pendingTransportSurgeThreshold,
+          unassignedCallSurgeSeconds: eventData.unassignedCallSurgeSeconds,
+        }),
       ],
     },
     {
       id: 'teams',
       label: 'Staff Assignments',
       fields: [
-        { label: 'Teams', value: `${(eventData.staff || []).length} team${(eventData.staff || []).length === 1 ? '' : 's'}` },
-        { label: 'Supervisors', value: `${(eventData.supervisor || []).length} supervisor${(eventData.supervisor || []).length === 1 ? '' : 's'}` },
+        ...staffReviewFields((eventData.staff || []).length, (eventData.supervisor || []).length),
       ],
     },
     ...(hasVenueEquipment
@@ -636,7 +637,7 @@ export default function EventCreation() {
             id: 'equipment',
             label: 'Equipment',
             fields: [
-              { label: 'Equipment', value: `${eventData.eventEquipment.length} item${eventData.eventEquipment.length === 1 ? '' : 's'}` },
+              { label: 'Equipment', value: countLabel(eventData.eventEquipment.length, 'item') },
             ],
           },
         ]
@@ -647,9 +648,7 @@ export default function EventCreation() {
       fields: [
         {
           label: 'Post schedule',
-          value: postsEnabled
-            ? `${(eventData.eventPosts || []).length} post${(eventData.eventPosts || []).length === 1 ? '' : 's'} · ${scheduleChips.length} repost time${scheduleChips.length === 1 ? '' : 's'}`
-            : 'Not enabled',
+          value: postScheduleReviewValue(postsEnabled, (eventData.eventPosts || []).length, scheduleChips.length),
         },
       ],
     },
@@ -681,15 +680,7 @@ export default function EventCreation() {
   const showMapPanel = currentStepId === 'equipment' || currentStepId === 'postschedule';
   const showMapColumn = showMapPanel && hasMap;
 
-  const stepIdx = STEP_ORDER.indexOf(currentStepId as (typeof STEP_ORDER)[number]);
-  const isFirstStep = stepIdx <= 0;
-  const isLastStep = stepIdx === STEP_ORDER.length - 1;
-  const goNext = () => {
-    if (stepIdx >= 0 && stepIdx < STEP_ORDER.length - 1) setCurrentStepId(STEP_ORDER[stepIdx + 1]);
-  };
-  const goBack = () => {
-    if (stepIdx > 0) setCurrentStepId(STEP_ORDER[stepIdx - 1]);
-  };
+  const { isFirstStep, isLastStep, goNext, goBack } = getStepNavigation(STEP_ORDER, currentStepId, setCurrentStepId);
 
   const backButton = !isFirstStep && (
     <Button variant="flat" size="md" onPress={goBack} className="px-6">

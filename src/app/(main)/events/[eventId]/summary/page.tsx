@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo } from 'react';
+import { formatEventDate } from '@/lib/eventDate';
 import { useParams } from 'next/navigation';
 import { dbService } from '@/lib/services';
 import { Event, Call, TeamLogEntry, CallLogEntry, InteractionSession } from '@/app/types';
@@ -251,7 +252,6 @@ export default function SummaryPage() {
     : 0;
 
   const totalCalls = event.calls?.length ?? 0;
-  const eventDate = new Date(event.date);
 
   // Create chronological call numbers based on first log entry time
   const getChronologicalCallNumber = (call: Call) => {
@@ -279,7 +279,7 @@ export default function SummaryPage() {
             <h1 className="text-3xl md:text-4xl font-bold">
               Event Summary: {event.name}{' '}
               <span className="font-normal text-surface-light/70 text-xl md:text-2xl">
-                ({eventDate.toLocaleDateString()})
+                ({formatEventDate(event.date)})
               </span>
             </h1>
             <div className="flex gap-2 shrink-0">

@@ -36,6 +36,8 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { dropdownMotionProps } from './trackingcardparts';
+import { textToLog } from '@/lib/logText';
 
 // Define EditableCallField type locally
 type EditableCallField = keyof Call | 'ageSex';
@@ -69,9 +71,9 @@ interface CallTrackingTableProps {
   handleRemoveTeamFromCall: (callId: string, team: string) => Promise<void>;
   handleAddTeamToCall: (callId: string, team: string) => Promise<void>;
   handleRevertDetachment: (callId: string, team: string) => void;
-  getCallRowClass: (call: Call) => string;
   formatAgeSex: (age?: string | number, gender?: string) => string;
-  TableColGroup: React.ComponentType;
+  /** Overrides the default column widths. Must be a stable (module-scope) component. */
+  TableColGroup?: React.ComponentType;
 }
 
 interface LogEntry {
@@ -79,14 +81,21 @@ interface LogEntry {
   message: string;
 }
 
-const dropdownMotionProps = {
-  initial: { opacity: 0, y: -8, scale: 0.98 },
-  animate: { opacity: 1, y: 0, scale: 1 },
-  exit: { opacity: 0, y: -8, scale: 0.98 },
-  transition: { duration: 0.16, ease: 'easeOut' },
-} as const;
 
 const DETAILS_CLOSE_ANIMATION_MS = 320;
+
+// Call #, Chief Complaint, A/S, Location, Team (flex), row actions (kebab
+// menu + priority/pin indicator icons).
+const DefaultTableColGroup = () => (
+  <colgroup>
+    <col style={{ width: '4rem' }} />
+    <col style={{ width: '11rem' }} />
+    <col style={{ width: '4rem' }} />
+    <col style={{ width: '11rem' }} />
+    <col />
+    <col style={{ width: '4.5rem' }} />
+  </colgroup>
+);
 
 export const CallTrackingTable: React.FC<CallTrackingTableProps> = ({
   event,
@@ -116,9 +125,8 @@ export const CallTrackingTable: React.FC<CallTrackingTableProps> = ({
   handleRemoveTeamFromCall,
   handleAddTeamToCall,
   handleRevertDetachment,
-  getCallRowClass,
   formatAgeSex,
-  TableColGroup,
+  TableColGroup = DefaultTableColGroup,
 }) => {
   // const ButtonRefs = useRef<Record<string, HTMLElement | null>>({});
   const [closingCallId, setClosingCallId] = React.useState<string | null>(null);
@@ -1566,11 +1574,9 @@ export const CallTrackingTable: React.FC<CallTrackingTableProps> = ({
                         const callNow = event?.calls.find((currentCall: Call) => currentCall.id === call.id);
                         if (!callNow) return;
 
-                        const lines = text.split('\n').filter((line) => line.trim());
-                        const newLog: LogEntry[] = lines.map((line) => ({
-                          timestamp: Date.now(),
-                          message: line,
-                        }));
+                        // Keep unchanged lines' timestamps — the call timer counts from the first entry.
+                        const newLog = textToLog(text, callNow.log);
+                        if (!newLog) return;
 
                         const updatedCall = { ...callNow, log: newLog };
                         const updated = event!.calls.map((currentCall: Call) =>

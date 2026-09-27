@@ -20,6 +20,8 @@ import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
 import { isClinicCallResolved } from '@/lib/clinics';
 import { sortActiveCalls } from '@/lib/callSort';
 import CallIndicatorIcons from './callindicatoricons';
+import { dropdownMotionProps } from './trackingcardparts';
+import { textToLog } from '@/lib/logText';
 
 type EditableCallField = keyof Call | 'ageSex';
 
@@ -47,12 +49,6 @@ interface ClinicTrackingTableProps {
   formatAgeSex: (age?: string | number, gender?: string) => string;
 }
 
-const dropdownMotionProps = {
-  initial: { opacity: 0, y: -8, scale: 0.98 },
-  animate: { opacity: 1, y: 0, scale: 1 },
-  exit: { opacity: 0, y: -8, scale: 0.98 },
-  transition: { duration: 0.16, ease: 'easeOut' },
-} as const;
 
 const DETAILS_CLOSE_ANIMATION_MS = 320;
 
@@ -578,12 +574,9 @@ export default function ClinicTrackingTable({
                                   const callNow = event?.calls.find((c: Call) => c.id === call.id);
                                   if (!callNow) return;
                                   
-                                  // Convert text back to log entries
-                                  const lines = text.split('\n').filter(line => line.trim());
-                                  const newLog: CallLogEntry[] = lines.map(line => ({
-                                    timestamp: Date.now(),
-                                    message: line
-                                  }));
+                                  // Keep unchanged lines' timestamps — the call timer counts from the first entry.
+                                  const newLog = textToLog(text, callNow.log);
+                                  if (!newLog) return;
                                   
                                   const updatedCall = { ...callNow, log: newLog };
                                   const updated = event!.calls.map((c: Call) => 

@@ -196,6 +196,7 @@ PocketBase stores these as opaque `json` fields with no server-side schema; the 
 | `members` | string[] | Member names. |
 | `log?` | `{timestamp:number, message:string}[]` | Activity log for this team. |
 | `originalPost?` | string | Post the team was originally assigned before any reassignment. |
+| `statusSince?` | number | Epoch ms when the team entered its current `status`/`location`; drives the team timer. Stamped by the dispatch page on every status or location change (absent on events that predate it — the timer then falls back to the logs). |
 
 **`Supervisor`** — same shape as `Staff` but with a single `member: string` instead of `members: string[]`.
 

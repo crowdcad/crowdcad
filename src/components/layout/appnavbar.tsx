@@ -4,7 +4,6 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import dynamic from "next/dynamic";
 import { authService, dbService } from "@/lib/services";
 import { useAuth } from "@/hooks/useauth";
 import { useAdmin } from "@/hooks/useAdmin";
@@ -28,21 +27,7 @@ import {
 } from "@heroui/react";
 
 import { Menu, Moon, UserRound, LogOut, Sun } from "lucide-react";
-
-const LoginModalLazy = dynamic(() => import("@/components/modals/auth/loginmodal"), { ssr: false });
-
-function LiveClock() {
-  const [now, setNow] = useState<Date>(() => new Date());
-  useEffect(() => {
-    const id = setInterval(() => setNow(new Date()), 1000);
-    return () => clearInterval(id);
-  }, []);
-  return (
-    <span suppressHydrationWarning={true} className="tabular-nums text-surface-light text-sm font-semibold font-arial">
-      {now.toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-    </span>
-  );
-}
+import { LiveClock, LoginModalLazy, MobileMenuAccountItems, useThemeToggle } from '@/components/layout/navbarshared';
 
 export default function AppNavbar() {
   const router = useRouter();
@@ -58,29 +43,7 @@ export default function AppNavbar() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [loginOpen, setLoginOpen] = useState(false);
   const [loginMode, setLoginMode] = useState<"login" | "signup">("login");
-  const [isDarkTheme, setIsDarkTheme] = useState(true);
-
-  useEffect(() => {
-    const root = document.documentElement;
-    const hasDarkClass = root.classList.contains("dark");
-    setIsDarkTheme(hasDarkClass);
-  }, []);
-
-  const toggleTheme = useCallback(() => {
-    const nextIsDark = !isDarkTheme;
-    const root = document.documentElement;
-
-    root.classList.toggle("dark", nextIsDark);
-    root.setAttribute("data-theme", nextIsDark ? "dark" : "light");
-
-    try {
-      localStorage.setItem("ccad-theme", nextIsDark ? "dark" : "light");
-    } catch {
-      // Ignore localStorage failures (private mode / restricted storage).
-    }
-
-    setIsDarkTheme(nextIsDark);
-  }, [isDarkTheme]);
+  const { isDarkTheme, toggleTheme } = useThemeToggle();
 
   const isDispatch = !!(pathname && /^\/events\/[^/]+\/dispatch(?:$|\/|\?)/.test(pathname));
   const dispatchEventId = pathname?.match(/^\/events\/([^/?#]+)\/dispatch(?:$|[/?#])/)?.[1] ?? null;
@@ -386,71 +349,17 @@ export default function AppNavbar() {
             ))
           )}
 
-          <div className="my-2 border-t border-surface-liner" />
-
-          <NavbarMenuItem className="mt-1">
-            <button
-              className="block w-full rounded-md px-2 py-2 text-left text-sm font-medium transition text-surface-light hover:text-accent"
-              onClick={() => {
-                toggleTheme();
-                setIsMenuOpen(false);
-              }}
-            >
-              {isDarkTheme ? "Switch to light mode" : "Switch to dark mode"}
-            </button>
-          </NavbarMenuItem>
-
-          {!user ? (
-            <>
-              <NavbarMenuItem className="mt-1">
-                <button
-                  className="block w-full rounded-md px-2 py-2 text-left text-sm font-medium transition text-surface-light hover:text-accent"
-                  onClick={() => {
-                    setIsMenuOpen(false);
-                    setLoginMode("login");
-                    setLoginOpen(true);
-                  }}
-                >
-                  Log in
-                </button>
-              </NavbarMenuItem>
-              <NavbarMenuItem className="mt-1">
-                <button
-                  className="block w-full rounded-md px-2 py-2 text-left text-sm font-medium transition text-surface-light hover:text-accent"
-                  onClick={() => {
-                    setIsMenuOpen(false);
-                    setLoginMode("signup");
-                    setLoginOpen(true);
-                  }}
-                >
-                  Sign up
-                </button>
-              </NavbarMenuItem>
-            </>
-          ) : (
-            <>
-              <NavbarMenuItem>
-                <Link
-                  href="/profile"
-                  className="block w-full rounded-md px-2 py-2 text-left text-sm font-medium transition text-surface-light hover:text-accent"
-                  onClick={() => setIsMenuOpen(false)}
-                >
-                  Profile
-                </Link>
-              </NavbarMenuItem>
-              <NavbarMenuItem>
-                <button
-                  className="block w-full rounded-md px-2 py-2 text-left text-sm font-medium transition text-status-red hover:text-status-red/80"
-                  onClick={() => {
-                    setIsMenuOpen(false);
-                    onLogout();
-                  }}
-                >
-                  Logout
-                </button>
-              </NavbarMenuItem>
-            </>
-          )}
+          <MobileMenuAccountItems
+            signedIn={!!user}
+            isDarkTheme={isDarkTheme}
+            toggleTheme={toggleTheme}
+            closeMenu={() => setIsMenuOpen(false)}
+            openLogin={(mode) => {
+              setLoginMode(mode);
+              setLoginOpen(true);
+            }}
+            onLogout={onLogout}
+          />
         </NavbarMenu>
       </Navbar>
 

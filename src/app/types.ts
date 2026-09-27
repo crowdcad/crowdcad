@@ -129,6 +129,8 @@ export interface Staff {
   members: string[];
   log?: TeamLogEntry[];
   originalPost?: string;
+  /** Epoch ms when the unit entered its current status/location — drives its timer. Stamped by the dispatch page on every status or location change. */
+  statusSince?: number;
 }
 
 export interface Supervisor {
@@ -138,6 +140,8 @@ export interface Supervisor {
   member: string;
   log?: TeamLogEntry[];
   originalPost?: string;
+  /** Epoch ms when the unit entered its current status/location — drives its timer. Stamped by the dispatch page on every status or location change. */
+  statusSince?: number;
 }
 
 export type PostAssignment = {

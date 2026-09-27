@@ -4,7 +4,7 @@ This document gives a concise overview of CrowdCAD's architecture and where key 
 
 High level
 - Frontend: Next.js (App Router), TypeScript, React (server components by default). UI built using TailwindCSS and HeroUI components.
-- Backend / persistence: Firebase (Authentication, Firestore, Cloud Storage). Dataconnect schema exists for connector integration.
+- Backend / persistence: Firebase (Authentication, Firestore, Cloud Storage) by default, or PocketBase for self-hosting (`NEXT_PUBLIC_BACKEND=pocketbase`). App code talks to either through `src/lib/services` (`authService`, `dbService`, `storageService`), never to the Firebase SDK directly. Lite mode stores events locally in the browser (`src/lib/liteEventStore.ts`). Dataconnect schema exists for connector integration.
 - Hosting / CI: Firebase Hosting is used for deployment; CI commonly uses GitHub Actions.
 
 Repository layout (important folders)
@@ -20,17 +20,17 @@ Repository layout (important folders)
   - `src/components/event-create/` — event creation sections split by responsibility (metadata, staffing, schedule, posts/equipment)
   - `src/components/venue-management/` — venue management sections split by responsibility (layers, marker placement, uploads, equipment)
   - `src/components/layout/` — layout-level components (navbar, etc.)
-  - `src/components/ui/` — small reusable primitives and shared controls (Button, Input, Tooltip, Sidebar, map pan/zoom overlays)
+  - `src/components/ui/` — the remaining shadcn/Radix primitives (dropdown menu, resizable panels) and shared controls (loading screen, map pan/zoom overlays)
 
-- `src/hooks/` — shared React hooks (auth, mobile helpers, data collection)
-- `src/lib/` — utilities (e.g., `utils.ts` and `cn()` helpers)
+- `src/hooks/` — shared React hooks (auth, admin/certifications, dispatch vocabulary, timers, zoom/pan, mobile breakpoint)
+- `src/lib/` — pure utilities and domain helpers (`cn()`, status colors, call sorting, team sorting, age/sex parsing, posting times, CSV export, zones, clinics) and the `services/` backend abstraction
 - `dataconnect/` — GraphQL schema and connector definitions used for backend connectors
 - `docs/` — user and developer documentation (this folder)
 
 Key architectural decisions
 
 - App Router / Server Components: Pages under `src/app` are server components by default. Client interactivity (hooks, event handlers) requires the `'use client'` directive at the top of the file.
-- Firebase-first: The app uses Firebase for auth, realtime persistence, storage and hosting. `src/app/firebase.ts` centralizes initialization and should not be edited lightly.
+- Swappable backend: `src/lib/services/factory.ts` picks the Firebase or PocketBase implementation of `IAuthService` / `IDbService` / `IStorageService`. `src/app/firebase.ts` centralizes Firebase initialization (and stubs it out under PocketBase) and should not be edited lightly.
 - Component-first UI: UI is organized around modular components and small primitives in `src/components/ui` so features compose cleanly.
 - Feature decomposition: page-level screens should be split into focused section components when a page starts to accumulate unrelated responsibilities.
 - Shared dispatch primitives: call and clinic tracking should compose from shared dispatch building blocks (`trackingtablebase.tsx`, `trackingtextentry.tsx`, `motioncell.tsx`) to keep behavior and styling consistent.
@@ -45,7 +45,7 @@ Data model and types
 
 Authentication & security
 
-- Firebase Authentication is used for user identity; `useauth.ts` in `src/hooks` wraps auth state for components.
+- `useauth.ts` in `src/hooks` wraps `authService` auth state for components (Firebase Authentication or PocketBase auth).
 - Sensitive production configuration (service accounts, BAAs) must be handled per-organization — see `docs/SETUP_FIREBASE.md`, `docs/SETUP_POCKETBASE.md`, and `docs/DEPLOYMENT.md` for guidance.
 
 Development & testing
@@ -61,7 +61,7 @@ Build & Deploy
 Where to look for examples
 
 - Client-side modal example: `src/components/modals/event/quickcallmodal.tsx`
-- UI primitives: `src/components/ui/button.tsx`, `src/components/ui/input.tsx`
+- Dispatch page layout: `src/components/dispatch/leftpanellists.tsx`, `src/components/dispatch/dispatchcontrols.tsx`
 - Dispatch widgets: `src/components/dispatch/teamcard.tsx`, `src/components/dispatch/calltrackingcard.tsx`, `src/components/dispatch/clinictrackingcard.tsx`
 - Dispatch shared primitives: `src/components/dispatch/trackingtablebase.tsx`, `src/components/dispatch/trackingtextentry.tsx`
 
