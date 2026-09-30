@@ -13,10 +13,10 @@ Digital Public Goods Standard.
 CrowdCAD is self-hosted software. When an organization deploys
 CrowdCAD, it does so on infrastructure that the organization controls.
 All data entered into a deployment, including patient encounter
-records, dispatch records, and personnel information, is stored on
+records, dispatch records and personnel information, is stored on
 that infrastructure.
 
-The maintainers of CrowdCAD do not receive, store, access, or
+The maintainers of CrowdCAD do not receive, store, access or
 otherwise have visibility into any data processed by a deployed
 instance of CrowdCAD. For that reason, the maintainers do not act as a
 data processor under the GDPR or comparable frameworks with respect to
@@ -59,7 +59,7 @@ assessing and documenting the resulting data flows.
 ## 5. Contributor Obligations
 
 Contributors to CrowdCAD agree not to introduce data collection,
-telemetry, or third party calls that are not disclosed in this
+telemetry or third party calls that are not disclosed in this
 document. A contributor proposing a change that introduces such a call
 must disclose it in the relevant pull request so that this document
 can be updated accordingly.

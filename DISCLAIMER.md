@@ -29,22 +29,22 @@ deployment. The deploying organization:
 privacy law, for all information entered into its deployment, as
 further described in PRIVACY.md;
 
-(c) is responsible for configuring, securing, and maintaining its
+(c) is responsible for configuring, securing and maintaining its
 deployment, including applying updates;
 
 (d) is responsible for complying with any regulatory requirements,
-licensing requirements, or medical direction requirements applicable
+licensing requirements or medical direction requirements applicable
 to its operations in its jurisdiction.
 
 CrowdCAD is a coordination and documentation tool. It does not render
 clinical or triage decisions, and its use does not substitute for the
-deploying organization's own medical direction, protocols, or clinical
+deploying organization's own medical direction, protocols or clinical
 judgment.
 
 ## 3. Support
 
 CrowdCAD is maintained by an open source community. No service level
-agreement, guaranteed response time, or on call support is provided in
+agreement, guaranteed response time or on call support is provided in
 connection with the use of CrowdCAD. Issues may be reported at
 https://github.com/evanqua/crowdcad/issues. Organizations deploying
 CrowdCAD for a live event are advised to maintain an independent
@@ -55,10 +55,10 @@ depend on the availability of the software.
 
 Procedures for reporting a security vulnerability are set forth in
 SECURITY.md. Organizations are advised to review CrowdCAD's deployment
-guidance — including its guidance on configuring Firebase Firestore
+guidance, including its guidance on configuring Firebase Firestore
 and Storage security rules, or PocketBase collection access rules, for
-a self-hosted deployment (see docs/DEPLOYMENT.md, docs/SETUP_FIREBASE.md,
-and docs/SETUP_POCKETBASE.md) — and to follow that guidance rather than
+a self-hosted deployment (see docs/DEPLOYMENT.md, docs/SETUP_FIREBASE.md
+and docs/SETUP_POCKETBASE.md), and to follow that guidance rather than
 deploying with default or unsecured configurations.
 
 ## 5. Contact

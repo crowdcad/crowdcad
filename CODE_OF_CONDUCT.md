@@ -4,7 +4,7 @@ Last updated: 2026-02-11
 
 Purpose
 -------
-CrowdCAD is an open-source project built for the volunteer EMS and event medical community. We are committed to providing a welcoming, inclusive, and harassment-free experience for everyone participating in the project, regardless of background, identity, or experience level.
+CrowdCAD is an open-source project built for the volunteer EMS and event medical community. We are committed to providing a welcoming, inclusive and harassment-free experience for everyone participating in the project, regardless of background, identity or experience level.
 
 Standards
 ---------
@@ -12,24 +12,24 @@ All participants are expected to:
 
 - Be respectful and considerate in all communications and contributions.
 - Act professionally and courteously; assume good faith from others.
-- Focus feedback on the code, design, or behavior — not on individuals.
+- Focus feedback on the code, design or behavior under discussion.
 - Use inclusive language and avoid demeaning or exclusionary remarks.
 
 Unacceptable behaviors include (but are not limited to):
 
-- Harassment, intimidation, stalking, or threats of violence.
+- Harassment, intimidation, stalking or threats of violence.
 - Derogatory comments or slurs related to a person’s identity or background.
-- Sustained interruption of discussions, personal attacks, or doxxing.
+- Sustained interruption of discussions, personal attacks or doxxing.
 - Posting sexually explicit or violent material in project spaces.
-- Deliberate sabotage of the project, data, or infrastructure.
+- Deliberate sabotage of the project, data or infrastructure.
 
 Scope
 -----
-This Code of Conduct applies to all project spaces (repository issues and PRs, mailing lists, chat channels, events, and other online or offline forums where CrowdCAD contributors interact). It covers behavior both during project activities and at events organized by or associated with CrowdCAD.
+This Code of Conduct applies to all project spaces (repository issues and PRs, mailing lists, chat channels, events and other online or offline forums where CrowdCAD contributors interact). It covers behavior both during project activities and at events organized by or associated with CrowdCAD.
 
 Reporting
 ---------
-If you experience or witness unacceptable behavior, please report it as soon as possible. You can report incidents by emailing the project conduct team at support@crowdcad.org. Provide as much detail as you can (what happened, when, where, and any relevant links or screenshots). Reports will be treated seriously and handled with discretion.
+If you experience or witness unacceptable behavior, please report it as soon as possible. You can report incidents by emailing the project conduct team at support@crowdcad.org. Provide as much detail as you can (what happened, when, where and any relevant links or screenshots). Reports will be treated seriously and handled with discretion.
 
 Enforcement
 -----------
@@ -56,7 +56,7 @@ We take false reports seriously. Deliberately filing false reports may result in
 
 Acknowledgements
 -----------------
-This Code of Conduct is based on widely adopted open-source community standards and has been adapted to fit the CrowdCAD project. It is intended to be fair, transparent, and aligned with our mission to support volunteer EMS teams.
+This Code of Conduct is based on widely adopted open-source community standards and has been adapted to fit the CrowdCAD project. It is intended to be fair, transparent and aligned with our mission to support volunteer EMS teams.
 
 Contact
 -------
