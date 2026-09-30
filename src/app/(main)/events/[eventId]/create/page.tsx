@@ -20,7 +20,7 @@ import PostingScheduleSection from '@/components/event-create/PostingScheduleSec
 import { EquipmentSelectionSection, PostsSelectionSection } from '@/components/event-create/PostsEquipmentSection';
 import { WizardShell, StepProgress, ReviewColumns, type WizardStep, type ReviewColumn } from '@/components/wizard';
 import { countLabel, eventConfigReviewFields, staffReviewFields, postScheduleReviewValue, getStepNavigation } from '@/components/wizard/eventReview';
-import { stripUndefined } from '@/lib/utils';
+import { randomId, stripUndefined } from '@/lib/utils';
 import AddTeamModal, { TeamDraft } from '@/components/modals/event/addteammodal';
 import AddSupervisorModal from '@/components/modals/event/addsupervisormodal';
 import BulkImportModal from '@/components/modals/event/bulkimportmodal';
@@ -150,7 +150,7 @@ export default function EventCreation() {
     }
 
     const chips = times.map((timeStr) => ({
-      id: crypto.randomUUID(),
+      id: randomId(),
       time: timeStr,
       editable: false,
     }));
@@ -221,7 +221,7 @@ export default function EventCreation() {
               venue = {
                 ...venue,
                 layers: [{
-                  id: crypto.randomUUID(),
+                  id: randomId(),
                   name: 'Main Floor',
                   posts: venue.posts || [],
                   mapUrl: venue.mapUrl,

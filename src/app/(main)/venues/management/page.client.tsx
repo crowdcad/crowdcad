@@ -12,7 +12,7 @@ import { isPointWithinRect, pixelToPercent } from '@/lib/markerUtils';
 import { hasDuplicateClinicName, isClinicPost } from '@/lib/clinics';
 import { hasDuplicateZoneName } from '@/lib/zones';
 import { getNextZoneColor } from '@/lib/zoneColors';
-import { stripUndefined } from '@/lib/utils';
+import { randomId, stripUndefined } from '@/lib/utils';
 import { uploadWithRetry } from '@/lib/uploadUtils';
 import { useZoomPan } from '@/hooks/useZoomPan';
 import { MAP_CHECKER_BG } from '@/lib/mapStyles';
@@ -77,7 +77,7 @@ export default function VenueManagementPageClient() {
   }>({
     name: '',
     equipment: [],
-    layers: [{ id: crypto.randomUUID(), name: 'Floor 1', posts: [], mapUrl: undefined }],
+    layers: [{ id: randomId(), name: 'Floor 1', posts: [], mapUrl: undefined }],
   });
 
   const [currentLayer, setCurrentLayer] = useState(0);
@@ -282,7 +282,7 @@ export default function VenueManagementPageClient() {
             } else {
               // Backward compatibility: create single layer from old format
               layers = [{
-                id: crypto.randomUUID(),
+                id: randomId(),
                 name: 'Main',
                 posts: venue.posts || [],
                 mapUrl: venue.mapUrl,
@@ -359,7 +359,7 @@ export default function VenueManagementPageClient() {
     const name = equipmentInput.trim();
     if (!name) return;
     const newItem: EquipmentWithLocation = {
-      id: crypto.randomUUID(),
+      id: randomId(),
       name,
       status: 'Available' as EquipmentStatus,
     };
@@ -488,7 +488,7 @@ export default function VenueManagementPageClient() {
     }
 
     const newZone: Zone = {
-      id: crypto.randomUUID(),
+      id: randomId(),
       name,
       color: zoneColorInput || getNextZoneColor(venueData.layers[pendingZone.layerIdx]?.zones || []),
       points: pendingZone.points,
@@ -614,7 +614,7 @@ export default function VenueManagementPageClient() {
       const copy = [...newLayers[pendingMarker.layerIdx].posts];
       const currentPost = copy[pendingMarker.postIdx];
       if (typeof currentPost !== 'string') {
-        const clinicId = markerIsClinicInput ? (currentPost.clinicId || crypto.randomUUID()) : currentPost.clinicId;
+        const clinicId = markerIsClinicInput ? (currentPost.clinicId || randomId()) : currentPost.clinicId;
         copy[pendingMarker.postIdx] = {
           ...currentPost,
           name,
@@ -670,7 +670,7 @@ export default function VenueManagementPageClient() {
       const newLayers = [...prev.layers];
       const post = newLayers[layerIdx].posts[postIdx];
       if (typeof post === 'string') return prev;
-      const clinicId = isClinic ? (post.clinicId || crypto.randomUUID()) : post.clinicId;
+      const clinicId = isClinic ? (post.clinicId || randomId()) : post.clinicId;
       const clinicIdField = clinicId ? { clinicId } : {};
       if (newLayerIdx !== layerIdx) {
         // Move to new layer
@@ -892,7 +892,7 @@ export default function VenueManagementPageClient() {
     try {
       const mapUrl = await storageService.uploadFile(`venue_maps/${Date.now()}_${file.name}`, file);
       const newLayer: Layer = {
-        id: crypto.randomUUID(),
+        id: randomId(),
         name,
         mapUrl,
         posts: [],
@@ -938,10 +938,10 @@ export default function VenueManagementPageClient() {
     try {
       const mapUrl = await storageService.uploadFile(`venue_maps/${Date.now()}_${imageFile.name}`, imageFile);
       const postsWithClinicIds = posts.map((post) =>
-        isClinicPost(post) ? { ...post, clinicId: crypto.randomUUID() } : post
+        isClinicPost(post) ? { ...post, clinicId: randomId() } : post
       );
       const newLayer: Layer = {
-        id: crypto.randomUUID(),
+        id: randomId(),
         name,
         mapUrl,
         posts: postsWithClinicIds,
