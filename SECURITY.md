@@ -1,6 +1,6 @@
 # Security Policy
 
-CrowdCAD takes the security and privacy of our users and contributors seriously. This document explains how to report vulnerabilities, what to include, and how we handle reports.
+CrowdCAD takes the security and privacy of our users and contributors seriously. This document explains how to report vulnerabilities, what to include and how we handle reports.
 
 **Current project status**
 
@@ -30,10 +30,10 @@ Suggested report contents:
 
 ## Response process & timeline
 
-1. **Acknowledgement** — We aim to acknowledge receipt within 3 business days.
-2. **Assessment** — Maintainers will validate the report, determine impact, and scope affected versions.
-3. **Remediation** — For confirmed issues we will develop and test a fix, then release and document the remediation.
-4. **Disclosure** — After a fix is available, we will publish a short advisory in the GitHub Security tab describing the impact, affected versions, and remediation steps. We may coordinate disclosure timing if downstream users need notice.
+1. **Acknowledgement** We aim to acknowledge receipt within 3 business days.
+2. **Assessment:** Maintainers will validate the report, determine impact and scope affected versions.
+3. **Remediation:** For confirmed issues we will develop and test a fix, then release and document the remediation.
+4. **Disclosure:** After a fix is available, we will publish a short advisory in the GitHub Security tab describing the impact, affected versions and remediation steps. We may coordinate disclosure timing if downstream users need notice.
 
 Typical target times (may vary with severity and complexity):
 
@@ -80,7 +80,7 @@ If you follow this policy in good faith, we will not pursue legal action for the
 - Security reports: **support@crowdcad.org**
 - GitHub Security Advisories: use the repository Security tab
 - Maintainers:
-  - Evan Passalacqua — @evanqua
-  - Ivan Zhang — @iv-zhang
+  - Evan Passalacqua (@evanqua)
+  - Ivan Zhang (@iv-zhang)
 
 Thank you for helping us keep CrowdCAD secure.

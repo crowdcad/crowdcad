@@ -2,6 +2,7 @@ import React from 'react';
 import { Button, Checkbox, Chip, Input, ScrollShadow, Select, SelectItem, Tooltip } from '@heroui/react';
 import { CircleHelp, Plus, Trash2 } from 'lucide-react';
 import type { Event, Post, Venue, EventEquipment } from '@/app/types';
+import { randomId } from '@/lib/utils';
 
 type FlattenedPost = {
   post: Post;
@@ -188,7 +189,7 @@ export function EquipmentSelectionSection({
       ...prev,
       eventEquipment: [
         ...prev.eventEquipment,
-        { id: crypto.randomUUID(), name, status: 'Available', defaultLocation: undefined },
+        { id: randomId(), name, status: 'Available', defaultLocation: undefined },
       ],
     }));
     setNewEquipName('');

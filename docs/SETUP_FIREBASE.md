@@ -1,173 +1,191 @@
 # Firebase Setup for CrowdCAD
 
-This guide explains how to configure Firebase for local development and production deployments — one of two supported backends, alongside PocketBase (see [`SETUP_POCKETBASE.md`](SETUP_POCKETBASE.md)). Firebase is a good fit when your organization wants a managed cloud backend with HIPAA-eligible infrastructure (via a signed Google BAA); see [`DEPLOYMENT.md`](DEPLOYMENT.md) for a side-by-side comparison to help you choose. This guide complements `src/app/firebase.ts`, which contains the runtime initialization code.
+This guide sets up CrowdCAD with the Firebase backend for local development and production. Firebase is the managed cloud option and the path to use if your organization needs HIPAA-eligible infrastructure through a signed Google BAA. For the self-hosted option see [`SETUP_POCKETBASE.md`](SETUP_POCKETBASE.md), and for a side-by-side comparison see [`DEPLOYMENT.md`](DEPLOYMENT.md).
 
-Important: do not commit secrets (API keys or service account JSON) to the repository. Use environment files for local development and CI secrets for production.
+A step-by-step version of this guide for readers with no terminal experience, with separate Mac and Windows instructions, is published at [crowdcad.org/docs/firebase-setup](https://crowdcad.org/docs/firebase-setup).
 
-## Required Firebase products
+Runtime initialization lives in `src/app/firebase.ts`. Access control lives in `firestore.rules`.
 
-- Authentication (Email/Password, SSO providers as needed)
-- Firestore (Realtime DB is not required by default)
-- Cloud Storage (for uploaded assets)
-- Hosting (for the frontend)
+Firebase web config values (including the API key) are public by design and ship in the client bundle. Security comes from Firestore and Storage rules. Service account keys are private: never commit them or expose them to client code.
 
-Optional: Cloud Functions if you add server-side integrations.
+## Prerequisites
 
-## Create a Firebase project
+- Git
+- Node.js 20 or newer with npm (current LTS recommended)
+- Firebase CLI: `npm install -g firebase-tools`
+- A Google account
 
-1. Go to https://console.firebase.google.com/ and create a new project.
-2. Add a Web App; copy the config values from Project Settings.
-3. Enable Firestore, Authentication providers you need, and Storage.
+On Windows PowerShell, globally installed npm commands are `.ps1` scripts. If PowerShell reports that running scripts is disabled, run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once.
 
-Record the Project ID — you will use it in `NEXT_PUBLIC_FIREBASE_PROJECT_ID` and CI secrets.
+## 1. Fork and clone
 
-## Fork and clone the repository
-
-Since this is a shared project, start by creating your own copy rather than working directly against the upstream repository:
-
-1. Go to https://github.com/evanqua/crowdcad and click **Fork** to create a copy under your own GitHub account.
-2. Clone your fork (not the upstream repo):
+Fork [evanqua/crowdcad](https://github.com/evanqua/crowdcad) on GitHub, clone your fork and add the original repository as the `upstream` remote so you can pull future releases:
 
 ```bash
 git clone https://github.com/YOUR_USERNAME/crowdcad.git
 cd crowdcad
+git remote add upstream https://github.com/evanqua/crowdcad.git
+npm install
 ```
 
-3. Add the original repository as an `upstream` remote so you can pull in future updates — this is recommended so your fork doesn't fall behind:
+## 2. Create and configure the Firebase project
+
+In the [Firebase Console](https://console.firebase.google.com/):
+
+1. **Create a project.** Google Analytics is optional and can be turned off. Record the project ID.
+2. **Authentication:** open **Build > Authentication**, click **Get started** and enable the **Email/Password** provider. CrowdCAD uses email and password sign-in only.
+3. **Firestore:** open **Build > Firestore Database**, click **Create database**, choose a location and start in **production mode**. The location cannot be changed later. Step 4 deploys the real rules.
+4. **Storage (optional):** only venue map image uploads use Cloud Storage. Creating a default bucket requires the Blaze (pay-as-you-go) plan. Without a bucket everything else works, and map uploads fail.
+5. **Web app:** open **Project settings > General > Your apps**, add a Web app (Firebase Hosting setup is not needed) and copy the `firebaseConfig` values.
+
+## 3. Environment variables
 
 ```bash
-git remote add upstream https://github.com/evanqua/crowdcad.git
+cp .env.example .env.local
 ```
 
-Do all local development, environment configuration, and deployment described below from your fork.
-
-## Local environment variables
-
-Create a `.env.local` file in the project root with these variables (copy from `.env.example`):
-
 ```env
-NEXT_PUBLIC_FIREBASE_API_KEY=AIza...your_api_key...
+NEXT_PUBLIC_BACKEND=firebase
+NEXT_PUBLIC_FIREBASE_API_KEY=AIza...
 NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com
 NEXT_PUBLIC_FIREBASE_PROJECT_ID=your-project-id
-NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=your-project.appspot.com
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=your-project-id.firebasestorage.app
 NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=1234567890
 NEXT_PUBLIC_FIREBASE_APP_ID=1:1234567890:web:abcdef123456
-NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID=G-XXXXXXX # optional
+NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID=G-XXXXXXX
 DISABLE_TELEMETRY=true
 ```
 
-- `DISABLE_TELEMETRY=true` is recommended for production hosting when handling PHI to avoid accidental analytics capture.
-- Firebase client config values (including the API key) are intentionally exposed to the browser — this is expected and normal for Firebase web apps. Access control is enforced by Firestore and Storage security rules, not by keeping the config secret. Service-account credentials and private keys must never appear in client code or be committed to the repository.
+- `firebase.ts` requires `apiKey`, `projectId`, `authDomain` and `storageBucket`. Keep the `storageBucket` value from the web config even if you skipped Storage.
+- Buckets created since late 2024 use `PROJECT_ID.firebasestorage.app`. Older projects use `PROJECT_ID.appspot.com`.
+- `NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID` is optional.
+- `DISABLE_TELEMETRY=true` is recommended for any deployment that may handle PHI.
 
-## Emulator Suite (recommended for testing rules)
+## 4. Deploy the security rules
 
-Install and run the Firebase Emulator Suite for safe local testing of Firestore, Auth and Storage:
-
-```bash
-npm install -g firebase-tools
-firebase emulators:start --only firestore,auth,storage
-```
-
-Use the emulators when developing Firestore rules and client workflows.
-
-## Firestore & Storage security rules
-
-- Design rules that enforce per-event authorization (e.g., documents contain `eventId` and reads/writes are allowed only when the user is a member of that event).
-- Test rules with the Emulator or the `firebase rules:test` command.
-- Example rule considerations:
-  - Allow only authenticated users to write event logs.
-  - Limit Storage uploads size and content type.
-
-## Authentication
-
-- For production consider enabling SSO providers (Google, OIDC) and enforce MFA for admin users.
-- Create service accounts for CI and server-side tasks with least privilege.
-
-## Granting admin access
-
-CrowdCAD's app-level admin role (Profile > Admin — manages the certification list and other admins) is separate from Firebase IAM/service accounts above. It's a boolean `isAdmin` field on the user's `users/{uid}` Firestore document.
-
-There's no signup-time or console way to set it, so the first admin on a deployment must be bootstrapped with a script:
-
-```bash
-GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json \
-node scripts/setAdmin.js admin@example.com
-```
-
-This requires a service account JSON (Firebase Console > Project Settings > Service Accounts > Generate new private key). Once the first admin signs in, they can grant or revoke admin access for other users from the "Manage Admins" panel in Profile > Admin — the script is only needed once per deployment.
-
-## Forgot-password emails
-
-The "Forgot password?" link on the login screen uses Firebase Auth's built-in `sendPasswordResetEmail` — Firebase sends and delivers the email itself, no SMTP config needed. The only requirement is that your deployed domain (and `localhost` for local dev) is listed under **Authentication > Settings > Authorized domains** in the Firebase Console — this is usually already the case for any domain you're using to sign in, since Firebase Auth requires it for sign-in to work at all.
-
-## Deploy to Firebase Hosting
-
-Once local development is working, deploy with the Firebase CLI, setting the project explicitly:
+A production-mode database denies all reads and writes until rules are deployed.
 
 ```bash
 firebase login
-firebase use --add <PROJECT_ID>
+firebase deploy --only firestore:rules --project YOUR_PROJECT_ID
+```
+
+This deploys `firestore.rules` from the repository root. Redeploy it after any release that changes the file.
+
+If you created a Storage bucket, set its rules under **Storage > Rules** in the console. Uploads are written to `venue_maps/`. A minimal rule set:
+
+```
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /venue_maps/{file} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+        && request.resource.size < 20 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+  }
+}
+```
+
+## 5. Run the app
+
+```bash
+npm run dev
+```
+
+Open `http://localhost:3000` and create an account.
+
+For event use, run a production build:
+
+```bash
 npm run build
-firebase deploy --project <PROJECT_ID>
+npm start
 ```
 
-**CI & production deploys**
+`next start` listens on all interfaces, so other devices on the same network can open `http://<host LAN IP>:3000`.
 
-- Store `FIREBASE_PROJECT` and `FIREBASE_TOKEN` (generated with `firebase login:ci`, or use Workload Identity Federation for tighter security) in your CI secrets.
-- Keep the deployable build deterministic by pinning dependencies (`package-lock.json`).
+## 6. Grant yourself admin access
 
-Example GitHub Actions deploy snippet (minimal):
+CrowdCAD's app-level admin role (Profile > Admin: certification list and admin management) is a boolean `isAdmin` field on the user's `users/{uid}` document. Users cannot set it on themselves, so the first admin is bootstrapped with a service account:
 
-```yaml
-name: Deploy
-on:
-  push:
-    branches: [ main ]
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '18'
-      - run: npm ci
-      - run: npm run build
-        env:
-          NEXT_PUBLIC_FIREBASE_API_KEY: ${{ secrets.NEXT_PUBLIC_FIREBASE_API_KEY }}
-          NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: ${{ secrets.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN }}
-          NEXT_PUBLIC_FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT }}
-          NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: ${{ secrets.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET }}
-          NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID }}
-          NEXT_PUBLIC_FIREBASE_APP_ID: ${{ secrets.NEXT_PUBLIC_FIREBASE_APP_ID }}
-      - name: Deploy to Firebase Hosting
-        run: npx firebase-tools deploy --only hosting --project ${{ secrets.FIREBASE_PROJECT }} --token ${{ secrets.FIREBASE_TOKEN }}
+1. In the console, open **Project settings > Service accounts** and click **Generate new private key**. Store the JSON file outside the repository.
+2. Sign in to the app once with the account that should become admin.
+3. Run:
+
+   ```bash
+   # macOS / Linux
+   GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json node scripts/setAdmin.js you@example.com
+   ```
+
+   ```powershell
+   # Windows PowerShell
+   $env:GOOGLE_APPLICATION_CREDENTIALS="C:\path\to\service-account.json"
+   node scripts/setAdmin.js you@example.com
+   ```
+
+After that user signs in, they can grant or revoke admin access for others from Profile > Admin > Manage Admins. Delete the key from **Service accounts** in the Google Cloud console once you no longer need it.
+
+## Forgot-password emails
+
+The login screen's "Forgot password?" link uses Firebase Auth's `sendPasswordResetEmail`. Firebase sends the email itself, so no SMTP setup is needed. The app's domain must be listed under **Authentication > Settings > Authorized domains**. `localhost` and the project's `firebaseapp.com` and `web.app` domains are listed by default.
+
+## Updating to a new release
+
+```bash
+git fetch upstream
+git merge upstream/main
+git push origin main
+npm install
+firebase deploy --only firestore:rules --project YOUR_PROJECT_ID
+npm run build
+npm start
 ```
 
-**Post-deploy checks**
+Check [`CHANGELOG.md`](../CHANGELOG.md) for release-specific steps.
 
-- Verify Firestore rules and Storage rules are active in the production project.
-- Confirm the hosting URL and environment variables are correct.
-- Run basic end-to-end checks: sign in, create an event, and create a sample dispatch log.
+## Emulator Suite
 
-## Firewalls, BAAs, and compliance
+The Emulator Suite runs Auth, Firestore and Storage locally for rules development and the E2E tests. Ports are set in `firebase.json`.
 
-- If you will manage PHI in Firestore/Storage, obtain a signed Google BAA for the Firebase/GCP project and ensure all third-party integrations are covered by BAAs. This managed-BAA path is the main reason organizations choose Firebase over PocketBase for PHI-handling deployments — see [`DEPLOYMENT.md`](DEPLOYMENT.md) for the full comparison.
-- Do not send PHI to analytics, crash-reporting, or third-party services unless there's a signed BAA covering them.
+```bash
+firebase emulators:start --only firestore,auth,storage
+```
+
+The app connects to the emulators when `NEXT_PUBLIC_USE_FIREBASE_EMULATOR=true` and `NEXT_PUBLIC_USE_FIRESTORE_EMULATOR=true` are set. See the `test:e2e:serve` script in `package.json` for a working example.
+
+## Deploying to Firebase Hosting
+
+Firebase Hosting serves Next.js through its web frameworks integration, which requires the Blaze plan. `firebase.json` in this repository contains rules and emulator settings only. `firebase.json.template` includes a `hosting` block you can merge into it:
+
+```bash
+firebase experiments:enable webframeworks
+npm run build
+firebase deploy --only hosting,firestore:rules --project YOUR_PROJECT_ID
+```
+
+Any other Node host that runs `npm run build` and `npm start` (or the `Dockerfile`) also works. Add the deployed domain to Authorized domains.
+
+For CI deploys, store the `NEXT_PUBLIC_FIREBASE_*` values and a deploy credential as CI secrets. Prefer Workload Identity Federation or a least-privilege service account over a long-lived `firebase login:ci` token.
+
+## Compliance
+
+- If Firestore or Storage will hold PHI, sign a Google BAA for the project before any real data enters it, and confirm every third-party integration is also covered.
+- Do not send PHI to analytics, crash reporting or other third-party services without a BAA.
 
 ## Production checklist
 
-- Signed Google BAA (if processing PHI).
-- Firestore & Storage rules reviewed and tested.
-- Admin accounts enforce MFA; service accounts follow least privilege.
-- Telemetry disabled (`DISABLE_TELEMETRY=true`) or sanitized.
-- Backups and exports configured, encrypted, and covered by BAAs where applicable.
-- Documented incident response and breach notification plans; workforce HIPAA training as needed.
+- Signed Google BAA if processing PHI
+- `firestore.rules` deployed and tested, and Storage rules set if Storage is enabled
+- MFA on admin Google accounts, and service accounts scoped to least privilege
+- `DISABLE_TELEMETRY=true`
+- Scheduled Firestore exports, encrypted and covered by the BAA where applicable
+- Documented incident response and breach notification plans
 
 ## Troubleshooting
 
-- If Auth fails locally, ensure the emulator is running and your app is pointed at emulator endpoints.
-- If Firestore rules block valid operations, run the Emulator with `FIREBASE_DEBUG=true` to collect logs.
-
-For a comparison against the PocketBase path, see [`DEPLOYMENT.md`](DEPLOYMENT.md). For more guidance see the top-level `README.md`.
+- **`Missing or insufficient permissions` in the browser console.** Rules were not deployed to this project. Run step 4 and confirm `--project` matches `NEXT_PUBLIC_FIREBASE_PROJECT_ID`.
+- **`auth/operation-not-allowed` on sign-up.** Enable the Email/Password provider.
+- **`auth/unauthorized-domain`.** Add the domain or IP you are using under Authorized domains.
+- **`Missing required Firebase env vars` in the terminal or browser.** `.env.local` is missing one of the listed values, or the server was started before the file was saved. Stop it, fix the file and start it again. `NEXT_PUBLIC_*` values are read at build time, so rerun `npm run build` before `npm start`.
+- **Rules behave unexpectedly.** Reproduce against the Emulator Suite and inspect the rules evaluation in the Emulator UI (`http://localhost:4000`).

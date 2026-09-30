@@ -1,62 +1,66 @@
-# Deployment / Self-Hosting Guide
+# Deployment and Self-Hosting Guide
 
-CrowdCAD supports two backends. Both are first-class, fully supported deployment paths — pick whichever fits your organization's requirements and preferences. This guide helps you choose; once you've decided, follow the matching step-by-step setup guide:
+CrowdCAD supports two backends. Both are maintained in parallel and selected with `NEXT_PUBLIC_BACKEND` (`firebase` or `pocketbase`). This guide helps you choose one. Each setup guide then covers everything through a running deployment:
 
-- **[`SETUP_FIREBASE.md`](SETUP_FIREBASE.md)** — managed cloud backend on Firebase/GCP.
-- **[`SETUP_POCKETBASE.md`](SETUP_POCKETBASE.md)** — self-hosted backend on your own machine or LAN, via Docker.
+- [`SETUP_FIREBASE.md`](SETUP_FIREBASE.md): managed cloud backend on Firebase and Google Cloud
+- [`SETUP_POCKETBASE.md`](SETUP_POCKETBASE.md): self-hosted backend on your own machine or LAN, run with Docker
 
-> **Fork recommended.** If you plan to customize CrowdCAD for your organization, fork [`evanqua/crowdcad`](https://github.com/evanqua/crowdcad) on GitHub before cloning, regardless of which backend you choose. Forking keeps your changes attributable, lets you receive upstream updates, and makes collaboration visible to the community. If you only want a read-only copy, cloning is fine.
+Beginner-friendly versions of both guides, with separate Mac and Windows steps, are at [crowdcad.org/docs](https://crowdcad.org/docs).
 
 ## Choosing a backend
 
 | | **Firebase** | **PocketBase** |
 |---|---|---|
-| Infrastructure | Managed by Google Cloud | Self-hosted (Docker, your machine or LAN) |
-| Cloud account required | Yes (Firebase/GCP project) | No |
-| HIPAA path | Signed Google BAA covers Firestore, Auth, Storage, Hosting | No managed BAA — your organization owns compliance for infrastructure it runs |
-| Ops responsibility | Google manages uptime, scaling, patching | Your organization manages the server, backups, and updates |
-| Cost model | Usage-based cloud billing | Your own hosting cost (can be $0 on existing hardware) |
-| Good fit for | Organizations that want a managed cloud backend and are prepared to sign a Google BAA for PHI | Organizations that want full data locality (e.g., no data leaving a venue's LAN), no recurring cloud cost, or no cloud account at all |
-| Setup guide | [`SETUP_FIREBASE.md`](SETUP_FIREBASE.md) | [`SETUP_POCKETBASE.md`](SETUP_POCKETBASE.md) |
+| Infrastructure | Managed by Google Cloud | Your machine or LAN, run with Docker |
+| Cloud account | Firebase project required | None |
+| HIPAA path | Signed Google BAA covering Firestore, Auth, Storage and Hosting | No managed BAA. Your organization owns compliance for the infrastructure it runs. |
+| Operations | Google handles uptime, scaling and patching | Your organization handles the server, backups and updates |
+| Cost | Usage-based cloud billing. Map image uploads need the Blaze plan. | Your own hardware, which can be $0 |
+| Internet needed during an event | Yes | No, if all devices share the LAN |
+| Good fit for | Organizations that want managed infrastructure and can sign a Google BAA for PHI | Organizations that want data to stay at the venue, no recurring cloud cost or no cloud account |
 
-Neither option is the "default" — both are maintained in parallel (`NEXT_PUBLIC_BACKEND=firebase` or `pocketbase`), and the choice comes down to your organization's infrastructure, compliance, and operational preferences rather than a technical limitation of the app itself.
+The choice depends on your infrastructure, compliance and operational needs. The app's features are the same on both backends.
 
-## Common prerequisites
+## Fork and clone
 
-- Git, Node.js (18+), npm
-- A fork of the repo (recommended) or a direct clone
-
-```bash
-# Fork via GitHub UI first: https://github.com/evanqua/crowdcad
-# Then clone your fork:
-git clone https://github.com/<your-github-username>/crowdcad.git
-cd crowdcad
-```
-
-Or clone directly (no fork):
+Fork [evanqua/crowdcad](https://github.com/evanqua/crowdcad) on GitHub, whichever backend you choose. A fork keeps your changes attributable, gives you a place to commit organization-specific configuration and lets you pull future releases from `upstream`:
 
 ```bash
-git clone https://github.com/evanqua/crowdcad.git
+git clone https://github.com/YOUR_USERNAME/crowdcad.git
 cd crowdcad
+git remote add upstream https://github.com/evanqua/crowdcad.git
 ```
 
-From here, follow [`SETUP_FIREBASE.md`](SETUP_FIREBASE.md) or [`SETUP_POCKETBASE.md`](SETUP_POCKETBASE.md) for backend-specific environment variables, local setup, and deployment steps — each guide is self-contained through to a running production deployment.
+Common prerequisites are Git and Node.js 20 or newer. PocketBase also needs Docker Desktop.
 
-## General operational guidance (both backends)
+## Staying up to date
 
-- **Security rules / access control** — Firebase enforces access via Firestore/Storage security rules; PocketBase enforces access via collection rules. Test both with their respective tooling before allowing real users.
-- **Authentication** — enforce strong passwords and MFA for admin accounts where the backend supports it.
-- **Telemetry & logs** — set `DISABLE_TELEMETRY=true` in production and review the app for `console.log` or analytics calls that might capture PHI.
-- **Backups** — ensure backups and any export destinations are encrypted and, if handling PHI under Firebase, covered by BAAs.
-- **Least privilege** — scope service accounts and admin roles narrowly regardless of backend.
+Releases are listed in [`CHANGELOG.md`](../CHANGELOG.md). To update a fork:
 
-## Post-deploy checks (both backends)
+```bash
+git fetch upstream
+git merge upstream/main
+git push origin main
+npm install
+```
 
-- Confirm the hosting URL and environment variables are correct.
-- Run basic end-to-end checks: sign in, create an event, and create a sample dispatch log.
-- Verify security rules (Firestore/Storage rules, or PocketBase collection rules) are active in the production environment.
+Then follow the redeploy steps in your backend's guide. PocketBase reruns `setup-pocketbase.js` and rebuilds the containers. Firebase redeploys `firestore.rules` and rebuilds the app.
+
+## Operational guidance for both backends
+
+- **Access control.** Firebase enforces access with Firestore and Storage rules. PocketBase enforces it with collection rules applied by `scripts/setup-pocketbase.js`. Test them before real users sign in.
+- **Authentication.** Require strong passwords, and MFA on admin accounts where the backend supports it.
+- **Telemetry and logs.** Set `DISABLE_TELEMETRY=true` in production and review custom code for `console.log` or analytics calls that could capture PHI.
+- **Backups.** Encrypt backups and export destinations. Under Firebase, confirm they are covered by the BAA when handling PHI.
+- **Least privilege.** Scope service accounts and admin roles narrowly.
+
+## Post-deploy checks
+
+- Sign in, create a venue, create an event and log a test call.
+- Confirm the security rules or collection rules are active in the production environment.
+- Open the app from a second device on the network your team will use.
 
 ## Notes
 
-- Each organization must supply its own backend credentials — never reuse another organization's Firebase project or PocketBase instance.
-- If you want the maintainers to host for you (SaaS), a separate BAA and an operational HIPAA program is required on the maintainer side; this is independent of which backend you self-host.
+- Each organization supplies its own backend. Never reuse another organization's Firebase project or PocketBase instance.
+- Maintainer-hosted SaaS would require a separate BAA and an operational HIPAA program on the maintainer side, independent of which backend you self-host.

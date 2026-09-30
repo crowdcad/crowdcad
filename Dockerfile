@@ -16,7 +16,7 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY src ./src
 COPY public ./public
-COPY package.json package-lock.json components.json next.config.js tailwind.config.js postcss.config.mjs tsconfig.json eslint.config.mjs next-env.d.ts ./
+COPY package.json package-lock.json components.json next.config.js tailwind.config.js postcss.config.mjs tsconfig.json eslint.config.mjs ./
 
 # Add build args using safe names to avoid SonarCloud secret warnings
 ARG FB_API

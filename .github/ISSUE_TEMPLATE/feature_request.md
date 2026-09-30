@@ -38,7 +38,7 @@ Include sketches, example screenshots (link to external images if needed), or a 
 
 ## Priority
 
-- Low / Medium / High — how important is this feature for the project roadmap?
+- Low / Medium / High: how important is this feature for the project roadmap?
 
 ## Additional context
 
@@ -46,4 +46,4 @@ Add any other context or screenshots about the feature request here.
 
 Maintainers: Evan Passalacqua (`@evanqua`) and Ivan Zhang (`@iv-zhang`).
 
-If this is security-sensitive, do not include details in the public issue — follow `SECURITY.md` and report via `support@crowdcad.org` or GitHub Security Advisories.
+If this is security-sensitive, do not include details in the public issue. Follow `SECURITY.md` and report via `support@crowdcad.org` or GitHub Security Advisories.

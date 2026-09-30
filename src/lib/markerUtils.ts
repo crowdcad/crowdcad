@@ -1,5 +1,6 @@
 import type { GeoBounds, Post, Zone } from '@/app/types';
 import { getNextZoneColor } from '@/lib/zoneColors';
+import { randomId } from '@/lib/utils';
 
 export function clampPercent(value: number): number {
   return Math.max(0, Math.min(100, value));
@@ -315,7 +316,7 @@ export function geoJsonToZones(
 
     const color = feature.properties?.color;
     zones.push({
-      id: crypto.randomUUID(),
+      id: randomId(),
       name,
       color: typeof color === 'string' && HEX_COLOR_PATTERN.test(color) ? color : getNextZoneColor(zones),
       points,

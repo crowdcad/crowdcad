@@ -18,6 +18,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 
 - **Map zones** — the venue builder's Map/Locations step gained an "Add Area" button (next to "Add Markers") for drawing a colored polygon area on the map: click to place vertices (each shown as a colored dot in the area's own color, with the first point ringed once there are enough to close), connect back to that first point (or double-click) to complete the loop, then name it and optionally check "Mark as Dispatch Zone". Areas render beneath post pins everywhere the map does (venue builder, dispatch Map tab, event creation). A dispatch zone gets its own "{name} Calls" tab in the dispatch view, positioned next to "All Calls" and before any clinic tabs (the existing "Calls" tab is renamed to "All Calls" once at least one dispatch zone exists) — a call is routed into a zone's tab automatically based on whether its location falls inside that zone's polygon, so redrawing a zone re-routes existing calls instead of orphaning them. The same zone/location association now feeds a "Zone Breakdown" on the post-event Summary page (and its exported CSV), showing calls/delivered-to-clinic/transports per dispatch zone. The GIS import dialog (Import GIS Map) now accepts an optional second GeoJSON file for polygon areas alongside its existing point-features file, matching how ArcGIS and most GIS tools export one geometry type per layer, with a worked example at `docs/examples/venue-map-import.geojson`.
 
+### Fixed
+
+- **Docker builds work from a fresh clone.** `Dockerfile` copied `next-env.d.ts`, which is gitignored, so `docker compose up --build` failed in the builder stage for anyone who had not run Next locally first.
+- **PocketBase runs natively on Apple Silicon.** `Dockerfile.pocketbase` now downloads the release matching the host CPU (`amd64` or `arm64`) using BuildKit's `TARGETARCH`. Before this it always pulled `amd64` and ran under emulation on ARM Macs.
+- **Venue and event creation work from other devices on the LAN.** `crypto.randomUUID()` only exists on HTTPS or `localhost`, so a teammate opening the app at `http://192.168.x.x:3000` hit an error when adding layers, markers, areas or equipment. A new `randomId()` helper in `src/lib/utils.ts` falls back to `crypto.getRandomValues`.
+
+### Changed
+
+- **Documentation overhaul.** Setup guides now include the `npm install` step the PocketBase scripts need, the Firebase console steps (Email/Password, Firestore, optional Storage on Blaze), deploying `firestore.rules`, LAN access, updating a fork from `upstream` and redeploying. The user guide and architecture docs match the current wizards and dispatch board. All markdown follows a new plain style (see "Docs style" in `CONTRIBUTING.md`).
+
 ---
 
 ## [1.6.0] - 2026-09-07
