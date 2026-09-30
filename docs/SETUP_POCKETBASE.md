@@ -1,140 +1,210 @@
 # PocketBase Setup for CrowdCAD
 
-This guide explains how to configure PocketBase for local development and self-hosted/LAN deployments — one of two supported backends, alongside Firebase (see [`SETUP_FIREBASE.md`](SETUP_FIREBASE.md)). PocketBase is a good fit when you want all data to stay on your own machine or LAN with no cloud account required; see [`DEPLOYMENT.md`](DEPLOYMENT.md) for a side-by-side comparison to help you choose. This guide complements `src/lib/services/pocketbase/client.ts` and `src/lib/services/pocketbase/PocketbaseAuthService.ts`, which contain the runtime client and auth adapter, and `docker-compose.yml` / `Dockerfile.pocketbase`, which define the Docker setup path used below.
+This guide sets up CrowdCAD with the PocketBase backend for local development or a self-hosted LAN deployment. PocketBase keeps all data on a machine you control and needs no cloud account. For the managed cloud option see [`SETUP_FIREBASE.md`](SETUP_FIREBASE.md), and for a side-by-side comparison see [`DEPLOYMENT.md`](DEPLOYMENT.md).
 
-Important: do not commit secrets (admin passwords or `.env.local`) to the repository. Use environment files for local development and your own secret store for production.
+A step-by-step version of this guide for readers with no terminal experience, with separate Mac and Windows instructions, is published at [crowdcad.org/docs/pocketbase-setup](https://crowdcad.org/docs/pocketbase-setup).
+
+Relevant source files:
+
+- `src/lib/services/pocketbase/client.ts` and `PocketbaseAuthService.ts`: runtime client and auth adapter
+- `docker-compose.yml`, `Dockerfile` and `Dockerfile.pocketbase`: the Docker setup used below
+- `scripts/setup-pocketbase.js`: collection and access-rule provisioning
+- `scripts/setAdminPocketbase.js`: first-admin bootstrap
+
+Keep `.env.local` and superuser credentials out of version control.
 
 ## Prerequisites
 
-- **Docker Desktop** — required for the recommended setup path below. Available for Windows, macOS, and Linux. Download from [docker.com](https://www.docker.com/products/docker-desktop/), or on Windows install it via `winget`:
+- **Git**
+- **Node.js 20 or newer** with npm. The current LTS release is recommended. Node runs the provisioning scripts on the host even when the app itself runs in Docker.
+- **Docker Desktop** (Windows, macOS or Linux). On Windows it can be installed with `winget install -e --id Docker.DockerDesktop`. It depends on WSL2 and usually needs a restart after the first install.
 
-  ```bash
-  winget install -e --id Docker.DockerDesktop
-  ```
+Commands below work in PowerShell on Windows and in bash or zsh on macOS and Linux. Git Bash on Windows rewrites arguments that start with `/`, which breaks the `docker exec ... /pb/pocketbase` command in step 5. If you use Git Bash, prefix that command with `MSYS_NO_PATHCONV=1`.
 
-  On Windows, this installs the WSL2 backend Docker Desktop depends on; a **system restart is typically required** afterward before Docker Desktop can start.
-- Node.js and npm — only needed for `node scripts/setup-pocketbase.js` (and, if you're not using Docker for the app itself, `npm install` / `npm run dev`).
-- All `docker` and `npm` commands in this guide are run in a **bash-compatible shell** — Git Bash on Windows, Terminal (or your shell of choice) on macOS/Linux. Commands are the same across platforms, with one Windows-specific exception called out below: Git Bash auto-converts Unix-style path arguments, which breaks the `docker exec ... pocketbase superuser upsert` command unless prefixed with `MSYS_NO_PATHCONV=1` (see step 4 and Troubleshooting).
+The PocketBase image downloads the release that matches the host CPU (`amd64` or `arm64`), so Apple Silicon Macs run it natively. The pinned version is set by `PB_VERSION` in `Dockerfile.pocketbase` (currently 0.37.1).
 
-## Setup (Docker + PocketBase)
+## Setup
 
-**1. Fork and clone the repository**
+### 1. Fork and clone
 
-Since this is a shared project, start by creating your own copy rather than working directly against the upstream repository. Go to https://github.com/evanqua/crowdcad and click **Fork** to create a copy under your own GitHub account, then clone your fork (not the upstream repo):
+Fork [evanqua/crowdcad](https://github.com/evanqua/crowdcad) on GitHub, clone your fork and add the original repository as the `upstream` remote so you can pull future releases:
 
 ```bash
 git clone https://github.com/YOUR_USERNAME/crowdcad.git
 cd crowdcad
-```
-
-Add the original repository as an `upstream` remote so you can pull in future updates — this is recommended so your fork doesn't fall behind:
-
-```bash
 git remote add upstream https://github.com/evanqua/crowdcad.git
 ```
 
-If you already have a Firebase-configured checkout of this repo and want to try PocketBase alongside it, clone into a separate directory instead of reusing the existing one — each checkout has its own `.env.local` and `.pb-data/`, and running both from the same directory will collide.
+Each checkout has its own `.env.local` and `.pb-data/`. If you already have a Firebase checkout, clone PocketBase into a separate directory.
 
-**2. Configure environment variables**
+### 2. Configure environment variables
 
 ```bash
 cp .env.example .env.local
 ```
 
-In `.env.local`, set:
+Set these values in `.env.local`:
 
 ```env
 NEXT_PUBLIC_BACKEND=pocketbase
 NEXT_PUBLIC_POCKETBASE_URL=http://127.0.0.1:8090
 PB_URL=http://127.0.0.1:8090
 PB_ADMIN_EMAIL=admin@example.com
-PB_ADMIN_PASSWORD=YourPassword!
+PB_ADMIN_PASSWORD=YourPassword123
 ```
 
-`NEXT_PUBLIC_POCKETBASE_URL` is read by the app at runtime; `PB_URL`, `PB_ADMIN_EMAIL`, and `PB_ADMIN_PASSWORD` are read only by `scripts/setup-pocketbase.js` in step 5, not by the app itself.
+| Variable | Read by | Purpose |
+|---|---|---|
+| `NEXT_PUBLIC_BACKEND` | App (build time) | Selects the PocketBase service implementations |
+| `NEXT_PUBLIC_POCKETBASE_URL` | App (build time) | PocketBase URL the browser connects to |
+| `PB_URL` | Scripts only | PocketBase URL the provisioning scripts use from the host |
+| `PB_ADMIN_EMAIL` / `PB_ADMIN_PASSWORD` | Scripts only | Superuser credentials for provisioning |
 
-**3. Build and start the containers**
+`NEXT_PUBLIC_*` values are inlined into the client bundle at build time. Rebuild the `web` image after changing them.
+
+Avoid `$`, `#` and spaces in `PB_ADMIN_PASSWORD`. Docker Compose treats `$` as variable interpolation when it reads the env file.
+
+### 3. Install Node dependencies
+
+```bash
+npm install
+```
+
+The provisioning scripts load `.env.local` through `dotenv`. Without `node_modules` they fall back to the shell environment and exit with `PB_ADMIN_EMAIL and PB_ADMIN_PASSWORD must be set`.
+
+### 4. Build and start the containers
 
 ```bash
 docker compose --env-file .env.local up -d --build
 ```
 
-This starts two services: `web` (the Next.js app, port 3000) and `pocketbase` (port 8090, data persisted to `./.pb-data`).
+This starts two services:
 
-**4. Create the PocketBase superadmin**
+- `web`: a production build of the Next.js app on port 3000
+- `pocketbase`: PocketBase on port 8090, with data persisted to `./.pb-data`
 
-First time only — this account is stored in `.pb-data/` and persists across restarts, so it's skippable on subsequent runs.
+The first build takes several minutes.
 
-```bash
-docker exec pocketbase /pb/pocketbase superuser upsert admin@example.com YourPassword!
-```
+### 5. Create the PocketBase superuser
 
-Use the same email and password as `PB_ADMIN_EMAIL` / `PB_ADMIN_PASSWORD` in `.env.local`.
-
-On Windows with Git Bash specifically, Git Bash rewrites the leading `/pb/...` argument as if it were a Windows path, which breaks this command. Prefix it with `MSYS_NO_PATHCONV=1`:
+This is a one-time step. The account is stored in `.pb-data/` and persists across restarts.
 
 ```bash
-MSYS_NO_PATHCONV=1 docker exec pocketbase /pb/pocketbase superuser upsert admin@example.com YourPassword!
+docker exec pocketbase /pb/pocketbase superuser upsert admin@example.com 'YourPassword123'
 ```
 
-**5. Create the required collections**
+Use the same email and password as `PB_ADMIN_EMAIL` and `PB_ADMIN_PASSWORD`.
+
+### 6. Create collections and access rules
 
 ```bash
 node scripts/setup-pocketbase.js
 ```
 
-This creates the `venues`, `events`, `dispatchLogs`, `_storage`, and `settings` collections, plus an `isAdmin` field on the built-in `users` auth collection, and applies the access rules that keep editing or deleting someone else's venue, or ending someone else's event, restricted to that record's owner or an admin (mirrors this repo's `firestore.rules` — see the rule constants at the top of the script for exactly what each collection allows). It's idempotent — safe to run again any time, and re-applies those rules on every run even to collections that already existed, so a manual rule change made in the admin UI afterward will be reverted the next time this runs; change the script itself instead if you need different rules. **Do not skip this step**: without it, the `users` auth collection has no matching app schema yet, and signing up will fail with a "Failed to create record" error.
+This creates the `venues`, `events`, `dispatchLogs`, `_storage` and `settings` collections, adds an `isAdmin` field to the built-in `users` collection and applies access rules that mirror `firestore.rules`. Only a record's owner or an admin can edit or delete a venue or end an event. The rule constants at the top of the script define exactly what each collection allows.
 
-**6. Run the app**
+The script is idempotent. It reapplies its rules on every run, including to existing collections, so rule edits made in the admin UI are reverted the next time it runs. Change the script if you need different rules.
 
-The app is available at `http://localhost:3000`. The PocketBase admin UI is at `http://localhost:8090/_/`.
+Sign-up fails with "Failed to create record" until this step has run.
 
-**7. (Optional) Grant yourself admin access**
+### 7. Open the app
 
-One-time bootstrap step for Profile > Admin (e.g. managing the certification list):
+- App: `http://localhost:3000`
+- PocketBase admin UI: `http://localhost:8090/_/`
+
+Create your user account from the app's sign-up screen. PocketBase requires passwords of at least 8 characters.
+
+### 8. Grant yourself admin access
+
+A one-time bootstrap for Profile > Admin (certification list, admin management). The script reads `PB_URL`, `PB_ADMIN_EMAIL` and `PB_ADMIN_PASSWORD` from `.env.local`:
 
 ```bash
-PB_URL=http://127.0.0.1:8090 PB_ADMIN_EMAIL=admin@example.com PB_ADMIN_PASSWORD=YourPassword! \
 node scripts/setAdminPocketbase.js you@example.com
 ```
 
-After signing in, that user can grant or revoke admin access for others from Profile > Admin > Manage Admins — the script is only needed once per deployment.
+Use the email of the account you created in step 7. After that user signs in, they can grant or revoke admin access for others from Profile > Admin > Manage Admins.
 
-**8. Stopping and restarting**
+## Serving other devices on your network
+
+`NEXT_PUBLIC_POCKETBASE_URL` is the address each browser uses to reach PocketBase, so `127.0.0.1` only works on the host machine. To serve other devices on the LAN:
+
+1. Find the host's LAN IP address (for example `192.168.1.20`). Give the host a DHCP reservation so the address stays the same.
+2. Set `NEXT_PUBLIC_POCKETBASE_URL=http://192.168.1.20:8090` in `.env.local`. `PB_URL` can stay `127.0.0.1` since the scripts run on the host.
+3. Rebuild: `docker compose --env-file .env.local up -d --build`.
+4. Allow inbound connections on ports 3000 and 8090 in the host firewall.
+5. Other devices open `http://192.168.1.20:3000`.
+
+## Stopping and restarting
 
 ```bash
 docker compose down
-```
-
-Data (collections, records, and the superadmin account) persists in `.pb-data/` between restarts, so bringing the stack back up does not require repeating steps 4–5:
-
-```bash
 docker compose --env-file .env.local up -d
 ```
 
-## Forgot-password emails & SMTP configuration
+Collections, records and the superuser persist in `.pb-data/`, so steps 5 to 8 do not need repeating.
 
-`PocketbaseAuthService.sendPasswordResetEmail` and `confirmPasswordReset` (`src/lib/services/pocketbase/PocketbaseAuthService.ts`) call PocketBase's built-in `requestPasswordReset` / `confirmPasswordReset` APIs directly — there is no custom reset-password backend logic layered on top in this repo (no `pb_hooks` directory is present; `Dockerfile.pocketbase` only copies `pb_hooks`/`pb_migrations` into the image if you uncomment those lines yourself). The app does add its own `/reset-password` page (`src/app/reset-password/page.tsx`) that reads a `token` (or `oobCode`) query parameter and submits it to `confirmPasswordReset` — this is what the reset email's link needs to point at.
+## Updating to a new release
 
-Two things must be configured before "forgot password" actually works for your users, and neither is set automatically:
+Pull the latest release from `upstream` into your fork, then rebuild:
 
-1. **Point the reset email at this app, not PocketBase's admin UI.** By default, PocketBase's built-in reset-password email template links to its own admin UI. In the admin UI (`/_/`), go to **Collections > users > Options > Email templates > Reset password** and change the action URL to:
+```bash
+git fetch upstream
+git merge upstream/main
+git push origin main
+npm install
+docker compose --env-file .env.local up -d --build
+node scripts/setup-pocketbase.js
+```
+
+Rerunning `setup-pocketbase.js` applies any new collections, fields or rules the release added. Check [`CHANGELOG.md`](../CHANGELOG.md) for release-specific steps.
+
+## Backups
+
+All PocketBase data lives in `.pb-data/`. Stop the stack with `docker compose down` and copy that directory to back it up. You can also schedule backups from the admin UI under **Settings > Backups**.
+
+## Forgot-password emails and SMTP
+
+`PocketbaseAuthService` calls PocketBase's built-in `requestPasswordReset` and `confirmPasswordReset` APIs. The app provides its own `/reset-password` page (`src/app/reset-password/page.tsx`), which reads a `token` (or `oobCode`) query parameter and submits it to `confirmPasswordReset`. There is no custom server logic. `Dockerfile.pocketbase` only copies `pb_hooks` or `pb_migrations` into the image if you uncomment those lines.
+
+Two admin UI settings are needed before password reset works. Neither is configured automatically:
+
+1. **Point the reset email at the app.** PocketBase's default template links to its own admin UI. Under **Collections > users > Options > Email templates > Reset password**, set the action URL to:
 
    ```
    {APP_URL}/reset-password?token={TOKEN}
    ```
 
-   replacing `{APP_URL}` with your deployed app's URL (e.g. `http://localhost:3000` for local dev).
+   Replace `{APP_URL}` with the app's URL, for example `http://localhost:3000`.
 
-2. **Configure outbound SMTP.** PocketBase does not send email out of the box. In the admin UI, go to **Settings > Mail settings** and enter your mail provider's SMTP host, port, and credentials (whatever provider your organization uses — PocketBase does not ship with one configured). This repo does not expose SMTP settings as environment variables or in `docker-compose.yml`; they're configured entirely through the admin UI and stored in `.pb-data/`, so they persist across `docker compose down` / `up` like everything else in that volume.
+2. **Configure outbound SMTP.** PocketBase does not send email until you enter an SMTP host, port and credentials under **Settings > Mail settings**. These settings are stored in `.pb-data/` and are not exposed as environment variables.
 
-`scripts/setup-pocketbase.js` also prints a reminder of both of these steps after it finishes.
+`setup-pocketbase.js` prints a reminder of both steps when it finishes.
+
+## Running without Docker
+
+Download the PocketBase binary for your platform from [pocketbase.io/docs](https://pocketbase.io/docs) and place it in the project root:
+
+```bash
+./pocketbase superuser upsert admin@example.com 'YourPassword123'
+./pocketbase serve --http=0.0.0.0:8090
+```
+
+In a second terminal, set `.env.local` as in step 2 (use the LAN IP for `NEXT_PUBLIC_POCKETBASE_URL` if other devices will connect), then:
+
+```bash
+npm install
+node scripts/setup-pocketbase.js
+npm run build
+npm start
+```
+
+Use `npm run dev` in place of `build` and `start` for development.
 
 ## Troubleshooting
 
-- **`docker: command not found`** — Docker Desktop isn't installed, or isn't running. Confirm it's installed (see Prerequisites) and open before running any `docker compose` or `docker exec` command.
-- **"Failed to create record" on sign-up** — the required collections haven't been created yet. Run `node scripts/setup-pocketbase.js` (step 5 above).
-- **Sign-up rejects an otherwise-valid password** — PocketBase's default auth collection requires passwords to be at least 8 characters. This isn't currently enforced client-side, so a shorter password will fail at the PocketBase API instead of showing until submitted.
-- **`docker exec pocketbase /pb/pocketbase superuser upsert ...` fails or behaves unexpectedly on Windows** — Git Bash is rewriting the `/pb/...` path. Prefix the command with `MSYS_NO_PATHCONV=1` as shown in step 4.
-
-For a comparison against the Firebase path, see [`DEPLOYMENT.md`](DEPLOYMENT.md). For more guidance see `README.md`'s Quickstart section.
+- **`docker: command not found`, or Docker cannot connect to the daemon.** Docker Desktop is not installed or not running. Start it and wait for the engine to report that it is running.
+- **`PB_ADMIN_EMAIL and PB_ADMIN_PASSWORD must be set`.** Run `npm install` so the scripts can load `.env.local`, and check that you ran the script from the project root.
+- **"Failed to create record" on sign-up.** Run `node scripts/setup-pocketbase.js`.
+- **Sign-up rejects a password.** PocketBase requires at least 8 characters. The client does not check this before submitting.
+- **Other devices load the page but cannot sign in.** `NEXT_PUBLIC_POCKETBASE_URL` still points at `127.0.0.1`, or the `web` image was not rebuilt after changing it. See [Serving other devices on your network](#serving-other-devices-on-your-network).
+- **`docker exec ... /pb/pocketbase` fails in Git Bash.** Git Bash rewrote the `/pb/...` path. Prefix the command with `MSYS_NO_PATHCONV=1` or run it in PowerShell.

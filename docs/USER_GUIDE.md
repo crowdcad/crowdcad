@@ -1,90 +1,101 @@
-# CrowdCAD User Guide (overview)
+# CrowdCAD User Guide
 
-This document is a short, user-focused guide to the primary workflows in CrowdCAD. Refer to the web feature pages and project UI for detailed, contextual help: https://crowdcad.org/features
+A short guide to CrowdCAD's main workflows for dispatchers, supervisors and event organizers. Screenshots and feature walkthroughs are at [crowdcad.org/features](https://crowdcad.org/features).
 
 ## Who this is for
 
 - Event medical volunteers and supervisors
-- Small teams running first-aid stations at public events
-- Organizers who need logs, incident tracking, and simple dispatch tools
+- Teams running first-aid posts and clinics at public events
+- Organizers who need call logs, team tracking and post-event reports
 
-## Quick start (user)
+## Quick start
 
-1. Open the CrowdCAD deployment URL provided by your organization.
-2. Sign in using the provided authentication method (email + password).
-3. Select or create an Event (if you have permission).
-4. Create or join a Team/Unit assigned to the Event.
-5. Use the Dispatch interface to log calls, assign teams, and close incidents.
+1. Open the CrowdCAD address your organization gave you and sign in with your email and password.
+2. Pick a venue on **Venue Selection**, or click **Create Venue** to build one.
+3. Create an event at that venue and walk through the setup steps.
+4. Launch the event to open the dispatch board.
+5. Log calls, assign teams and track clinic patients until the event ends.
+6. End the event and review or export the summary.
 
 ## Lite mode (local-only)
 
-- Open `/lite` to use CrowdCAD Lite without cloud sync.
-- Lite mode stores data in your browser (IndexedDB/local storage) on the current device.
-- In Lite Event Setup, you can add/edit locations, equipment, and teams before starting dispatch.
-- Teams can be edited from the Teams panel using the pencil icon.
-- Use this mode for quick local workflows when internet or account access is unavailable.
+- Open `/lite` to use CrowdCAD Lite with no account or server.
+- Lite mode stores data in this browser on this device only. Clearing browser data deletes it, and other devices cannot see it.
+- Lite event setup covers event configuration, locations, staff assignments, equipment and the post schedule, then opens the same dispatch board as the full app.
+- Use Lite mode to evaluate CrowdCAD, for training or when a small event has no network.
 
 ## Basic concepts
 
-- Event: an organized occurrence (concert, festival, sports match) with its own roster, venues and logs.
-- Venue: a physical place inside an event (first-aid tent, roving patrol area).
-- Team / Unit: a group of volunteers or staff with assigned roles.
-- Call / Incident: a logged patient encounter or service request.
-- Dispatch Log: chronological record of assignments, statuses, and notes.
+- **Venue:** a physical site with one or more map floors. A venue holds locations (posts and clinics), map areas and default equipment, and is reused across events.
+- **Location / post:** a named marker on the venue map where a team can be stationed. A location can be marked as a clinic.
+- **Dispatch zone:** a map area drawn on the venue. Calls inside it are grouped under their own tab on the dispatch board.
+- **Event:** one operational period at a venue, with its own teams, supervisors, equipment, post schedule and log.
+- **Team:** a group of responders with a status (available, on a call, on break, in clinic and so on).
+- **Call:** a logged patient encounter or service request, with location, complaint, assigned teams and status.
+- **Clinic patient:** a walk-up or delivered patient tracked on a clinic tab.
 
 ## Typical workflows
 
-Sign In
+### Build a venue
 
-- Use your organization's sign-in method. If you cannot sign in, contact your local CrowdCAD admin or the maintainers.
+Click **Create Venue** on Venue Selection. The venue wizard has five steps:
 
-Create or Join an Event
+1. **Venue Configuration:** name and basic details.
+2. **Map:** upload a map image per floor, or import a GIS map (see below). Draw areas with **Add Area** and check "Mark as Dispatch Zone" to give an area its own call tab.
+3. **Locations:** place post markers and mark clinics.
+4. **Equipment:** add equipment and set each item's default location.
+5. **Review:** confirm and save.
 
-- Users with permission can create a new Event and configure time, venues, and roster.
-- Join an existing Event by invitation or via the event selector.
+### Create an event
 
-Create a Team
+From a venue, start a new event. The event wizard has five steps:
 
-- From the Event dashboard, create a Team and add members (by email or existing accounts).
+1. **Event Configuration:** name and date (both required), start and end time, and advanced settings such as surge criteria.
+2. **Staff Assignments:** add teams and supervisors by hand, or import them from the CSV template.
+3. **Equipment:** choose venue equipment or add event-only items.
+4. **Post schedule:** choose posts (or **Enable All**) and generate the rotation schedule.
+5. **Review & launch:** check the summary and open the dispatch board.
 
-Log a Call / Incident
+### Run dispatch
 
-- Open the Dispatch interface and click the “New Call” or “Quick Call” button.
-- Enter the location (venue), time, patient information (minimal), and notes about the condition.
-- Assign a Team or responder and set the call status (e.g., triaged, treated, transported).
+- The left panel lists teams, supervisors and equipment. Change a team's status or post from its card.
+- The availability strip shows how many teams are available, on break or in clinic, and on calls. A surge alert appears when a configured threshold is reached, and can also be toggled by hand.
+- Click **Add Call** on the Calls tab to log a call with location, age and sex, and chief complaint. Assign one or more teams, update status as the call progresses and add notes to its log.
+- Calls inside a dispatch zone also appear on that zone's tab.
+- Record transports with "Transporting to" and capture the transport unit when prompted.
+- Use the Clinic tab to track walk-ups and patients delivered from calls.
+- The Map tab shows posts, teams, supervisors and equipment on the venue map.
+- **Posting Schedule** opens the rotation, and **Update all posts** moves every team to its next scheduled post.
 
-Assigning & Tracking
+### End an event and review it
 
-- Use the map or venue selector to assign teams to locations.
-- Update statuses on the Dispatch Log so others can see who is available or responding.
+- **End Event** (available to the event's creator or a site admin) stops data collection after confirmation.
+- The Summary page shows charts, per-team activity and a zone breakdown. **Export Summary** and the log export produce CSV files with a full date and time per entry.
 
-Closing an Incident
+### Import a GIS venue map
 
-- Add final notes, set disposition (treated on-site, transported, released) and close the call. The entry remains in the Dispatch Log for later review and export.
+On the venue Map step, "Or import a GIS map with pre-placed points and areas" opens the GIS import dialog. Use it when the venue layout already exists in a GIS tool such as ArcGIS.
 
-Exporting Logs
+- **Inputs:** a flattened background image of the map, plus one or two GeoJSON files. One file holds point locations and the other holds polygon areas. Either can be omitted, and a single combined file with both geometry types also works in either input. Most GIS tools export one geometry type per layer, which matches the two inputs.
+- **Point features** need a `name` property. An optional `isClinic` boolean marks the location as a clinic.
+- **Polygon features** (or MultiPolygon, using the first polygon's outer ring) need a `name` property. Optional `isDispatchZone` (boolean) marks a dispatch zone, and optional `color` (hex string such as `"#22c55e"`) sets the map color. Colors are assigned automatically when omitted.
+- **Georeferencing** uses the FeatureCollection's `bbox`, or the extent of the features when `bbox` is missing. When both files are uploaded they share one set of bounds so they line up with each other.
+- `docs/examples/venue-map-import.geojson` is a minimal example with one clinic point and one dispatch-zone polygon. Check the import preview before confirming. If features are offset, the `bbox` probably does not match the image's extent.
 
-- Dispatchers can export event logs and reports for post-event review. Check the admin panel for export options.
+### Profile and admin
 
-Importing a GIS Venue Map
+- **Profile** holds your details, language, preferences and password.
+- Admins also see **Profile > Admin**, which manages the certification list, venues, users and **Manage Admins**.
 
-- From a venue's Map step, "Or import a GIS map with pre-placed points and areas" opens the GIS import dialog — an alternative to manually placing markers/areas, for venues whose layout already exists in a GIS tool (e.g. ArcGIS).
-- You provide: a flattened background image (the map picture itself), and one or two GeoJSON files — one for point locations, one for polygon areas. Either file can be omitted if you only have one kind of feature; a single combined GeoJSON file (with both Point and Polygon features) also works, uploaded as either one.
-- ArcGIS (and most GIS tools) typically export one geometry type per layer, so a point layer and a polygon layer usually come out as two separate files — that maps directly onto the dialog's two file inputs.
-- **Point features** need a `name` property (text); an optional `isClinic` boolean marks that location as a clinic, same as checking "Mark as Clinic" when placing a marker by hand.
-- **Polygon features** (or MultiPolygon — only the first polygon's outer ring is used) need a `name` property; optional `isDispatchZone` (boolean) marks it as a dispatch zone, same as checking "Mark as Dispatch Zone" when drawing an area by hand, and optional `color` (a hex string like `"#22c55e"`) sets its map color — omitted, it's auto-assigned.
-- Georeferencing (lining features up correctly on the image) uses the FeatureCollection's `bbox`, or falls back to the min/max extent of the features themselves if no `bbox` is present. If both a points file and a polygons file are uploaded, the same shared bounds is used for both, so they land in a consistent position relative to each other.
-- See `docs/examples/venue-map-import.geojson` for a minimal worked example (one clinic point, one dispatch-zone polygon). The import preview shows points and areas overlaid on the background image before you confirm — check that they line up with their real locations; if they look off, the bbox likely doesn't match the image's extent.
+## Privacy and data handling
 
-Privacy & Data Handling
+- Collect only the information needed to provide care.
+- Avoid personally identifying information unless it is essential, and follow your organization's privacy policies and any BAAs that apply.
+- Lite mode data stays in the browser on the device where it was entered.
 
-- Only collect the minimal information necessary to provide care.
-- Do not store personally identifying information unless essential, and ensure your organization’s privacy policies and BAAs (if applicable) are followed.
+## Help and support
 
-Help & Support
-
-- For bugs or feature requests, open a GitHub issue describing the problem.
-- For security issues, follow `SECURITY.md` and report via `support@crowdcad.org` or GitHub Security Advisories.
-- For deployment questions, consult `docs/DEPLOYMENT.md` (choosing a backend), `docs/SETUP_FIREBASE.md`, or `docs/SETUP_POCKETBASE.md`.
-
-More information and screenshots: https://crowdcad.org/features
+- Report bugs or request features by opening a GitHub issue.
+- Report security issues as described in [`SECURITY.md`](../SECURITY.md).
+- For deployment questions see [`DEPLOYMENT.md`](DEPLOYMENT.md), [`SETUP_FIREBASE.md`](SETUP_FIREBASE.md) or [`SETUP_POCKETBASE.md`](SETUP_POCKETBASE.md).
+- Join the [CrowdCAD Discord](https://discord.gg/7detyFE7GM) or email support@crowdcad.org.

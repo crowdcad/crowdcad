@@ -20,7 +20,7 @@
 <br clear="left"/>
 
 
-CrowdCAD is an open-source, browser-based Computer-Aided Dispatch (CAD) system for volunteer EMS and event medical teams. Full developer and operational documentation lives in the `docs/` folder and in policy files. The demo with further information can be found at [crowdcad.org](https://crowdcad.org)
+CrowdCAD is an open-source, browser-based Computer-Aided Dispatch (CAD) system for volunteer EMS and event medical teams. Developer and operational documentation lives in `docs/` and the policy files linked below. A live demo and beginner-friendly setup guides are at [crowdcad.org](https://crowdcad.org).
 
 #### Quick links
 
@@ -30,224 +30,127 @@ CrowdCAD is an open-source, browser-based Computer-Aided Dispatch (CAD) system f
 - **Choosing a backend:** [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
 - **Firebase setup:** [docs/SETUP_FIREBASE.md](docs/SETUP_FIREBASE.md)
 - **PocketBase setup:** [docs/SETUP_POCKETBASE.md](docs/SETUP_POCKETBASE.md)
+- **PocketBase data model (ICD):** [docs/ICD.md](docs/ICD.md)
 - **Contributing guide:** [CONTRIBUTING.md](CONTRIBUTING.md)
 - **Code of Conduct:** [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
-- **Changelog / Releases:** [CHANGELOG.md](CHANGELOG.md)
-- **Security & reporting:** [SECURITY.md](SECURITY.md)
+- **Changelog:** [CHANGELOG.md](CHANGELOG.md)
+- **Security and reporting:** [SECURITY.md](SECURITY.md)
 - **License:** [LICENSE.md](LICENSE.md)
 - **Privacy:** [PRIVACY.md](PRIVACY.md)
 - **Deployment disclaimer:** [DISCLAIMER.md](DISCLAIMER.md)
 
 #### Quickstart
 
-CrowdCAD supports two backends, maintained as equal alternatives: **Firebase** (managed cloud) and **PocketBase** (self-hosted, no cloud account required). Pick whichever fits your organization's requirements and preferences — see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for a side-by-side comparison. Each option below is fully self-contained; you only need to follow one.
+CrowdCAD supports two backends maintained side by side. **Firebase** is managed cloud infrastructure. **PocketBase** is self-hosted with Docker and needs no cloud account. [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) compares them. You only need one.
 
-**Fork first (recommended for either option)** — preserves attribution and lets you receive upstream updates:
+New to the terminal? Follow the step-by-step guides with Mac and Windows instructions at [crowdcad.org/docs](https://crowdcad.org/docs).
+
+**1. Fork and clone.** Fork this repository on GitHub, then:
 
 ```bash
-# Fork via GitHub first: https://github.com/evanqua/crowdcad
-# Then clone your fork:
-git clone https://github.com/<your-github-username>/crowdcad.git
+git clone https://github.com/YOUR_USERNAME/crowdcad.git
 cd crowdcad
-```
-
-Or clone directly without forking: `git clone https://github.com/evanqua/crowdcad.git && cd crowdcad`
-
----
-
-**Option A — Firebase**
-
-Full walkthrough, including service accounts, security rules, and CI deploys: [docs/SETUP_FIREBASE.md](docs/SETUP_FIREBASE.md).
-
-*With Docker:*
-```bash
-cp .env.example .env.local
-# Edit .env.local and paste values from your Firebase project settings
-# Leave NEXT_PUBLIC_BACKEND unset or set it to "firebase"
-docker compose --env-file .env.local up --build -d
-```
-The dev server runs at `http://localhost:3000`. To stop it, run `docker compose down`.
-
-*Without Docker:*
-```bash
-cp .env.example .env.local
-# edit .env.local and paste values from your Firebase project settings
+git remote add upstream https://github.com/evanqua/crowdcad.git
 npm install
+cp .env.example .env.local
+```
+
+The `upstream` remote lets you pull future releases into your fork.
+
+**2a. Firebase.** Create a Firebase project with Email/Password auth and a Firestore database, paste its web config into `.env.local`, deploy the rules and start the app:
+
+```bash
+firebase deploy --only firestore:rules --project YOUR_PROJECT_ID
 npm run dev
 ```
-The dev server runs at `http://localhost:3000`. The runtime initializer is at `src/app/firebase.ts`.
 
----
+Full steps, including Storage, the first admin and hosting: [docs/SETUP_FIREBASE.md](docs/SETUP_FIREBASE.md).
 
-**Option B — PocketBase**
+**2b. PocketBase.** Set `NEXT_PUBLIC_BACKEND=pocketbase` and the `PB_*` values in `.env.local`, then:
 
-Full walkthrough, including Windows/Git Bash notes and SMTP configuration for "forgot password" emails: [docs/SETUP_POCKETBASE.md](docs/SETUP_POCKETBASE.md).
-
-*With Docker (recommended for this option):*
-
-1. Copy and configure the environment file:
-```bash
-cp .env.example .env.local
-```
-
-In `.env.local`, set the following values:
-```env
-NEXT_PUBLIC_BACKEND=pocketbase
-NEXT_PUBLIC_POCKETBASE_URL=http://127.0.0.1:8090
-PB_URL=http://127.0.0.1:8090
-PB_ADMIN_EMAIL=admin@example.com
-PB_ADMIN_PASSWORD=YourPassword!
-```
-
-2. Build and start the containers:
 ```bash
 docker compose --env-file .env.local up -d --build
-```
-
-3. Create the PocketBase superadmin (first time only — skippable on subsequent runs since data is persisted in `.pb-data/`):
-```bash
-docker exec pocketbase /pb/pocketbase superuser upsert admin@example.com YourPassword!
-```
-> Use the same email and password as defined in `PB_ADMIN_EMAIL` and `PB_ADMIN_PASSWORD` in your `.env.local`.
-
-4. Create the required collections (first time only):
-```bash
+docker exec pocketbase /pb/pocketbase superuser upsert admin@example.com 'YourPassword123'
 node scripts/setup-pocketbase.js
 ```
 
-5. The app is available at `http://localhost:3000` and the PocketBase admin UI at `http://localhost:8090/_/`.
+Full steps, including LAN access, the first admin, backups and password-reset email: [docs/SETUP_POCKETBASE.md](docs/SETUP_POCKETBASE.md).
 
-6. Grant yourself admin access (first time only — needed for Profile > Admin, e.g. managing the certification list):
-```bash
-PB_URL=http://127.0.0.1:8090 PB_ADMIN_EMAIL=admin@example.com PB_ADMIN_PASSWORD=YourPassword! \
-node scripts/setAdminPocketbase.js you@example.com
-```
-> This is only needed once — after signing in, that user can grant/revoke admin access for others from Profile > Admin > Manage Admins.
+The app runs at `http://localhost:3000`.
 
-7. (Optional) Enable "Forgot password" emails: in the PocketBase admin UI, configure **Settings > Mail settings** with real SMTP credentials, then update the **Collections > users > Options > Email templates > Reset password** action URL to `{APP_URL}/reset-password?token={TOKEN}` (replacing `{APP_URL}` with your app's URL) so the link opens this app instead of PocketBase's own admin UI. Without this, users can't self-serve a forgotten password. `scripts/setup-pocketbase.js` also prints this reminder.
-
-To stop the stack: `docker compose down`. Your data is preserved in `.pb-data/` and will be available on the next `docker compose up`.
-
-*Without Docker (download-the-binary setup):*
-
-Download the PocketBase binary for your platform from [pocketbase.io/docs](https://pocketbase.io/docs) and place it at the root of the project (or anywhere — adjust the path accordingly), then:
+**Updating.** Pull new releases from `upstream`:
 
 ```bash
-# Create (or update) the superadmin account
-./pocketbase superuser upsert admin@example.com YourPassword!
-
-# Start PocketBase accessible on the whole LAN (port 8090)
-./pocketbase serve --http=0.0.0.0:8090
+git fetch upstream
+git merge upstream/main
+git push origin main
 ```
 
-Set environment variables:
-```bash
-cp .env.example .env.local
-```
-```env
-NEXT_PUBLIC_BACKEND=pocketbase
-NEXT_PUBLIC_POCKETBASE_URL=http://192.168.x.x:8090   # LAN IP of the machine running PocketBase
-DISABLE_TELEMETRY=true
-
-# Used by the setup script (not read by the app)
-PB_URL=http://192.168.x.x:8090
-PB_ADMIN_EMAIL=admin@example.com
-PB_ADMIN_PASSWORD=YourPassword!
-```
-Use the LAN IP address (not `localhost`) so every device on the network can connect.
-
-Then create collections and run the app:
-```bash
-node scripts/setup-pocketbase.js
-npm install
-npm run dev
-# or for production:
-npm run build && npm start
-```
-The app will be available at `http://localhost:3000` and will communicate with PocketBase via the URL you configured. See [docs/SETUP_POCKETBASE.md](docs/SETUP_POCKETBASE.md) for granting yourself admin access and enabling "forgot password" emails.
+Then follow the "Updating to a new release" section of your backend's setup guide.
 
 #### Testing
 
-The E2E suite uses Playwright BDD with Firebase emulators. The test runner starts the emulators and a production build of Next.js automatically — no manual server setup required.
+The E2E suite uses Playwright BDD. The Firebase suite runs against the Firebase Emulator Suite, and the test runner starts the emulators and a production build automatically.
 
-**Prerequisites**
+Prerequisites:
 
-- [Firebase CLI](https://firebase.google.com/docs/cli) installed globally (`npm install -g firebase-tools`)
-- Playwright browsers installed: `npx playwright install --with-deps chromium`
+- [Firebase CLI](https://firebase.google.com/docs/cli): `npm install -g firebase-tools`
+- Playwright browsers: `npx playwright install --with-deps chromium`
 
-**First-time setup**
+First-time setup (the example file already holds working emulator defaults):
 
 ```bash
 cp .env.test.local.example .env.test.local
-# .env.test.local already contains working defaults for the emulator — no edits needed
 ```
 
-**Run the full suite**
+Run the suites:
 
 ```bash
-npm run test:e2e
+npm run test:e2e             # Firebase suite
+npm run test:e2e:pocketbase  # PocketBase suite
+npm run test:e2e:ui          # interactive Playwright UI
+npm run test:e2e:debug       # step through with the Playwright inspector
 ```
 
-This runs `bddgen` (generates Playwright spec files from the `.feature` files) then `playwright test`. The emulators and app server start and stop automatically.
-
-**Other modes**
-
-```bash
-npm run test:e2e:ui     # Playwright UI — interactive test explorer
-npm run test:e2e:debug  # Step through tests with the Playwright inspector
-```
-
-After a run, an HTML report is generated in `playwright-report/`. Open it with:
-
-```bash
-npx playwright show-report
-```
+`bddgen` generates Playwright specs from the `.feature` files before each run. Open the HTML report with `npx playwright show-report`.
 
 #### When to read the other docs
 
-- Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) before making cross-cutting changes.
-- Read [docs/COMPONENTS.md](docs/COMPONENTS.md) before adding UI components or modals.
-- Read [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) first if you haven't chosen a backend yet — it compares Firebase and PocketBase.
-- Follow [docs/SETUP_FIREBASE.md](docs/SETUP_FIREBASE.md) for Firebase setup, compliance guidance (BAA), rules, and CI deploys.
-- Follow [docs/SETUP_POCKETBASE.md](docs/SETUP_POCKETBASE.md) for self-hosted/LAN deployments backed by PocketBase.
-- See [docs/USER_GUIDE.md](docs/USER_GUIDE.md) for operator-facing workflows and screenshots.
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) before cross-cutting changes
+- [docs/COMPONENTS.md](docs/COMPONENTS.md) before adding UI components or modals
+- [docs/ICD.md](docs/ICD.md) before changing the shape of venue or event data
+- [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) if you have not chosen a backend yet
+- [docs/USER_GUIDE.md](docs/USER_GUIDE.md) for operator workflows
 
 #### Reporting and policies
 
-- Report security issues per [SECURITY.md](SECURITY.md).
+- Report security issues as described in [SECURITY.md](SECURITY.md).
 - Community expectations are in [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
-
-#### Privacy and Deployment
-
-See [PRIVACY.md](./PRIVACY.md) for information on how CrowdCAD handles
-data, and [DISCLAIMER.md](./DISCLAIMER.md) for the terms under which
-CrowdCAD is made available to deploying organizations.
+- [PRIVACY.md](PRIVACY.md) explains how CrowdCAD handles data, and [DISCLAIMER.md](DISCLAIMER.md) sets the terms under which it is made available to deploying organizations.
 
 #### Contributing
 
-Please consult [CONTRIBUTING.md](CONTRIBUTING.md) for workflow and PR guidance. For small changes, open a branch, push and create a PR for review.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for workflow and PR guidance.
 
-#### Community & visibility
+#### Community and visibility
 
-CrowdCAD's mission is to make volunteer event medical services safer and more effective. To help the project reach as many organizations as possible:
+CrowdCAD's mission is to make volunteer event medical services safer and more effective. To help it reach more organizations:
 
-- Please fork the repository on GitHub when adopting or modifying CrowdCAD. Forks preserve attribution and make upstream collaboration visible.
-- Star and watch the repo if you use it; forks, stars and PRs are public signals that help discoverability.
-- If you use CrowdCAD for your organization, consider linking back to this repository in your README or site to help others find the project.
+- Fork the repository when adopting or modifying CrowdCAD. Forks preserve attribution and make upstream collaboration visible.
+- Star and watch the repository if you use it.
+- Link back to this repository from your organization's README or site.
 
 #### Stay connected
 
-- **Get release notifications:** [Sign up here](https://forms.gle/XbGvaRhpd8kH9wqFA) to hear about new releases and features. This list is used for release announcements only.
-- **Discord:** [Join the CrowdCAD Discord](https://discord.gg/7detyFE7GM) for feature discussion, help debugging, and coordinating ideas for operational formatting.
+- **Release notifications:** [sign up here](https://forms.gle/XbGvaRhpd8kH9wqFA). The list is used for release announcements only.
+- **Discord:** [join the CrowdCAD Discord](https://discord.gg/7detyFE7GM) for feature discussion, debugging help and operational formatting ideas.
 
-#### Support / Contact
+#### Support and contact
 
-For questions, security reports, or hosting inquiries, email: support@crowdcad.org
+For questions, security reports or hosting inquiries, email support@crowdcad.org.
 
 #### Acknowledgements
 
-CrowdCAD is built by volunteers and maintainers listed in the project metadata. See the individual docs for maintainers and contact details.
+CrowdCAD is built by volunteers and the maintainers listed in the project metadata.
 
-CrowdCAD is an open-source software framework. It does not provide HIPAA compliance out of the box. Organizations hosting CrowdCAD are solely responsible for ensuring their implementation meets applicable legal and regulatory requirements, including HIPAA.
-
-CrowdCAD contributors assume no responsibility for how this software is used.
+CrowdCAD is an open-source software framework and does not provide HIPAA compliance out of the box. Organizations hosting CrowdCAD are solely responsible for ensuring their implementation meets applicable legal and regulatory requirements, including HIPAA. CrowdCAD contributors assume no responsibility for how this software is used.
