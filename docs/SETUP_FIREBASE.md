@@ -79,7 +79,7 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
     match /venue_maps/{file} {
-      allow read: if true;
+      allow read: if request.auth != null;
       allow write: if request.auth != null
         && request.resource.size < 20 * 1024 * 1024
         && request.resource.contentType.matches('image/.*');
