@@ -4,7 +4,7 @@ import React, { useMemo } from 'react';
 import { Button } from '@heroui/react';
 import type { Call } from '@/app/types';
 
-const CLOSED_STATUSES = ['Delivered', 'Refusal', 'NMM', 'Resolved'];
+const CLOSED_STATUSES = ['Delivered', 'Refusal', 'NMM', 'Treat and Release', 'Resolved'];
 
 type DuplicateCallModalProps = {
   duplicateCallId: string;

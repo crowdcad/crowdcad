@@ -467,7 +467,7 @@ function TeamMarker({
   const { color } = getTeamMarkerColors(team);
 
   const activeCall = calls.find(c =>
-    c.assignedTeam?.includes(team.team) && !['Resolved', 'Delivered', 'Refusal', 'NMM'].includes(c.status)
+    c.assignedTeam?.includes(team.team) && !['Resolved', 'Delivered', 'Refusal', 'NMM', 'Treat and Release'].includes(c.status)
   );
   const statusLabel = team.status || 'Unknown';
 

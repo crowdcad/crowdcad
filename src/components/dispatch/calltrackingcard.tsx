@@ -20,7 +20,7 @@ import type { Event, Call, DetachedTeam } from '@/app/types';
 import StatusLabel, { getMenuLabel } from '@/components/dispatch/statuslabel';
 import EquipmentTypeIcon, { getEquipmentStatusWord } from '@/components/dispatch/equipmenttypeicon';
 import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
-import { getEventClinics, isCallResolved, getVenueLocationOptions } from '@/lib/clinics';
+import { getEventClinics, getTransportClinicId, isCallResolved, getVenueLocationOptions } from '@/lib/clinics';
 import { getEquipmentIconType } from '@/lib/equipmentIcon';
 import { getStatusColor } from '@/lib/statusColors';
 import CallIndicatorIcons from './callindicatoricons';
@@ -119,6 +119,20 @@ export default function CallTrackingCard({
       .map(eq => typeof eq === 'string' ? eq : eq.name)
       .filter(equipName => !call.equipment?.includes(equipName));
   }, [event.venue?.equipment, call.equipment]);
+
+  // Where each piece of equipment currently is — shown inline in the Add
+  // Equipment menu so the dispatcher can pick the closest one. Live event
+  // equipment wins over the venue's configured home location.
+  const equipmentLocations = useMemo(() => {
+    const locations = new Map<string, string>();
+    (event.venue?.equipment || []).forEach(eq => {
+      if (typeof eq !== 'string' && eq.location) locations.set(eq.name, eq.location);
+    });
+    (event.eventEquipment || []).forEach(eq => {
+      if (eq.location) locations.set(eq.name, eq.location);
+    });
+    return locations;
+  }, [event.venue?.equipment, event.eventEquipment]);
 
   // Get teams available for equipment delivery
   const teamsForEquipment = useMemo(() => {
@@ -250,7 +264,7 @@ export default function CallTrackingCard({
             const isEquipmentOnlyTeam = call.equipmentTeams?.includes(team);
             const statusOptions = isEquipmentOnlyTeam
               ? ['En Route Eq', 'Assisting', 'Delivered Eq']
-              : ['En Route', 'On Scene', 'Unable to Locate', 'Transporting', 'Pending Transport', 'Rolled from Scene', 'Delivered', 'Refusal', 'NMM', 'Detached'];
+              : ['En Route', 'On Scene', 'Unable to Locate', 'Transporting', 'Pending Transport', 'Rolled from Scene', 'Delivered', 'Refusal', 'NMM', 'Treat and Release', 'Detached'];
             
             // Same resolution desktop's CallTrackingTable uses: a per-call
             // override (teamStatusMap) takes priority over the team's own
@@ -338,6 +352,13 @@ export default function CallTrackingCard({
                       <DropdownMenu
                         aria-label="Team Status"
                         onAction={(key) => {
+                          // A destination picked when the team went Transporting carries over —
+                          // Delivered only asks again if no clinic was chosen yet.
+                          const transportClinicId = key === 'Delivered' ? getTransportClinicId(call, currentStatus, clinics) : undefined;
+                          if (transportClinicId) {
+                            handleTeamStatusChange(call.id, team, 'Delivered', transportClinicId);
+                            return;
+                          }
                           if ((key === 'Transporting' || key === 'Delivered') && clinics.length > 1) {
                             setClinicPickTeam(team);
                             setClinicPickStatus(key as string);
@@ -476,7 +497,7 @@ export default function CallTrackingCard({
                     availableEquipment.map(equipName => (
                       <DropdownMenuSub key={equipName}>
                         <DropdownMenuSubTrigger className="hover:bg-surface-liner focus:bg-surface-liner cursor-pointer text-surface-light">
-                          {equipName}
+                          {equipName} ({t(equipmentLocations.get(equipName) || 'Unknown')})
                         </DropdownMenuSubTrigger>
                         <DropdownMenuSubContent className="bg-surface-deep border-surface-liner">
                           {teamsForEquipment.length > 0 ? (

@@ -1005,7 +1005,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
       // Check if equipment is on any active call
       const activeCall = event.calls?.find(c => 
         c.equipment?.includes(eqName) && 
-        !['Resolved', 'Delivered', 'Refusal', 'NMM'].includes(c.status)
+        !['Resolved', 'Delivered', 'Refusal', 'NMM', 'Treat and Release'].includes(c.status)
       );
       
       // Determine delivery team
@@ -1253,7 +1253,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
   // Statuses that fully resolve a call — per any one of these on any one team,
   // the whole call closes out and every other team/supervisor/equipment still
   // on it releases back to post, not just the team that reported it.
-  const RESOLVING_STATUSES = ['Delivered', 'Refusal', 'NMM', 'Unable to Locate', 'Rolled from Scene'];
+  const RESOLVING_STATUSES = ['Delivered', 'Refusal', 'NMM', 'Treat and Release', 'Unable to Locate', 'Rolled from Scene'];
 
   const handleTeamStatusChange = (callId: string, team: string, newStatus: string, clinicId?: string, transportUnitValue?: string) => {
     console.log("FUNCTION CALLED", { callId, team, newStatus });
@@ -1415,6 +1415,8 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
             newCallStatus = 'Delivered';
           } else if (newStatus === 'NMM') {
             newCallStatus = 'NMM';
+          } else if (newStatus === 'Treat and Release') {
+            newCallStatus = 'Treat and Release';
           } else if (newStatus === 'Unable to Locate') {
             newCallStatus = 'Unable to Locate';
           } else if (newStatus === 'Refusal') {
@@ -1489,7 +1491,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
           // Equipment assistance statuses
           updatedLocation = latestCall.location;
           updatedStatus = newStatus;
-        } else if (['Refusal', 'NMM', 'Detached', 'Unable to Locate', 'Rolled from Scene'].includes(newStatus)) {
+        } else if (['Refusal', 'NMM', 'Treat and Release', 'Detached', 'Unable to Locate', 'Rolled from Scene'].includes(newStatus)) {
           updatedLocation = t.originalPost || 'Unknown';
           updatedStatus = 'Available';
         } else if (newStatus === 'In Clinic') {
@@ -1593,7 +1595,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
       } else {
         // Case A: Call has no remaining assigned teams → resolve equipment to Clinic
         const noTeamsRemain = !callAfterUpdate?.assignedTeam || callAfterUpdate.assignedTeam.length === 0;
-        const callResolvedLike = ['Resolved', 'Delivered', 'Refusal', 'NMM', 'Unable to Locate', 'Rolled'].includes(
+        const callResolvedLike = ['Resolved', 'Delivered', 'Refusal', 'NMM', 'Treat and Release', 'Unable to Locate', 'Rolled'].includes(
           callAfterUpdate?.status || newCallStatus
         );
 
@@ -4103,12 +4105,12 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
                         : (call: Call) => getCallZoneIds(call, venueLayers).some(id => callZoneFilter.has(id));
                       const activeMobileCalls = sortActiveCalls(
                         event.calls
-                          .filter((call: Call) => !['Delivered', 'Refusal', 'NMM', 'Rolled', 'Resolved', 'Unable to Locate'].includes(call.status))
+                          .filter((call: Call) => !['Delivered', 'Refusal', 'NMM', 'Treat and Release', 'Rolled', 'Resolved', 'Unable to Locate'].includes(call.status))
                           .filter((call: Call) => !mobileZoneFilter || mobileZoneFilter(call)),
                         callSortMode
                       );
                       const resolvedMobileCalls = event.calls
-                        .filter((c: Call) => ['Delivered', 'Refusal', 'NMM', 'Rolled', 'Resolved', 'Unable to Locate'].includes(c.status))
+                        .filter((c: Call) => ['Delivered', 'Refusal', 'NMM', 'Treat and Release', 'Rolled', 'Resolved', 'Unable to Locate'].includes(c.status))
                         .filter((call: Call) => !mobileZoneFilter || mobileZoneFilter(call))
                         .sort((a: Call, b: Call) => parseInt(a.id) - parseInt(b.id));
                       return (

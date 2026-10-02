@@ -21,7 +21,7 @@ import TrackingTableBase from './trackingtablebase';
 import PendingCallChip from './pendingcallchip';
 import { getStatusColor, TEAM_CARD_ROW_HOVER_CLASS } from '@/lib/statusColors';
 import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
-import { getEventClinics, RESOLVED_CALL_STATUSES, getVenueLocationOptions } from '@/lib/clinics';
+import { getEventClinics, getTransportClinicId, RESOLVED_CALL_STATUSES, getVenueLocationOptions } from '@/lib/clinics';
 import { getEquipmentIconType } from '@/lib/equipmentIcon';
 import { withPendingSuffix } from '@/lib/callTiming';
 import { sortActiveCalls, type CallSortMode } from '@/lib/callSort';
@@ -458,7 +458,7 @@ export const CallTrackingTable: React.FC<CallTrackingTableProps> = ({
                               const isEquipmentOnlyTeam = call.equipmentTeams?.includes(team);
                               const statusOptions = isEquipmentOnlyTeam
                                 ? ['En Route Eq', 'Assisting', 'Delivered Eq',]
-                                : ['En Route', 'On Scene', 'Unable to Locate', 'Transporting', 'Pending Transport', 'Rolled from Scene', 'Delivered', 'Refusal', 'NMM', 'Detached'];
+                                : ['En Route', 'On Scene', 'Unable to Locate', 'Transporting', 'Pending Transport', 'Rolled from Scene', 'Delivered', 'Refusal', 'NMM', 'Treat and Release', 'Detached'];
                               const currentTeamStatus = teamStatusMap[call.id]?.[team] || event?.staff.find(s => s.team === team)?.status || 'En Route';
                               const teamStatusColor = getStatusColor(currentTeamStatus);
 
@@ -564,6 +564,13 @@ export const CallTrackingTable: React.FC<CallTrackingTableProps> = ({
                                           aria-label="Team status"
                                           onAction={(key) => {
                                             teamStatusMenuSelectedRef.current = true;
+                                            // A destination picked when the team went Transporting carries over —
+                                            // Delivered only asks again if no clinic was chosen yet.
+                                            const transportClinicId = key === 'Delivered' ? getTransportClinicId(call, currentTeamStatus, clinics) : undefined;
+                                            if (transportClinicId) {
+                                              handleTeamStatusChange(call.id, team, 'Delivered', transportClinicId);
+                                              return;
+                                            }
                                             if ((key === 'Transporting' || key === 'Delivered') && clinics.length > 1) {
                                               setOpenMenuToken(`team-clinic-pick:${call.id}:${team}`);
                                               setClinicPickStatus(key as string);
@@ -649,7 +656,7 @@ export const CallTrackingTable: React.FC<CallTrackingTableProps> = ({
                                         const teamStaff = event.staff?.find(s => s.team === teamName);
                                         const isAssignedToActiveCall = event.calls?.some((c: Call) => 
                                           c.assignedTeam?.includes(teamName) && 
-                                          !['Resolved', 'Delivered', 'Refusal', 'NMM', 'Rolled'].includes(c.status)
+                                          !['Resolved', 'Delivered', 'Refusal', 'NMM', 'Treat and Release', 'Rolled'].includes(c.status)
                                         );
                                         return !isAssignedToActiveCall && teamStaff?.status === 'Available';
                                       });
@@ -658,7 +665,7 @@ export const CallTrackingTable: React.FC<CallTrackingTableProps> = ({
                                         const teamStaff = event.staff?.find(s => s.team === teamName);
                                         const isAssignedToActiveCall = event.calls?.some((c: Call) => 
                                           c.assignedTeam?.includes(teamName) && 
-                                          !['Resolved', 'Delivered', 'Refusal', 'NMM', 'Rolled'].includes(c.status)
+                                          !['Resolved', 'Delivered', 'Refusal', 'NMM', 'Treat and Release', 'Rolled'].includes(c.status)
                                         );
                                         return !isAssignedToActiveCall && ['In Clinic', 'On Break'].includes(teamStaff?.status || '');
                                       });                                     
@@ -697,7 +704,7 @@ export const CallTrackingTable: React.FC<CallTrackingTableProps> = ({
                                         const notAssignedToThisCall = !call.assignedTeam?.includes(supervisor.team);
                                         const notAssignedToAnyActiveCall = !event.calls?.some((c: Call) => 
                                           c.assignedTeam?.includes(supervisor.team) && 
-                                          !['Resolved', 'Delivered', 'Refusal', 'NMM', 'Rolled'].includes(c.status)
+                                          !['Resolved', 'Delivered', 'Refusal', 'NMM', 'Treat and Release', 'Rolled'].includes(c.status)
                                         );
                                         const hasValidStatus = ['Available', 'In Clinic', 'On Break'].includes(supervisor.status);
                                         return notAssignedToThisCall && notAssignedToAnyActiveCall && hasValidStatus;
@@ -759,7 +766,7 @@ export const CallTrackingTable: React.FC<CallTrackingTableProps> = ({
                                       const isAvailable = supervisor.status === 'Available' ||
                                         !event.calls?.some((c: Call) => 
                                           c.assignedTeam?.includes(supervisor.team) && 
-                                          !['Resolved', 'Delivered', 'Refusal', 'NMM', 'Rolled'].includes(c.status)
+                                          !['Resolved', 'Delivered', 'Refusal', 'NMM', 'Treat and Release', 'Rolled'].includes(c.status)
                                         );
                                       return notAssignedToThisCall && isAvailable;
                                     }).length === 0) && (
@@ -789,7 +796,7 @@ export const CallTrackingTable: React.FC<CallTrackingTableProps> = ({
                                         ...availableEquipment.map((equipment: Equipment) => (
                                         <DropdownMenuSub key={equipment.id}>
                                           <DropdownMenuSubTrigger className="text-surface-light hover:bg-surface-liner focus:bg-surface-liner cursor-pointer">
-                                            {equipment.name}
+                                            {equipment.name} ({t(equipment.location || 'Unknown')})
                                           </DropdownMenuSubTrigger>
                                           <DropdownMenuSubContent className="bg-surface-deep border-surface-liner">
                                             {/* Available TEAMS and INACTIVE TEAMS */}
@@ -798,7 +805,7 @@ export const CallTrackingTable: React.FC<CallTrackingTableProps> = ({
                                                 const notAssignedToThisCall = !call.assignedTeam?.includes(team.team);
                                                 const notAssignedToAnyActiveCall = !event.calls?.some((c: Call) => 
                                                   c.assignedTeam?.includes(team.team) && 
-                                                  !['Resolved', 'Delivered', 'Refusal', 'NMM', 'Rolled'].includes(c.status)
+                                                  !['Resolved', 'Delivered', 'Refusal', 'NMM', 'Treat and Release', 'Rolled'].includes(c.status)
                                                 );
                                                 return notAssignedToThisCall && notAssignedToAnyActiveCall && team.status === 'Available';
                                               });
@@ -807,7 +814,7 @@ export const CallTrackingTable: React.FC<CallTrackingTableProps> = ({
                                                 const notAssignedToThisCall = !call.assignedTeam?.includes(team.team);
                                                 const notAssignedToAnyActiveCall = !event.calls?.some((c: Call) => 
                                                   c.assignedTeam?.includes(team.team) && 
-                                                  !['Resolved', 'Delivered', 'Refusal', 'NMM', 'Rolled'].includes(c.status)
+                                                  !['Resolved', 'Delivered', 'Refusal', 'NMM', 'Treat and Release', 'Rolled'].includes(c.status)
                                                 );
                                                 return notAssignedToThisCall && notAssignedToAnyActiveCall && ['In Clinic', 'On Break'].includes(team.status);
                                               });
@@ -949,7 +956,7 @@ export const CallTrackingTable: React.FC<CallTrackingTableProps> = ({
                                                 const notAssignedToThisCall = !call.assignedTeam?.includes(sup.team);
                                                 const notAssignedToAnyActiveCall = !event.calls?.some((c: Call) => 
                                                   c.assignedTeam?.includes(sup.team) && 
-                                                  !['Resolved', 'Delivered', 'Refusal', 'NMM', 'Rolled'].includes(c.status)
+                                                  !['Resolved', 'Delivered', 'Refusal', 'NMM', 'Treat and Release', 'Rolled'].includes(c.status)
                                                 );
                                                 return notAssignedToThisCall && notAssignedToAnyActiveCall && sup.status === 'Available';
                                               }) || [];
@@ -958,7 +965,7 @@ export const CallTrackingTable: React.FC<CallTrackingTableProps> = ({
                                                 const notAssignedToThisCall = !call.assignedTeam?.includes(sup.team);
                                                 const notAssignedToAnyActiveCall = !event.calls?.some((c: Call) => 
                                                   c.assignedTeam?.includes(sup.team) && 
-                                                  !['Resolved', 'Delivered', 'Refusal', 'NMM', 'Rolled'].includes(c.status)
+                                                  !['Resolved', 'Delivered', 'Refusal', 'NMM', 'Treat and Release', 'Rolled'].includes(c.status)
                                                 );
                                                 return notAssignedToThisCall && notAssignedToAnyActiveCall && ['In Clinic', 'On Break'].includes(sup.status);
                                               }) || [];
@@ -1109,7 +1116,7 @@ export const CallTrackingTable: React.FC<CallTrackingTableProps> = ({
                                         ...inClinicEquipment.map((equipment: Equipment) => (
                                         <DropdownMenuSub key={equipment.id}>
                                           <DropdownMenuSubTrigger className="text-surface-light hover:bg-surface-liner focus:bg-surface-liner cursor-pointer bg-status-card-blue">
-                                            {equipment.name}
+                                            {equipment.name} ({t(equipment.location || 'Unknown')})
                                           </DropdownMenuSubTrigger>
                                           <DropdownMenuSubContent className="bg-surface-deep border-surface-liner">
                                             {/* Available TEAMS and INACTIVE TEAMS for In Clinic equipment */}
@@ -1118,7 +1125,7 @@ export const CallTrackingTable: React.FC<CallTrackingTableProps> = ({
                                                 const notAssignedToThisCall = !call.assignedTeam?.includes(team.team);
                                                 const notAssignedToAnyActiveCall = !event.calls?.some((c: Call) => 
                                                   c.assignedTeam?.includes(team.team) && 
-                                                  !['Resolved', 'Delivered', 'Refusal', 'NMM', 'Rolled'].includes(c.status)
+                                                  !['Resolved', 'Delivered', 'Refusal', 'NMM', 'Treat and Release', 'Rolled'].includes(c.status)
                                                 );
                                                 return notAssignedToThisCall && notAssignedToAnyActiveCall && team.status === 'Available';
                                               });
@@ -1127,7 +1134,7 @@ export const CallTrackingTable: React.FC<CallTrackingTableProps> = ({
                                                 const notAssignedToThisCall = !call.assignedTeam?.includes(team.team);
                                                 const notAssignedToAnyActiveCall = !event.calls?.some((c: Call) => 
                                                   c.assignedTeam?.includes(team.team) && 
-                                                  !['Resolved', 'Delivered', 'Refusal', 'NMM', 'Rolled'].includes(c.status)
+                                                  !['Resolved', 'Delivered', 'Refusal', 'NMM', 'Treat and Release', 'Rolled'].includes(c.status)
                                                 );
                                                 return notAssignedToThisCall && notAssignedToAnyActiveCall && ['In Clinic', 'On Break'].includes(team.status);
                                               });
@@ -1269,7 +1276,7 @@ export const CallTrackingTable: React.FC<CallTrackingTableProps> = ({
                                                 const notAssignedToThisCall = !call.assignedTeam?.includes(sup.team);
                                                 const notAssignedToAnyActiveCall = !event.calls?.some((c: Call) => 
                                                   c.assignedTeam?.includes(sup.team) && 
-                                                  !['Resolved', 'Delivered', 'Refusal', 'NMM', 'Rolled'].includes(c.status)
+                                                  !['Resolved', 'Delivered', 'Refusal', 'NMM', 'Treat and Release', 'Rolled'].includes(c.status)
                                                 );
                                                 return notAssignedToThisCall && notAssignedToAnyActiveCall && sup.status === 'Available';
                                               }) || [];
@@ -1278,7 +1285,7 @@ export const CallTrackingTable: React.FC<CallTrackingTableProps> = ({
                                                 const notAssignedToThisCall = !call.assignedTeam?.includes(sup.team);
                                                 const notAssignedToAnyActiveCall = !event.calls?.some((c: Call) => 
                                                   c.assignedTeam?.includes(sup.team) && 
-                                                  !['Resolved', 'Delivered', 'Refusal', 'NMM', 'Rolled'].includes(c.status)
+                                                  !['Resolved', 'Delivered', 'Refusal', 'NMM', 'Treat and Release', 'Rolled'].includes(c.status)
                                                 );
                                                 return notAssignedToThisCall && notAssignedToAnyActiveCall && ['In Clinic', 'On Break'].includes(sup.status);
                                               }) || [];

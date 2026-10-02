@@ -100,6 +100,22 @@ export function getClinicName(clinics: Clinic[], clinicId: string | undefined): 
 }
 
 /**
+ * Clinic a "Delivered" status should reuse without asking the dispatcher to
+ * pick again — the destination already chosen when the team (or call) was
+ * marked Transporting. Undefined means no destination has been chosen yet,
+ * so a multi-clinic event still needs the picker.
+ */
+export function getTransportClinicId(
+  call: Pick<Call, 'status' | 'clinicId'>,
+  teamStatus: string | undefined,
+  clinics: Clinic[]
+): string | undefined {
+  const wasTransporting = teamStatus === 'Transporting' || call.status === 'Transporting';
+  if (!wasTransporting || !call.clinicId) return undefined;
+  return clinics.some(c => c.id === call.clinicId) ? call.clinicId : undefined;
+}
+
+/**
  * Call.status values that mean the call itself is fully closed out — every
  * team/supervisor/equipment still on it has been auto-returned to post (see
  * the resolving cascade in dispatch/page.tsx's handleTeamStatusChange). A
@@ -109,7 +125,7 @@ export function getClinicName(clinics: Clinic[], clinicId: string | undefined): 
  * summary/page.tsx for how that specific case is still distinguished when
  * needed via `detachedTeams`.
  */
-export const RESOLVED_CALL_STATUSES = ['Delivered', 'Refusal', 'NMM', 'Rolled', 'Resolved', 'Unable to Locate'];
+export const RESOLVED_CALL_STATUSES = ['Delivered', 'Refusal', 'NMM', 'Treat and Release', 'Rolled', 'Resolved', 'Unable to Locate'];
 
 /** True once a call's status is one of RESOLVED_CALL_STATUSES. */
 export function isCallResolved(call: Call): boolean {
