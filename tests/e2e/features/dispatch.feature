@@ -109,6 +109,15 @@ Feature: Dispatch board
     When I change team "Golf" status on the call to "No Medical Merit"
     Then the team "Golf" should have status "Available"
 
+  Scenario: Treat and Release closes the call and returns the team to Available
+    When I open the add team modal
+    And I create a team named "India" with a member "Lee Wong" certified as "CPR"
+    And I open the quick call modal
+    And I log a call assigned to team "India" at location "North Gate" with complaint "Laceration"
+    Then the team "India" should have status "En Route"
+    When I change team "India" status on the call to "Treat and Release"
+    Then the team "India" should have status "Available"
+
   Scenario: Total Calls counter reflects the number of logged calls
     When I open the quick call modal
     And I log a call with location "Stage Left" and complaint "Sprain"

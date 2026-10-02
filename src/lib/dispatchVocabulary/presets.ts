@@ -44,6 +44,7 @@ const CROWDCAD_FRENCH_TERMS: Record<string, string> = {
   Delivered: 'Remis',
   Refusal: 'Refus de soins',
   NMM: 'Sans objet médical',
+  'Treat and Release': 'Soigné sur place',
   'Unable to Locate': 'Introuvable',
   Rolled: 'Évacué',
   'Rolled from Scene': 'Transport direct',

@@ -3,6 +3,7 @@
 import React from 'react';
 import { useElapsedSeconds, formatMMSS } from '@/hooks/useMMSS';
 import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
+import { useSurgeFlashing, surgeAlarmClass } from '@/hooks/useSurgeFlashing';
 
 type Props = {
   active: boolean;
@@ -19,11 +20,13 @@ type Props = {
  * active it ticks a live elapsed timer and pulses with the same
  * grey-to-alarm-orange animation as the Pending call chip
  * (`animate-pending-alarm`), so the two "something needs attention" signals
- * read as the same visual language.
+ * read as the same visual language. With flashing disabled in Preferences
+ * (useSurgeFlashing) it holds a steady alarm orange instead.
  */
 export default function SurgeToggleButton({ active, startedAt, onToggle }: Props) {
   const { t } = useDispatchTerms();
   const elapsed = useElapsedSeconds(active ? startedAt : undefined);
+  const { flashingDisabled } = useSurgeFlashing();
 
   return (
     <button
@@ -34,7 +37,7 @@ export default function SurgeToggleButton({ active, startedAt, onToggle }: Props
       data-testid="surge-toggle-button"
       className={`self-start shrink-0 h-8 px-4 flex items-center rounded-md border text-[15px] sm:text-base font-semibold tabular-nums transition-colors ${
         active
-          ? 'border-surface-liner bg-surface-liner/30 animate-pending-alarm text-surface-light'
+          ? `${surgeAlarmClass(flashingDisabled)} text-surface-light`
           : 'border-surface-liner bg-transparent text-surface-faint hover:text-surface-light hover:bg-surface-liner/30'
       }`}
     >

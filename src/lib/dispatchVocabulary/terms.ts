@@ -75,6 +75,7 @@ export const DISPATCH_TERMS: DispatchTerm[] = [
     'Delivered',
     'Refusal',
     'NMM',
+    'Treat and Release',
     'Unable to Locate',
     'Rolled',
     'Rolled from Scene',

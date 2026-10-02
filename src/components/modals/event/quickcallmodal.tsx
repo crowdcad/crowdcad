@@ -66,7 +66,7 @@ export default function QuickCallModal({
     const available = allTeams.filter((staff: Staff) => {
       const isAssignedToActiveCall = event?.calls?.some((c: Call) => 
         c.assignedTeam?.includes(staff.team) && 
-        !['Resolved', 'Delivered', 'Refusal', 'NMM', 'Rolled'].includes(c.status)
+        !['Resolved', 'Delivered', 'Refusal', 'NMM', 'Treat and Release', 'Rolled'].includes(c.status)
       );
       return !isAssignedToActiveCall && staff.status === 'Available';
     }).sort((a: Staff, b: Staff) =>
@@ -76,7 +76,7 @@ export default function QuickCallModal({
     const inactive = allTeams.filter((staff: Staff) => {
       const isAssignedToActiveCall = event?.calls?.some((c: Call) => 
         c.assignedTeam?.includes(staff.team) && 
-        !['Resolved', 'Delivered', 'Refusal', 'NMM', 'Rolled'].includes(c.status)
+        !['Resolved', 'Delivered', 'Refusal', 'NMM', 'Treat and Release', 'Rolled'].includes(c.status)
       );
       return !isAssignedToActiveCall && ['In Clinic', 'On Break'].includes(staff.status || '');
     }).sort((a: Staff, b: Staff) =>
@@ -95,7 +95,7 @@ export default function QuickCallModal({
     const isAssignedToActiveCall = (supervisor: Supervisor) =>
       event?.calls?.some((c: Call) =>
         c.assignedTeam?.includes(supervisor.team) &&
-        !['Resolved', 'Delivered', 'Refusal', 'NMM', 'Rolled'].includes(c.status)
+        !['Resolved', 'Delivered', 'Refusal', 'NMM', 'Treat and Release', 'Rolled'].includes(c.status)
       );
 
     const available = allSupervisors

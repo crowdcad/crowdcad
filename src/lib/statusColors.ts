@@ -45,6 +45,7 @@ export const STATUS_COLORS: Record<string, DispatchStatusColor> = {
   },
   Refusal: DEFAULT_STATUS_COLOR,
   NMM: DEFAULT_STATUS_COLOR,
+  'Treat and Release': DEFAULT_STATUS_COLOR,
   Resolved: DEFAULT_STATUS_COLOR,
   Rolled: DEFAULT_STATUS_COLOR,
   'Rolled from Scene': DEFAULT_STATUS_COLOR,
@@ -108,13 +109,13 @@ export function getStatusColor(status?: string | null): DispatchStatusColor {
 export function deriveTeamVisualStatus(status: string, event: Event, team: string): string {
   const onEqRun =
     !!event.calls?.some(
-      c => c.equipmentTeams?.includes(team) && !['Resolved', 'Delivered', 'Delivered Eq', 'Refusal', 'NMM'].includes(c.status)
+      c => c.equipmentTeams?.includes(team) && !['Resolved', 'Delivered', 'Delivered Eq', 'Refusal', 'NMM', 'Treat and Release'].includes(c.status)
     ) || ['En Route Eq', 'Assisting'].includes(status);
 
   if (onEqRun) return 'En Route Eq';
 
   const activeCare = !!event.calls?.some(
-    c => c.assignedTeam?.includes(team) && !['Resolved', 'Delivered', 'Delivered Eq', 'Refusal', 'NMM'].includes(c.status)
+    c => c.assignedTeam?.includes(team) && !['Resolved', 'Delivered', 'Delivered Eq', 'Refusal', 'NMM', 'Treat and Release'].includes(c.status)
   );
 
   if (activeCare) return 'En Route';

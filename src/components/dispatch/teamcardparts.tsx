@@ -55,11 +55,11 @@ export type TeamStatusModel = {
 /** Which statuses a team can move to right now, plus the display bits derived alongside. */
 export function useTeamStatusModel(staff: Staff, event: Event): TeamStatusModel {
   const isOnAnyActiveCall = !!event.calls?.some(c =>
-    c.assignedTeam?.includes(staff.team) && !['Resolved', 'Delivered', 'Refusal', 'NMM'].includes(c.status)
+    c.assignedTeam?.includes(staff.team) && !['Resolved', 'Delivered', 'Refusal', 'NMM', 'Treat and Release'].includes(c.status)
   );
 
   const isOnEq = !!event.calls?.some(c =>
-    c.equipmentTeams?.includes(staff.team) && !['Resolved', 'Delivered Eq', 'Refusal', 'NMM'].includes(c.status)
+    c.equipmentTeams?.includes(staff.team) && !['Resolved', 'Delivered Eq', 'Refusal', 'NMM', 'Treat and Release'].includes(c.status)
   ) || ['En Route Eq', 'Assisting'].includes(staff.status);
 
   const statusOptions = isOnEq
