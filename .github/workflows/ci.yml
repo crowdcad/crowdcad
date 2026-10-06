@@ -11,6 +11,7 @@ on:
       - main
       - master
       - develop
+      - integration/tak
 
 jobs:
   set-env:
