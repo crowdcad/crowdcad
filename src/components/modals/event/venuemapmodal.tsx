@@ -680,6 +680,14 @@ function SupervisorMarker({ supervisor, post, rect, scale, isSelected }: Supervi
   );
 }
 
+/** Optional add-on layer for the map, e.g. TAK live tracking. Omitted, the map renders exactly as before. */
+export interface MapOverlay {
+  /** Rendered inside the zoomed/panned map, like the built-in markers. `rect` is the image's contained rect in container pixels. */
+  markers?: (ctx: { layer: Layer | undefined; layerIndex: number; rect: { x: number; y: number; width: number; height: number }; scale: number }) => React.ReactNode;
+  /** Rendered above the map, unscaled (panels, badges). */
+  chrome?: React.ReactNode;
+}
+
 export interface VenueMapWithPostsProps {
   layers: Layer[];
   currentLayer: number;
@@ -720,6 +728,8 @@ export interface VenueMapWithPostsProps {
   onAddCallAtPost?: (postName: string) => void;
   /** Same, but from clicking a team marker — prefills the assigned team instead of the location. */
   onAddCallForTeam?: (teamName: string) => void;
+  /** Optional add-on layer (see MapOverlay). */
+  overlay?: MapOverlay;
 }
 
 export function VenueMapWithPosts({
@@ -751,6 +761,7 @@ export function VenueMapWithPosts({
   selectedEquipmentName,
   onAddCallAtPost,
   onAddCallForTeam,
+  overlay,
 }: VenueMapWithPostsProps) {
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   const [naturalSize, setNaturalSize] = useState({ width: 0, height: 0 });
@@ -1008,8 +1019,11 @@ export function VenueMapWithPosts({
             })}
           </>
         )}
+        {overlay?.markers && shouldRenderMarkers &&
+          overlay.markers({ layer: layers[currentLayer], layerIndex: currentLayer, rect, scale })}
       </div>
       </div>
+      {overlay?.chrome}
     </div>
   );
 }

@@ -7,7 +7,7 @@ import type { Layer, Staff, Supervisor, Equipment, Call, Clinic, Post } from '@/
 import { useZoomPan } from '@/hooks/useZoomPan';
 import { MAP_CHECKER_BG } from '@/lib/mapStyles';
 import MapZoomControls from '@/components/ui/map-zoom-controls';
-import { VenueMapWithPosts } from '@/components/modals/event/venuemapmodal';
+import { VenueMapWithPosts, type MapOverlay } from '@/components/modals/event/venuemapmodal';
 
 /** A request to jump to and highlight a specific team on the map. requestId
  *  must change (e.g. Date.now()) each time, including re-clicking the same
@@ -54,6 +54,8 @@ interface VenueMapTabProps {
   onTeamFocusHandled?: () => void;
   onSupervisorFocusHandled?: () => void;
   onEquipmentFocusHandled?: () => void;
+  /** Optional add-on layer passed through to the map (see MapOverlay). */
+  overlay?: MapOverlay;
 }
 
 function isCoordinatedPost(post: Post): post is { name: string; x: number; y: number } {
@@ -87,6 +89,7 @@ export default function VenueMapTab({
   onTeamFocusHandled,
   onSupervisorFocusHandled,
   onEquipmentFocusHandled,
+  overlay,
 }: VenueMapTabProps) {
   const [currentLayer, setCurrentLayer] = useState(0);
   const [searchInput, setSearchInput] = useState('');
@@ -327,6 +330,7 @@ export default function VenueMapTab({
           selectedEquipmentName={selectedEquipmentName}
           onAddCallAtPost={onAddCallAtPost}
           onAddCallForTeam={onAddCallForTeam}
+          overlay={overlay}
         />
         <MapZoomControls onZoomIn={() => zoomIn(0.25)} onZoomOut={() => zoomOut(0.25)} onReset={resetZoom} />
       </div>

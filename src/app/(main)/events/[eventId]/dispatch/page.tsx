@@ -2,6 +2,8 @@
 import { useEffect, useMemo, useState, useRef, useCallback, use } from 'react';
 import PostingScheduleModal from '@/components/modals/event/postingschedulemodal';
 import VenueMapTab, { type TeamFocusRequest, type SupervisorFocusRequest, type EquipmentFocusRequest } from '@/components/dispatch/venuemaptab';
+import dynamic from 'next/dynamic';
+import type { MapOverlay } from '@/components/modals/event/venuemapmodal';
 import EventSummaryModal from '@/components/modals/event/eventsummarymodal';
 import QuickCallModal from "@/components/modals/event/quickcallmodal";
 import ClinicWalkupModal from "@/components/dispatch/clinicwalkupmodal";
@@ -56,6 +58,14 @@ import { downloadTextFile } from '@/lib/downloadFile';
 import { formatAgeSex, parseAgeSex } from '@/lib/ageSex';
 import { getActivePostingTime } from '@/lib/postingTimes';
 import { stampStatusSince, deriveStatusSinceFromLogs } from '@/lib/teamStatusSince';
+import { newTeamId } from '@/lib/teamId';
+
+// TAK live tracking (optional, in development): loaded only for TAK events,
+// and compiled out entirely unless NEXT_PUBLIC_TAK is exactly "on".
+const TakLiveMarkers =
+  process.env.NEXT_PUBLIC_TAK === 'on' ? dynamic(() => import('@/features/tak').then((m) => m.TakLiveMarkers), { ssr: false }) : null;
+const TakEventPanel =
+  process.env.NEXT_PUBLIC_TAK === 'on' ? dynamic(() => import('@/features/tak').then((m) => m.TakEventPanel), { ssr: false }) : null;
 
 interface DispatchRoutePageProps {
   params: Promise<{ eventId: string }>;
@@ -514,9 +524,9 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     if (!event) return;
     const now = Date.now();
     const testTeams: Staff[] = [
-      { team: 'Alpha', members: ['Test User [EMT]'], status: 'Available', location: 'Roaming', log: [{ timestamp: now, message: 'Test data populated' }], originalPost: 'Roaming' },
-      { team: 'Bravo', members: ['Test User [Paramedic]'], status: 'Available', location: 'Roaming', log: [{ timestamp: now, message: 'Test data populated' }], originalPost: 'Roaming' },
-      { team: 'Charlie', members: ['Test User [RN]'], status: 'Available', location: 'Roaming', log: [{ timestamp: now, message: 'Test data populated' }], originalPost: 'Roaming' }
+      { id: newTeamId(), team: 'Alpha', members: ['Test User [EMT]'], status: 'Available', location: 'Roaming', log: [{ timestamp: now, message: 'Test data populated' }], originalPost: 'Roaming' },
+      { id: newTeamId(), team: 'Bravo', members: ['Test User [Paramedic]'], status: 'Available', location: 'Roaming', log: [{ timestamp: now, message: 'Test data populated' }], originalPost: 'Roaming' },
+      { id: newTeamId(), team: 'Charlie', members: ['Test User [RN]'], status: 'Available', location: 'Roaming', log: [{ timestamp: now, message: 'Test data populated' }], originalPost: 'Roaming' }
     ];
     
     const currentTeamNames = new Set((event.staff || []).map(s => s.team));
@@ -636,6 +646,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     const hhmm = now.getHours().toString().padStart(2, '0') + now.getMinutes().toString().padStart(2, '0');
 
     const newSupervisor: Supervisor = {
+      id: newTeamId(),
       team: callSign,
       member: memberString,
       status: 'Available',
@@ -759,6 +770,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
       const membersStrings = team.members.map(m => `${m.name} [${m.cert}]${m.lead ? ' (Lead)' : ''}`);
 
       const staffEntry: Staff = {
+        id: newTeamId(),
         team: trimmedName,
         members: membersStrings,
         status: 'Available',
@@ -2892,6 +2904,14 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     await updateEvent(() => ({ ended: true, endedAt: Date.now() }), { bypassEndedCheck: true });
     setShowEndEventModal(false);
 
+    // TAK live tracking (optional): mark the event's TAK config closed so the
+    // bridge clears live positions and stops writing.
+    if (process.env.NEXT_PUBLIC_TAK === 'on' && event.mapMode === 'tak' && !isLiteMode) {
+      void import('@/features/tak')
+        .then((m) => m.onEventEnded(eventId))
+        .catch((err) => console.error('TAK: could not close the event config', err));
+    }
+
     if (!isLiteMode) {
       window.dispatchEvent(new CustomEvent('dispatch-event-ended'));
     }
@@ -3170,6 +3190,28 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
   // existed. Shared with the post-event summary page's zone breakdown via
   // getEventVenueLayers, so both resolve a call's zone(s) identically.
   const venueLayers: Layer[] = getEventVenueLayers(event);
+
+  // TAK live tracking (optional): only TAK events get the map overlay, and
+  // only builds with NEXT_PUBLIC_TAK=on contain it at all.
+  const takOverlay: MapOverlay | undefined =
+    process.env.NEXT_PUBLIC_TAK === 'on' && TakLiveMarkers && TakEventPanel &&
+    event.mapMode === 'tak' && !isLiteMode && user && eventId
+      ? {
+          markers: (ctx) => (
+            <TakLiveMarkers
+              eventId={eventId}
+              staff={event.staff || []}
+              supervisor={event.supervisor || []}
+              layer={ctx.layer}
+              rect={ctx.rect}
+              scale={ctx.scale}
+            />
+          ),
+          chrome: (
+            <TakEventPanel eventId={eventId} event={event} uid={user.uid} isOwner={event.userId === user.uid} layers={venueLayers} />
+          ),
+        }
+      : undefined;
 
   // The Map tab only makes sense once an image actually exists to show —
   // a venue with no map uploaded to any layer gets no tab, same rule the
@@ -4034,6 +4076,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
                           onTeamFocusHandled={() => setMapTeamFocusRequest(null)}
                           onSupervisorFocusHandled={() => setMapSupervisorFocusRequest(null)}
                           onEquipmentFocusHandled={() => setMapEquipmentFocusRequest(null)}
+                          overlay={takOverlay}
                         />
                       </div>
                     )}
@@ -4213,6 +4256,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
                       onTeamFocusHandled={() => setMapTeamFocusRequest(null)}
                       onSupervisorFocusHandled={() => setMapSupervisorFocusRequest(null)}
                       onEquipmentFocusHandled={() => setMapEquipmentFocusRequest(null)}
+                      overlay={takOverlay}
                     />
                   </div>
                 </Tab>

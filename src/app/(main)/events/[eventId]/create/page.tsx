@@ -27,6 +27,13 @@ import BulkImportModal from '@/components/modals/event/bulkimportmodal';
 import { VenueMapWithPosts } from '@/components/modals/event/venuemapmodal';
 import { MAP_CHECKER_BG } from '@/lib/mapStyles';
 import LoadingScreen from '@/components/ui/loading-screen';
+import { newTeamId } from '@/lib/teamId';
+import dynamic from 'next/dynamic';
+
+// TAK live tracking (optional, in development): the map-mode choice is
+// compiled out entirely unless NEXT_PUBLIC_TAK is exactly "on".
+const TakMapModeChoice =
+  process.env.NEXT_PUBLIC_TAK === 'on' ? dynamic(() => import('@/features/tak').then((m) => m.TakMapModeChoice), { ssr: false }) : null;
 
 // Helper to get post name regardless of type
 const getPostName = (post: Post): string => {
@@ -308,6 +315,7 @@ export default function EventCreation() {
         return { ...prev, staff };
       }
       const newStaff: Staff = {
+        id: newTeamId(),
         team: team.name,
         location: "No Post",
         status: "On Break",
@@ -332,6 +340,7 @@ export default function EventCreation() {
   const handleAddSamUnit = () => {
     if (!samName.trim() || !samCert) return;
     const newSupervisor: Supervisor = {
+      id: newTeamId(),
       team: samName.trim(),
       location: 'Roaming',
       status: 'On Break',
@@ -516,6 +525,17 @@ export default function EventCreation() {
         setScheduleTo={setScheduleTo}
         inputClassNames={inputClassNames}
       />
+      {TakMapModeChoice && eventId && authService.currentUser && (
+        <div className="mt-4">
+          <TakMapModeChoice
+            eventId={eventId}
+            uid={authService.currentUser.uid}
+            mapMode={eventData.mapMode}
+            onMapModeChange={(mode) => setEventData((prev) => ({ ...prev, mapMode: mode }))}
+            layers={eventData.venue?.layers ?? []}
+          />
+        </div>
+      )}
     </div>
   );
 
