@@ -103,6 +103,9 @@ export interface Event {
   /** Seconds an unassigned ("Pending") call may sit without a team before a surge alert fires. Defaults to 120 (2:00) when unset. */
   unassignedCallSurgeSeconds?: number;
 
+  /** Map mode: unset or 'standard' for a standard event; 'tak' loads the optional TAK live-tracking module. Core reads it only to decide whether to load that module. Owner/admin only. */
+  mapMode?: 'standard' | 'tak';
+
   /** Manually declared "surge" state for the ops team, toggled via the Surge button beside the Calls/Clinic tabs — distinct from the automatic `surgeLimitPercent` threshold indicator. */
   manualSurgeActive?: boolean;
   /** Epoch ms when the current manual surge was started; cleared when surge is turned off. */
@@ -123,6 +126,8 @@ export interface TeamLogEntry {
 }
 
 export interface Staff {
+  /** Stable id, generated at creation and kept across renames (src/lib/teamId.ts). Read only by the optional TAK module; older teams may lack it. */
+  id?: string;
   team: string;
   location: string;
   status: string;
@@ -134,6 +139,8 @@ export interface Staff {
 }
 
 export interface Supervisor {
+  /** Stable id, generated at creation and kept across renames (src/lib/teamId.ts). Read only by the optional TAK module; older entries may lack it. */
+  id?: string;
   team: string;
   location: string;
   status: string;
