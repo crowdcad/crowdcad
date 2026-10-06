@@ -6,6 +6,54 @@ This plan covers a prototype that puts team positions from TAK devices (ATAK, iT
 
 Related: [data-contract.md](data-contract.md) (collections, fields, rules), [decisions.md](decisions.md) (dated decision log).
 
+## Status
+
+Updated at the end of each phase.
+
+- **P0 Docs and scaffolding: done.** Plan, data contract and decision log are merged. The `tak-bridge` TypeScript scaffold, Docker image and CI are green.
+- **P1 CoT inbound: built, waiting on the real-device check.** This is in `crowdcad/tak-bridge` `integration/tak`:
+  - **TLS identity from the client `.p12`.** The CA is optional, because the `.p12` normally bundles it.
+  - **`CotStreamSource` on 8089:** keepalive pings, idle detection, and reconnect with backoff.
+  - **Framing and parsing.** CoT is framed and parsed with `fast-xml-parser`. Only `a-*` events become positions.
+  - **Log-only mode.** `CROWDCAD_BACKEND=none` connects to TAK and logs positions without writing anything.
+  - **A CoT simulator** (synthetic devices, compressed time) and a throwaway dev-certificate helper.
+  - **43 tests, green in CI on Node 22 and 24.** They include TLS end-to-end tests against the simulator: positions arrive within 5 s through fragmented and noisy streams; the CA is trusted from the `.p12` or `TAK_CA`; an unverifiable server is refused; the source reconnects after a drop.
+  - **Acceptance:** a real device's position must appear in the bridge logs within 5 s. That needs a real TAK Server and phone (see [Needs Evan](#needs-evan)). Everything that does not depend on it continues.
+
+## Needs Evan
+
+### P1: phone position in the bridge logs (real TAK Server)
+
+The bridge runs with your real `.p12`. Run these steps yourself; the certificate and its password stay on your machine.
+
+1. **Create the bridge's TAK user.** In TAK Portal, create a user for the bridge (for example `crowdcad-bridge`). Add it to the same TAK group your phone's user is in, then download its certificate bundle (`.p12`) and note the password.
+2. **On a machine that can reach the TAK Server's port 8089** (the infra-TAK host is simplest):
+   ```bash
+   git clone https://github.com/crowdcad/tak-bridge.git
+   cd tak-bridge
+   git checkout integration/tak
+   mkdir certs
+   cp /path/to/crowdcad-bridge.p12 certs/client.p12
+   chmod 644 certs/client.p12
+   cp .env.example .env
+   ```
+3. **Edit `.env`:**
+   - `TAK_HOST`: the TAK Server hostname, as it appears in its certificate.
+   - `TAK_CLIENT_P12_PASSWORD`: the bundle's password.
+   - `CROWDCAD_BACKEND=none`.
+
+   Leave the other values as they are. Add `TAK_CA` only if step 5 shows a certificate verification error.
+4. **Start it:** `docker compose up -d --build`, then `docker compose logs -f`. Expect `"msg":"connected to TAK Server"`.
+5. **Send positions from the phone.** On the phone (ATAK or iTAK, connected to the same server and group), set the location reporting interval to a few seconds, or move around. Each report should appear within 5 s as a `"msg":"position"` line with the phone's callsign. Compare the line's `time` (when the bridge logged it) with its `deviceTime` (when the phone reported).
+6. **Report the result.** Report pass or fail, plus any error lines. You don't need to share coordinates. Stop it with `docker compose down`.
+
+**If something goes wrong:**
+- **"password ... is wrong":** check `TAK_CLIENT_P12_PASSWORD`.
+- **"legacy encryption":** follow the conversion command in the message, or add `NODE_OPTIONS=--openssl-legacy-provider` to `.env`.
+- **Certificate verification errors** (`UNABLE_TO_VERIFY_LEAF_SIGNATURE`, `SELF_SIGNED_CERT_IN_CHAIN`): export the TAK Server CA as PEM to `certs/ca.pem` and set `TAK_CA=/certs/ca.pem`.
+- **`ERR_TLS_CERT_ALTNAME_INVALID`:** set `TAK_SERVER_NAME` to the name in the server certificate.
+- **Connected but no positions:** the bridge user is probably not in the phone's group.
+
 ## Scope
 
 **v1 (this plan):** inbound only. The bridge reads device positions from a TAK Server and writes them to CrowdCAD.

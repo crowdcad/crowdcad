@@ -186,3 +186,16 @@ The in-app settings page is `/profile`. Any signed-in user can open it, but its 
 ### D27. `NEXT_PUBLIC_TAK` build flag approved, opt-in
 - **When TAK is compiled in.** Only when `NEXT_PUBLIC_TAK` is exactly `"on"`. Missing or any other value compiles TAK out, including the event-creation map choice, the Admin TAK section, and the creation page's query for allowed bridges.
 - **Where it's documented.** Next to `NEXT_PUBLIC_BACKEND`, in `.env.example` and `docs/DEPLOYMENT.md`.
+
+### D28. Log-only bridge mode
+`CROWDCAD_BACKEND=none` connects to TAK and logs positions without writing anywhere, and needs no bridge account. It's for checking the TAK side of a setup, for diagnostics, and for the P1 real-device check.
+
+### D29. The CA comes from the client `.p12` by default
+- **Default.** TAK client bundles normally include the server CA, and Node trusts CA certificates bundled in the `.p12` (confirmed by tests). So `TAK_CA` is optional.
+- **A separate CA** must be PEM. A truststore `.p12` is rejected, with the `openssl` command to convert it.
+- **Legacy-encrypted `.p12` bundles** get an explanatory error, with a re-export command or the `--openssl-legacy-provider` fallback.
+
+### D30. A CoT simulator stands in for TAK hardware
+- **What it is.** A seeded, deterministic simulator in `tak-bridge` (`src/sim/`). Synthetic devices dwell at posts and walk between them.
+- **Two ways to run it.** It runs either on a virtual clock (an 8-hour, 20-device event in well under a second), or as a TLS server replaying CoT in real or compressed time.
+- **Uses.** The P1 and P2 tests and the P5 budget tests. Real-device checks are listed under "Needs Evan" in plan.md, and never block other work.
