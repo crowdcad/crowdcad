@@ -11,7 +11,7 @@
 
 <br/>
 
-[![CI](https://github.com/evanqua/crowdcad/workflows/CI/badge.svg)](https://github.com/evanqua/crowdcad/actions/workflows/ci.yml)
+[![CI](https://github.com/crowdcad/crowdcad/actions/workflows/ci.yml/badge.svg)](https://github.com/crowdcad/crowdcad/actions/workflows/ci.yml)
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL%203.0-blue.svg)](LICENSE.md)
 [![Version](https://img.shields.io/badge/version-1.6.0-green.svg)](CHANGELOG.md)
 [![Discord](https://img.shields.io/badge/Discord-Join-5865F2?logo=discord&logoColor=white)](https://discord.gg/7detyFE7GM)
@@ -50,7 +50,7 @@ New to the terminal? Follow the step-by-step guides with Mac and Windows instruc
 ```bash
 git clone https://github.com/YOUR_USERNAME/crowdcad.git
 cd crowdcad
-git remote add upstream https://github.com/evanqua/crowdcad.git
+git remote add upstream https://github.com/crowdcad/crowdcad.git
 npm install
 cp .env.example .env.local
 ```

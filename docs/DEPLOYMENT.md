@@ -23,12 +23,12 @@ The choice depends on your infrastructure, compliance and operational needs. The
 
 ## Fork and clone
 
-Fork [evanqua/crowdcad](https://github.com/evanqua/crowdcad) on GitHub, whichever backend you choose. A fork keeps your changes attributable, gives you a place to commit organization-specific configuration and lets you pull future releases from `upstream`:
+Fork [crowdcad/crowdcad](https://github.com/crowdcad/crowdcad) on GitHub, whichever backend you choose. A fork keeps your changes attributable, gives you a place to commit organization-specific configuration and lets you pull future releases from `upstream`:
 
 ```bash
 git clone https://github.com/YOUR_USERNAME/crowdcad.git
 cd crowdcad
-git remote add upstream https://github.com/evanqua/crowdcad.git
+git remote add upstream https://github.com/crowdcad/crowdcad.git
 ```
 
 Common prerequisites are Git and Node.js 20 or newer. PocketBase also needs Docker Desktop.

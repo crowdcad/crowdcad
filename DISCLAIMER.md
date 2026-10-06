@@ -46,7 +46,7 @@ judgment.
 CrowdCAD is maintained by an open source community. No service level
 agreement, guaranteed response time or on call support is provided in
 connection with the use of CrowdCAD. Issues may be reported at
-https://github.com/evanqua/crowdcad/issues. Organizations deploying
+https://github.com/crowdcad/crowdcad/issues. Organizations deploying
 CrowdCAD for a live event are advised to maintain an independent
 contingency plan, such as a paper or radio based backup, that does not
 depend on the availability of the software.
@@ -65,4 +65,4 @@ deploying with default or unsecured configurations.
 
 Questions concerning this document may be directed to
 support@crowdcad.org or submitted as an issue at
-https://github.com/evanqua/crowdcad.
+https://github.com/crowdcad/crowdcad.
