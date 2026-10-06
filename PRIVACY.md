@@ -68,4 +68,4 @@ can be updated accordingly.
 
 Questions concerning this document may be directed to
 support@crowdcad.org or submitted as an issue at
-https://github.com/evanqua/crowdcad.
+https://github.com/crowdcad/crowdcad.
