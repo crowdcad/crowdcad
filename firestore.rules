@@ -27,8 +27,8 @@ service cloud.firestore {
     // impossible for every real user the moment these rules were actually
     // deployed to production (they never had been before). The one thing
     // required is that you can only create a venue naming yourself as its
-    // owner, not someone else. Reading a venue still requires org
-    // membership if the venue happens to have an orgId (see
+    // owner, not someone else. Reading a venue requires being signed in and
+    // having one of the access paths the app itself offers (see
     // isVenueVisibleToUser). Only the venue's creator or a site admin can
     // update, share, or delete it; org membership alone is not enough (a
     // non-admin org member should not be able to edit or delete another
@@ -168,13 +168,42 @@ service cloud.firestore {
     // userId). `resource.data` doesn't have this problem since it's not a
     // get() call at all — it's the value Firestore already looked up to
     // decide whether to run the rule in the first place.
+    //
+    // Reads require sign-in plus one of the access paths the app offers:
+    // owner, listed in `sharedWith`, an instance-wide org venue/event, a
+    // member of the doc's `orgId` organization, or a site admin. These used
+    // to treat any doc without an `orgId` as public, and since the app never
+    // sets `orgId`, that made every venue and event (including call data)
+    // readable by anyone holding the public Firebase config, signed in or
+    // not. Each branch below matches one of the app's list queries, so
+    // Firestore can prove those queries safe: `userId == uid` (owner),
+    // `sharedWith array-contains email` (shared), `isOrgVenue/isOrgEvent ==
+    // true` (org-wide), `orgId == X`, and admin.
     function isVenueVisibleToUser() {
-      // if venue has orgId, require membership; otherwise public
-      return !('orgId' in resource.data && resource.data.orgId is string) || isOrgMember(resource.data.orgId);
+      return request.auth != null && (
+        isVenueOwner() ||
+        isVenueSharedWithRequester() ||
+        resource.data.get('isOrgVenue', false) == true ||
+        ('orgId' in resource.data && resource.data.orgId is string && isOrgMember(resource.data.orgId)) ||
+        isRequestingUserAdmin()
+      );
     }
 
     function isEventVisibleToUser() {
-      return !('orgId' in resource.data && resource.data.orgId is string) || isOrgMember(resource.data.orgId);
+      return request.auth != null && (
+        isEventOwnerOrOrgMember() ||
+        isEventSharedWithRequester() ||
+        isEventOrgShow() ||
+        isRequestingUserAdmin()
+      );
+    }
+
+    // Same check as isEventSharedWithRequester below.
+    function isVenueSharedWithRequester() {
+      return request.auth != null &&
+        ('email' in request.auth.token) && request.auth.token.email is string &&
+        'sharedWith' in resource.data &&
+        request.auth.token.email.lower() in resource.data.sharedWith;
     }
 
     function isVenueOwner() {
@@ -189,12 +218,17 @@ service cloud.firestore {
 
     // sharedWith is always written lowercased by the app (see ShareModal),
     // so a lowercased token email is safe to compare directly against it
-    // without needing to lowercase every array entry.
+    // without needing to lowercase every array entry. Written as
+    // `'sharedWith' in resource.data && email in sharedWith` rather than
+    // `get(...) is list && hasAny([...])`: both are fine for a single-doc
+    // read, but Firestore can only prove the selection page's
+    // `sharedWith array-contains email` list query safe against this form
+    // (confirmed against the emulator, where the hasAny form denied it).
     function isEventSharedWithRequester() {
       return request.auth != null &&
         ('email' in request.auth.token) && request.auth.token.email is string &&
-        resource.data.get('sharedWith', []) is list &&
-        resource.data.sharedWith.hasAny([request.auth.token.email.lower()]);
+        'sharedWith' in resource.data &&
+        request.auth.token.email.lower() in resource.data.sharedWith;
     }
 
     // isOrgEvent makes a show visible to and dispatchable by every member of
