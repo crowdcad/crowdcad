@@ -19,12 +19,12 @@ On Windows PowerShell, globally installed npm commands are `.ps1` scripts. If Po
 
 ## 1. Fork and clone
 
-Fork [evanqua/crowdcad](https://github.com/evanqua/crowdcad) on GitHub, clone your fork and add the original repository as the `upstream` remote so you can pull future releases:
+Fork [crowdcad/crowdcad](https://github.com/crowdcad/crowdcad) on GitHub, clone your fork and add the original repository as the `upstream` remote so you can pull future releases:
 
 ```bash
 git clone https://github.com/YOUR_USERNAME/crowdcad.git
 cd crowdcad
-git remote add upstream https://github.com/evanqua/crowdcad.git
+git remote add upstream https://github.com/crowdcad/crowdcad.git
 npm install
 ```
 

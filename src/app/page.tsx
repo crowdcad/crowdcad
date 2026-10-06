@@ -113,13 +113,13 @@ export default function LandingPage() {
         </a>
         <span className="hidden sm:inline text-surface-light/20">|</span>
         <a
-          href="https://github.com/evanqua/CrowdCAD"
+          href="https://github.com/crowdcad/crowdcad"
           target="_blank"
           rel="noopener noreferrer"
           className="flex items-center gap-1.5 hover:text-accent transition-colors"
         >
           <Github className="w-3.5 h-3.5" />
-          evanqua/CrowdCAD
+          crowdcad/crowdcad
         </a>
         <span className="hidden sm:inline text-surface-light/20">|</span>
         <a

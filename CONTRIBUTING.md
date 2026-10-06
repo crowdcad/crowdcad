@@ -19,7 +19,7 @@ Please read this together with `CODE_OF_CONDUCT.md`, `LICENSE.md` and `SECURITY.
    ```bash
    git clone https://github.com/YOUR_USERNAME/crowdcad.git
    cd crowdcad
-   git remote add upstream https://github.com/evanqua/crowdcad.git
+   git remote add upstream https://github.com/crowdcad/crowdcad.git
    ```
 
 2. Configure a backend by following [`docs/SETUP_FIREBASE.md`](docs/SETUP_FIREBASE.md) or [`docs/SETUP_POCKETBASE.md`](docs/SETUP_POCKETBASE.md).
