@@ -7,6 +7,8 @@ CrowdCAD supports two backends. Both are maintained in parallel and selected wit
 
 Beginner-friendly versions of both guides, with separate Mac and Windows steps, are at [crowdcad.org/docs](https://crowdcad.org/docs).
 
+TAK live tracking is an optional add-on, in development and off by default. It is compiled in only when `NEXT_PUBLIC_TAK` is exactly `on`; missing or any other value compiles it out. See [`tak-integration/plan.md`](tak-integration/plan.md).
+
 ## Choosing a backend
 
 | | **Firebase** | **PocketBase** |
