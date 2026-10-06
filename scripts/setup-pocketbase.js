@@ -398,8 +398,11 @@ async function ensureTakCollections(headers) {
       { name: 'naturalWidth', type: 'number' },
       { name: 'naturalHeight', type: 'number' },
       { name: 'controlPoints', type: 'json' },
+      { name: 'origin', type: 'json' },
       { name: 'transform', type: 'json' },
       { name: 'residualM', type: 'number' },
+      { name: 'ownerUid', type: 'text' },
+      { name: 'updatedAt', type: 'number' },
     ],
     {
       listRule: TAK_EVENT_READER,
@@ -410,6 +413,14 @@ async function ensureTakCollections(headers) {
     },
     ['CREATE UNIQUE INDEX idx_tak_map_alignment ON tak_map_alignment (event, layerId)'],
   );
+  // Fields added after the first TAK schema version, for existing installs.
+  for (const field of [
+    { name: 'origin', type: 'json' },
+    { name: 'ownerUid', type: 'text' },
+    { name: 'updatedAt', type: 'number' },
+  ]) {
+    await ensureField(headers, 'tak_map_alignment', field);
+  }
 
   await ensureCollection(
     headers,
