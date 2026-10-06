@@ -199,3 +199,27 @@ The in-app settings page is `/profile`. Any signed-in user can open it, but its 
 - **What it is.** A seeded, deterministic simulator in `tak-bridge` (`src/sim/`). Synthetic devices dwell at posts and walk between them.
 - **Two ways to run it.** It runs either on a virtual clock (an 8-hour, 20-device event in well under a second), or as a TLS server replaying CoT in real or compressed time.
 - **Uses.** The P1 and P2 tests and the P5 budget tests. Real-device checks are listed under "Needs Evan" in plan.md, and never block other work.
+
+### D31. Rules and adapter tests live in `tak-bridge`
+- **Where.** The Firestore rules tests (`@firebase/rules-unit-testing`), the PocketBase rules tests, and the adapter end-to-end tests are in `crowdcad/tak-bridge`.
+- **How.** Its CI checks out this repository's `integration/tak` for `firestore.rules` and `scripts/setup-pocketbase.js`.
+- **Why.** This needs no change to core's `package.json` or CI, which are outside the approved touchpoints.
+- **The cost.** A rules change in core is exercised by the next `tak-bridge` CI run, not by core's own CI. Core's e2e suites still cover the existing app flows against the same rules.
+
+### D32. `!isBridge()` costs one rules read on event access
+- **What it costs.** `isBridge()` is an `exists()` on `bridgeAccounts/{uid}`, which Firestore bills as one document read per rules evaluation.
+- **Where it applies.** Every event read and write gains this check.
+- **What it doesn't change.** Behavior and network traffic for non-bridge users are unchanged. The check is kept, because it is the authoritative bridge test. An email-domain check would be free, but it can be spoofed.
+
+### D33. The PocketBase bridge polls instead of using realtime
+- **The choice.** The PocketBase adapter polls config and device links every 5 s.
+- **Why.** PocketBase realtime relies on a browser-style `EventSource`, which Node does not reliably provide, and polling keeps the container dependency-free.
+- **Firebase is unaffected.** It uses snapshot listeners.
+
+### D34. PocketBase `allowedUsers` is a relation to `users`
+- **The problem.** PocketBase's `~` on a JSON field is a substring match.
+- **The fix.** A multi-relation gives exact membership checks (`allowedUsers.id ?= @request.auth.id`).
+- **Firebase is unaffected.** It keeps a uid array.
+
+### D35. PocketBase e2e migrations are not mirrored
+`tests/e2e/pb_migrations/` is not loaded by the PocketBase e2e harness, which builds its own permissive schema in `tests/e2e/global-setup.pocketbase.ts`. TAK schema and rules therefore live only in `scripts/setup-pocketbase.js`.

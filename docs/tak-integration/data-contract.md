@@ -1,6 +1,6 @@
 # TAK integration: data contract
 
-**Contract version: 0.2.0 (draft).** TAK support is in development and is an optional add-on. Nothing here is released, and the contract may change until 1.0.0.
+**Contract version: 0.2.1 (draft).** TAK support is in development and is an optional add-on. Nothing here is released, and the contract may change until 1.0.0.
 
 This document defines every record the TAK integration adds, who writes each one, and what the access rules enforce. It covers both backends: Firebase (the default) and PocketBase (opt-in with `NEXT_PUBLIC_BACKEND=pocketbase`). The bridge reaches both through one adapter interface, so behavior is the same on either.
 
@@ -28,7 +28,7 @@ Related: [plan.md](plan.md), [decisions.md](decisions.md).
 | `bridgeUid` | Auth uid (Firebase) or user id (PocketBase) of the bridge account |
 | `eventId` | Existing event id |
 | `layerId` | Existing `Layer.id` of a map layer in the event's venue snapshot |
-| `deviceUid` | TAK device UID (CoT `event@uid`) |
+| `deviceUid` | TAK device UID (CoT `event@uid`). Used as a document id in URL-encoded form (`encodeURIComponent`), since Firestore ids can't contain `/`; readers decode it |
 | `teamId` | `Staff.id` / `Supervisor.id` (see [Team ids](#team-ids)) |
 | `segmentId` | `${deviceUid}~${teamId}~${startedAtMs}`. One history segment per continuous (device, team) pairing |
 
@@ -144,7 +144,7 @@ PocketBase collections are flat, so each one carries `event` and/or `bridge` as 
 |---|---|---|
 | `users` (existing) | adds `role` (`'' \| 'bridge'`) | Only an admin can set `role = 'bridge'`. A bridge user cannot change `role` |
 | `events` (existing) | adds `mapMode` (text) | Added to `EVENT_PROTECTED_FIELDS_UNTOUCHED`; list and view add `@request.auth.role != 'bridge'` |
-| `tak_bridges` | `bridgeUser`, `label`, `createdBy`, `allowedUsers` (json), `defaultHistoryMode` | Admins write; admins, allowed users and the bridge read |
+| `tak_bridges` | `bridgeUser`, `label`, `createdBy`, `allowedUsers` (multi-relation to `users`, so membership is an exact match), `defaultHistoryMode` | Admins write; admins, allowed users and the bridge read |
 | `tak_device_mappings` | `bridge`, `deviceUid`, `teamName`, `callsign`, `updatedBy` | Admins and allowed users, never `role = 'bridge'` |
 | `tak_bridge_status` | `bridge`, `lastSeenAt`, `takConnected`, `version`, `linkedEventCount` | Bridge writes; admins and allowed users read |
 | `tak_event_config` | `event` (unique), `bridge`, `enabled`, `closed`, `historyMode` | Event owner writes, `bridge` only if the owner is in that bridge's `allowedUsers`; the end-event flow sets `closed`; event readers and the linked bridge read |
@@ -156,7 +156,8 @@ PocketBase collections are flat, so each one carries `event` and/or `bridge` as 
 | `tak_event_status` | `event`, `bridge`, `lastSeenAt`, `takConnected`, `liveDeviceCount` | Linked bridge writes; event readers read |
 
 - **Unique indexes:** `tak_live(event, deviceUid)`, `tak_device_links(event, deviceUid)`, `tak_event_config(event)`, `tak_map_alignment(event, layerId)`, `tak_history(segmentId)`.
-- Schema and rules are added to `scripts/setup-pocketbase.js` and mirrored in `tests/e2e/pb_migrations/`.
+- Schema and rules live in `scripts/setup-pocketbase.js`. (`tests/e2e/pb_migrations/` is not used by the e2e harness, which creates its own permissive schema, so it is not mirrored.)
+- TAK "event reader" rules mirror the current `events` view rule (any signed-in, non-bridge user) and must be tightened together with it.
 - The `allowedUsers` and `sharedWith` checks must be exact matches, not the current `~` substring match (see [plan.md](plan.md#open-items)).
 
 ## Team ids
@@ -188,6 +189,7 @@ PocketBase collections are flat, so each one carries `event` and/or `bridge` as 
 
 ## Changelog
 
+- 0.2.1 (2026-10-07): clarifications, not breaking. Device UIDs are URL-encoded as document ids. PocketBase `allowedUsers` is a relation to `users`. PocketBase e2e migrations are not mirrored.
 - 0.2.0 (2026-10-06):
   - Bridges are admin-managed, with `allowedUsers`, and linking requires being allowed.
   - Added `Event.mapMode`.

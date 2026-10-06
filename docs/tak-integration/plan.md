@@ -11,14 +11,22 @@ Related: [data-contract.md](data-contract.md) (collections, fields, rules), [dec
 Updated at the end of each phase.
 
 - **P0 Docs and scaffolding: done.** Plan, data contract and decision log are merged. The `tak-bridge` TypeScript scaffold, Docker image and CI are green.
-- **P1 CoT inbound: built, waiting on the real-device check.** This is in `crowdcad/tak-bridge` `integration/tak`:
-  - **TLS identity from the client `.p12`.** The CA is optional, because the `.p12` normally bundles it.
-  - **`CotStreamSource` on 8089:** keepalive pings, idle detection, and reconnect with backoff.
-  - **Framing and parsing.** CoT is framed and parsed with `fast-xml-parser`. Only `a-*` events become positions.
-  - **Log-only mode.** `CROWDCAD_BACKEND=none` connects to TAK and logs positions without writing anything.
-  - **A CoT simulator** (synthetic devices, compressed time) and a throwaway dev-certificate helper.
-  - **43 tests, green in CI on Node 22 and 24.** They include TLS end-to-end tests against the simulator: positions arrive within 5 s through fragmented and noisy streams; the CA is trusted from the `.p12` or `TAK_CA`; an unverifiable server is refused; the source reconnects after a drop.
-  - **Acceptance:** a real device's position must appear in the bridge logs within 5 s. That needs a real TAK Server and phone (see [Needs Evan](#needs-evan)). Everything that does not depend on it continues.
+- **P1 CoT inbound: built, waiting on the real-device check.**
+  - This is in `crowdcad/tak-bridge` `integration/tak`: the TLS identity from the client `.p12` (the CA is optional, since the `.p12` normally bundles it); `CotStreamSource` on 8089 (pings, idle detection, backoff reconnect); CoT framing and parsing (`a-*` only); log-only mode (`CROWDCAD_BACKEND=none`); and a CoT simulator with a throwaway dev-certificate helper.
+  - TLS end-to-end tests against the simulator all pass.
+  - **Acceptance:** the real-device check is under [Needs Evan](#needs-evan). Other work continues.
+- **P2 Backend writes and rules: done.** Acceptance is met for both backends.
+  - **Bridge** (`crowdcad/tak-bridge`): a backend-agnostic `Bridge` service, plus Firebase (client SDK) and PocketBase adapters. It handles sign-in as the bridge account; live docs on more than 10 m of movement or a 60 s heartbeat; bridge and event status every 60 s; a startup sweep of stale live docs; and live-doc cleanup at close.
+  - **Core rules** (touchpoint f): the TAK block in `firestore.rules` and the TAK collections and rules in `scripts/setup-pocketbase.js`.
+    - Existing rules change only by the bridge exclusion on events and `mapMode` joining the protected fields.
+    - The PocketBase setup is verified on a fresh install, a re-run, and an upgrade from `main`'s script.
+  - **Tests** (in `tak-bridge` CI, against core's `integration/tak`):
+    - **Firestore emulator.** 25 rules cases, including a regression set for the non-TAK rules, plus 4 end-to-end bridge tests. They show writes to unlinked or closed events are rejected, a bridge account cannot read event documents (the patient-data path), revocation works, and live docs update and clear at close.
+    - **Local PocketBase.** 11 equivalent tests.
+    - **Mutation checks.** Removing the bridge exclusion from either backend's event rules fails the isolation tests.
+    - **Simulator budget.** An 8-hour, 20-device event writes 60 to 200 live docs per device-hour.
+    - **Core e2e** (Firebase and PocketBase) on the tracking PR covers the existing app flows.
+  - **Deferred to P5:** history writes. The rules for history are in place and tested.
 
 ## Needs Evan
 
