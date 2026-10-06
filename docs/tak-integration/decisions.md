@@ -175,3 +175,14 @@ The in-app settings page is `/profile`. Any signed-in user can open it, but its 
 ### D25. Footprint acceptance for P3 to P5
 - The existing map and rules tests pass unchanged.
 - A standard event's network and bundle footprint is unchanged.
+
+## 2026-10-07
+
+### D26. `Event.mapMode` approved
+- **Field.** `Event.mapMode` is an optional field with values `'standard' | 'tak'`. Missing means `'standard'`.
+- **Readers.** Core reads it only to decide whether to load the TAK module.
+- **Protection.** It is a protected event field: only the owner or an admin can change it.
+
+### D27. `NEXT_PUBLIC_TAK` build flag approved, opt-in
+- **When TAK is compiled in.** Only when `NEXT_PUBLIC_TAK` is exactly `"on"`. Missing or any other value compiles TAK out, including the event-creation map choice, the Admin TAK section, and the creation page's query for allowed bridges.
+- **Where it's documented.** Next to `NEXT_PUBLIC_BACKEND`, in `.env.example` and `docs/DEPLOYMENT.md`.

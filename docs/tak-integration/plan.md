@@ -62,9 +62,9 @@ These are every existing core file the TAK work changes. **Anything not on this 
 - `dispatch/page.tsx:516` (test teams), `:638` (supervisor) and `:761` (team)
 - `lite/create/page.tsx:437` (team) and `:459` (supervisor)
 
-**Proposed, needs approval:**
-- **`Event.mapMode`** (part of b). Without a marker on the event doc, every event page would need an extra `takConfig` read to find out whether TAK is on, which breaks the "no change for standard events" rule.
-- **An optional build flag** such as `NEXT_PUBLIC_TAK=1`. When unset, the three lazy entry points are compiled out. The event-creation choice and the Admin TAK section then disappear, and the one query the creation page makes for allowed bridges is skipped. Self-hosters who never use TAK get zero change.
+**Approved additions (D26, D27):**
+- **`Event.mapMode`** (part of b): optional, `'standard' | 'tak'`, and missing means `'standard'`. Core reads it only to decide whether to load the TAK module.
+- **`NEXT_PUBLIC_TAK`:** TAK is compiled in only when the value is exactly `"on"`. Otherwise the three lazy entry points are compiled out, and the creation page's query for allowed bridges is skipped. It is documented next to `NEXT_PUBLIC_BACKEND` in `.env.example` and `docs/DEPLOYMENT.md`. Gating the entry points on the flag is part of touchpoints (a) to (d).
 
 ## Team-id audit (2026-10-06)
 
