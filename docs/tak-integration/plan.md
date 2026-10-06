@@ -28,6 +28,20 @@ Updated at the end of each phase.
     - **Core e2e** (Firebase and PocketBase) on the tracking PR covers the existing app flows.
   - **Deferred to P5:** history writes. The rules for history are in place and tested.
 
+- **P3 Align map: done.** The acceptance criterion is met.
+  - **`src/features/tak/`.** The first module code, not yet loaded by any page:
+    - an affine fit from 3 or more control points, with the estimated error in meters;
+    - lat/lon to image-percent projection;
+    - an alignment store for both backends;
+    - the `AlignMap` component. It renders its own image and captures natural dimensions during alignment. Existing map code, percent positions and the GeoJSON import are untouched.
+  - **Acceptance.** On a synthetic rotated, anisotropic map with 2 m control-point noise, held-out known coordinates land within the reported error (5 seeds, 200 points each). With exactly 3 points, the error is reported as unknown.
+  - **Tooling:**
+    - Touchpoint (h): vitest (`npm run test:unit`), 22 unit tests.
+    - Touchpoint (g): the ESLint boundary blocks TAK internals and static value imports of the module from core.
+    - Touchpoint (h): a CI job builds with TAK off and on and runs the footprint check. It passes locally, trivially so far, since nothing loads the module yet. It becomes meaningful in P4.
+  - **Shared criteria.** The existing map tests (core e2e) and rules tests pass unchanged.
+  - **Deferred to P4:** wiring "Align map" into the event TAK panel and event creation.
+
 ## Needs Evan
 
 ### P1: phone position in the bridge logs (real TAK Server)

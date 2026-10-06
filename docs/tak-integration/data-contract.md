@@ -1,6 +1,6 @@
 # TAK integration: data contract
 
-**Contract version: 0.2.1 (draft).** TAK support is in development and is an optional add-on. Nothing here is released, and the contract may change until 1.0.0.
+**Contract version: 0.2.2 (draft).** TAK support is in development and is an optional add-on. Nothing here is released, and the contract may change until 1.0.0.
 
 This document defines every record the TAK integration adds, who writes each one, and what the access rules enforce. It covers both backends: Firebase (the default) and PocketBase (opt-in with `NEXT_PUBLIC_BACKEND=pocketbase`). The bridge reaches both through one adapter interface, so behavior is the same on either.
 
@@ -63,7 +63,7 @@ Both are optional fields. They are absent on standard events and on all existing
 | `bridgeAccounts/{bridgeUid}/deviceMappings/{deviceUid}` | `teamName`, `callsign`, `updatedAt`, `updatedBy` | Admins; users in `allowedUsers` (create and update, when they link a device manually) | Admins; users in `allowedUsers` |
 | `bridgeAccounts/{bridgeUid}/status/current` | `lastSeenAt`, `takConnected`, `version`, `linkedEventCount` | The bridge | Admins; users in `allowedUsers` |
 | `events/{eventId}/takConfig/current` | `eventId`, `bridgeUid` (or null), `enabled`, `closed`, `historyMode`, `updatedAt` | Event owner. `bridgeUid` may be set only if the owner is in that bridge's `allowedUsers`. The end-event flow sets `closed: true` (owner or admin) | Anyone who can read the event; the linked bridge |
-| `events/{eventId}/takMapAlignment/{layerId}` | `mapUrl`, `naturalWidth`, `naturalHeight`, `controlPoints[]`, `transform`, `residualM`, `ownerUid`, `updatedAt` | Event owner | Anyone who can read the event. Not the bridge |
+| `events/{eventId}/takMapAlignment/{layerId}` | `mapUrl`, `naturalWidth`, `naturalHeight`, `controlPoints[]`, `origin`, `transform`, `residualM`, `ownerUid`, `updatedAt` | Event owner | Anyone who can read the event. Not the bridge |
 | `events/{eventId}/takDeviceLinks/{deviceUid}` | `teamId`, `linkedAt`, `method` (`auto` or `manual`), `linkedBy` | Anyone who can dispatch the event, except bridge accounts | Anyone who can read the event; the linked bridge |
 | `events/{eventId}/takLive/{deviceUid}` | `lat`, `lon`, `hae`, `ce`, `course`, `speed`, `callsign`, `cotType`, `deviceTime`, `receivedAt`, `bridgeUid` | The linked bridge, while `enabled` and not `closed`. The bridge also deletes | Anyone who can read the event |
 | `events/{eventId}/takHistory/{segmentId}` | `deviceUid`, `teamId`, `startedAt`, `endedAt`, `windows[]`, `grid`, `bridgeUid` | The linked bridge, while `historyMode != off` | Event owner only (v1) |
@@ -104,8 +104,10 @@ interface TakMapAlignment {
   naturalWidth: number;       // captured during alignment
   naturalHeight: number;
   controlPoints: Array<{ x: number; y: number; lat: number; lon: number; label?: string }>; // x, y in percent; at least 3
-  transform: { a: number; b: number; c: number; d: number; e: number; f: number };          // affine: local meters -> image percent
-  residualM: number;          // RMS residual of the fit, in meters
+  origin: { lat: number; lon: number };   // local-meters origin (control-point centroid)
+  transform: { a: number; b: number; c: number; d: number; e: number; f: number };
+  // affine from local meters (east, north of origin) to image percent: x% = a*E + b*N + c, y% = d*E + e*N + f
+  residualM: number | null;   // estimated error in meters, sqrt(SSR / (n - 3)); null with exactly 3 points
   ownerUid: string;
   updatedAt: number;
 }
@@ -148,7 +150,7 @@ PocketBase collections are flat, so each one carries `event` and/or `bridge` as 
 | `tak_device_mappings` | `bridge`, `deviceUid`, `teamName`, `callsign`, `updatedBy` | Admins and allowed users, never `role = 'bridge'` |
 | `tak_bridge_status` | `bridge`, `lastSeenAt`, `takConnected`, `version`, `linkedEventCount` | Bridge writes; admins and allowed users read |
 | `tak_event_config` | `event` (unique), `bridge`, `enabled`, `closed`, `historyMode` | Event owner writes, `bridge` only if the owner is in that bridge's `allowedUsers`; the end-event flow sets `closed`; event readers and the linked bridge read |
-| `tak_map_alignment` | `event`, `layerId`, `mapUrl`, `naturalWidth`, `naturalHeight`, `controlPoints` (json), `transform` (json), `residualM` | Event owner writes; event readers read |
+| `tak_map_alignment` | `event`, `layerId`, `mapUrl`, `naturalWidth`, `naturalHeight`, `controlPoints` (json), `origin` (json), `transform` (json), `residualM`, `ownerUid`, `updatedAt` | Event owner writes; event readers read |
 | `tak_device_links` | `event`, `deviceUid`, `teamId`, `linkedAt`, `method`, `linkedBy` | Event dispatchers write, never `role = 'bridge'`; event readers and the linked bridge read |
 | `tak_live` | `event`, `bridge`, `deviceUid`, and the same position fields as Firestore | Linked bridge writes, through `@collection.tak_event_config` (`event = event && bridge = @request.auth.id && enabled && !closed`); event readers read |
 | `tak_history` | `event`, `bridge`, `segmentId`, `deviceUid`, `teamId`, `startedAt`, `endedAt`, `windows` (json), `grid` (json) | Linked bridge writes; event owner reads |
@@ -189,6 +191,7 @@ PocketBase collections are flat, so each one carries `event` and/or `bridge` as 
 
 ## Changelog
 
+- 0.2.2 (2026-10-07): additive. Map alignment gains `origin`; `residualM` is the estimated error and is null with only 3 control points; PocketBase `tak_map_alignment` gains `origin`, `ownerUid` and `updatedAt`.
 - 0.2.1 (2026-10-07): clarifications, not breaking. Device UIDs are URL-encoded as document ids. PocketBase `allowedUsers` is a relation to `users`. PocketBase e2e migrations are not mirrored.
 - 0.2.0 (2026-10-06):
   - Bridges are admin-managed, with `allowedUsers`, and linking requires being allowed.

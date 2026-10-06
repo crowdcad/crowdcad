@@ -223,3 +223,19 @@ The in-app settings page is `/profile`. Any signed-in user can open it, but its 
 
 ### D35. PocketBase e2e migrations are not mirrored
 `tests/e2e/pb_migrations/` is not loaded by the PocketBase e2e harness, which builds its own permissive schema in `tests/e2e/global-setup.pocketbase.ts`. TAK schema and rules therefore live only in `scripts/setup-pocketbase.js`.
+
+### D36. Core test infrastructure approved (touchpoint h)
+- **What it adds.** Core gains vitest (`npm run test:unit`, `vitest.config.mts`) and a CI job (`tak-unit-footprint`). The job runs the unit tests and the bundle-footprint check (`scripts/check-tak-footprint.mjs`) on builds with TAK off and on.
+- **Why it's needed.** The touchpoints list didn't cover it, but P3 to P5 can't meet their acceptance criteria without it.
+
+### D37. vitest 3 with vite 6, to keep production dependencies unchanged
+vitest 4's vite requires a newer postcss than core uses, which would move three production packages. vitest 3.2 with vite 6.4 accepts core's existing versions, and only a dev-only types package changes.
+
+### D38. How the module boundary is enforced
+- **TAK internals.** `import/no-restricted-paths` (error) blocks imports of TAK internals from outside `src/features/tak`.
+- **Static value imports.** `@typescript-eslint/no-restricted-imports` with `allowTypeImports` (error) blocks static value imports of the module, so it can only be loaded dynamically.
+- **Existing rule unchanged.** The Firebase-import warning stays as it was, because this uses separate rules.
+
+### D39. Map alignment error is the residual standard error
+- **The measure.** The reported accuracy is `sqrt(SSR / (n - 3))` in meters, the standard estimate of a single point's scatter for a 6-parameter fit. With exactly 3 points it is null ("add a 4th point").
+- **The fit space.** The fit is done in pixels for isotropy, and stored in percent with a local-meters origin.
