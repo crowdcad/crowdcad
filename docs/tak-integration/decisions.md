@@ -112,3 +112,66 @@ The existing end-event flow also sets `closed` on the event's TAK config. A Fire
 - **Tracking PRs:** one draft from `integration/tak` to `main` per repository, never merged without approval.
 - **Keeping current:** `main` is merged in periodically, and `integration/tak` is never rebased.
 - **Commits:** every commit is signed off for DCO.
+
+### D17. TAK is a fully optional add-on
+- **Standard events.** Their behavior does not change. They load no TAK code and read or write no TAK data.
+- **One module.** All TAK UI and logic lives in `src/features/tak/`. Core loads it with a dynamic import, and only for events with `mapMode === 'tak'`, the Admin TAK section, and the event-creation map choice.
+- **Imports.** Core imports only the module's public entry. An ESLint `no-restricted-imports` rule blocks imports of its internals from outside it.
+
+### D18. Core touchpoints are listed and capped
+The plan's "Core touchpoints" section lists every existing core file the TAK work changes:
+- (a) a map overlay slot;
+- (b) the map-mode choice in event creation;
+- (c) a TAK section in the Admin settings area;
+- (d) a step in the end-event flow that sets `closed` on the TAK config;
+- (e) team ids;
+- (f) an isolated block of TAK rules, plus `!isBridge()` on event reads;
+- (g) the ESLint import rule.
+
+Anything beyond that list needs maintainer approval first.
+
+### D19. No organization model; `allowedUsers` stands in. Supersedes D3 and D5 where they differ.
+- **Who manages bridges.** Bridges are created, edited, rotated and revoked only by admins, meaning the users that the existing Admin settings area is shown to (`users/{uid}.isAdmin`). Admins also manage each bridge's `allowedUsers`: uids, chosen by email in the UI.
+- **Self-hosted:** the instance's admins act as the organization's admins.
+- **Hosted:** site admins create TAK servers on behalf of agencies.
+- **Linking.** An event owner can link a bridge only if they are in its `allowedUsers`. The escalation block in D3 is unchanged.
+- **The future.** A real organization concept is a separate decision, needed if hosted agencies want self-serve TAK setup.
+
+### D20. TAK setup lives in the Admin settings area. Supersedes D3's "Org settings".
+The in-app settings page is `/profile`. Any signed-in user can open it, but its Admin area is shown only to admins. TAK setup is a TAK section in that Admin area. It holds:
+- the bridge list, with status and last seen;
+- the Add TAK server wizard;
+- "Who can use this TAK server";
+- remembered device mappings;
+- the default history mode;
+- rotate and revoke.
+
+### D21. One map-mode choice at event creation
+- The Event Configuration step offers "Map: Standard (default) / TAK live tracking".
+- The TAK option lists only bridges the user is allowed to use. With none, it is disabled, with "Ask your admin to set up TAK". With exactly one, it is preselected.
+- Choosing TAK shows the history mode and offers "Align map now or later".
+- The choice can be changed while editing the event.
+- It is stored as the optional event field `mapMode`, so event pages know whether to load TAK without an extra read. `mapMode` is a protected field: only the owner or an admin can change it.
+
+### D22. Map alignment is a TAK step and does not touch existing maps. Supersedes D14 where they differ.
+- **Existing logic stays as it is:** map rendering, percent positions and the GeoJSON linear mapping.
+- **"Align map"** is a step inside the TAK module.
+  - It places at least 3 control points, fits an affine transform, and shows the residual error in meters.
+  - It is stored in a separate optional record per event map layer (`takMapAlignment`), read only by TAK and heat-map code.
+- **Natural image dimensions** are captured during alignment, not in the existing upload flow.
+
+### D23. Team ids
+- **Shape.** `Staff` and `Supervisor` get an optional `id`.
+- **Generation.** At every creation site from now on. A backfill runs only for TAK events.
+- **Readers.** Core code outside TAK never reads it.
+- **The audit** of every code path that edits teams found that all of them preserve unknown fields. Edits and renames therefore keep the id.
+
+### D24. Hosted bridge-account creation stays open
+- **The requirement.** Client-side bridge creation needs email/password sign-up enabled in Firebase Authentication.
+- **The decision point.** If a hosted deployment has sign-up disabled, the maintainer chooses before P4 between a server-side creation function and manual creation for hosted users.
+- **Not an option.** Public sign-up is not re-enabled for this.
+- **The prototype** uses the Firebase emulator.
+
+### D25. Footprint acceptance for P3 to P5
+- The existing map and rules tests pass unchanged.
+- A standard event's network and bundle footprint is unchanged.
