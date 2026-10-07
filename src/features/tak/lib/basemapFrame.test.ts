@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { fitAffine, latLonToPercent, percentToLatLon, toLocalMeters } from './affine';
-import { basemapFrame, imageCorners, pxPerMeter } from './basemapFrame';
+import { basemapFrame, imageCorners, pxPerMeter, snapshotFrame } from './basemapFrame';
 import type { ControlPoint, LatLon } from '../types';
 
 /** Builds an alignment for a W x H image rotated by `deg`, `mPerPx` meters per pixel, with optional shear. */
@@ -125,5 +125,35 @@ describe('imageCorners', () => {
       expect(p.x).toBeCloseTo(want[i]![0]!, 6);
       expect(p.y).toBeCloseTo(want[i]![1]!, 6);
     });
+  });
+});
+
+describe('snapshotFrame', () => {
+  it('covers the image plus the margin on every side, at the same positions as the live frame', () => {
+    const fit = synthetic(25, 0.25);
+    const snap = snapshotFrame(fit, rect, { margin: 1, detail: 2 })!;
+    const live = basemapFrame(fit, rect, container, 1)!;
+    // The rendered area spans at least 3x the image's longer side (before the near-identity CSS transform).
+    expect(snap.box.width / snap.oversample).toBeGreaterThanOrEqual(3 * rect.width * 0.95);
+    for (const [px, py] of [
+      [0, 0],
+      [100, 100],
+      [-80, 50],
+      [180, -60],
+    ] as const) {
+      const p = percentToLatLon(fit, px, py);
+      const a = drawn(snap, p);
+      const want = { x: rect.x + (px / 100) * rect.width, y: rect.y + (py / 100) * rect.height };
+      expect(Math.hypot(a.x - want.x, a.y - want.y)).toBeLessThan(0.5);
+      if (px >= 0 && px <= 100) {
+        const b = drawn(live, p);
+        expect(Math.hypot(a.x - b.x, a.y - b.y)).toBeLessThan(0.5);
+      }
+    }
+  });
+
+  it('stays within the canvas cap', () => {
+    const snap = snapshotFrame(synthetic(10, 0.25), { x: 0, y: 0, width: 1800, height: 1200 }, { margin: 1, detail: 4 })!;
+    expect(Math.max(snap.box.width, snap.box.height)).toBeLessThanOrEqual(4096 + 1);
   });
 });

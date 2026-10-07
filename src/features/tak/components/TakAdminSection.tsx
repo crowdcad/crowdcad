@@ -31,6 +31,7 @@ import {
 } from '../lib/bridgeSetup';
 import { TAK_MODULE_MARKER } from '../marker';
 import type { HistoryMode } from '../types';
+import { TAK_INPUT_CLASSNAMES } from '../lib/ui';
 
 /**
  * Admin > TAK: TAK servers (bridges) for this CrowdCAD. Only admins see this
@@ -135,7 +136,7 @@ function BridgeRow({
           </div>
         ))}
         <div className="flex gap-2">
-          <Input size="sm" placeholder="user@example.org" value={newEmail} onValueChange={setNewEmail} aria-label="Email of a user to allow" />
+          <Input classNames={TAK_INPUT_CLASSNAMES} size="sm" placeholder="user@example.org" value={newEmail} onValueChange={setNewEmail} aria-label="Email of a user to allow" />
           <Button size="sm" variant="flat" isDisabled={!newEmail.trim()} onPress={addUser}>
             Add
           </Button>
@@ -335,7 +336,7 @@ function AddTakServerWizard({
         <ModalBody className="space-y-3 text-sm">
           {step === 1 && (
             <>
-              <Input label="Name for this TAK server" placeholder="e.g. Main TAK server" value={label} onValueChange={setLabel} autoFocus />
+              <Input classNames={TAK_INPUT_CLASSNAMES} label="Name for this TAK server" placeholder="e.g. Main TAK server" value={label} onValueChange={setLabel} autoFocus />
               <p className="font-medium">Where will the bridge run?</p>
               <div role="radiogroup" className="space-y-2">
                 <Choice checked={placement === 'tak-host'} onSelect={() => setPlacement('tak-host')} title="On the TAK Server machine (Docker)">
@@ -364,14 +365,14 @@ function AddTakServerWizard({
                   code with a phone camera and copy the text it shows. Paste it below to fill in the fields, or type them in yourself.
                 </li>
               </ol>
-              <Input
+              <Input classNames={TAK_INPUT_CLASSNAMES}
                 label="Enroll QR link (optional)"
                 placeholder="tak://com.atakmap.app/enroll?host=…&username=…&token=…"
                 value={link}
                 onValueChange={onLink}
                 description={link.trim() && !linkParsed ? "That doesn't look like an enrollment link." : undefined}
               />
-              <Input
+              <Input classNames={TAK_INPUT_CLASSNAMES}
                 label="TAK Server address"
                 placeholder="takserver.example.org"
                 value={tak.host}
@@ -379,8 +380,8 @@ function AddTakServerWizard({
                 description="The TAK Server itself, not the TAK Portal web address. Phones connect to it on port 8089."
               />
               <div className="flex gap-2">
-                <Input label="TAK username" value={tak.username} onValueChange={(username) => setTak((t) => ({ ...t, username }))} />
-                <Input
+                <Input classNames={TAK_INPUT_CLASSNAMES} label="TAK username" value={tak.username} onValueChange={(username) => setTak((t) => ({ ...t, username }))} />
+                <Input classNames={TAK_INPUT_CLASSNAMES}
                   label="TAK password or token"
                   type="password"
                   value={tak.password}

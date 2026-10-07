@@ -8,6 +8,7 @@ import { imageCorners } from '../lib/basemapFrame';
 import { DEFAULT_BASEMAP_ID, resolveBasemap } from '../lib/basemaps';
 import { searchPlaces, type PlaceResult } from '../lib/geocode';
 import { saveAlignment } from '../data/alignmentStore';
+import { TAK_INPUT_CLASSNAMES } from '../lib/ui';
 import { PREF, usePref } from '../data/prefs';
 import { TAK_MODULE_MARKER } from '../marker';
 import type { ControlPoint, LatLon, TakMapAlignment } from '../types';
@@ -206,7 +207,7 @@ export default function AlignMap({ eventId, layer, ownerUid, initial, onSaved, o
             void runSearch();
           }}
         >
-          <Input
+          <Input classNames={TAK_INPUT_CLASSNAMES}
             size="sm"
             label="Find a place or coordinates"
             placeholder="Venue name, address, or 37.7694, -122.4862"
@@ -316,7 +317,7 @@ export default function AlignMap({ eventId, layer, ownerUid, initial, onSaved, o
         <div className="flex flex-wrap items-end gap-2 rounded-lg border border-surface-liner bg-surface-deep p-3">
           {pendingImg && (
             <>
-              <Input
+              <Input classNames={TAK_INPUT_CLASSNAMES}
                 size="sm"
                 label="Or type its position (latitude, longitude)"
                 placeholder="45.0012, -100.0021"

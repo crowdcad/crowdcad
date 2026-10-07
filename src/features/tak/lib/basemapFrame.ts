@@ -107,7 +107,8 @@ export function basemapFrame(
   }
   const width = Math.ceil(2 * hw * 1.05);
   const height = Math.ceil(2 * hh * 1.05);
-  const oversample = Math.max(1, Math.min(scale, maxCanvasPx / Math.max(width, height)));
+  // Below 1 only when the area itself is larger than the cap: then it renders smaller and is scaled up.
+  const oversample = Math.min(Math.max(1, scale), maxCanvasPx / Math.max(width, height));
 
   const zoom = Math.log2((s * 360 * M_PER_DEG * Math.cos((center.lat * Math.PI) / 180)) / WORLD_PX) + Math.log2(oversample);
   // With bearing b, MapLibre rotates the map by -b on screen; we need it rotated by phi.
@@ -132,4 +133,25 @@ export function imageCorners(alignment: Alignment): [LatLon, LatLon, LatLon, Lat
     percentToLatLon(alignment, 100, 100),
     percentToLatLon(alignment, 0, 100),
   ];
+}
+
+export interface SnapshotOptions {
+  /** Extra basemap on every side, as a multiple of the image's longer side. */
+  margin?: number;
+  /** Render this many times the on-screen size, so it stays sharp when zoomed in. */
+  detail?: number;
+  maxCanvasPx?: number;
+}
+
+/**
+ * The frame for a one-time basemap picture under the dispatch map (D60):
+ * the image plus `margin` on every side, rendered at `detail` times the
+ * on-screen size (capped). `box` is in the same container pixels as `rect`.
+ */
+export function snapshotFrame(alignment: Alignment, rect: Box, { margin = 1, detail = 2, maxCanvasPx = 4096 }: SnapshotOptions = {}): BasemapFrame | null {
+  const m = margin * Math.max(rect.width, rect.height);
+  const area = { width: rect.width + 2 * m, height: rect.height + 2 * m };
+  const f = basemapFrame(alignment, { x: m, y: m, width: rect.width, height: rect.height }, area, detail, maxCanvasPx);
+  if (!f) return null;
+  return { ...f, box: { ...f.box, x: f.box.x + rect.x - m, y: f.box.y + rect.y - m } };
 }
