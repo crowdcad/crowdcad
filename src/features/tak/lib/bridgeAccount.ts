@@ -41,10 +41,14 @@ export interface BridgeCredentials {
 
 async function createFirebaseUser(email: string, password: string): Promise<string> {
   const { getApp, initializeApp, deleteApp } = await import('firebase/app');
-  const { initializeAuth, inMemoryPersistence, createUserWithEmailAndPassword, signOut } = await import('firebase/auth');
+  const { connectAuthEmulator, createUserWithEmailAndPassword, getAuth, initializeAuth, inMemoryPersistence, signOut } =
+    await import('firebase/auth');
   const secondary = initializeApp(getApp().options, `tak-bridge-provisioning-${randomString(8)}`);
   try {
     const auth = initializeAuth(secondary, { persistence: inMemoryPersistence });
+    // Follow the app's own Auth instance onto the emulator when it uses one.
+    const emu = getAuth(getApp()).emulatorConfig;
+    if (emu) connectAuthEmulator(auth, `${emu.protocol}://${emu.host}${emu.port ? `:${emu.port}` : ''}`, { disableWarnings: true });
     const cred = await createUserWithEmailAndPassword(auth, email, password);
     await signOut(auth);
     return cred.user.uid;
