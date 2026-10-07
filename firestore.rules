@@ -366,6 +366,16 @@ service cloud.firestore {
       }
     }
 
+    // Which teams are on a call, as opaque team ids only, published by the
+    // dispatchers' browsers so the bridge can keep Detailed history during
+    // calls without reading the event. No call details.
+    match /events/{eventId}/takCallState/{docId} {
+      allow read: if canReadEventData(eventId) || isLinkedBridge(eventId);
+      allow write: if docId == 'current' && !isBridge() && canReadEventData(eventId) &&
+        request.resource.data.keys().hasOnly(['teamIdsOnCall', 'updatedAt']) &&
+        request.resource.data.teamIdsOnCall is list && request.resource.data.updatedAt is number;
+    }
+
     // Per-event bridge status, for the event's TAK panel.
     match /events/{eventId}/takStatus/{docId} {
       allow read: if canReadEventData(eventId);

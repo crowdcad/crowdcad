@@ -529,6 +529,26 @@ async function ensureTakCollections(headers) {
     ['CREATE UNIQUE INDEX idx_tak_history_points ON tak_history_points (segmentId, chunk)'],
   );
 
+  // Which teams are on a call (opaque team ids only), published by
+  // dispatchers for Detailed history; read by the linked bridge.
+  await ensureCollection(
+    headers,
+    'tak_call_state',
+    [
+      { name: 'event', type: 'text', required: true },
+      { name: 'teamIdsOnCall', type: 'json' },
+      { name: 'updatedAt', type: 'number' },
+    ],
+    {
+      listRule: `${TAK_EVENT_READER} || ${takLinkedBridge('event')}`,
+      viewRule: `${TAK_EVENT_READER} || ${takLinkedBridge('event')}`,
+      createRule: TAK_EVENT_READER,
+      updateRule: `${TAK_EVENT_READER} && @request.body.event:isset = false`,
+      deleteRule: `${AUTH_RULE} && ${NOT_BRIDGE} && ${takEventOwner('event')}`,
+    },
+    ['CREATE UNIQUE INDEX idx_tak_call_state ON tak_call_state (event)'],
+  );
+
   await ensureCollection(
     headers,
     'tak_event_status',
