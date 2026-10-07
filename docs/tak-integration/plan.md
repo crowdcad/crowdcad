@@ -99,7 +99,29 @@ Updated at the end of each phase.
     - Unit: 67 bridge tests and 51 core tests.
     - Browser smoke: 7 of 7 steps, now including the history view and heat map, with no console errors.
 
+- **P6 Packaging: done.** The first release is under [Needs Evan](#needs-evan).
+  - **Image release workflow** in `crowdcad/tak-bridge`. A `vX.Y.Z` tag runs the checks, then builds `linux/amd64` and `linux/arm64` images and pushes `ghcr.io/crowdcad/tak-bridge:X.Y.Z` and `:X.Y`. No tag has been pushed yet, so nothing is published.
+  - **`docker-compose.yml`** uses the published image, which can be pinned with `TAK_BRIDGE_VERSION`. It still builds from source with `--build`.
+  - **The infra-TAK setup guide** (`docs/setup-infra-tak.md` in `tak-bridge`) covers setup, operations, troubleshooting, the optional TTL backstop, and what is stored.
+  - **PocketBase parity check.** One scenario (sign in, link, two minutes of positions, close) runs unchanged on the Firebase emulator and a local PocketBase, and both produce the same expected result. It is green in CI.
+
+**Overall:** P0 to P6 are built. The open acceptance items need real hardware (P1, P4) and a first release (P6). See below.
+
 ## Needs Evan
+
+### P6: publish the first bridge image
+When you're ready to publish, tag a release on `crowdcad/tak-bridge`. Tag a commit on `integration/tak` for a preview, or `main` after merging:
+
+```bash
+git tag v0.1.0 && git push origin v0.1.0
+```
+
+The release workflow then pushes `ghcr.io/crowdcad/tak-bridge:0.1.0`. The first publish creates the package under the `crowdcad` org. Check its visibility (public or private) in the org's package settings afterwards.
+
+### Repository setup
+- Install the DCO app on the `crowdcad` org, so sign-off checks run on PRs.
+- **Hosted bridge creation** (D24). If the hosted Firebase project has email/password sign-up disabled, choose between a server-side creation function and manual creation for hosted users.
+
 
 ### P1: phone position in the bridge logs (real TAK Server)
 

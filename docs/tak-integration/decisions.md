@@ -290,3 +290,10 @@ For an 8-hour, 20-device event, measured on the simulator:
   - Time on post uses posts on aligned layers, within 25 m.
   - Distance sums moves between consecutive 5-minute windows.
   - A coverage gap is a stretch of 10 minutes or more.
+
+### D50. Bridge images are published only from version tags
+- **How.** `crowdcad/tak-bridge`'s release workflow builds multi-arch images (amd64 and arm64) and pushes them to `ghcr.io/crowdcad/tak-bridge` only when a maintainer pushes a `vX.Y.Z` tag. Lint, typecheck and tests must pass first.
+- **Compose.** It defaults to the published image and keeps building from source as an option.
+
+### D51. One parity scenario for every backend
+The same end-to-end scenario runs against the Firebase emulator and a local PocketBase, and must produce an identical result. A difference in backend behavior therefore fails CI.
