@@ -1,6 +1,6 @@
 # TAK integration: data contract
 
-**Contract version: 0.2.2 (draft).** TAK support is in development and is an optional add-on. Nothing here is released, and the contract may change until 1.0.0.
+**Contract version: 0.2.3 (draft).** TAK support is in development and is an optional add-on. Nothing here is released, and the contract may change until 1.0.0.
 
 This document defines every record the TAK integration adds, who writes each one, and what the access rules enforce. It covers both backends: Firebase (the default) and PocketBase (opt-in with `NEXT_PUBLIC_BACKEND=pocketbase`). The bridge reaches both through one adapter interface, so behavior is the same on either.
 
@@ -191,6 +191,7 @@ PocketBase collections are flat, so each one carries `event` and/or `bridge` as 
 
 ## Changelog
 
+- 0.2.3 (2026-10-07): clarification. Switching an event back to Standard in the event builder deletes its TAK config (owner only). Standard events keep `mapMode: 'standard'` only if they were ever TAK; never-TAK events have no `mapMode`.
 - 0.2.2 (2026-10-07): additive. Map alignment gains `origin`; `residualM` is the estimated error and is null with only 3 control points; PocketBase `tak_map_alignment` gains `origin`, `ownerUid` and `updatedAt`.
 - 0.2.1 (2026-10-07): clarifications, not breaking. Device UIDs are URL-encoded as document ids. PocketBase `allowedUsers` is a relation to `users`. PocketBase e2e migrations are not mirrored.
 - 0.2.0 (2026-10-06):

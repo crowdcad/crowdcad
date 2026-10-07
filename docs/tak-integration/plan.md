@@ -42,6 +42,29 @@ Updated at the end of each phase.
   - **Shared criteria.** The existing map tests (core e2e) and rules tests pass unchanged.
   - **Deferred to P4:** wiring "Align map" into the event TAK panel and event creation.
 
+- **P4 CrowdCAD TAK UI: built. Waiting on the end-to-end check with a real device.**
+  - **Touchpoints** (a), (b), (c), (d), (e) and (i) are wired, each as a lazy import gated inline on `NEXT_PUBLIC_TAK === 'on'`:
+    - (a) the map overlay slot (markers in the zoomed map, plus a TAK panel as map chrome);
+    - (b) the "Map: Standard / TAK live tracking" choice in the event builder;
+    - (c) the TAK section in Admin settings: bridges with status, the Add TAK server wizard, "who can use this TAK server", the default history mode, remembered devices, rotate and revoke;
+    - (d) end-event closes the TAK config;
+    - (e) team ids at all 9 creation sites, with a TAK-only backfill;
+    - (i) `next.config.js` always defines the flag.
+  - **The TAK panel:**
+    - status, and a recording indicator;
+    - for the owner: link a bridge, choose the history mode, and align each map;
+    - for dispatchers: unassigned devices with auto-link (remembered mapping, then a unique case- and space-insensitive callsign match) and a team dropdown;
+    - linked devices.
+  - **Tests:** 44 core unit tests. They include the team-id source audit (new teams get ids, and updates keep them; both were mutation-checked), plus linking, team positions, backfill scope and credentials.
+  - **Footprint against `main`:**
+    - A build without the flag contains no TAK code.
+    - `/profile` and the dispatch page's first-load JS are unchanged.
+    - The create pages grow by 10 to 20 bytes, for team-id generation.
+    - With the flag on, TAK lives only in one lazy chunk.
+  - **Not yet done:**
+    - The TAK screens have not been exercised in a browser. Core e2e runs with TAK off. The end-to-end check under [Needs Evan](#needs-evan) is the first real run.
+    - Hosted bridge creation stays open (D24).
+
 ## Needs Evan
 
 ### P1: phone position in the bridge logs (real TAK Server)
@@ -75,6 +98,22 @@ The bridge runs with your real `.p12`. Run these steps yourself; the certificate
 - **Certificate verification errors** (`UNABLE_TO_VERIFY_LEAF_SIGNATURE`, `SELF_SIGNED_CERT_IN_CHAIN`): export the TAK Server CA as PEM to `certs/ca.pem` and set `TAK_CA=/certs/ca.pem`.
 - **`ERR_TLS_CERT_ALTNAME_INVALID`:** set `TAK_SERVER_NAME` to the name in the server certificate.
 - **Connected but no positions:** the bridge user is probably not in the phone's group.
+
+### P4: end to end with a real device (emulator or a dev Firebase project)
+
+This uses your real `.p12` on the bridge side. Run it yourself; nothing here touches production.
+
+1. **Start the backend and app.** Run the Firebase emulators from a `crowdcad/crowdcad` checkout on `integration/tak` (`npx firebase emulators:start --only auth,firestore --project demo-crowdcad`). Start the app against them with TAK on: `NEXT_PUBLIC_TAK=on`, plus the emulator variables from `npm run test:e2e:serve`. A dev Firebase project with `NEXT_PUBLIC_TAK=on` also works.
+2. **Make yourself an admin.** Sign up, then set `isAdmin: true` on your `users/{uid}` doc (emulator UI, or `scripts/setAdmin.js` against the dev project).
+3. **Create the bridge.** Go to Profile > Admin > TAK > Add TAK server and follow the wizard. Copy the `.env` block.
+4. **Run the bridge.** On the machine running the bridge, use the `.env` block plus the TAK section from the P1 steps. Set `CROWDCAD_BACKEND=firebase`, and add `FIRESTORE_EMULATOR_HOST` and `FIREBASE_AUTH_EMULATOR_HOST` if you're using the emulator. Then `docker compose up -d --build`. The wizard should show "Connected".
+5. **Set up an event.**
+   1. Create an event and choose **Map: TAK live tracking**, with the bridge preselected.
+   2. Add a team whose name matches your phone's callsign.
+   3. Align the map with 4 or more points you can find on the ground.
+6. **Check the dispatch map.** On the dispatch page's Map tab, the TAK pill should show the device. It should auto-link to the team (or appear under "Unassigned TAK devices" if the names differ), and your position should appear on the aligned map.
+7. **End the event.** Within a minute, the event's `takLive` docs should be gone.
+8. **Report** pass or fail per step, plus any console errors. You don't need to share coordinates.
 
 ## Scope
 

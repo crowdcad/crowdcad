@@ -239,3 +239,24 @@ vitest 4's vite requires a newer postcss than core uses, which would move three 
 ### D39. Map alignment error is the residual standard error
 - **The measure.** The reported accuracy is `sqrt(SSR / (n - 3))` in meters, the standard estimate of a single point's scatter for a 6-parameter fit. With exactly 3 points it is null ("add a 4th point").
 - **The fit space.** The fit is done in pixels for isotropy, and stored in percent with a local-meters origin.
+
+### D40. `next.config.js` always defines `NEXT_PUBLIC_TAK` (touchpoint i, approved)
+- **Why it's needed.** Next.js inlines only the `NEXT_PUBLIC_*` variables that are set. With the flag unset, `process.env.NEXT_PUBLIC_TAK === 'on'` wasn't a build-time constant, and an unreachable TAK chunk stayed in the build.
+- **The fix.** `env: { NEXT_PUBLIC_TAK: process.env.NEXT_PUBLIC_TAK === 'on' ? 'on' : 'off' }` makes the gate constant, so TAK is fully compiled out.
+- **Deployments with their own config.** They need the same line when they adopt TAK.
+
+### D41. Core's TAK entry points use `React.lazy`, not `next/dynamic`
+- **Why.** `next/dynamic`'s import stayed in each page even with the TAK branch compiled out, adding about 1 kB to three routes. `React.lazy`, inside a `Suspense` boundary, adds nothing.
+- **No server rendering is lost.** The TAK components never render on the server, because they need a signed-in user or admin status.
+
+### D42. The map overlay slot has two parts
+`MapOverlay.markers` renders inside the zoomed and panned map, with the layer, image rect and scale. `MapOverlay.chrome` renders above the map, unscaled. Without an overlay, the map renders as before.
+
+### D43. The event TAK panel is map chrome, not a new dispatch tab
+- **Where it lives.** The event's TAK status, settings, Align map and device linking sit in a collapsible panel on the Map tab, delivered through the overlay slot (touchpoint a).
+- **Why.** The dispatch page's layout and tab set stay as they are.
+
+### D44. The team-id audit is a source test (touchpoint h)
+- **What it checks.** `src/lib/teamId.test.ts` parses core's source with the TypeScript compiler API. It fails if a new team or supervisor literal lacks `id`, or if a staff or supervisor `.map()` update doesn't spread the existing entry.
+- **Why a source test.** Those updates live inside page components.
+- **Exceptions.** Two view-only projections are allowlisted, each with its reason.
