@@ -12,6 +12,7 @@ import {
   type TakLivePosition,
 } from './takStore';
 import { loadAlignments } from './alignmentStore';
+import type { HeatCell } from '../lib/historyStats';
 import type { TakMapAlignment } from '../types';
 
 /**
@@ -60,6 +61,42 @@ function open(eventId: string): Entry {
     for (const u of unsubs) u();
   };
   return entry;
+}
+
+/** View state shared by the TAK panel (map chrome) and the map markers. */
+export interface TakViewState {
+  heatmap: HeatCell[] | null;
+}
+
+const views = new Map<string, { state: TakViewState; listeners: Set<(s: TakViewState) => void> }>();
+
+function viewEntry(eventId: string) {
+  let v = views.get(eventId);
+  if (!v) {
+    v = { state: { heatmap: null }, listeners: new Set() };
+    views.set(eventId, v);
+  }
+  return v;
+}
+
+export function setTakView(eventId: string, patch: Partial<TakViewState>): void {
+  const v = viewEntry(eventId);
+  v.state = { ...v.state, ...patch };
+  for (const l of v.listeners) l(v.state);
+}
+
+export function useTakView(eventId: string | undefined): TakViewState {
+  const [state, setState] = useState<TakViewState>(() => (eventId ? viewEntry(eventId).state : { heatmap: null }));
+  useEffect(() => {
+    if (!eventId) return;
+    const v = viewEntry(eventId);
+    v.listeners.add(setState);
+    setState(v.state);
+    return () => {
+      v.listeners.delete(setState);
+    };
+  }, [eventId]);
+  return state;
 }
 
 /** Re-reads map alignments after an "Align map" save. */

@@ -1,5 +1,6 @@
 import { dbService, isPocketbaseBackend } from '@/lib/services';
 import type { DocSnapshot, QueryConstraint } from '@/lib/services/types';
+import type { HistorySegment } from '../lib/historyStats';
 import type { HistoryMode } from '../types';
 
 /**
@@ -373,6 +374,28 @@ export function subscribeEventStatus(eventId: string, cb: (s: TakEventStatus | n
     }, onError);
   }
   return dbService.subscribeToDocument<Rec>(fs.status(eventId), 'current', (snap) => cb(snap.data ? toStatus(snap.data) : null), onError);
+}
+
+// ---------------------------------------------------------------- history
+
+/** History segments for an event. Only the event owner can read them (v1). */
+export async function loadHistory(eventId: string): Promise<HistorySegment[]> {
+  const toSeg = (id: string, d: Rec): HistorySegment => ({
+    segmentId: typeof d.segmentId === 'string' ? d.segmentId : decodeURIComponent(id),
+    deviceUid: String(d.deviceUid ?? ''),
+    teamId: String(d.teamId ?? ''),
+    startedAt: num(d.startedAt),
+    // PocketBase stores an open segment's endedAt as 0.
+    endedAt: typeof d.endedAt === 'number' && d.endedAt > 0 ? d.endedAt : null,
+    windows: Array.isArray(d.windows) ? (d.windows as HistorySegment['windows']) : [],
+    grid: (d.grid as HistorySegment['grid']) ?? { cellM: 5, originLat: 0, originLon: 0, cells: {} },
+  });
+  if (isPocketbaseBackend) {
+    const snaps = await dbService.queryCollection<Rec>('tak_history', [{ field: 'event', op: '==', value: eventId }]);
+    return data(snaps).map((s) => toSeg(s.id, s.data));
+  }
+  const snaps = await dbService.getCollection<Rec>(`events/${eventId}/takHistory`);
+  return data(snaps).map((s) => toSeg(s.id, s.data));
 }
 
 // ------------------------------------------------------------ call state
