@@ -1,6 +1,6 @@
 # TAK integration: data contract
 
-**Contract version: 0.2.3 (draft).** TAK support is in development and is an optional add-on. Nothing here is released, and the contract may change until 1.0.0.
+**Contract version: 0.3.0 (draft).** TAK support is in development and is an optional add-on. Nothing here is released, and the contract may change until 1.0.0.
 
 This document defines every record the TAK integration adds, who writes each one, and what the access rules enforce. It covers both backends: Firebase (the default) and PocketBase (opt-in with `NEXT_PUBLIC_BACKEND=pocketbase`). The bridge reaches both through one adapter interface, so behavior is the same on either.
 
@@ -66,8 +66,9 @@ Both are optional fields. They are absent on standard events and on all existing
 | `events/{eventId}/takMapAlignment/{layerId}` | `mapUrl`, `naturalWidth`, `naturalHeight`, `controlPoints[]`, `origin`, `transform`, `residualM`, `ownerUid`, `updatedAt` | Event owner | Anyone who can read the event. Not the bridge |
 | `events/{eventId}/takDeviceLinks/{deviceUid}` | `teamId`, `linkedAt`, `method` (`auto` or `manual`), `linkedBy` | Anyone who can dispatch the event, except bridge accounts | Anyone who can read the event; the linked bridge |
 | `events/{eventId}/takLive/{deviceUid}` | `lat`, `lon`, `hae`, `ce`, `course`, `speed`, `callsign`, `cotType`, `deviceTime`, `receivedAt`, `bridgeUid` | The linked bridge, while `enabled` and not `closed`. The bridge also deletes | Anyone who can read the event |
-| `events/{eventId}/takHistory/{segmentId}` | `deviceUid`, `teamId`, `startedAt`, `endedAt`, `windows[]`, `grid`, `bridgeUid` | The linked bridge, while `historyMode != off` | Event owner only (v1) |
+| `events/{eventId}/takHistory/{segmentId}` | `deviceUid`, `teamId`, `startedAt`, `endedAt`, `windows[]`, `grid`, `bridgeUid` (doc id: URL-encoded `segmentId`) | The linked bridge, while the config is enabled and `historyMode != off`. Unlike live positions, this is allowed after close, so open segments can be ended | Event owner only (v1) |
 | `events/{eventId}/takHistory/{segmentId}/points/{chunkId}` | `points[]` (`t`, `lat`, `lon`, `ce`), at most 500 per chunk | The linked bridge, `detailed` mode only | Event owner only (v1) |
+| `events/{eventId}/takCallState/current` | `teamIdsOnCall` (opaque team ids), `updatedAt` | Anyone who can dispatch the event, except bridge accounts (the TAK agent in their browser publishes it in Detailed mode) | Anyone who can read the event; the linked bridge |
 | `events/{eventId}/takStatus/current` | `lastSeenAt`, `takConnected`, `liveDeviceCount` | The linked bridge | Anyone who can read the event |
 
 - **Team positions** are joined in the browser through `takDeviceLinks`. A team's position is the most recent fix among its linked devices.
@@ -94,7 +95,8 @@ interface TakHistorySegment {
   grid: {
     cellM: 5;                 // nominal cell size in meters
     originLat: number; originLon: number; // grid origin (first fix of the segment)
-    cells: Record<string, number>;        // "ix,iy" -> seconds spent in the cell
+    cells: Record<string, number>;        // "ix,iy" -> seconds spent in the cell (at most 5,000 cells)
+    overflowSecs: number;                 // seconds that fell outside the cell cap
   };
 }
 
@@ -153,8 +155,9 @@ PocketBase collections are flat, so each one carries `event` and/or `bridge` as 
 | `tak_map_alignment` | `event`, `layerId`, `mapUrl`, `naturalWidth`, `naturalHeight`, `controlPoints` (json), `origin` (json), `transform` (json), `residualM`, `ownerUid`, `updatedAt` | Event owner writes; event readers read |
 | `tak_device_links` | `event`, `deviceUid`, `teamId`, `linkedAt`, `method`, `linkedBy` | Event dispatchers write, never `role = 'bridge'`; event readers and the linked bridge read |
 | `tak_live` | `event`, `bridge`, `deviceUid`, and the same position fields as Firestore | Linked bridge writes, through `@collection.tak_event_config` (`event = event && bridge = @request.auth.id && enabled && !closed`); event readers read |
-| `tak_history` | `event`, `bridge`, `segmentId`, `deviceUid`, `teamId`, `startedAt`, `endedAt`, `windows` (json), `grid` (json) | Linked bridge writes; event owner reads |
+| `tak_history` | `event`, `bridge`, `segmentId`, `deviceUid`, `teamId`, `startedAt`, `endedAt` (0 while open), `windows` (json), `grid` (json) | Linked bridge writes (also after close); event owner reads |
 | `tak_history_points` | `event`, `bridge`, `segmentId`, `chunk`, `points` (json) | Same as `tak_history` |
+| `tak_call_state` | `event` (unique), `teamIdsOnCall` (json), `updatedAt` | Event readers write (never `role = 'bridge'`); event readers and the linked bridge read |
 | `tak_event_status` | `event`, `bridge`, `lastSeenAt`, `takConnected`, `liveDeviceCount` | Linked bridge writes; event readers read |
 
 - **Unique indexes:** `tak_live(event, deviceUid)`, `tak_device_links(event, deviceUid)`, `tak_event_config(event)`, `tak_map_alignment(event, layerId)`, `tak_history(segmentId)`.
@@ -191,6 +194,11 @@ PocketBase collections are flat, so each one carries `event` and/or `bridge` as 
 
 ## Changelog
 
+- 0.3.0 (2026-10-07):
+  - Added `takCallState` / `tak_call_state`: on-call opaque team ids for Detailed history.
+  - History writes are allowed after close.
+  - PocketBase stores an open segment's `endedAt` as 0.
+  - The history grid gains `overflowSecs`.
 - 0.2.3 (2026-10-07): clarification. Switching an event back to Standard in the event builder deletes its TAK config (owner only). Standard events keep `mapMode: 'standard'` only if they were ever TAK; never-TAK events have no `mapMode`.
 - 0.2.2 (2026-10-07): additive. Map alignment gains `origin`; `residualM` is the estimated error and is null with only 3 control points; PocketBase `tak_map_alignment` gains `origin`, `ownerUid` and `updatedAt`.
 - 0.2.1 (2026-10-07): clarifications, not breaking. Device UIDs are URL-encoded as document ids. PocketBase `allowedUsers` is a relation to `users`. PocketBase e2e migrations are not mirrored.

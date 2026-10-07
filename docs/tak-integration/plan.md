@@ -74,6 +74,31 @@ Updated at the end of each phase.
     - A real device, end to end (see [Needs Evan](#needs-evan)).
     - Hosted bridge creation stays open (D24).
 
+- **P5 History and end-of-event view: done.** Acceptance is met.
+  - **Bridge:** a history recorder per (device, team) segment, with:
+    - 5-minute windows (time-weighted mean, spread, count, seconds; each fix is credited up to 60 s);
+    - a sparse 5 m heat-map grid, capped at 5,000 cells, with overflow counted;
+    - Detailed-mode points every 15 s while the team is on a call;
+    - segment writes every 5 minutes;
+    - segments ended and flushed at close, before live docs are cleared.
+  - **Core:**
+    - `takCallState`, published by a headless `TakEventAgent` (D45, D46). The agent also runs auto-linking and the team-id backfill on any tab.
+    - An owner-only history view in the TAK panel: a heat map on aligned maps, plus per-team time tracked, distance, time on post and coverage gaps.
+  - **Budgets for a simulated 8-hour, 20-device event:**
+
+    | Measure | Budget | Measured |
+    |---|---|---|
+    | Live writes per device-hour | 60 to 200 | within range |
+    | Segment writes per device-hour | 12 or fewer | 12.1, one per 5-minute flush |
+    | Largest segment doc | under 256 KiB | 21.9 KiB |
+    | Largest grid | 5,000 cells or fewer | 1,163 cells |
+    | Detailed points | at most 500 per chunk doc | 240 per hour of call time |
+
+  - **Tests:**
+    - Rules: 28 Firestore cases, plus 4 bridge end-to-end tests on the emulator, and 13 PocketBase tests. They now include history after close and call state.
+    - Unit: 67 bridge tests and 51 core tests.
+    - Browser smoke: 7 of 7 steps, now including the history view and heat map, with no console errors.
+
 ## Needs Evan
 
 ### P1: phone position in the bridge logs (real TAK Server)

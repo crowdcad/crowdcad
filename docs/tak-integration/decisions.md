@@ -260,3 +260,33 @@ vitest 4's vite requires a newer postcss than core uses, which would move three 
 - **What it checks.** `src/lib/teamId.test.ts` parses core's source with the TypeScript compiler API. It fails if a new team or supervisor literal lacks `id`, or if a staff or supervisor `.map()` update doesn't spread the existing entry.
 - **Why a source test.** Those updates live inside page components.
 - **Exceptions.** Two view-only projections are allowlisted, each with its reason.
+
+### D45. Detailed history learns about calls from opaque team ids only
+- **What's published.** Dispatchers' browsers publish `takCallState` (`teamIdsOnCall`, `updatedAt`). The bridge reads it to keep 15 s points while a team is on a call.
+- **What isn't.** No call details, locations or patient information leave the event, which keeps D6.
+- **Shape is enforced.** The rules allow only those two fields.
+
+### D46. A headless TakEventAgent runs TAK background work on the dispatch page (extends touchpoint a, approved)
+- **What it is.** For TAK events, the dispatch page also renders one lazily loaded component with no UI. It publishes call state, auto-links devices and backfills team ids, whichever tab is open.
+- **Gating.** It uses the same `NEXT_PUBLIC_TAK` and `mapMode` guard as the map overlay.
+
+### D47. History may be written after an event closes
+- **The contradiction.** The data contract has the bridge flush and end its open segments at close, but the rules had gated history writes on an open event.
+- **The fix.** History writes now need a linked, enabled bridge and a history mode other than off. Live writes still stop at close.
+
+### D48. History budgets (P5)
+For an 8-hour, 20-device event, measured on the simulator:
+
+| Measure | Budget | Measured |
+|---|---|---|
+| Segment writes | one per segment per 5 minutes, about 12 per device-hour | 12.1 |
+| Segment doc | under 256 KiB | at most 21.9 KiB |
+| Grid | 5,000 cells or fewer | at most 1,163 |
+| Detailed points | 500 per chunk doc | 240 per call-hour |
+
+### D49. End-of-event view lives in the TAK panel
+- **Where.** The owner-only heat map and per-team stats sit in the TAK panel on the dispatch map (touchpoint a), not on the summary page, which needs no change.
+- **How the stats work.**
+  - Time on post uses posts on aligned layers, within 25 m.
+  - Distance sums moves between consecutive 5-minute windows.
+  - A coverage gap is a stretch of 10 minutes or more.
