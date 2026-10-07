@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { Button, Input, Modal, ModalBody, ModalContent, ModalFooter, ModalHeader, Select, SelectItem, Snippet } from '@heroui/react';
-import { CheckCircle2, Plus, RefreshCw, Trash2, X } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Loader2, Plus, RefreshCw, Trash2, X } from 'lucide-react';
 import {
   findUserIdByEmail,
   forgetMapping,
@@ -16,7 +16,19 @@ import {
   type TakBridgeStatus,
   type TakDeviceMapping,
 } from '../data/takStore';
-import { backendEnv, COMPOSE_SNIPPET, createBridgeAccount, envBlock, type BridgeCredentials } from '../lib/bridgeAccount';
+import { createBridgeAccount, type BridgeCredentials } from '../lib/bridgeAccount';
+import {
+  backendEnv,
+  detectLocalSetup,
+  envBlock,
+  parseEnrollLink,
+  setupChecklist,
+  setupCommands,
+  type ChecklistItem,
+  type LocalOs,
+  type Placement,
+  type TakSignIn,
+} from '../lib/bridgeSetup';
 import { TAK_MODULE_MARKER } from '../marker';
 import type { HistoryMode } from '../types';
 
@@ -40,7 +52,13 @@ function lastSeen(status: TakBridgeStatus | null | undefined): string {
   const s = Math.round((Date.now() - status.lastSeenAt) / 1000);
   const when = s < 60 ? `${s}s ago` : s < 3600 ? `${Math.floor(s / 60)} min ago` : `${Math.floor(s / 3600)} h ago`;
   const live = s < 180;
-  return `${live ? (status.takConnected ? 'connected to TAK' : 'running, not connected to TAK') : 'offline'} (last seen ${when})`;
+  const state = live ? (status.takConnected ? 'connected to TAK' : 'running, not connected to TAK') : 'offline';
+  const devices =
+    live && status.takConnected && status.devicesSeen !== undefined
+      ? `, ${status.devicesSeen} device${status.devicesSeen === 1 ? '' : 's'} seen`
+      : '';
+  const problem = live && !status.takConnected && status.takError ? `. ${status.takError}` : '';
+  return `${state}${devices} (last seen ${when})${problem}`;
 }
 
 function BridgeRow({
@@ -198,6 +216,45 @@ function BridgeRow({
 
 type WizardStep = 1 | 2 | 3 | 4;
 
+const CHECK_ICON: Record<ChecklistItem['state'], React.ReactNode> = {
+  done: <CheckCircle2 className="h-5 w-5 shrink-0 text-status-green" />,
+  waiting: <Loader2 className="h-5 w-5 shrink-0 animate-spin text-surface-faint" />,
+  problem: <AlertTriangle className="h-5 w-5 shrink-0 text-status-red" />,
+};
+
+function Choice({
+  checked,
+  onSelect,
+  title,
+  children,
+}: {
+  checked: boolean;
+  onSelect: () => void;
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={checked}
+      onClick={onSelect}
+      className={`w-full rounded-lg border p-3 text-left ${checked ? 'border-accent bg-accent/10' : 'border-surface-liner'}`}
+    >
+      <p className="font-medium">{title}</p>
+      <p className="text-surface-faint">{children}</p>
+    </button>
+  );
+}
+
+function CopyBlock({ text }: { text: string }) {
+  return (
+    <Snippet symbol="" className="w-full" classNames={{ pre: 'whitespace-pre-wrap break-all text-xs' }}>
+      {text}
+    </Snippet>
+  );
+}
+
 function AddTakServerWizard({
   adminUid,
   rotating,
@@ -209,16 +266,41 @@ function AddTakServerWizard({
 }) {
   const [step, setStep] = useState<WizardStep>(1);
   const [label, setLabel] = useState(rotating ? `${rotating.label} (new)` : '');
+  const [placement, setPlacement] = useState<Placement>('tak-host');
+  const [os, setOs] = useState<LocalOs>(() =>
+    typeof navigator !== 'undefined' && /win/i.test(navigator.userAgent) ? 'windows' : 'unix',
+  );
+  const [link, setLink] = useState('');
+  const [tak, setTak] = useState<TakSignIn>({ host: '', username: '', password: '' });
   const [creds, setCreds] = useState<BridgeCredentials | null>(null);
-  const [block, setBlock] = useState('');
+  const [env, setEnv] = useState<{ block: string; warnings: string[] } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<TakBridgeStatus | null>(null);
+  const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
+    void detectLocalSetup().then((local) => {
+      if (local) setPlacement('local');
+    });
+  }, []);
+  useEffect(() => {
     if (step !== 4 || !creds) return;
-    return subscribeBridgeStatus(creds.bridgeUid, setStatus, () => {});
+    const timer = setInterval(() => setNow(Date.now()), 5_000);
+    const unsubscribe = subscribeBridgeStatus(creds.bridgeUid, setStatus, () => {});
+    return () => {
+      clearInterval(timer);
+      unsubscribe();
+    };
   }, [step, creds]);
+
+  const linkParsed = link.trim() ? parseEnrollLink(link) : null;
+  const onLink = (text: string) => {
+    setLink(text);
+    const parsed = parseEnrollLink(text);
+    if (parsed) setTak(parsed);
+  };
+  const takReady = !!(tak.host.trim() && tak.username.trim() && tak.password);
 
   const generate = async () => {
     setBusy(true);
@@ -230,8 +312,12 @@ function AddTakServerWizard({
         defaultHistoryMode: rotating?.defaultHistoryMode ?? 'summary',
         createdBy: adminUid,
       });
+      const backend = await backendEnv(placement);
       setCreds(c);
-      setBlock(envBlock(await backendEnv(), c));
+      setEnv({
+        block: envBlock(backend.vars, c, { ...tak, host: tak.host.trim(), username: tak.username.trim() }),
+        warnings: backend.warnings,
+      });
       setStep(3);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not create the bridge account.');
@@ -243,65 +329,164 @@ function AddTakServerWizard({
   return (
     <Modal isOpen onClose={onClose} size="2xl" scrollBehavior="inside" isDismissable={step !== 3}>
       <ModalContent>
-        <ModalHeader>{rotating ? `Rotate ${rotating.label}` : 'Add TAK server'} ({step} of 4)</ModalHeader>
+        <ModalHeader>
+          {rotating ? `Rotate ${rotating.label}` : 'Add TAK server'} ({step} of 4)
+        </ModalHeader>
         <ModalBody className="space-y-3 text-sm">
           {step === 1 && (
-            <Input label="Name for this TAK server" placeholder="e.g. Main TAK server" value={label} onValueChange={setLabel} autoFocus />
-          )}
-          {step === 2 && (
-            <ol className="list-decimal space-y-1 pl-5">
-              <li>In TAK Portal, create a user for the bridge, for example <code>crowdcad-bridge</code>.</li>
-              <li>Add it to the TAK groups your responders use. The bridge only sees positions from groups it belongs to.</li>
-              <li>Download the user&apos;s certificate bundle (<code>.p12</code>) and note its password. You will copy it to the TAK host.</li>
-            </ol>
-          )}
-          {step === 3 && creds && (
             <>
-              <p>
-                Copy this now: the password is shown only once and CrowdCAD does not keep it. On the TAK host, save it as{' '}
-                <code>.env</code> in the bridge folder and fill in the TAK section.
-              </p>
-              <Snippet symbol="" className="w-full" classNames={{ pre: 'whitespace-pre-wrap break-all text-xs' }}>
-                {block}
-              </Snippet>
-              <p>Then, on the TAK host:</p>
-              <Snippet symbol="" className="w-full" classNames={{ pre: 'whitespace-pre-wrap text-xs' }}>
-                {COMPOSE_SNIPPET}
-              </Snippet>
+              <Input label="Name for this TAK server" placeholder="e.g. Main TAK server" value={label} onValueChange={setLabel} autoFocus />
+              <p className="font-medium">Where will the bridge run?</p>
+              <div role="radiogroup" className="space-y-2">
+                <Choice checked={placement === 'tak-host'} onSelect={() => setPlacement('tak-host')} title="On the TAK Server machine (Docker)">
+                  For real use. The bridge runs next to TAK Server and starts again after a reboot. Needs Docker and git on that machine.
+                </Choice>
+                <Choice checked={placement === 'local'} onSelect={() => setPlacement('local')} title="On this computer (test)">
+                  For trying it out, including against a local CrowdCAD with emulators. Needs Node.js 22 or newer and git. The bridge stops
+                  when you close its window.
+                </Choice>
+              </div>
             </>
           )}
-          {step === 4 && (
-            <div className="flex items-center gap-2">
-              {status ? (
+
+          {step === 2 && (
+            <>
+              <p>The bridge signs in to TAK Server as its own TAK user, the same way a phone does. In TAK Portal:</p>
+              <ol className="list-decimal space-y-1 pl-5">
+                <li>
+                  Create a user for the bridge, for example <code>crowdcad-bridge</code>, and give it a password.
+                </li>
+                <li>
+                  Add it to the same TAK groups your responders&apos; phones use. The bridge only sees positions from groups it belongs to.
+                </li>
+                <li>
+                  Open the user&apos;s <strong>Enroll QR</strong>. If TAK Portal shows the link next to the code, copy it. Otherwise scan the
+                  code with a phone camera and copy the text it shows. Paste it below to fill in the fields, or type them in yourself.
+                </li>
+              </ol>
+              <Input
+                label="Enroll QR link (optional)"
+                placeholder="tak://com.atakmap.app/enroll?host=…&username=…&token=…"
+                value={link}
+                onValueChange={onLink}
+                description={link.trim() && !linkParsed ? "That doesn't look like an enrollment link." : undefined}
+              />
+              <Input
+                label="TAK Server address"
+                placeholder="takserver.example.org"
+                value={tak.host}
+                onValueChange={(host) => setTak((t) => ({ ...t, host }))}
+                description="The TAK Server itself, not the TAK Portal web address. Phones connect to it on port 8089."
+              />
+              <div className="flex gap-2">
+                <Input label="TAK username" value={tak.username} onValueChange={(username) => setTak((t) => ({ ...t, username }))} />
+                <Input
+                  label="TAK password or token"
+                  type="password"
+                  value={tak.password}
+                  onValueChange={(password) => setTak((t) => ({ ...t, password }))}
+                />
+              </div>
+              <p className="text-surface-faint">
+                These only go into the bridge&apos;s settings on the next screen. CrowdCAD does not save them. The user&apos;s real password
+                works better than an Enroll QR token: a token may only work once, and the bridge signs in again each time it renews its
+                certificate.
+              </p>
+            </>
+          )}
+
+          {step === 3 && creds && env && (
+            <>
+              <p>
+                <strong>Copy this now.</strong> The passwords are shown only once and CrowdCAD does not keep them. If you lose them, use
+                Rotate.
+              </p>
+              {env.warnings.map((w) => (
+                <p key={w} className="flex gap-2 text-status-red">
+                  <AlertTriangle className="h-4 w-4 shrink-0" /> {w}
+                </p>
+              ))}
+              {placement === 'tak-host' ? (
                 <>
-                  <CheckCircle2 className="h-5 w-5 text-status-green" /> Connected. {status.takConnected ? 'The bridge reached the TAK Server.' : 'The bridge is running but not connected to TAK yet; check its logs.'}
+                  <p>
+                    Sign in to the TAK Server machine (for example with <code>ssh</code>), go to the folder where the bridge should live,
+                    and paste all of this. It downloads the bridge, writes its settings to <code>.env</code>, and starts it:
+                  </p>
+                  <CopyBlock text={setupCommands('tak-host', env.block)} />
+                  <p className="text-surface-faint">
+                    The last command shows the bridge&apos;s log. Look for &quot;enrolled with TAK Server&quot; and &quot;connected to TAK
+                    Server&quot;. Press Ctrl+C to stop watching; the bridge keeps running.
+                  </p>
                 </>
               ) : (
-                <>Waiting for the bridge to report in… This appears once <code>docker compose up</code> is running.</>
+                <>
+                  <div className="flex gap-2">
+                    <Button size="sm" variant={os === 'windows' ? 'solid' : 'flat'} onPress={() => setOs('windows')}>
+                      Windows (PowerShell)
+                    </Button>
+                    <Button size="sm" variant={os === 'unix' ? 'solid' : 'flat'} onPress={() => setOs('unix')}>
+                      macOS or Linux
+                    </Button>
+                  </div>
+                  <p>
+                    Open {os === 'windows' ? 'PowerShell' : 'Terminal'} on this computer, go to the folder where the bridge should live
+                    (for example <code>cd {os === 'windows' ? '$HOME' : '~'}</code>), and paste all of this:
+                  </p>
+                  <CopyBlock text={setupCommands('local', env.block, os)} />
+                  <p className="text-surface-faint">
+                    Keep that window open while testing. Ctrl+C stops the bridge. To start it again later, run{' '}
+                    <code>node --env-file=.env dist/index.js</code> in the <code>tak-bridge</code> folder.
+                  </p>
+                </>
               )}
-            </div>
+              <details>
+                <summary className="cursor-pointer">Just the .env contents</summary>
+                <CopyBlock text={env.block} />
+              </details>
+            </>
           )}
-          {step === 4 && rotating && (
-            <p className="text-surface-faint">
-              Next: link events to the new server, then revoke {rotating.label}.
-            </p>
+
+          {step === 4 && (
+            <>
+              <ul className="space-y-3">
+                {setupChecklist(status, placement, now).map((item) => (
+                  <li key={item.label} className="flex gap-2">
+                    {CHECK_ICON[item.state]}
+                    <div>
+                      <p className="font-medium">{item.label}</p>
+                      {item.hint && <p className="text-surface-faint">{item.hint}</p>}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              <p className="text-surface-faint">
+                The bridge reports about once a minute, so allow a minute or two. You can close this at any time; the same status shows in
+                this TAK server&apos;s row.
+              </p>
+              {rotating && <p className="text-surface-faint">Next: link events to the new server, then revoke {rotating.label}.</p>}
+            </>
           )}
           {error && <p className="text-status-red">{error}</p>}
         </ModalBody>
         <ModalFooter>
+          {step === 2 && (
+            <Button variant="flat" onPress={() => setStep(1)}>
+              Back
+            </Button>
+          )}
           {step === 1 && (
             <Button className="bg-accent text-surface-light" isDisabled={!label.trim()} onPress={() => setStep(2)}>
               Next
             </Button>
           )}
           {step === 2 && (
-            <Button className="bg-accent text-surface-light" isLoading={busy} onPress={generate}>
-              Create bridge account
+            <Button className="bg-accent text-surface-light" isDisabled={!takReady} isLoading={busy} onPress={generate}>
+              Create bridge settings
             </Button>
           )}
           {step === 3 && (
             <Button className="bg-accent text-surface-light" onPress={() => setStep(4)}>
-              I&apos;ve copied it
+              I&apos;ve copied it and started the bridge
             </Button>
           )}
           {step === 4 && <Button onPress={onClose}>Done</Button>}

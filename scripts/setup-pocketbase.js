@@ -292,6 +292,13 @@ const TAK_BODY_HISTORY_MODE =
   "(@request.body.historyMode:isset = false || @request.body.historyMode = 'off' || " +
   "@request.body.historyMode = 'summary' || @request.body.historyMode = 'detailed')";
 
+// Bridge status details shown in the TAK setup checklist (data contract v0.4).
+const TAK_BRIDGE_STATUS_DETAIL_FIELDS = [
+  { name: 'devicesSeen', type: 'number' },
+  { name: 'lastPositionAt', type: 'number' },
+  { name: 'takError', type: 'text' },
+];
+
 async function ensureTakCollections(headers) {
   console.log('\nTAK collections (optional add-on):');
   const usersCollection = await (await pbFetch('/api/collections/users', { headers })).json();
@@ -347,6 +354,7 @@ async function ensureTakCollections(headers) {
       { name: 'takConnected', type: 'bool' },
       { name: 'version', type: 'text' },
       { name: 'linkedEventCount', type: 'number' },
+      ...TAK_BRIDGE_STATUS_DETAIL_FIELDS,
     ],
     {
       listRule: `bridge = @request.auth.id || ${TAK_ADMIN} || ${takAllowedUser('bridge')}`,
@@ -357,6 +365,8 @@ async function ensureTakCollections(headers) {
     },
     ['CREATE UNIQUE INDEX idx_tak_bridge_status ON tak_bridge_status (bridge)'],
   );
+  // Added after the collection was first released; ensureCollection skips existing collections.
+  for (const field of TAK_BRIDGE_STATUS_DETAIL_FIELDS) await ensureField(headers, 'tak_bridge_status', field);
 
   // Linking: the owner may set `bridge` only to a bridge they're allowed to
   // use. An admin may only change `closed` (the end-event flow).

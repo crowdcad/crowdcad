@@ -27,6 +27,12 @@ export interface TakBridgeStatus {
   takConnected: boolean;
   version?: string;
   linkedEventCount?: number;
+  /** Distinct TAK devices the bridge has seen since it started (bridge 0.2+). */
+  devicesSeen?: number;
+  /** When the bridge last received a position, or 0. */
+  lastPositionAt?: number;
+  /** The bridge's last TAK connection problem, in plain words. */
+  takError?: string;
 }
 
 export interface TakEventConfig {
@@ -176,6 +182,9 @@ function toBridgeStatus(d: Rec): TakBridgeStatus {
     takConnected: d.takConnected === true,
     version: typeof d.version === 'string' ? d.version : undefined,
     linkedEventCount: num(d.linkedEventCount),
+    devicesSeen: typeof d.devicesSeen === 'number' ? d.devicesSeen : undefined,
+    lastPositionAt: typeof d.lastPositionAt === 'number' ? d.lastPositionAt : undefined,
+    takError: typeof d.takError === 'string' && d.takError ? d.takError : undefined,
   };
 }
 
