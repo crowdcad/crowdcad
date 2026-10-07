@@ -1,8 +1,7 @@
 'use client';
-import { useEffect, useMemo, useState, useRef, useCallback, use } from 'react';
+import { useEffect, useMemo, useState, useRef, useCallback, use, lazy, Suspense } from 'react';
 import PostingScheduleModal from '@/components/modals/event/postingschedulemodal';
 import VenueMapTab, { type TeamFocusRequest, type SupervisorFocusRequest, type EquipmentFocusRequest } from '@/components/dispatch/venuemaptab';
-import dynamic from 'next/dynamic';
 import type { MapOverlay } from '@/components/modals/event/venuemapmodal';
 import EventSummaryModal from '@/components/modals/event/eventsummarymodal';
 import QuickCallModal from "@/components/modals/event/quickcallmodal";
@@ -62,10 +61,11 @@ import { newTeamId } from '@/lib/teamId';
 
 // TAK live tracking (optional, in development): loaded only for TAK events,
 // and compiled out entirely unless NEXT_PUBLIC_TAK is exactly "on".
+// React.lazy rather than next/dynamic: with the flag off this adds nothing to the page.
 const TakLiveMarkers =
-  process.env.NEXT_PUBLIC_TAK === 'on' ? dynamic(() => import('@/features/tak').then((m) => m.TakLiveMarkers), { ssr: false }) : null;
+  process.env.NEXT_PUBLIC_TAK === 'on' ? lazy(() => import('@/features/tak').then((m) => ({ default: m.TakLiveMarkers }))) : null;
 const TakEventPanel =
-  process.env.NEXT_PUBLIC_TAK === 'on' ? dynamic(() => import('@/features/tak').then((m) => m.TakEventPanel), { ssr: false }) : null;
+  process.env.NEXT_PUBLIC_TAK === 'on' ? lazy(() => import('@/features/tak').then((m) => ({ default: m.TakEventPanel }))) : null;
 
 interface DispatchRoutePageProps {
   params: Promise<{ eventId: string }>;
@@ -3198,17 +3198,21 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     event.mapMode === 'tak' && !isLiteMode && user && eventId
       ? {
           markers: (ctx) => (
-            <TakLiveMarkers
-              eventId={eventId}
-              staff={event.staff || []}
-              supervisor={event.supervisor || []}
-              layer={ctx.layer}
-              rect={ctx.rect}
-              scale={ctx.scale}
-            />
+            <Suspense fallback={null}>
+              <TakLiveMarkers
+                eventId={eventId}
+                staff={event.staff || []}
+                supervisor={event.supervisor || []}
+                layer={ctx.layer}
+                rect={ctx.rect}
+                scale={ctx.scale}
+              />
+            </Suspense>
           ),
           chrome: (
-            <TakEventPanel eventId={eventId} event={event} uid={user.uid} isOwner={event.userId === user.uid} layers={venueLayers} />
+            <Suspense fallback={null}>
+              <TakEventPanel eventId={eventId} event={event} uid={user.uid} isOwner={event.userId === user.uid} layers={venueLayers} />
+            </Suspense>
           ),
         }
       : undefined;

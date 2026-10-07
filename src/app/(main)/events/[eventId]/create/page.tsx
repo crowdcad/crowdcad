@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter, useParams } from 'next/navigation';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { Event, Venue, Staff, Supervisor, Post, Equipment, EventEquipment } from '@/app/types';
 import { authService, dbService } from '@/lib/services';
 import { Button, Card, ScrollShadow } from '@heroui/react';
@@ -28,12 +28,11 @@ import { VenueMapWithPosts } from '@/components/modals/event/venuemapmodal';
 import { MAP_CHECKER_BG } from '@/lib/mapStyles';
 import LoadingScreen from '@/components/ui/loading-screen';
 import { newTeamId } from '@/lib/teamId';
-import dynamic from 'next/dynamic';
 
 // TAK live tracking (optional, in development): the map-mode choice is
 // compiled out entirely unless NEXT_PUBLIC_TAK is exactly "on".
 const TakMapModeChoice =
-  process.env.NEXT_PUBLIC_TAK === 'on' ? dynamic(() => import('@/features/tak').then((m) => m.TakMapModeChoice), { ssr: false }) : null;
+  process.env.NEXT_PUBLIC_TAK === 'on' ? lazy(() => import('@/features/tak').then((m) => ({ default: m.TakMapModeChoice }))) : null;
 
 // Helper to get post name regardless of type
 const getPostName = (post: Post): string => {
@@ -526,6 +525,7 @@ export default function EventCreation() {
         inputClassNames={inputClassNames}
       />
       {TakMapModeChoice && eventId && authService.currentUser && (
+        <Suspense fallback={null}>
         <div className="mt-4">
           <TakMapModeChoice
             eventId={eventId}
@@ -535,6 +535,7 @@ export default function EventCreation() {
             layers={eventData.venue?.layers ?? []}
           />
         </div>
+        </Suspense>
       )}
     </div>
   );
