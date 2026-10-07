@@ -198,7 +198,7 @@ The in-app settings page is `/profile`. Any signed-in user can open it, but its 
 ### D30. A CoT simulator stands in for TAK hardware
 - **What it is.** A seeded, deterministic simulator in `tak-bridge` (`src/sim/`). Synthetic devices dwell at posts and walk between them.
 - **Two ways to run it.** It runs either on a virtual clock (an 8-hour, 20-device event in well under a second), or as a TLS server replaying CoT in real or compressed time.
-- **Uses.** The P1 and P2 tests and the P5 budget tests. Real-device checks are listed under "Needs Evan" in plan.md, and never block other work.
+- **Uses.** The P1 and P2 tests and the P5 budget tests. Real-device checks are listed under "Maintainer actions" in plan.md, and never block other work.
 
 ### D31. Rules and adapter tests live in `tak-bridge`
 - **Where.** The Firestore rules tests (`@firebase/rules-unit-testing`), the PocketBase rules tests, and the adapter end-to-end tests are in `crowdcad/tak-bridge`.
@@ -313,3 +313,28 @@ The same end-to-end scenario runs against the Firebase emulator and a local Pock
 - **Placement.** The admin chooses where the bridge runs: the TAK Server machine (Docker) or this computer (a test with Node). It defaults to this computer when CrowdCAD itself runs locally or on the Firebase emulators, and warns when the chosen placement cannot reach the backend.
 - **Output.** One paste-ready script per placement (and per OS for local runs) that clones the bridge, writes a complete `.env` (TAK sign-in, backend settings including emulator hosts, bridge account) and starts it. The TAK password goes only into that one-time block; CrowdCAD never stores it.
 - **Checklist.** The last step shows a live checklist from the bridge's status (signed in, connected to TAK, receiving positions), with the bridge's own plain-words error when TAK fails (data contract 0.4.0).
+
+### D55. Basemaps and place search use open data and are configurable
+- **Library.** MapLibre GL JS (BSD-3-Clause), loaded only with the TAK module. Its worker is bundled as an asset and passed with `setWorkerUrl`, since bundlers don't follow its own lookup.
+- **Default styles.** OpenFreeMap (Positron and others): no key and no usage limits, with OpenStreetMap attribution. CARTO's hosted Positron tiles need a commercial license for commercial use, so they are not the default.
+- **Satellite and other styles.** Not built in, since good imagery needs a provider key and license. A deployment adds them with `NEXT_PUBLIC_TAK_BASEMAPS` (a JSON list of style URLs or raster tiles with attribution).
+- **Search.** Photon (OpenStreetMap data) by default, run only on submit. `NEXT_PUBLIC_TAK_GEOCODER_URL` points elsewhere or turns it off. Google is not used: its terms bar showing its results on another map and limit storing coordinates, and control points are stored.
+- **Privacy and offline use.** `off` for either setting stops requests to outside map services. Without a basemap, alignment works as before, with typed coordinates.
+- **Preferences.** Basemap choice and image opacity are per viewer, in browser storage. They change nothing in event data.
+
+### D56. A basemap under the dispatch map (touchpoint j)
+- **Approved** 2026-10-07 by the maintainer.
+- **How it is drawn.** The image stays upright, so the basemap is rotated and scaled into the image's frame from the alignment. MapLibre takes the rotation as a bearing, so labels stay upright, and a CSS matrix applies the rest (scale and any shear). It is re-rendered at zoom steps so it stays sharp.
+- **Off by default.** Each viewer picks a basemap and the image's opacity in the TAK panel. A layer without a current alignment shows no basemap.
+
+### D57. Location history moves to the event summary page (touchpoint k)
+- **Supersedes** the placement in D49. The dispatch page closes when an event ends, and history is most useful afterwards.
+- **What it shows.** For the event owner only: the heat map on a basemap with the aligned event map (selectable, with opacity), and per-team tracked time, distance, coverage gaps and time on post. The map zooms with Ctrl or Cmd plus scroll, so the page still scrolls.
+- **The dispatch map** no longer shows the heat map; the TAK panel points to the summary page.
+
+### D58. A segment's last position is credited until the segment ends
+- **The finding.** Each position was credited with the time until the next one, so a segment's last position earned nothing. A one-minute test with a phone reporting every 30 s, and a device reassigned once, produced two single-position segments and an empty heat map.
+- **The change.** When a segment ends (event close, reassignment, history turned off), its last position is credited until then, capped at the same 60 s as other gaps. `endedAt` is the end of that credited time.
+
+### D59. Basemap-only events are a separate core decision
+- **Proposed** in plan.md P8, not started. Posts on a basemap layer would need real coordinates instead of image percent, which changes core's data model, venue management and both backends. That is outside the TAK touchpoints, so it waits for a maintainer decision.

@@ -1,6 +1,6 @@
 # TAK integration: data contract
 
-**Contract version: 0.4.0 (draft).** TAK support is in development and is an optional add-on. Nothing here is released, and the contract may change until 1.0.0.
+**Contract version: 0.4.1 (draft).** TAK support is in development and is an optional add-on. Nothing here is released, and the contract may change until 1.0.0.
 
 This document defines every record the TAK integration adds, who writes each one, and what the access rules enforce. It covers both backends: Firebase (the default) and PocketBase (opt-in with `NEXT_PUBLIC_BACKEND=pocketbase`). The bridge reaches both through one adapter interface, so behavior is the same on either.
 
@@ -194,6 +194,7 @@ PocketBase collections are flat, so each one carries `event` and/or `bridge` as 
 
 ## Changelog
 
+- 0.4.1 (2026-10-07): behavior note, no schema change. A history segment's last position is credited until the segment ends, capped at 60 s, and `endedAt` is the end of that credited time (D58).
 - 0.4.0 (2026-10-07): additive. Bridge status gains `devicesSeen` (distinct TAK devices since the bridge started), `lastPositionAt` (ms, 0 if none) and `takError` (the last TAK connection problem in plain words, empty when connected; never secrets). PocketBase `tak_bridge_status` gains the same fields; the setup script adds them to existing installs. Readers treat them as optional, since older bridges do not write them.
 - 0.3.0 (2026-10-07):
   - Added `takCallState` / `tak_call_state`: on-call opaque team ids for Detailed history.

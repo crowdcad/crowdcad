@@ -9,6 +9,8 @@ Beginner-friendly versions of both guides, with separate Mac and Windows steps, 
 
 TAK live tracking is an optional add-on, in development and off by default. It is compiled in only when `NEXT_PUBLIC_TAK` is exactly `on`; missing or any other value compiles it out. See [`tak-integration/plan.md`](tak-integration/plan.md).
 
+With TAK on, `NEXT_PUBLIC_TAK_BASEMAPS` and `NEXT_PUBLIC_TAK_GEOCODER_URL` choose the basemaps and place search used for aligning maps and viewing history. Both default to open OpenStreetMap-based services and accept `off`, which stops requests to outside map services. See `.env.example` and decision D55.
+
 ## Choosing a backend
 
 | | **Firebase** | **PocketBase** |

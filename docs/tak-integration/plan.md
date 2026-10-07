@@ -11,10 +11,10 @@ Related: [data-contract.md](data-contract.md) (collections, fields, rules), [dec
 Updated at the end of each phase.
 
 - **P0 Docs and scaffolding: done.** Plan, data contract and decision log are merged. The `tak-bridge` TypeScript scaffold, Docker image and CI are green.
-- **P1 CoT inbound: built, waiting on the real-device check.**
+- **P1 CoT inbound: done.**
   - This is in `crowdcad/tak-bridge` `integration/tak`: the TLS identity, from certificate enrollment on 8446 (D52) or a client `.p12`; `CotStreamSource` on 8089 (pings, idle detection, backoff reconnect); CoT framing and parsing (`a-*` only); log-only mode (`CROWDCAD_BACKEND=none`); and a CoT simulator with a throwaway dev-certificate helper.
   - TLS end-to-end tests against the simulator all pass.
-  - **Acceptance:** the real-device check is under [Needs Evan](#needs-evan). Other work continues.
+  - **Acceptance:** met on 2026-10-07 with a real phone and a real TAK Server: the bridge enrolled on 8446, connected on 8089, and received positions from a phone in the bridge user's TAK group.
 - **P2 Backend writes and rules: done.** Acceptance is met for both backends.
   - **Bridge** (`crowdcad/tak-bridge`): a backend-agnostic `Bridge` service, plus Firebase (client SDK) and PocketBase adapters. It handles sign-in as the bridge account; live docs on more than 10 m of movement or a 60 s heartbeat; bridge and event status every 60 s; a startup sweep of stale live docs; and live-doc cleanup at close.
   - **Core rules** (touchpoint f): the TAK block in `firestore.rules` and the TAK collections and rules in `scripts/setup-pocketbase.js`.
@@ -42,7 +42,7 @@ Updated at the end of each phase.
   - **Shared criteria.** The existing map tests (core e2e) and rules tests pass unchanged.
   - **Deferred to P4:** wiring "Align map" into the event TAK panel and event creation.
 
-- **P4 CrowdCAD TAK UI: built. Waiting on the end-to-end check with a real device.**
+- **P4 CrowdCAD TAK UI: built. The real-device check mostly passed.**
   - **Touchpoints** (a), (b), (c), (d), (e) and (i) are wired, each as a lazy import gated inline on `NEXT_PUBLIC_TAK === 'on'`:
     - (a) the map overlay slot (markers in the zoomed map, plus a TAK panel as map chrome);
     - (b) the "Map: Standard / TAK live tracking" choice in the event builder;
@@ -70,8 +70,9 @@ Updated at the end of each phase.
     - the event builder offering TAK to an allowed user.
 
     It found and fixed two defects: bridge creation ignored the Auth emulator, and the map-mode radio selection was invisible in the dark theme.
+  - **Real-device check (2026-10-07):** a phone's position appeared on the aligned dispatch map of a live TAK event, and the device auto-linked to the team named after its callsign. The test also showed that a segment's last position earned no time, so a short test left an empty heat map; the bridge now credits it (D58).
   - **Not yet done:**
-    - A real device, end to end (see [Needs Evan](#needs-evan)).
+    - Confirm live positions clear within a minute of ending the event, and the history view on the summary page (see [Maintainer actions](#maintainer-actions)).
     - Hosted bridge creation stays open (D24).
 
 - **P5 History and end-of-event view: done.** Acceptance is met.
@@ -83,7 +84,7 @@ Updated at the end of each phase.
     - segments ended and flushed at close, before live docs are cleared.
   - **Core:**
     - `takCallState`, published by a headless `TakEventAgent` (D45, D46). The agent also runs auto-linking and the team-id backfill on any tab.
-    - An owner-only history view in the TAK panel: a heat map on aligned maps, plus per-team time tracked, distance, time on post and coverage gaps.
+    - An owner-only history view: a heat map plus per-team time tracked, distance, time on post and coverage gaps. It was first in the TAK panel (D49) and is now on the event summary page (P7, D57).
   - **Budgets for a simulated 8-hour, 20-device event:**
 
     | Measure | Budget | Measured |
@@ -99,15 +100,27 @@ Updated at the end of each phase.
     - Unit: 67 bridge tests and 51 core tests.
     - Browser smoke: 7 of 7 steps, now including the history view and heat map, with no console errors.
 
-- **P6 Packaging: done.** The first release is under [Needs Evan](#needs-evan).
+- **P6 Packaging: done.** The first release is under [Maintainer actions](#maintainer-actions).
   - **Image release workflow** in `crowdcad/tak-bridge`. A `vX.Y.Z` tag runs the checks, then builds `linux/amd64` and `linux/arm64` images and pushes `ghcr.io/crowdcad/tak-bridge:X.Y.Z` and `:X.Y`. No tag has been pushed yet, so nothing is published.
   - **`docker-compose.yml`** uses the published image, which can be pinned with `TAK_BRIDGE_VERSION`. It still builds from source with `--build`.
   - **The infra-TAK setup guide** (`docs/setup-infra-tak.md` in `tak-bridge`) covers setup, operations, troubleshooting, the optional TTL backstop, and what is stored.
   - **PocketBase parity check.** One scenario (sign in, link, two minutes of positions, close) runs unchanged on the Firebase emulator and a local PocketBase, and both produce the same expected result. It is green in CI.
 
-**Overall:** P0 to P6 are built. The open acceptance items need real hardware (P1, P4) and a first release (P6). See below.
+- **P7 Basemaps and map setup: in progress (early implementation).** See [P7](#p7-basemaps-and-map-setup).
+  - **Done:**
+    - A basemap module: MapLibre GL JS (BSD-3-Clause) with OpenFreeMap styles (Light, Streets, Bright, Dark, Dark blue) and "No basemap", plus deployment-added styles or raster tiles such as satellite imagery (D55).
+    - "Align map" shows the image and a basemap side by side. Each control point is a click on the image and a click on the basemap, in either order; typed coordinates and "Use my location" still work. Place search (Photon, OpenStreetMap data) moves the basemap. Once 3 points exist, the image is previewed on the basemap with an opacity slider. Points bunched in one part of the image get a warning.
+    - The basemap choice is per viewer, remembered in the browser.
+    - The dispatch map can show a basemap under the event map (touchpoint j, D56), off by default, with an image-opacity slider in the TAK panel.
+    - The history view moved to the event summary page (touchpoint k, D57): heat map on a basemap with the aligned event map, and per-team stats. The dispatch map no longer shows the heat map.
+    - Bridge: a segment's last position is credited until the segment ends, capped at 60 s (D58).
+  - **Tests:** 19 new core unit tests (basemap frame geometry, including rotation, shear and zoom; basemap options; place search), 83 TAK unit tests in all. 94 bridge unit tests and 33 emulator tests pass.
+  - **Checked in a browser** against the emulators: the summary heat map and image overlay, the dispatch underlay lining up with the summary view, and the align dialog with search.
+  - **Not yet done:** the underlay fills the image's box rather than the whole map pane; touch gestures for the align basemap on phones; P8.
 
-## Needs Evan
+**Overall:** P0 to P6 are built, and P1 is verified on real hardware. The open items are the rest of the P4 check and a first release (P6). See below.
+
+## Maintainer actions
 
 ### P6: publish the first bridge image
 When you're ready to publish, tag a release on `crowdcad/tak-bridge`. Tag a commit on `integration/tak` for a preview, or `main` after merging:
@@ -134,8 +147,9 @@ Run these yourself. The TAK password and the bridge's certificate stay on your m
 5. **P1 check.** The checklist should reach **Connected to the TAK Server**, then **Receiving positions** once the phone reports. For the log-only variant, set `CROWDCAD_BACKEND=none` in the bridge's `.env`: each phone report should appear within 5 s as a `"msg":"position"` line.
 6. **P4 check.**
    1. Create an event with **Map: TAK live tracking** and the bridge preselected, add a team whose name matches the phone's callsign, and align the map with 4 or more points.
-   2. On the dispatch Map tab, the device should auto-link to the team and appear on the aligned map.
-   3. End the event. Within a minute, its live positions should be gone.
+   2. On the dispatch Map tab, the device should auto-link to the team and appear on the aligned map. **Passed 2026-10-07.**
+   3. Walk around for at least 5 minutes, then end the event. Within a minute, its live positions should be gone.
+   4. On the event summary page, "Location history (TAK)" should show the heat map along the route and the team's tracked time.
 7. **Report** pass or fail per step, plus any error text from the checklist or console. You don't need to share coordinates.
 
 The full guide, including troubleshooting, is `docs/setup-infra-tak.md` in `crowdcad/tak-bridge`.
@@ -189,6 +203,8 @@ These are every existing core file the TAK work changes. **Anything not on this 
 | e | Team ids | `src/app/types.ts`, plus the 9 creation sites below and a new `src/lib/teamId.ts` | Optional `id` on `Staff` and `Supervisor`, generated at creation from now on. Core code outside TAK never reads it |
 | f | Rules | `firestore.rules`, `scripts/setup-pocketbase.js`, `tests/e2e/pb_migrations/*` | One isolated, commented block of TAK rules; `!isBridge()` on event reads; `mapMode` added to the protected event fields |
 | g | Import boundary (requested) | `eslint.config.mjs` | The `no-restricted-imports` rule above |
+| j | Map underlay slot (approved 2026-10-07) | `src/components/modals/event/venuemapmodal.tsx`, `src/app/(main)/events/[eventId]/dispatch/page.tsx` | `MapOverlay` gains an optional `underlay` render prop, drawn beneath the image inside the transformed map container with `{ layer, rect, container, scale, setImageOpacity }`. Without it the image stays fully opaque and nothing renders differently. The dispatch page supplies it with the TAK overlay |
+| k | Event summary history (approved 2026-10-07) | `src/app/(main)/events/[eventId]/summary/page.tsx` | One lazily loaded `TakEventSummary` for events with `mapMode === 'tak'`, gated inline on `NEXT_PUBLIC_TAK === 'on'`. It renders nothing for anyone but the event owner |
 
 **Team-id creation sites**, each to call `newTeamId()`:
 - `create/page.tsx:310` (team) and `:334` (supervisor)
@@ -383,6 +399,33 @@ Each phase ends with a PR into `integration/tak` that a maintainer approves. `in
 - A GHCR image (`ghcr.io/crowdcad/tak-bridge`) built on version tags.
 - An infra-TAK setup guide.
 - A PocketBase parity check.
+
+### P7: Basemaps and map setup
+Make alignment quicker and easier to check, and give dispatchers real-world context under the event map.
+
+- **Basemap module** (inside `src/features/tak/`): MapLibre GL JS, loaded only with the TAK module. Styles from OpenFreeMap by default; `NEXT_PUBLIC_TAK_BASEMAPS` adds or replaces styles (a style URL or raster tiles with attribution), or `off` removes outside basemaps entirely (D55).
+- **Align map:** image and basemap side by side, point pairs by clicking both, place search (`NEXT_PUBLIC_TAK_GEOCODER_URL`, Photon by default, `off` to disable), and a live overlay preview with opacity. Typed coordinates and "Use my location" stay.
+- **Dispatch underlay** (touchpoint j): an optional basemap under the event map, in the image's frame, per viewer, with image opacity.
+- **History on the summary page** (touchpoint k): heat map, event map overlay and per-team stats for the owner, after the event ends.
+
+**Accept:**
+- The basemap drawn under a rotated or sheared alignment matches `latLonToPercent` to within a pixel (unit tests).
+- With TAK off, nothing changes: the footprint check passes and the summary and dispatch pages render as before.
+- With `NEXT_PUBLIC_TAK_BASEMAPS=off` and `NEXT_PUBLIC_TAK_GEOCODER_URL=off`, the app makes no requests to outside map services, and alignment works with typed coordinates.
+- The shared criteria above hold.
+
+**Next steps:**
+- The underlay fills the whole map pane, not only the image's box (needs `container` to be the visible pane in touchpoint j).
+- A per-event default basemap chosen by the owner (would add a field to `takConfig`; a data contract change, so it needs approval).
+- Tile caching or a self-hosted tile option documented for events with poor connectivity.
+
+### P8: Basemap-only events (proposed, needs approval)
+Events that use a basemap instead of an uploaded map image. This changes core, not just the TAK module, so it is a separate decision (D59).
+
+- **Shape (proposed):** a map layer gains an optional `basemap` (style id plus a default view) as an alternative to `mapUrl`. Posts on such a layer store `lat`/`lon` instead of `x`/`y` percent.
+- **Affected core areas:** venue management (layer editor, post placement), event creation, the dispatch map, the zone breakdown on the summary page, and both backends' schema and rules.
+- **Interim option inside TAK only:** a TAK event's layer could use a basemap snapshot as its image with an automatic alignment. This needs no schema change but stores a static picture.
+- **Not started.** It needs a maintainer decision on the data model first.
 
 ### Later
 - v1.1: posts as static CoT markers over 8089.
