@@ -25,6 +25,9 @@ export interface TakMapModeChoiceProps {
   layers: Layer[];
 }
 
+// HeroUI's primary is near-black in the dark theme; show the selection in the accent colour, as elsewhere in core.
+const RADIO_CLASSES = { control: 'bg-accent', wrapper: 'group-data-[selected=true]:border-accent' };
+
 const HISTORY_LABELS: Record<HistoryMode, string> = {
   off: 'Off: live positions only, nothing kept',
   summary: 'Summary: 5-minute summaries and a heat map (default)',
@@ -93,8 +96,10 @@ export default function TakMapModeChoice({ eventId, uid, mapMode, onMapModeChang
         value={tak ? 'tak' : 'standard'}
         onValueChange={(v) => void chooseMode(v as 'standard' | 'tak')}
       >
-        <Radio value="standard">Standard</Radio>
-        <Radio value="tak" isDisabled={noBridges && !tak}>
+        <Radio value="standard" classNames={RADIO_CLASSES}>
+          Standard
+        </Radio>
+        <Radio value="tak" isDisabled={noBridges && !tak} classNames={RADIO_CLASSES}>
           TAK live tracking
         </Radio>
       </RadioGroup>
