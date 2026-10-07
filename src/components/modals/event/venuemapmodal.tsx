@@ -686,6 +686,19 @@ export interface MapOverlay {
   markers?: (ctx: { layer: Layer | undefined; layerIndex: number; rect: { x: number; y: number; width: number; height: number }; scale: number }) => React.ReactNode;
   /** Rendered above the map, unscaled (panels, badges). */
   chrome?: React.ReactNode;
+  /**
+   * Rendered beneath the map image, inside the zoomed/panned map (e.g. a basemap). `container` is the map box in
+   * unscaled pixels. `setImageOpacity` lets it fade the image so what is beneath shows through; the image returns to
+   * fully opaque when no underlay is given.
+   */
+  underlay?: (ctx: {
+    layer: Layer | undefined;
+    layerIndex: number;
+    rect: { x: number; y: number; width: number; height: number };
+    container: { width: number; height: number };
+    scale: number;
+    setImageOpacity: (opacity: number) => void;
+  }) => React.ReactNode;
 }
 
 export interface VenueMapWithPostsProps {
@@ -766,6 +779,8 @@ export function VenueMapWithPosts({
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   const [naturalSize, setNaturalSize] = useState({ width: 0, height: 0 });
   const [imageLoaded, setImageLoaded] = useState(false);
+  const [underlayImageOpacity, setUnderlayImageOpacity] = useState(1);
+  const imageOpacity = overlay?.underlay ? underlayImageOpacity : 1;
   const containerRef = useRef<HTMLDivElement | null>(null);
   const imgContainerRef = useRef<HTMLDivElement | null>(null);
 
@@ -914,13 +929,26 @@ export function VenueMapWithPosts({
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
       >
+        {/* An add-on underlay (see MapOverlay) sits beneath the image: z-index -1 within this transformed container. */}
+        {overlay?.underlay && shouldRenderMarkers && (
+          <div style={{ position: 'absolute', inset: 0, zIndex: -1, pointerEvents: 'none' }}>
+            {overlay.underlay({
+              layer: layers[currentLayer],
+              layerIndex: currentLayer,
+              rect,
+              container: containerSize,
+              scale,
+              setImageOpacity: setUnderlayImageOpacity,
+            })}
+          </div>
+        )}
         <Image
           ref={imgRef}
           src={mapUrl}
           alt="Venue Map"
           width={1200}
           height={800}
-          style={{ width: '100%', height: '100%', objectFit: 'contain', userSelect: 'none' }}
+          style={{ width: '100%', height: '100%', objectFit: 'contain', userSelect: 'none', opacity: imageOpacity }}
           unoptimized
           onLoad={handleImageLoad}
           draggable={false}

@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import type { Layer, Staff, Supervisor } from '@/app/types';
-import { useTakEvent, useTakView } from '../data/hub';
+import { useTakEvent } from '../data/hub';
 import { alignmentMatches } from '../data/alignmentStore';
 import { latLonToPercent } from '../lib/affine';
 import { isStale, teamPositions } from '../lib/linking';
@@ -25,7 +25,6 @@ export interface TakLiveMarkersProps {
 
 export default function TakLiveMarkers({ eventId, staff, supervisor, layer, rect, scale }: TakLiveMarkersProps) {
   const tak = useTakEvent(eventId);
-  const view = useTakView(eventId);
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 15_000);
@@ -37,32 +36,9 @@ export default function TakLiveMarkers({ eventId, staff, supervisor, layer, rect
   const alignment = layer ? tak.alignments[layer.id] : undefined;
   if (!layer || !alignmentMatches(alignment, layer.mapUrl)) return null;
   const showLive = !!tak.config?.enabled;
-  const heat = view.heatmap;
-  const maxSecs = heat && heat.length ? Math.max(...heat.map((c) => c.secs)) : 0;
 
   return (
     <div className="pointer-events-none absolute inset-0" data-tak-module={TAK_MODULE_MARKER}>
-      {heat?.map((c, i) => {
-        const pct = latLonToPercent(alignment!, c);
-        if (pct.x < 0 || pct.x > 100 || pct.y < 0 || pct.y > 100) return null;
-        // Size each 5 m cell from the alignment: project a point 5 m east of the cell center.
-        const east = latLonToPercent(alignment!, { lat: c.lat, lon: c.lon + 5 / (111_195 * Math.cos((c.lat * Math.PI) / 180)) });
-        const sizePx = Math.max(3, Math.hypot(((east.x - pct.x) / 100) * rect.width, ((east.y - pct.y) / 100) * rect.height));
-        return (
-          <span
-            key={i}
-            className="absolute rounded-sm bg-status-red"
-            style={{
-              left: rect.x + (pct.x / 100) * rect.width,
-              top: rect.y + (pct.y / 100) * rect.height,
-              width: sizePx,
-              height: sizePx,
-              transform: 'translate(-50%, -50%)',
-              opacity: 0.15 + 0.7 * Math.sqrt(c.secs / maxSecs),
-            }}
-          />
-        );
-      })}
       {showLive && positions.map(({ team, position, deviceCount }) => {
         const pct = latLonToPercent(alignment!, position);
         if (pct.x < 0 || pct.x > 100 || pct.y < 0 || pct.y > 100) return null;

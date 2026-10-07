@@ -156,7 +156,7 @@ export default function TakMapModeChoice({ eventId, uid, mapMode, onMapModeChang
         </div>
       )}
 
-      <Modal isOpen={!!aligning} onClose={() => setAligning(null)} size="4xl" scrollBehavior="inside">
+      <Modal isOpen={!!aligning} onClose={() => setAligning(null)} size="5xl" scrollBehavior="inside">
         <ModalContent>
           <ModalBody className="py-5">
             {aligning && (

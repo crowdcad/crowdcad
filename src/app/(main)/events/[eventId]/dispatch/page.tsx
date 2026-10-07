@@ -68,6 +68,8 @@ const TakEventPanel =
   process.env.NEXT_PUBLIC_TAK === 'on' ? lazy(() => import('@/features/tak').then((m) => ({ default: m.TakEventPanel }))) : null;
 const TakEventAgent =
   process.env.NEXT_PUBLIC_TAK === 'on' ? lazy(() => import('@/features/tak').then((m) => ({ default: m.TakEventAgent }))) : null;
+const TakBasemapUnderlay =
+  process.env.NEXT_PUBLIC_TAK === 'on' ? lazy(() => import('@/features/tak').then((m) => ({ default: m.TakBasemapUnderlay }))) : null;
 
 interface DispatchRoutePageProps {
   params: Promise<{ eventId: string }>;
@@ -3196,9 +3198,21 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
   // TAK live tracking (optional): only TAK events get the map overlay, and
   // only builds with NEXT_PUBLIC_TAK=on contain it at all.
   const takOverlay: MapOverlay | undefined =
-    process.env.NEXT_PUBLIC_TAK === 'on' && TakLiveMarkers && TakEventPanel &&
+    process.env.NEXT_PUBLIC_TAK === 'on' && TakLiveMarkers && TakEventPanel && TakBasemapUnderlay &&
     event.mapMode === 'tak' && !isLiteMode && user && eventId
       ? {
+          underlay: (ctx) => (
+            <Suspense fallback={null}>
+              <TakBasemapUnderlay
+                eventId={eventId}
+                layer={ctx.layer}
+                rect={ctx.rect}
+                container={ctx.container}
+                scale={ctx.scale}
+                setImageOpacity={ctx.setImageOpacity}
+              />
+            </Suspense>
+          ),
           markers: (ctx) => (
             <Suspense fallback={null}>
               <TakLiveMarkers

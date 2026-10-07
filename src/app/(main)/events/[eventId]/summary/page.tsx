@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo } from 'react';
+import { lazy, Suspense, useEffect, useState, useMemo } from 'react';
 import { formatEventDate } from '@/lib/eventDate';
 import { useParams } from 'next/navigation';
 import { dbService } from '@/lib/services';
@@ -13,6 +13,11 @@ import { formatLogTimestampForCsv } from '@/lib/csvFormat';
 import { GRID_WRAPPER, GRID_CELL } from './summaryGrid';
 import LoadingScreen from '@/components/ui/loading-screen';
 import ExportLogModal from '@/components/modals/event/exportlogmodal';
+
+// TAK location history (optional, in development): loaded only for TAK events,
+// and compiled out entirely unless NEXT_PUBLIC_TAK is exactly "on".
+const TakEventSummary =
+  process.env.NEXT_PUBLIC_TAK === 'on' ? lazy(() => import('@/features/tak').then((m) => ({ default: m.TakEventSummary }))) : null;
 
 const SummaryCharts = dynamic(() => import('./SummaryCharts'), { ssr: false, loading: () => <div className="p-6 bg-surface-deep border border-surface-liner">Loading charts...</div> });
 
@@ -359,6 +364,12 @@ export default function SummaryPage() {
               ))}
             </div>
           </div>
+        )}
+
+        {process.env.NEXT_PUBLIC_TAK === 'on' && TakEventSummary && event.mapMode === 'tak' && eventId && (
+          <Suspense fallback={null}>
+            <TakEventSummary eventId={eventId} event={event} className={`${GRID_WRAPPER} ${GRID_CELL}`} />
+          </Suspense>
         )}
 
         <SummaryCharts

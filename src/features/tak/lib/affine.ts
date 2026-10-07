@@ -17,7 +17,7 @@ import type { AffineTransform, ControlPoint, LatLon } from '../types';
  */
 
 const EARTH_RADIUS_M = 6_371_008.8;
-const M_PER_DEG = (EARTH_RADIUS_M * Math.PI) / 180;
+export const M_PER_DEG = (EARTH_RADIUS_M * Math.PI) / 180;
 
 export function toLocalMeters(origin: LatLon, p: LatLon): { e: number; n: number } {
   return {

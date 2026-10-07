@@ -1,29 +1,30 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { Button, Modal, ModalBody, ModalContent, Select, SelectItem, Switch } from '@heroui/react';
-import { ChevronDown, ChevronUp, Flame, History, Link2Off, MapPinned, Radio } from 'lucide-react';
+import { Button, Modal, ModalBody, ModalContent, Select, SelectItem, Slider, Switch } from '@heroui/react';
+import { ChevronDown, ChevronUp, Link2Off, MapPinned, Radio } from 'lucide-react';
 import type { Event, Layer } from '@/app/types';
-import { refreshAlignments, setTakView, useTakEvent, useTakView } from '../data/hub';
+import { refreshAlignments, useTakEvent } from '../data/hub';
+import { PREF, usePref } from '../data/prefs';
 import { alignmentMatches } from '../data/alignmentStore';
 import {
   clearLive,
   linkDevice,
   listAllowedBridges,
-  loadHistory,
   rememberMapping,
   saveEventConfig,
   unlinkDevice,
   type TakBridge,
   type TakEventConfig,
 } from '../data/takStore';
-import { percentToLatLon } from '../lib/affine';
-import { heatCells, teamHistoryStats, type HistorySegment, type PostLocation } from '../lib/historyStats';
+import { NO_BASEMAP_ID, resolveBasemap } from '../lib/basemaps';
 import { isStale, unassignedDevices } from '../lib/linking';
 import { takTeams } from '../lib/teamIds';
 import { TAK_MODULE_MARKER } from '../marker';
 import type { HistoryMode } from '../types';
 import AlignMap from './AlignMap';
+import BasemapPicker from './BasemapPicker';
+import { DEFAULT_IMAGE_OPACITY } from './TakBasemapUnderlay';
 
 export interface TakEventPanelProps {
   eventId: string;
@@ -54,9 +55,9 @@ export default function TakEventPanel({ eventId, event, uid, isOwner, layers }: 
   const [bridges, setBridges] = useState<TakBridge[]>([]);
   const [aligning, setAligning] = useState<Layer | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [history, setHistory] = useState<HistorySegment[] | null>(null);
-  const [historyLoading, setHistoryLoading] = useState(false);
-  const view = useTakView(eventId);
+  const [underlayId, setUnderlayId] = usePref<string>(PREF.underlayBasemap, NO_BASEMAP_ID);
+  const [imageOpacity, setImageOpacity] = usePref<number>(PREF.imageOpacity, DEFAULT_IMAGE_OPACITY);
+  const underlay = resolveBasemap(underlayId, NO_BASEMAP_ID);
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 10_000);
@@ -130,6 +131,9 @@ export default function TakEventPanel({ eventId, event, uid, isOwner, layers }: 
         {unassigned.length > 0 && <span className="rounded-full bg-status-yellow/20 px-1.5 text-status-yellow">{unassigned.length} unassigned</span>}
         {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5" />}
       </button>
+      {underlay.attribution && (
+        <p className="mt-1 w-max max-w-full rounded bg-surface-deepest/80 px-1.5 text-[10px] text-surface-faint">{underlay.attribution}</p>
+      )}
 
       {open && (
         <div className="mt-2 max-h-[60vh] space-y-3 overflow-auto rounded-lg border border-surface-liner bg-surface-deepest/95 p-3 text-sm shadow-lg">
@@ -147,6 +151,24 @@ export default function TakEventPanel({ eventId, event, uid, isOwner, layers }: 
               </p>
             )}
           </section>
+
+          {layers.some((l) => alignmentMatches(tak.alignments[l.id], l.mapUrl)) && (
+            <section className="space-y-2">
+              <BasemapPicker label="Basemap under the map (just for you)" className="w-full" value={underlay.id} onChange={setUnderlayId} />
+              {underlay.id !== NO_BASEMAP_ID && (
+                <Slider
+                  size="sm"
+                  label="Event map opacity"
+                  minValue={0.2}
+                  maxValue={1}
+                  step={0.05}
+                  value={imageOpacity}
+                  onChange={(v) => setImageOpacity(Array.isArray(v) ? v[0]! : v)}
+                  getValue={(v) => `${Math.round((Array.isArray(v) ? v[0]! : v) * 100)}%`}
+                />
+              )}
+            </section>
+          )}
 
           {isOwner && (
             <section className="space-y-2">
@@ -259,47 +281,15 @@ export default function TakEventPanel({ eventId, event, uid, isOwner, layers }: 
             </section>
           )}
 
-          {isOwner && (config?.historyMode !== 'off' || history) && (
-            <section className="space-y-2">
-              <p className="text-xs text-surface-faint">Location history (only you can see this)</p>
-              {!history ? (
-                <Button
-                  size="sm"
-                  variant="flat"
-                  startContent={<History className="h-4 w-4" />}
-                  isLoading={historyLoading}
-                  onPress={async () => {
-                    setHistoryLoading(true);
-                    try {
-                      setHistory(await loadHistory(eventId));
-                    } catch (err) {
-                      setError(err instanceof Error ? err.message : 'Could not load history.');
-                    } finally {
-                      setHistoryLoading(false);
-                    }
-                  }}
-                >
-                  Load history
-                </Button>
-              ) : history.length === 0 ? (
-                <p className="text-surface-faint">No history recorded yet.</p>
-              ) : (
-                <HistorySummary
-                  history={history}
-                  teamName={teamName}
-                  posts={postLocations(layers, tak.alignments)}
-                  heatmapOn={!!view.heatmap}
-                  onToggleHeatmap={() => setTakView(eventId, { heatmap: view.heatmap ? null : heatCells(history) })}
-                />
-              )}
-            </section>
+          {isOwner && config?.historyMode !== 'off' && (
+            <p className="text-xs text-surface-faint">Location history and the heat map are on the event summary page after the event ends.</p>
           )}
 
           {(error || tak.error) && <p className="text-status-red">{error || tak.error}</p>}
         </div>
       )}
 
-      <Modal isOpen={!!aligning} onClose={() => setAligning(null)} size="4xl" scrollBehavior="inside">
+      <Modal isOpen={!!aligning} onClose={() => setAligning(null)} size="5xl" scrollBehavior="inside">
         <ModalContent>
           <ModalBody className="py-5">
             {aligning && (
@@ -318,68 +308,6 @@ export default function TakEventPanel({ eventId, event, uid, isOwner, layers }: 
           </ModalBody>
         </ModalContent>
       </Modal>
-    </div>
-  );
-}
-
-/** Post positions from aligned layers, for "time on post". */
-function postLocations(layers: Layer[], alignments: Record<string, import('../types').TakMapAlignment>): PostLocation[] {
-  const out: PostLocation[] = [];
-  for (const layer of layers) {
-    const a = alignments[layer.id];
-    if (!a || !alignmentMatches(a, layer.mapUrl)) continue;
-    for (const post of layer.posts ?? []) {
-      if (typeof post === 'string' || post.x === null || post.y === null) continue;
-      out.push({ name: post.name, ...percentToLatLon(a, post.x, post.y) });
-    }
-  }
-  return out;
-}
-
-function hm(secs: number): string {
-  const m = Math.round(secs / 60);
-  return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${m % 60} min`;
-}
-
-function HistorySummary({
-  history,
-  teamName,
-  posts,
-  heatmapOn,
-  onToggleHeatmap,
-}: {
-  history: HistorySegment[];
-  teamName: (id: string) => string;
-  posts: PostLocation[];
-  heatmapOn: boolean;
-  onToggleHeatmap: () => void;
-}) {
-  const stats = useMemo(() => teamHistoryStats(history, posts), [history, posts]);
-  return (
-    <div className="space-y-2">
-      <Button size="sm" variant={heatmapOn ? 'solid' : 'flat'} startContent={<Flame className="h-4 w-4" />} onPress={onToggleHeatmap}>
-        {heatmapOn ? 'Hide heat map' : 'Show heat map'}
-      </Button>
-      {posts.length === 0 && <p className="text-xs text-surface-faint">Align a map with posts to see time on post.</p>}
-      {stats.map((s) => {
-        const top = s.timeOnPost.slice(0, 3);
-        return (
-          <div key={s.teamId} className="rounded border border-surface-liner p-2">
-            <p className="font-medium">{teamName(s.teamId)}</p>
-            <p className="text-xs text-surface-faint">
-              Tracked {hm(s.trackedSecs)}, moved {(s.distanceM / 1000).toFixed(2)} km
-              {s.gaps.length > 0 ? `, ${s.gaps.length} coverage gap${s.gaps.length === 1 ? '' : 's'}` : ''}
-            </p>
-            {top.map((p) => (
-              <div key={p.post} className="mt-1 flex items-center gap-2 text-xs">
-                <span className="w-24 truncate">{p.post}</span>
-                <span className="h-2 rounded bg-accent" style={{ width: `${Math.max(4, (p.secs / Math.max(1, s.trackedSecs)) * 100)}%` }} />
-                <span className="text-surface-faint">{hm(p.secs)}</span>
-              </div>
-            ))}
-          </div>
-        );
-      })}
     </div>
   );
 }
