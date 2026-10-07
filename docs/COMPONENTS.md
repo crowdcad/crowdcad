@@ -75,6 +75,23 @@ const steps: WizardStep[] = [
 - Dispatch status colors come from `src/lib/statusColors.ts`, backed by `src/lib/colorTokens.js`.
 - Give section components explicit local prop types. Avoid threading untyped page state through several layers.
 
+## Text inputs: no inner focus ring
+
+HeroUI's `Input`, `Textarea` and `Autocomplete` already show focus on their wrapper, and the browser adds a second ring on the inner `<input>`. That inner ring keeps coming back on new fields, so every free-text or search field removes it on the `input` slot:
+
+```tsx
+const inputClassNames = {
+  input: 'outline-none focus:outline-none data-[focus=true]:outline-none focus:ring-0 focus-visible:ring-0',
+};
+
+<Input classNames={inputClassNames} />
+<Autocomplete inputProps={{ classNames: inputClassNames }} />
+```
+
+- Merge it into the field's existing `classNames` (label, wrapper and so on) rather than replacing them. Examples: the Add Call modal (`quickcallmodal.tsx`), event creation's `inputClassNames`, `cardFieldClassNames` in `trackingcardparts.tsx`.
+- TAK fields use `TAK_INPUT_CLASSNAMES` from `src/features/tak/lib/ui.ts`.
+- Keep focus visible: this removes only the duplicate inner ring, not the wrapper's focus styling.
+
 ## Third-party UI libraries
 
 - HeroUI for higher-level components

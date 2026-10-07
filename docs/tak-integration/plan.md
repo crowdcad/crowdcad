@@ -111,12 +111,14 @@ Updated at the end of each phase.
     - A basemap module: MapLibre GL JS (BSD-3-Clause) with OpenFreeMap styles (Light, Streets, Bright, Dark, Dark blue) and "No basemap", plus deployment-added styles or raster tiles such as satellite imagery (D55).
     - "Align map" shows the image and a basemap side by side. Each control point is a click on the image and a click on the basemap, in either order; typed coordinates and "Use my location" still work. Place search (Photon, OpenStreetMap data) moves the basemap. Once 3 points exist, the image is previewed on the basemap with an opacity slider. Points bunched in one part of the image get a warning.
     - The basemap choice is per viewer, remembered in the browser.
-    - The dispatch map can show a basemap under the event map (touchpoint j, D56), off by default, with an image-opacity slider in the TAK panel.
+    - The dispatch map can show a basemap under the event map (touchpoint j, D56), off by default, with an image-opacity slider in the TAK panel. It is rendered once as a picture covering the image plus its longer side again on every side, then moves with the event map at no cost (D60).
+    - Smooth overlays on the interactive maps (align and summary): the image and heat map are positioned in the map's own move handler, in the same frame as the map, and markers are MapLibre markers (D60).
+    - Text and search fields in the TAK module drop the inner focus ring (`TAK_INPUT_CLASSNAMES`), per `docs/COMPONENTS.md`.
     - The history view moved to the event summary page (touchpoint k, D57): heat map on a basemap with the aligned event map, and per-team stats. The dispatch map no longer shows the heat map.
     - Bridge: a segment's last position is credited until the segment ends, capped at 60 s (D58).
-  - **Tests:** 19 new core unit tests (basemap frame geometry, including rotation, shear and zoom; basemap options; place search), 83 TAK unit tests in all. 94 bridge unit tests and 33 emulator tests pass.
+  - **Tests:** 21 new core unit tests (basemap frame geometry, including rotation, shear, zoom and the dispatch picture's margin; basemap options; place search), 85 TAK unit tests in all. 94 bridge unit tests and 33 emulator tests pass.
   - **Checked in a browser** against the emulators: the summary heat map and image overlay, the dispatch underlay lining up with the summary view, and the align dialog with search.
-  - **Not yet done:** the underlay fills the image's box rather than the whole map pane; touch gestures for the align basemap on phones; P8.
+  - **Not yet done:** a sharper underlay re-render after zooming in past about 2x; touch gestures for the align basemap on phones; P8.
 
 **Overall:** P0 to P6 are built, and P1 is verified on real hardware. The open items are the rest of the P4 check and a first release (P6). See below.
 
@@ -405,17 +407,20 @@ Make alignment quicker and easier to check, and give dispatchers real-world cont
 
 - **Basemap module** (inside `src/features/tak/`): MapLibre GL JS, loaded only with the TAK module. Styles from OpenFreeMap by default; `NEXT_PUBLIC_TAK_BASEMAPS` adds or replaces styles (a style URL or raster tiles with attribution), or `off` removes outside basemaps entirely (D55).
 - **Align map:** image and basemap side by side, point pairs by clicking both, place search (`NEXT_PUBLIC_TAK_GEOCODER_URL`, Photon by default, `off` to disable), and a live overlay preview with opacity. Typed coordinates and "Use my location" stay.
-- **Dispatch underlay** (touchpoint j): an optional basemap under the event map, in the image's frame, per viewer, with image opacity.
+- **Dispatch underlay** (touchpoint j): an optional basemap under the event map, in the image's frame, per viewer, with image opacity. Rendered once as a picture with a wide margin (D60), so it costs nothing during the event and keeps working if the connection drops after it loads.
+- **Smooth interactive maps** (D60): overlays on the align and summary maps move in the map's own frame, with no React render per frame.
 - **History on the summary page** (touchpoint k): heat map, event map overlay and per-team stats for the owner, after the event ends.
 
 **Accept:**
-- The basemap drawn under a rotated or sheared alignment matches `latLonToPercent` to within a pixel (unit tests).
+- The basemap drawn under a rotated or sheared alignment matches `latLonToPercent` to within a pixel (unit tests), including the margin area of the dispatch picture.
+- The dispatch picture covers the image plus at least its longer side on every side, within a 4096-pixel canvas.
 - With TAK off, nothing changes: the footprint check passes and the summary and dispatch pages render as before.
 - With `NEXT_PUBLIC_TAK_BASEMAPS=off` and `NEXT_PUBLIC_TAK_GEOCODER_URL=off`, the app makes no requests to outside map services, and alignment works with typed coordinates.
 - The shared criteria above hold.
 
 **Next steps:**
-- The underlay fills the whole map pane, not only the image's box (needs `container` to be the visible pane in touchpoint j).
+- Optionally, a sharper dispatch picture rendered in the background after zooming in past about 2x, faded in over the current one.
+- Optionally, the image as a MapLibre WebGL image source on the interactive maps, where the storage bucket allows CORS (Firebase Storage needs a one-time CORS setting; the emulator and PocketBase already allow it).
 - A per-event default basemap chosen by the owner (would add a field to `takConfig`; a data contract change, so it needs approval).
 - Tile caching or a self-hosted tile option documented for events with poor connectivity.
 

@@ -338,3 +338,9 @@ The same end-to-end scenario runs against the Firebase emulator and a local Pock
 
 ### D59. Basemap-only events are a separate core decision
 - **Proposed** in plan.md P8, not started. Posts on a basemap layer would need real coordinates instead of image percent, which changes core's data model, venue management and both backends. That is outside the TAK touchpoints, so it waits for a maintainer decision.
+
+### D60. Smooth basemap overlays: live where it is interactive, a picture on the dispatch map
+- **The finding.** On the interactive maps, the image overlay, markers and heat map were moved by React after each map move, one frame behind the map, so they wobbled while zooming. On the dispatch map, the live underlay re-rendered and reloaded tiles at zoom steps.
+- **Align and summary maps (interactive).** Still a live MapLibre map. The image and heat canvas are repositioned directly in the map's `move` handler, which runs in the frame the map draws, and markers are MapLibre markers. No React render happens per frame.
+- **Dispatch map.** The basemap is rendered once, off-screen, in the image's frame, covering the image plus its longer side again on every side, at twice the screen resolution (capped at a 4096-pixel canvas). The pixels are kept as a picture and the map discarded. The picture sits in the same zoomed and panned container as the event map, so it moves with it exactly. It is rendered again only when the alignment, the basemap or the map's size changes, and the old picture stays until the new one is ready.
+- **Not stored.** The picture lives only in the viewer's browser. Saving it with the event would need a data contract change, and some imagery providers prohibit storing rendered tiles.
