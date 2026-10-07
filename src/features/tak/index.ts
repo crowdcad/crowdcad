@@ -13,6 +13,7 @@ export type { AffineTransform, ControlPoint, HistoryMode, LatLon, TakMapAlignmen
 export { default as AlignMap, type AlignMapProps } from './components/AlignMap';
 export { default as TakLiveMarkers, type TakLiveMarkersProps } from './components/TakLiveMarkers'; // (a) map overlay
 export { default as TakEventPanel, type TakEventPanelProps } from './components/TakEventPanel'; // (a) map overlay
+export { default as TakEventAgent, type TakEventAgentProps } from './components/TakEventAgent'; // (a) headless, D46
 export { default as TakMapModeChoice, type TakMapModeChoiceProps } from './components/TakMapModeChoice'; // (b) event creation
 export { default as TakAdminSection, type TakAdminSectionProps } from './components/TakAdminSection'; // (c) Admin settings
 export { onEventEnded } from './lifecycle'; // (d) end-event flow

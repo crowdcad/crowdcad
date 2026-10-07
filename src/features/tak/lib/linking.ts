@@ -1,3 +1,5 @@
+import type { Call } from '@/app/types';
+import { RESOLVED_CALL_STATUSES } from '@/lib/clinics';
 import type { TakDeviceLink, TakDeviceMapping, TakLivePosition } from '../data/takStore';
 
 /** A team as TAK sees it: an opaque id and the name dispatchers use. */
@@ -92,3 +94,21 @@ export function teamPositions(live: TakLivePosition[], links: TakDeviceLink[], t
 /** A fix is stale when the device hasn't reported for this long. */
 export const STALE_AFTER_MS = 2 * 60_000;
 export const isStale = (p: TakLivePosition, now: number) => now - p.receivedAt > STALE_AFTER_MS;
+
+/**
+ * Opaque ids of teams assigned to an open call, sorted. This is all the bridge
+ * learns about calls (for Detailed history): no call details, locations or
+ * patient information.
+ */
+export function teamIdsOnCall(calls: Call[] = [], teams: TakTeam[]): string[] {
+  const idByName = new Map(teams.map((t) => [t.name, t.id]));
+  const ids = new Set<string>();
+  for (const call of calls) {
+    if (RESOLVED_CALL_STATUSES.includes(call.status)) continue;
+    for (const name of call.assignedTeam ?? []) {
+      const id = idByName.get(name);
+      if (id) ids.add(id);
+    }
+  }
+  return [...ids].sort();
+}

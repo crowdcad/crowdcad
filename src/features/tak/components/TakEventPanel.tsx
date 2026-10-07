@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Button, Modal, ModalBody, ModalContent, Select, SelectItem, Switch } from '@heroui/react';
 import { ChevronDown, ChevronUp, Link2Off, MapPinned, Radio } from 'lucide-react';
 import type { Event, Layer } from '@/app/types';
@@ -10,16 +10,14 @@ import {
   clearLive,
   linkDevice,
   listAllowedBridges,
-  listMappings,
   rememberMapping,
   saveEventConfig,
   unlinkDevice,
   type TakBridge,
-  type TakDeviceMapping,
   type TakEventConfig,
 } from '../data/takStore';
-import { isStale, proposeAutoLinks, unassignedDevices } from '../lib/linking';
-import { ensureTeamIds, takTeams } from '../lib/teamIds';
+import { isStale, unassignedDevices } from '../lib/linking';
+import { takTeams } from '../lib/teamIds';
 import { TAK_MODULE_MARKER } from '../marker';
 import type { HistoryMode } from '../types';
 import AlignMap from './AlignMap';
@@ -51,10 +49,8 @@ export default function TakEventPanel({ eventId, event, uid, isOwner, layers }: 
   const [open, setOpen] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const [bridges, setBridges] = useState<TakBridge[]>([]);
-  const [mappings, setMappings] = useState<TakDeviceMapping[]>([]);
   const [aligning, setAligning] = useState<Layer | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const attempted = useRef(new Set<string>());
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 10_000);
@@ -65,31 +61,9 @@ export default function TakEventPanel({ eventId, event, uid, isOwner, layers }: 
   const config = tak.config;
   const bridgeUid = config?.bridgeUid ?? null;
 
-  // Teams created before team ids existed get one (TAK events only).
-  const needsIds = (event.staff ?? []).some((s) => !s.id) || (event.supervisor ?? []).some((s) => !s.id);
-  useEffect(() => {
-    if (needsIds && !event.ended) void ensureTeamIds(eventId).catch(() => {});
-  }, [needsIds, eventId, event.ended]);
-
   useEffect(() => {
     if (isOwner) void listAllowedBridges(uid).then(setBridges).catch(() => setBridges([]));
   }, [isOwner, uid]);
-
-  useEffect(() => {
-    if (!bridgeUid) return setMappings([]);
-    void listMappings(bridgeUid).then(setMappings).catch(() => setMappings([]));
-  }, [bridgeUid]);
-
-  // Auto-link: remembered mappings first, then exact (case/space-insensitive) callsign matches.
-  useEffect(() => {
-    if (!config?.enabled || event.ended) return;
-    for (const p of proposeAutoLinks(tak.live, tak.links, teams, mappings)) {
-      const key = `${p.deviceUid}->${p.teamId}`;
-      if (attempted.current.has(key)) continue;
-      attempted.current.add(key);
-      void linkDevice(eventId, p.deviceUid, p.teamId, 'auto', uid).catch(() => {});
-    }
-  }, [tak.live, tak.links, teams, mappings, config?.enabled, event.ended, eventId, uid]);
 
   const updateConfig = async (patch: Partial<TakEventConfig>) => {
     setError(null);

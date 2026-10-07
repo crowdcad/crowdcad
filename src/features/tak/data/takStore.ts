@@ -375,6 +375,18 @@ export function subscribeEventStatus(eventId: string, cb: (s: TakEventStatus | n
   return dbService.subscribeToDocument<Rec>(fs.status(eventId), 'current', (snap) => cb(snap.data ? toStatus(snap.data) : null), onError);
 }
 
+// ------------------------------------------------------------ call state
+
+/** Publishes which teams are on a call (opaque ids only) for Detailed history. */
+export async function saveCallState(eventId: string, teamIdsOnCall: string[]): Promise<void> {
+  const fields = { teamIdsOnCall, updatedAt: Date.now() };
+  if (isPocketbaseBackend) {
+    await pbUpsert('tak_call_state', [{ field: 'event', op: '==', value: eventId }], { event: eventId }, fields);
+    return;
+  }
+  await dbService.setDocument(`events/${eventId}/takCallState`, 'current', fields);
+}
+
 // ------------------------------------------------------------------ users
 
 /** Finds a user's id by email (admins; used to fill allowedUsers). */

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { TakDeviceLink, TakLivePosition } from '../data/takStore';
-import { isStale, normalizeName, proposeAutoLinks, teamPositions, unassignedDevices, type TakTeam } from './linking';
+import { isStale, normalizeName, proposeAutoLinks, teamIdsOnCall, teamPositions, unassignedDevices, type TakTeam } from './linking';
 
 const teams: TakTeam[] = [
   { id: 't1', name: 'Medic 1', kind: 'team' },
@@ -80,5 +80,17 @@ describe('unassignedDevices and staleness', () => {
   it('marks a fix stale after two minutes', () => {
     expect(isStale(pos('A', 'a', 0), 120_000)).toBe(false);
     expect(isStale(pos('A', 'a', 0), 120_001)).toBe(true);
+  });
+});
+
+describe('teamIdsOnCall', () => {
+  const call = (status: string, assignedTeam: string[]) => ({ id: status + assignedTeam.join(), order: 1, status, location: 'x', assignedTeam, chiefComplaint: 'private' });
+  it('lists teams on open calls only, as sorted opaque ids', () => {
+    const calls = [call('En Route', ['Medic 2', 'Sup North']), call('Resolved', ['Medic 1']), call('On Scene', ['Medic 2', 'Ghost Team'])];
+    expect(teamIdsOnCall(calls, teams)).toEqual(['s1', 't2']);
+  });
+  it('carries nothing but ids', () => {
+    const out = teamIdsOnCall([call('On Scene', ['Medic 1'])], teams);
+    expect(JSON.stringify(out)).not.toContain('private');
   });
 });

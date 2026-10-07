@@ -66,6 +66,8 @@ const TakLiveMarkers =
   process.env.NEXT_PUBLIC_TAK === 'on' ? lazy(() => import('@/features/tak').then((m) => ({ default: m.TakLiveMarkers }))) : null;
 const TakEventPanel =
   process.env.NEXT_PUBLIC_TAK === 'on' ? lazy(() => import('@/features/tak').then((m) => ({ default: m.TakEventPanel }))) : null;
+const TakEventAgent =
+  process.env.NEXT_PUBLIC_TAK === 'on' ? lazy(() => import('@/features/tak').then((m) => ({ default: m.TakEventAgent }))) : null;
 
 interface DispatchRoutePageProps {
   params: Promise<{ eventId: string }>;
@@ -3217,6 +3219,14 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
         }
       : undefined;
 
+  // TAK background work (call state, auto-linking) for the whole page, not only the Map tab.
+  const takAgent =
+    process.env.NEXT_PUBLIC_TAK === 'on' && TakEventAgent && event.mapMode === 'tak' && !isLiteMode && user && eventId ? (
+      <Suspense fallback={null}>
+        <TakEventAgent eventId={eventId} event={event} uid={user.uid} />
+      </Suspense>
+    ) : null;
+
   // The Map tab only makes sense once an image actually exists to show —
   // a venue with no map uploaded to any layer gets no tab, same rule the
   // navbar used for its old "Venue Map" shortcut.
@@ -3685,6 +3695,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
 
   return (
     <DispatchVocabularyProvider terms={vocabularyTerms}>
+      {takAgent}
       <ToastContainer
         theme="dark"
         toastClassName="!bg-surface-deep !border !border-surface-liner !rounded-2xl !text-surface-light !shadow-lg"
