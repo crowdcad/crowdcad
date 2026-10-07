@@ -61,8 +61,17 @@ Updated at the end of each phase.
     - `/profile` and the dispatch page's first-load JS are unchanged.
     - The create pages grow by 10 to 20 bytes, for team-id generation.
     - With the flag on, TAK lives only in one lazy chunk.
+  - **Browser smoke test** (Chromium, with `NEXT_PUBLIC_TAK=on`, against the Firebase emulators and the real rules): 6 of 6 steps pass, with no console errors. It covered:
+    - signing in;
+    - the Admin TAK section rendering;
+    - the Add TAK server wizard creating a bridge account and record, and showing the `.env` block;
+    - a TAK event's dispatch map showing the TAK panel;
+    - linking the bridge from the panel (the config is stored, and the switch and pill update);
+    - the event builder offering TAK to an allowed user.
+
+    It found and fixed two defects: bridge creation ignored the Auth emulator, and the map-mode radio selection was invisible in the dark theme.
   - **Not yet done:**
-    - The TAK screens have not been exercised in a browser. Core e2e runs with TAK off. The end-to-end check under [Needs Evan](#needs-evan) is the first real run.
+    - A real device, end to end (see [Needs Evan](#needs-evan)).
     - Hosted bridge creation stays open (D24).
 
 ## Needs Evan
