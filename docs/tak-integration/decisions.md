@@ -297,3 +297,19 @@ For an 8-hour, 20-device event, measured on the simulator:
 
 ### D51. One parity scenario for every backend
 The same end-to-end scenario runs against the Firebase emulator and a local PocketBase, and must produce an identical result. A difference in backend behavior therefore fails CI.
+
+### D52. The bridge enrolls for its own certificate
+- **The finding.** TAK Portal offers no `.p12` download for a user, only an Enroll QR (what ATAK and iTAK scan).
+- **The change.** With `TAK_USERNAME` and `TAK_PASSWORD` (or `TAK_ENROLL_URL`, the Enroll QR link), the bridge uses TAK Server's standard enrollment API on 8446: it generates its own RSA key, sends a CSR to `/Marti/api/tls/signClient/v2`, and gets back its certificate and the TAK CA chain. The key never leaves the bridge's machine.
+- **Storage and renewal.** The result is saved in `BRIDGE_DATA_DIR` (a named Docker volume, or `./data`) and renewed when fewer than 30 days remain. Renewal needs the TAK password to still work, so the docs prefer the user's password over a one-time token.
+- **Fallback.** `TAK_CLIENT_P12` still works, alone or as a fallback when enrollment fails.
+- **Dependency.** `node-forge` builds the CSR and reads `.p12` bundles. It is dual-licensed BSD-3-Clause or GPL-2.0; the bridge uses it under BSD-3-Clause.
+
+### D53. TAK Server certificates are trusted by CA, not by name
+- **The finding.** TAK Server's 8089 certificate is usually issued to an internal name (for example `takserver`) rather than the address clients use, so a normal hostname check fails.
+- **The rule.** When a TAK CA is known (from enrollment, `TAK_CA`, or bundled in the `.p12`), trust is limited to that CA and the server name is checked only if `TAK_SERVER_NAME` is set. Without a known CA, Node's normal checks against public roots apply. Enrollment on 8446 trusts public roots plus `TAK_CA`, since 8446 often has a public certificate.
+
+### D54. The Add TAK server wizard produces a complete setup
+- **Placement.** The admin chooses where the bridge runs: the TAK Server machine (Docker) or this computer (a test with Node). It defaults to this computer when CrowdCAD itself runs locally or on the Firebase emulators, and warns when the chosen placement cannot reach the backend.
+- **Output.** One paste-ready script per placement (and per OS for local runs) that clones the bridge, writes a complete `.env` (TAK sign-in, backend settings including emulator hosts, bridge account) and starts it. The TAK password goes only into that one-time block; CrowdCAD never stores it.
+- **Checklist.** The last step shows a live checklist from the bridge's status (signed in, connected to TAK, receiving positions), with the bridge's own plain-words error when TAK fails (data contract 0.4.0).

@@ -12,7 +12,7 @@ Updated at the end of each phase.
 
 - **P0 Docs and scaffolding: done.** Plan, data contract and decision log are merged. The `tak-bridge` TypeScript scaffold, Docker image and CI are green.
 - **P1 CoT inbound: built, waiting on the real-device check.**
-  - This is in `crowdcad/tak-bridge` `integration/tak`: the TLS identity from the client `.p12` (the CA is optional, since the `.p12` normally bundles it); `CotStreamSource` on 8089 (pings, idle detection, backoff reconnect); CoT framing and parsing (`a-*` only); log-only mode (`CROWDCAD_BACKEND=none`); and a CoT simulator with a throwaway dev-certificate helper.
+  - This is in `crowdcad/tak-bridge` `integration/tak`: the TLS identity, from certificate enrollment on 8446 (D52) or a client `.p12`; `CotStreamSource` on 8089 (pings, idle detection, backoff reconnect); CoT framing and parsing (`a-*` only); log-only mode (`CROWDCAD_BACKEND=none`); and a CoT simulator with a throwaway dev-certificate helper.
   - TLS end-to-end tests against the simulator all pass.
   - **Acceptance:** the real-device check is under [Needs Evan](#needs-evan). Other work continues.
 - **P2 Backend writes and rules: done.** Acceptance is met for both backends.
@@ -123,53 +123,22 @@ The release workflow then pushes `ghcr.io/crowdcad/tak-bridge:0.1.0`. The first 
 - **Hosted bridge creation** (D24). If the hosted Firebase project has email/password sign-up disabled, choose between a server-side creation function and manual creation for hosted users.
 
 
-### P1: phone position in the bridge logs (real TAK Server)
+### P1 and P4: a real phone, end to end
 
-The bridge runs with your real `.p12`. Run these steps yourself; the certificate and its password stay on your machine.
+Run these yourself. The TAK password and the bridge's certificate stay on your machine.
 
-1. **Create the bridge's TAK user.** In TAK Portal, create a user for the bridge (for example `crowdcad-bridge`). Add it to the same TAK group your phone's user is in, then download its certificate bundle (`.p12`) and note the password.
-2. **On a machine that can reach the TAK Server's port 8089** (the infra-TAK host is simplest):
-   ```bash
-   git clone https://github.com/crowdcad/tak-bridge.git
-   cd tak-bridge
-   git checkout integration/tak
-   mkdir certs
-   cp /path/to/crowdcad-bridge.p12 certs/client.p12
-   chmod 644 certs/client.p12
-   cp .env.example .env
-   ```
-3. **Edit `.env`:**
-   - `TAK_HOST`: the TAK Server hostname, as it appears in its certificate.
-   - `TAK_CLIENT_P12_PASSWORD`: the bundle's password.
-   - `CROWDCAD_BACKEND=none`.
+1. **Start CrowdCAD with TAK on.** Either a dev Firebase project, or the emulators from a `crowdcad/crowdcad` checkout on `integration/tak` (`npx firebase emulators:start --only auth,firestore --project demo-crowdcad`) with the app started against them and `NEXT_PUBLIC_TAK=on`.
+2. **Make yourself an admin.** Sign up, then set `isAdmin: true` on your `users/{uid}` doc.
+3. **Create the bridge's TAK user** in TAK Portal with a password, in the same TAK group as your phone's user.
+4. **Add the TAK server** in Profile > Admin > TAK. Choose **This computer (test)** (preselected on the emulators), enter the TAK Server address (the `host=` in the Enroll QR link, not the TAK Portal address), the username and the password, and paste the script it shows into a terminal.
+5. **P1 check.** The checklist should reach **Connected to the TAK Server**, then **Receiving positions** once the phone reports. For the log-only variant, set `CROWDCAD_BACKEND=none` in the bridge's `.env`: each phone report should appear within 5 s as a `"msg":"position"` line.
+6. **P4 check.**
+   1. Create an event with **Map: TAK live tracking** and the bridge preselected, add a team whose name matches the phone's callsign, and align the map with 4 or more points.
+   2. On the dispatch Map tab, the device should auto-link to the team and appear on the aligned map.
+   3. End the event. Within a minute, its live positions should be gone.
+7. **Report** pass or fail per step, plus any error text from the checklist or console. You don't need to share coordinates.
 
-   Leave the other values as they are. Add `TAK_CA` only if step 5 shows a certificate verification error.
-4. **Start it:** `docker compose up -d --build`, then `docker compose logs -f`. Expect `"msg":"connected to TAK Server"`.
-5. **Send positions from the phone.** On the phone (ATAK or iTAK, connected to the same server and group), set the location reporting interval to a few seconds, or move around. Each report should appear within 5 s as a `"msg":"position"` line with the phone's callsign. Compare the line's `time` (when the bridge logged it) with its `deviceTime` (when the phone reported).
-6. **Report the result.** Report pass or fail, plus any error lines. You don't need to share coordinates. Stop it with `docker compose down`.
-
-**If something goes wrong:**
-- **"password ... is wrong":** check `TAK_CLIENT_P12_PASSWORD`.
-- **"legacy encryption":** follow the conversion command in the message, or add `NODE_OPTIONS=--openssl-legacy-provider` to `.env`.
-- **Certificate verification errors** (`UNABLE_TO_VERIFY_LEAF_SIGNATURE`, `SELF_SIGNED_CERT_IN_CHAIN`): export the TAK Server CA as PEM to `certs/ca.pem` and set `TAK_CA=/certs/ca.pem`.
-- **`ERR_TLS_CERT_ALTNAME_INVALID`:** set `TAK_SERVER_NAME` to the name in the server certificate.
-- **Connected but no positions:** the bridge user is probably not in the phone's group.
-
-### P4: end to end with a real device (emulator or a dev Firebase project)
-
-This uses your real `.p12` on the bridge side. Run it yourself; nothing here touches production.
-
-1. **Start the backend and app.** Run the Firebase emulators from a `crowdcad/crowdcad` checkout on `integration/tak` (`npx firebase emulators:start --only auth,firestore --project demo-crowdcad`). Start the app against them with TAK on: `NEXT_PUBLIC_TAK=on`, plus the emulator variables from `npm run test:e2e:serve`. A dev Firebase project with `NEXT_PUBLIC_TAK=on` also works.
-2. **Make yourself an admin.** Sign up, then set `isAdmin: true` on your `users/{uid}` doc (emulator UI, or `scripts/setAdmin.js` against the dev project).
-3. **Create the bridge.** Go to Profile > Admin > TAK > Add TAK server and follow the wizard. Copy the `.env` block.
-4. **Run the bridge.** On the machine running the bridge, use the `.env` block plus the TAK section from the P1 steps. Set `CROWDCAD_BACKEND=firebase`, and add `FIRESTORE_EMULATOR_HOST` and `FIREBASE_AUTH_EMULATOR_HOST` if you're using the emulator. Then `docker compose up -d --build`. The wizard should show "Connected".
-5. **Set up an event.**
-   1. Create an event and choose **Map: TAK live tracking**, with the bridge preselected.
-   2. Add a team whose name matches your phone's callsign.
-   3. Align the map with 4 or more points you can find on the ground.
-6. **Check the dispatch map.** On the dispatch page's Map tab, the TAK pill should show the device. It should auto-link to the team (or appear under "Unassigned TAK devices" if the names differ), and your position should appear on the aligned map.
-7. **End the event.** Within a minute, the event's `takLive` docs should be gone.
-8. **Report** pass or fail per step, plus any console errors. You don't need to share coordinates.
+The full guide, including troubleshooting, is `docs/setup-infra-tak.md` in `crowdcad/tak-bridge`.
 
 ## Scope
 
@@ -270,11 +239,11 @@ TAK setup is a **TAK** section inside that Admin area, the equivalent of a tab t
 
 **Contents of the TAK section:**
 - **Bridge list:** name, status from the heartbeat, and last seen.
-- **Add TAK server wizard:**
-  1. Name the server.
-  2. Create the TAK Portal bridge user, add it to the responders' groups, and download its `.p12` (instructions).
-  3. Generate credentials, then show the `.env` block once, with a `docker-compose.yml` snippet.
-  4. Wait for the first heartbeat, then show "Connected".
+- **Add TAK server wizard** (D54):
+  1. Name the server and choose where the bridge runs: the TAK Server machine (Docker) or this computer (a test).
+  2. TAK Portal steps (create the bridge user, add it to the responders' groups, open its Enroll QR), then the TAK Server address, username and password, or the pasted Enroll QR link.
+  3. Generate the bridge account, then show once a paste-ready script that writes the complete `.env` and starts the bridge.
+  4. A live checklist: signed in, connected to TAK, receiving positions, with the bridge's own error text.
 - **Who can use this TAK server:** the `allowedUsers` list, with users chosen by email.
 - **Remembered device mappings.**
 - **Default history mode.**
@@ -317,13 +286,13 @@ TAK devices --TLS CoT--> TAK Server (8089) --TLS CoT--> tak-bridge (Docker, on t
 
 ### Bridge account flow
 
-1. **TAK Portal (infra-TAK).** Create a `crowdcad-bridge` user, add it to the responders' groups, and download its `.p12` and password.
+1. **TAK Portal (infra-TAK).** Create a `crowdcad-bridge` user with a password and add it to the responders' groups. The bridge enrolls for its own certificate with these credentials (D52); no `.p12` is needed.
 2. **CrowdCAD: Admin > TAK > Add TAK server.**
    - **Firebase:** a secondary Firebase app with in-memory auth persistence calls `createUserWithEmailAndPassword` for `<id>@bridge.crowdcad.org`, with a password CrowdCAD generates. The secondary app is then signed out and deleted, and the admin writes `bridgeAccounts/{bridgeUid}`.
    - **PocketBase:** an admin creates a user record with `role = 'bridge'`, which doesn't change the admin's session.
    - CrowdCAD shows the `.env` block once and never stores the password.
-3. **On the TAK host:** add the certificates, paste the `.env` block, and run `docker compose up -d`.
-4. **Connected:** CrowdCAD shows "Connected" when the heartbeat arrives.
+3. **On the TAK host (or this computer, for a test):** paste the script CrowdCAD shows. It writes `.env` and starts the bridge, which enrolls on 8446 and connects on 8089.
+4. **Checklist:** CrowdCAD shows signed in, connected to TAK, and receiving positions as the status arrives.
 
 - **Rotation:** add a new bridge, switch the events to it, then revoke the old one.
 - **Revocation:** delete the bridge record. The rules check it on every write.

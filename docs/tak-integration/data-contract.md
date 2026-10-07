@@ -1,6 +1,6 @@
 # TAK integration: data contract
 
-**Contract version: 0.3.0 (draft).** TAK support is in development and is an optional add-on. Nothing here is released, and the contract may change until 1.0.0.
+**Contract version: 0.4.0 (draft).** TAK support is in development and is an optional add-on. Nothing here is released, and the contract may change until 1.0.0.
 
 This document defines every record the TAK integration adds, who writes each one, and what the access rules enforce. It covers both backends: Firebase (the default) and PocketBase (opt-in with `NEXT_PUBLIC_BACKEND=pocketbase`). The bridge reaches both through one adapter interface, so behavior is the same on either.
 
@@ -61,7 +61,7 @@ Both are optional fields. They are absent on standard events and on all existing
 |---|---|---|---|
 | `bridgeAccounts/{bridgeUid}` | `label`, `createdBy`, `allowedUsers` (uids), `defaultHistoryMode`, `createdAt`, `updatedAt` | Admins (create, update, delete). Delete revokes the bridge | Admins; users in `allowedUsers`; the bridge itself |
 | `bridgeAccounts/{bridgeUid}/deviceMappings/{deviceUid}` | `teamName`, `callsign`, `updatedAt`, `updatedBy` | Admins; users in `allowedUsers` (create and update, when they link a device manually) | Admins; users in `allowedUsers` |
-| `bridgeAccounts/{bridgeUid}/status/current` | `lastSeenAt`, `takConnected`, `version`, `linkedEventCount` | The bridge | Admins; users in `allowedUsers` |
+| `bridgeAccounts/{bridgeUid}/status/current` | `lastSeenAt`, `takConnected`, `version`, `linkedEventCount`, `devicesSeen`, `lastPositionAt`, `takError` | The bridge | Admins; users in `allowedUsers` |
 | `events/{eventId}/takConfig/current` | `eventId`, `bridgeUid` (or null), `enabled`, `closed`, `historyMode`, `updatedAt` | Event owner. `bridgeUid` may be set only if the owner is in that bridge's `allowedUsers`. The end-event flow sets `closed: true` (owner or admin) | Anyone who can read the event; the linked bridge |
 | `events/{eventId}/takMapAlignment/{layerId}` | `mapUrl`, `naturalWidth`, `naturalHeight`, `controlPoints[]`, `origin`, `transform`, `residualM`, `ownerUid`, `updatedAt` | Event owner | Anyone who can read the event. Not the bridge |
 | `events/{eventId}/takDeviceLinks/{deviceUid}` | `teamId`, `linkedAt`, `method` (`auto` or `manual`), `linkedBy` | Anyone who can dispatch the event, except bridge accounts | Anyone who can read the event; the linked bridge |
@@ -150,7 +150,7 @@ PocketBase collections are flat, so each one carries `event` and/or `bridge` as 
 | `events` (existing) | adds `mapMode` (text) | Added to `EVENT_PROTECTED_FIELDS_UNTOUCHED`; list and view add `@request.auth.role != 'bridge'` |
 | `tak_bridges` | `bridgeUser`, `label`, `createdBy`, `allowedUsers` (multi-relation to `users`, so membership is an exact match), `defaultHistoryMode` | Admins write; admins, allowed users and the bridge read |
 | `tak_device_mappings` | `bridge`, `deviceUid`, `teamName`, `callsign`, `updatedBy` | Admins and allowed users, never `role = 'bridge'` |
-| `tak_bridge_status` | `bridge`, `lastSeenAt`, `takConnected`, `version`, `linkedEventCount` | Bridge writes; admins and allowed users read |
+| `tak_bridge_status` | `bridge`, `lastSeenAt`, `takConnected`, `version`, `linkedEventCount`, `devicesSeen`, `lastPositionAt`, `takError` | Bridge writes; admins and allowed users read |
 | `tak_event_config` | `event` (unique), `bridge`, `enabled`, `closed`, `historyMode` | Event owner writes, `bridge` only if the owner is in that bridge's `allowedUsers`; the end-event flow sets `closed`; event readers and the linked bridge read |
 | `tak_map_alignment` | `event`, `layerId`, `mapUrl`, `naturalWidth`, `naturalHeight`, `controlPoints` (json), `origin` (json), `transform` (json), `residualM`, `ownerUid`, `updatedAt` | Event owner writes; event readers read |
 | `tak_device_links` | `event`, `deviceUid`, `teamId`, `linkedAt`, `method`, `linkedBy` | Event dispatchers write, never `role = 'bridge'`; event readers and the linked bridge read |
@@ -194,6 +194,7 @@ PocketBase collections are flat, so each one carries `event` and/or `bridge` as 
 
 ## Changelog
 
+- 0.4.0 (2026-10-07): additive. Bridge status gains `devicesSeen` (distinct TAK devices since the bridge started), `lastPositionAt` (ms, 0 if none) and `takError` (the last TAK connection problem in plain words, empty when connected; never secrets). PocketBase `tak_bridge_status` gains the same fields; the setup script adds them to existing installs. Readers treat them as optional, since older bridges do not write them.
 - 0.3.0 (2026-10-07):
   - Added `takCallState` / `tak_call_state`: on-call opaque team ids for Detailed history.
   - History writes are allowed after close.
