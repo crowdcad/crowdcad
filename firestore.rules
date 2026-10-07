@@ -352,16 +352,18 @@ service cloud.firestore {
       allow delete: if isLinkedBridge(eventId) || (!isBridge() && isEventOwner(eventId));
     }
 
-    // Location history: owner-only in v1.
+    // Location history: owner-only in v1. Unlike live positions, history may
+    // still be written after the event closes, so the bridge can flush and
+    // end its open segments at close.
     match /events/{eventId}/takHistory/{segmentId} {
       allow read: if (!isBridge() && isEventOwner(eventId)) || isLinkedBridge(eventId);
-      allow create, update: if canBridgeWrite(eventId) && historyMode(eventId) != 'off' &&
+      allow create, update: if canBridgeWriteHistory(eventId) && historyMode(eventId) != 'off' &&
         request.resource.data.bridgeUid == request.auth.uid;
       allow delete: if !isBridge() && isEventOwner(eventId);
 
       match /points/{chunkId} {
         allow read: if (!isBridge() && isEventOwner(eventId)) || isLinkedBridge(eventId);
-        allow create, update: if canBridgeWrite(eventId) && historyMode(eventId) == 'detailed';
+        allow create, update: if canBridgeWriteHistory(eventId) && historyMode(eventId) == 'detailed';
         allow delete: if !isBridge() && isEventOwner(eventId);
       }
     }
@@ -436,6 +438,10 @@ service cloud.firestore {
     function canBridgeWrite(eventId) {
       let cfg = takConfigDoc(eventId);
       return isLinkedBridge(eventId) && cfg.get('enabled', false) == true && cfg.get('closed', false) != true;
+    }
+
+    function canBridgeWriteHistory(eventId) {
+      return isLinkedBridge(eventId) && takConfigDoc(eventId).get('enabled', false) == true;
     }
 
     function historyMode(eventId) {

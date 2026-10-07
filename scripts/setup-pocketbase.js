@@ -479,12 +479,15 @@ async function ensureTakCollections(headers) {
     ['CREATE UNIQUE INDEX idx_tak_live ON tak_live (event, deviceUid)'],
   );
 
-  // History: owner-only reads in v1. Writes follow the event's historyMode.
+  // History: owner-only reads in v1. Writes follow the event's historyMode
+  // and, unlike live positions, may continue after close so the bridge can
+  // flush and end its open segments.
   const historyWrite = (eventExpr, mode) =>
-    `${takBridgeCanWrite(eventExpr)} && ` +
+    `${TAK_IS_BRIDGE} && @collection.tak_event_config:hc.event ?= ${eventExpr} && ` +
+    `@collection.tak_event_config:hc.bridge ?= @request.auth.id && @collection.tak_event_config:hc.enabled ?= true && ` +
     (mode === 'detailed'
-      ? "@collection.tak_event_config:wc.historyMode ?= 'detailed'"
-      : "@collection.tak_event_config:wc.historyMode ?!= 'off'");
+      ? "@collection.tak_event_config:hc.historyMode ?= 'detailed'"
+      : "@collection.tak_event_config:hc.historyMode ?!= 'off'");
   const historyRead = `(${AUTH_RULE} && ${NOT_BRIDGE} && ${takEventOwner('event')}) || ${takLinkedBridge('event')}`;
   await ensureCollection(
     headers,
