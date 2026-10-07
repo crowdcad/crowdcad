@@ -429,8 +429,9 @@ function AddTakServerWizard({
                     </Button>
                   </div>
                   <p>
-                    Open {os === 'windows' ? 'PowerShell' : 'Terminal'} on this computer, go to the folder where the bridge should live
-                    (for example <code>cd {os === 'windows' ? '$HOME' : '~'}</code>), and paste all of this:
+                    Open {os === 'windows' ? 'PowerShell' : 'Terminal'} on <strong>this computer</strong> (the one showing this page, not
+                    the TAK Server machine: the bridge has to reach the same CrowdCAD this browser uses). Go to the folder where the bridge
+                    should live (for example <code>cd {os === 'windows' ? '$HOME' : '~'}</code>) and paste all of this:
                   </p>
                   <CopyBlock text={setupCommands('local', env.block, os)} />
                   <p className="text-surface-faint">

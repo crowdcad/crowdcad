@@ -111,14 +111,18 @@ export function envBlock(backend: Record<string, string>, creds: BridgeCredentia
 }
 
 const REPO = 'https://github.com/crowdcad/tak-bridge.git';
+/** TAK support is in development on this branch; switch to main at the first release. */
+const BRANCH = 'integration/tak';
+// Re-running the script (or an existing folder) updates the checkout instead of failing.
+const UNIX_GET = [`[ -d tak-bridge ] || git clone -b ${BRANCH} ${REPO}`, 'cd tak-bridge', `git checkout ${BRANCH}`, 'git pull --ff-only'];
+const PS_GET = [`if (-not (Test-Path tak-bridge)) { git clone -b ${BRANCH} ${REPO} }`, 'cd tak-bridge', `git checkout ${BRANCH}`, 'git pull --ff-only'];
 
 /** Exact commands to install and start the bridge, with the .env written inline so it is one paste. */
 export function setupCommands(placement: Placement, env: string, os: LocalOs = 'unix'): string {
   const body = env.trimEnd();
   if (placement === 'tak-host') {
     return [
-      `git clone ${REPO}`,
-      'cd tak-bridge',
+      ...UNIX_GET,
       "cat > .env <<'EOF'",
       body,
       'EOF',
@@ -129,8 +133,7 @@ export function setupCommands(placement: Placement, env: string, os: LocalOs = '
   }
   if (os === 'windows') {
     return [
-      `git clone ${REPO}`,
-      'cd tak-bridge',
+      ...PS_GET,
       "@'",
       body,
       "'@ | Set-Content -Encoding utf8 .env",
@@ -140,8 +143,7 @@ export function setupCommands(placement: Placement, env: string, os: LocalOs = '
     ].join('\n');
   }
   return [
-    `git clone ${REPO}`,
-    'cd tak-bridge',
+    ...UNIX_GET,
     "cat > .env <<'EOF'",
     body,
     'EOF',

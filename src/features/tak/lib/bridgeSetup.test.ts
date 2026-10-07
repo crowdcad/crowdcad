@@ -80,6 +80,13 @@ describe('setupCommands', () => {
     expect(cmds).toContain("\n'@ | Set-Content -Encoding utf8 .env\n");
     expect(cmds).toMatch(/npm ci\nnpm run build\nnode --env-file=\.env dist\/index\.js$/);
     expect(cmds).not.toContain('docker');
+    expect(cmds).toMatch(/^if \(-not \(Test-Path tak-bridge\)\) \{ git clone -b integration\/tak /);
+  });
+
+  it('reuses an existing checkout instead of failing', () => {
+    const lines = setupCommands('tak-host', block).split('\n');
+    expect(lines[0]).toMatch(/^\[ -d tak-bridge \] \|\| git clone -b integration\/tak /);
+    expect(lines.slice(1, 4)).toEqual(['cd tak-bridge', 'git checkout integration/tak', 'git pull --ff-only']);
   });
 
   it('this computer, macOS or Linux: heredoc then node', () => {
