@@ -4,12 +4,12 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { Layer } from '@/app/types';
 import { useTakEvent } from '../data/hub';
 import { alignmentFor } from '../data/alignmentStore';
-import { PREF, usePref } from '../data/prefs';
-import { snapshotFrame, type BasemapFrame } from '../lib/basemapFrame';
-import { BASEMAPS, DEFAULT_UNDERLAY_ID, NO_BASEMAP_ID, resolveBasemap } from '../lib/basemaps';
-import { useIsDark } from '../lib/ui';
+import { PREF, usePref } from '@/lib/geo/prefs';
+import { snapshotFrame, type BasemapFrame } from '@/lib/geo/basemapFrame';
+import { BASEMAPS, DEFAULT_UNDERLAY_ID, NO_BASEMAP_ID, resolveBasemap } from '@/lib/geo/basemaps';
+import { useIsDark } from '@/lib/geo/ui';
 import { TAK_MODULE_MARKER } from '../marker';
-import { loadMaplibre } from './BasemapView';
+import { loadMaplibre } from '@/components/geo/BasemapView';
 
 /**
  * A basemap under the dispatch map image (touchpoint j, D56, D60).

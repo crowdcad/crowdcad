@@ -32,7 +32,7 @@ import {
 import { TAK_MODULE_MARKER } from '../marker';
 import type { HistoryMode } from '../types';
 import { TAK_INPUT_CLASSNAMES } from '../lib/ui';
-import HelpTip from './HelpTip';
+import HelpTip from '@/components/geo/HelpTip';
 
 /**
  * Admin > TAK: TAK servers (bridges) for this CrowdCAD. Only admins see this

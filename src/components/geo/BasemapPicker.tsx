@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { Select, SelectItem } from '@heroui/react';
-import { basemapChoices } from '../lib/basemaps';
+import { basemapChoices } from '@/lib/geo/basemaps';
 
 /** Basemap style choice (D55). "Match light/dark mode" is the default where Light and Dark both exist. */
 export default function BasemapPicker({

@@ -1,4 +1,4 @@
-import type { AffineTransform, ControlPoint, LatLon } from '../types';
+import type { AffineTransform, ControlPoint, LatLon } from './types';
 
 /**
  * Map alignment math for the TAK "Align map" step.

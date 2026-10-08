@@ -40,7 +40,7 @@ function isPostObject(post: unknown): post is { name: string; x: number; y: numb
   );
 }
 
-interface ImageRect {
+export interface ImageRect {
   x: number;
   y: number;
   width: number;
@@ -58,7 +58,7 @@ interface PostMarkerProps {
   onAddCall?: (postName: string) => void;
 }
 
-function PostMarker({ post, rect, scale, isSelected, onAddCall }: PostMarkerProps) {
+export function PostMarker({ post, rect, scale, isSelected, onAddCall }: PostMarkerProps) {
   const [hovered, setHovered] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
@@ -246,7 +246,7 @@ interface EquipmentMarkerProps {
   isSelected?: boolean;
 }
 
-function EquipmentMarker({
+export function EquipmentMarker({
   equipment,
   post,
   rect,
@@ -417,7 +417,7 @@ interface TeamMarkerProps {
   staggerIndex?: number;
 }
 
-function TeamMarker({
+export function TeamMarker({
   team,
   post,
   rect,
@@ -588,7 +588,7 @@ interface SupervisorMarkerProps {
   isSelected?: boolean;
 }
 
-function SupervisorMarker({ supervisor, post, rect, scale, isSelected }: SupervisorMarkerProps) {
+export function SupervisorMarker({ supervisor, post, rect, scale, isSelected }: SupervisorMarkerProps) {
   const [hovered, setHovered] = useState(false);
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
   const markerRef = useRef<HTMLDivElement>(null);
@@ -686,6 +686,11 @@ export interface MapOverlay {
   markers?: (ctx: { layer: Layer | undefined; layerIndex: number; rect: { x: number; y: number; width: number; height: number }; scale: number }) => React.ReactNode;
   /** Rendered above the map, unscaled (panels, badges). */
   chrome?: React.ReactNode;
+  /**
+   * On the live map of a geo layer (P8, D64), content rendered inside the map, where it can add its own pins with
+   * GeoPins (src/components/geo/BasemapView.tsx). Image layers use `markers` instead.
+   */
+  geoMarkers?: (ctx: { layer: Layer | undefined; layerIndex: number }) => React.ReactNode;
   /**
    * Rendered beneath the map image, inside the zoomed/panned map (e.g. a basemap). `container` is the map box in
    * unscaled pixels. `setImageOpacity` lets it fade the image so what is beneath shows through; the image returns to

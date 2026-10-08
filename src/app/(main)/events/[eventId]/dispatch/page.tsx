@@ -58,6 +58,8 @@ import { formatAgeSex, parseAgeSex } from '@/lib/ageSex';
 import { getActivePostingTime } from '@/lib/postingTimes';
 import { stampStatusSince, deriveStatusSinceFromLogs } from '@/lib/teamStatusSince';
 import { newTeamId } from '@/lib/teamId';
+import { isGeoLayer } from '@/lib/geo/layers';
+import { isPlacedPost } from '@/lib/geo/positions';
 
 // TAK live tracking (optional, in development): loaded only for TAK events,
 // and compiled out entirely unless NEXT_PUBLIC_TAK is exactly "on".
@@ -70,6 +72,8 @@ const TakEventAgent =
   process.env.NEXT_PUBLIC_TAK === 'on' ? lazy(() => import('@/features/tak').then((m) => ({ default: m.TakEventAgent }))) : null;
 const TakBasemapUnderlay =
   process.env.NEXT_PUBLIC_TAK === 'on' ? lazy(() => import('@/features/tak').then((m) => ({ default: m.TakBasemapUnderlay }))) : null;
+const TakGeoMarkers =
+  process.env.NEXT_PUBLIC_TAK === 'on' ? lazy(() => import('@/features/tak').then((m) => ({ default: m.TakGeoMarkers }))) : null;
 
 interface DispatchRoutePageProps {
   params: Promise<{ eventId: string }>;
@@ -3198,9 +3202,14 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
   // TAK live tracking (optional): only TAK events get the map overlay, and
   // only builds with NEXT_PUBLIC_TAK=on contain it at all.
   const takOverlay: MapOverlay | undefined =
-    process.env.NEXT_PUBLIC_TAK === 'on' && TakLiveMarkers && TakEventPanel && TakBasemapUnderlay &&
+    process.env.NEXT_PUBLIC_TAK === 'on' && TakLiveMarkers && TakEventPanel && TakBasemapUnderlay && TakGeoMarkers &&
     event.mapMode === 'tak' && !isLiteMode && user && eventId
       ? {
+          geoMarkers: () => (
+            <Suspense fallback={null}>
+              <TakGeoMarkers eventId={eventId} staff={event.staff || []} supervisor={event.supervisor || []} />
+            </Suspense>
+          ),
           underlay: (ctx) => (
             <Suspense fallback={null}>
               <TakBasemapUnderlay
@@ -3244,7 +3253,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
   // The Map tab only makes sense once an image actually exists to show —
   // a venue with no map uploaded to any layer gets no tab, same rule the
   // navbar used for its old "Venue Map" shortcut.
-  const hasVenueMapImage = venueLayers.some((layer) => !!layer.mapUrl);
+  const hasVenueMapImage = venueLayers.some((layer) => !!layer.mapUrl || isGeoLayer(layer));
 
   // Every post name actually placeable on the map (has x/y coordinates) —
   // plain string posts and free-text locations (Roaming, In Clinic, a typed
@@ -3252,11 +3261,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
   // card's "view on map" button is disabled unless its location is in here.
   const knownMapLocations = new Set(
     venueLayers.flatMap((layer) =>
-      (layer.posts || [])
-        .filter((post): post is { name: string; x: number; y: number } =>
-          typeof post === 'object' && post !== null && typeof post.x === 'number' && typeof post.y === 'number'
-        )
-        .map((post) => post.name)
+      (layer.posts || []).filter((post) => isPlacedPost(post, layer)).map((post) => (typeof post === 'string' ? post : post.name))
     )
   );
 

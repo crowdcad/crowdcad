@@ -7,20 +7,20 @@ import type { Event, Layer } from '@/app/types';
 import { useAuth } from '@/hooks/useauth';
 import { getEventVenueLayers } from '@/lib/zones';
 import { alignmentFor, loadAlignments, loadVenueAlignments } from '../data/alignmentStore';
-import { PREF, usePref } from '../data/prefs';
+import { PREF, usePref } from '@/lib/geo/prefs';
 import { loadHistory } from '../data/takStore';
-import { percentToLatLon } from '../lib/affine';
-import { imageCorners } from '../lib/basemapFrame';
-import { DEFAULT_BASEMAP_ID, validChoice } from '../lib/basemaps';
+import { percentToLatLon } from '@/lib/geo/affine';
+import { imageCorners } from '@/lib/geo/basemapFrame';
+import { DEFAULT_BASEMAP_ID, validChoice } from '@/lib/geo/basemaps';
 import { heatCells, teamHistoryStats, type HistorySegment, type PostLocation } from '../lib/historyStats';
 import { exportFileName, heatCsv, heatGeoJson, historyCsv } from '../lib/historyExport';
 import { takTeams } from '../lib/teamIds';
 import { TAK_MODULE_MARKER } from '../marker';
-import { ACCENT_SLIDER_CLASSNAMES } from '../lib/ui';
+import { ACCENT_SLIDER_CLASSNAMES } from '@/lib/geo/ui';
 import type { TakMapAlignment } from '../types';
-import BasemapPicker from './BasemapPicker';
-import HelpTip from './HelpTip';
-import BasemapView, { type BasemapViewRequest } from './BasemapView';
+import BasemapPicker from '@/components/geo/BasemapPicker';
+import HelpTip from '@/components/geo/HelpTip';
+import BasemapView, { type BasemapViewRequest } from '@/components/geo/BasemapView';
 
 /**
  * Location history on the event summary page (touchpoint k, D57): the heat

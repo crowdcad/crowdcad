@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { fitAffine, latLonToPercent, percentToLatLon, toLocalMeters } from './affine';
 import { basemapFrame, imageCorners, pxPerMeter, snapshotFrame } from './basemapFrame';
-import type { ControlPoint, LatLon } from '../types';
+import type { ControlPoint, LatLon } from './types';
 
 /** Builds an alignment for a W x H image rotated by `deg`, `mPerPx` meters per pixel, with optional shear. */
 function synthetic(deg: number, mPerPx: number, shear = 0) {

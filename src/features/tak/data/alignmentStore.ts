@@ -1,5 +1,6 @@
 import { dbService, isPocketbaseBackend } from '@/lib/services';
 import type { TakMapAlignment } from '../types';
+import { alignmentMatches, layerAlignment } from '@/lib/geo/layers';
 
 /**
  * Map alignments, one per event map layer. Firebase stores them at
@@ -69,10 +70,7 @@ export async function deleteAlignment(eventId: string, layerId: string): Promise
   await dbService.deleteDocument(fsCollection(eventId), layerId);
 }
 
-/** An alignment applies to a layer only while the layer still shows the image it was made for. */
-export function alignmentMatches(alignment: TakMapAlignment | undefined, mapUrl: string | undefined): boolean {
-  return Boolean(alignment && mapUrl && alignment.mapUrl === mapUrl);
-}
+export { alignmentMatches };
 
 /**
  * A layer's current alignment, from (in order): the venue's own layer as it
@@ -82,18 +80,16 @@ export function alignmentMatches(alignment: TakMapAlignment | undefined, mapUrl:
  * made for the image the layer shows. Undefined when none matches.
  */
 export function alignmentFor(
-  layer: { id: string; mapUrl?: string; takAlignment?: TakMapAlignment } | undefined,
+  layer: { id: string; mapUrl?: string; alignment?: TakMapAlignment; takAlignment?: TakMapAlignment } | undefined,
   legacy: Record<string, TakMapAlignment> = {},
   venue: Record<string, TakMapAlignment> = {},
 ): TakMapAlignment | undefined {
   if (!layer) return undefined;
-  for (const a of [venue[layer.id], layer.takAlignment, legacy[layer.id]]) {
-    if (alignmentMatches(a, layer.mapUrl)) return a;
-  }
-  return undefined;
+  if (alignmentMatches(venue[layer.id], layer.mapUrl)) return venue[layer.id];
+  return layerAlignment(layer) ?? (alignmentMatches(legacy[layer.id], layer.mapUrl) ? legacy[layer.id] : undefined);
 }
 
-type VenueRecord = { id?: string; layers?: { id: string; mapUrl?: string; takAlignment?: TakMapAlignment }[] };
+type VenueRecord = { id?: string; layers?: { id: string; mapUrl?: string; alignment?: TakMapAlignment; takAlignment?: TakMapAlignment }[] };
 
 async function eventVenue(eventId: string): Promise<{ event: { venue?: VenueRecord }; venueId: string | null }> {
   const snap = await dbService.getDocument<{ venue?: VenueRecord }>('events', eventId);
@@ -113,7 +109,10 @@ export async function loadVenueAlignments(eventId: string): Promise<Record<strin
     if (!venueId) return {};
     const venue = await dbService.getDocument<VenueRecord>('venues', venueId);
     const out: Record<string, TakMapAlignment> = {};
-    for (const l of venue.data?.layers ?? []) if (l.takAlignment) out[l.id] = fromRecord(l.takAlignment);
+    for (const l of venue.data?.layers ?? []) {
+      const a = l.alignment ?? l.takAlignment;
+      if (a) out[l.id] = fromRecord(a);
+    }
     return out;
   } catch {
     return {};
@@ -132,9 +131,9 @@ export async function copyVenueAlignmentsToEvent(eventId: string): Promise<numbe
   let changed = 0;
   const layers = event.venue.layers.map((l) => {
     const a = fromVenue[l.id];
-    if (!a || !alignmentMatches(a, l.mapUrl) || l.takAlignment?.updatedAt === a.updatedAt) return l;
+    if (!a || !alignmentMatches(a, l.mapUrl) || (l.alignment ?? l.takAlignment)?.updatedAt === a.updatedAt) return l;
     changed++;
-    return { ...l, takAlignment: a };
+    return { ...l, alignment: a };
   });
   if (changed) await dbService.updateDocument('events', eventId, { venue: { ...event.venue, layers } });
   return changed;

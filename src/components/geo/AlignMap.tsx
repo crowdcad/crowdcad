@@ -6,14 +6,13 @@ import { Crosshair, LocateFixed, Trash2 } from 'lucide-react';
 import { useZoomPan } from '@/hooks/useZoomPan';
 import { MAP_CHECKER_BG } from '@/lib/mapStyles';
 import MapZoomControls from '@/components/ui/map-zoom-controls';
-import { fitAffine, parseLatLon } from '../lib/affine';
-import { imageCorners } from '../lib/basemapFrame';
-import { DEFAULT_BASEMAP_ID, validChoice } from '../lib/basemaps';
-import { searchPlaces, type PlaceResult } from '../lib/geocode';
-import { ACCENT_SLIDER_CLASSNAMES, TAK_INPUT_CLASSNAMES } from '../lib/ui';
-import { PREF, usePref } from '../data/prefs';
-import { TAK_MODULE_MARKER } from '../marker';
-import type { ControlPoint, LatLon, TakMapAlignment } from '../types';
+import { fitAffine, parseLatLon } from '@/lib/geo/affine';
+import { imageCorners } from '@/lib/geo/basemapFrame';
+import { DEFAULT_BASEMAP_ID, validChoice } from '@/lib/geo/basemaps';
+import { searchPlaces, type PlaceResult } from '@/lib/geo/geocode';
+import { ACCENT_SLIDER_CLASSNAMES } from '@/lib/geo/ui';
+import { PREF, usePref } from '@/lib/geo/prefs';
+import type { ControlPoint, LatLon, MapAlignment } from '@/lib/geo/types';
 import BasemapPicker from './BasemapPicker';
 import BasemapView, { type BasemapMarker, type BasemapViewRequest } from './BasemapView';
 
@@ -29,15 +28,15 @@ import BasemapView, { type BasemapMarker, type BasemapViewRequest } from './Base
 export interface AlignMapProps {
   layer: { id: string; name: string; mapUrl: string };
   ownerUid: string;
-  initial?: TakMapAlignment;
+  initial?: MapAlignment;
   /** Called with the result when the user saves. Leave out when using onChange. */
-  onSave?: (alignment: TakMapAlignment) => void | Promise<void>;
+  onSave?: (alignment: MapAlignment) => void | Promise<void>;
   /**
    * Called whenever the points change: the alignment once 3 or more points
    * fit, or null when they no longer do. With it there is no save button;
    * the caller keeps the latest (venue setup saves it with the venue).
    */
-  onChange?: (alignment: TakMapAlignment | null) => void;
+  onChange?: (alignment: MapAlignment | null) => void;
   saveLabel?: string;
   onCancel?: () => void;
   cancelLabel?: string;
@@ -185,7 +184,7 @@ export default function AlignMap({
     }
   };
 
-  const build = (): TakMapAlignment | null =>
+  const build = (): MapAlignment | null =>
     fitOk && natural
       ? {
           mapUrl: layer.mapUrl,
@@ -264,7 +263,7 @@ export default function AlignMap({
   };
 
   return (
-    <div className="flex flex-col gap-3 text-surface-light" data-tak-module={TAK_MODULE_MARKER}>
+    <div className="flex flex-col gap-3 text-surface-light">
       <div className="flex flex-wrap items-end gap-2">
         <BasemapPicker value={basemapChoice} onChange={setBasemapId} omit={['none']} />
         <form
@@ -275,8 +274,7 @@ export default function AlignMap({
           }}
         >
           <Input
-            classNames={TAK_INPUT_CLASSNAMES}
-            size="sm"
+                        size="sm"
             label="Find a place or coordinates (press Enter)"
             placeholder="Venue name, address, or 37.7694, -122.4862"
             value={query}
@@ -409,8 +407,7 @@ export default function AlignMap({
           {pendingImg && (
             <>
               <Input
-                classNames={TAK_INPUT_CLASSNAMES}
-                size="sm"
+                                size="sm"
                 label="Or type its position (latitude, longitude)"
                 placeholder="45.0012, -100.0021"
                 value={coordInput}

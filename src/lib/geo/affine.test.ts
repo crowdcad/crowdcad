@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ControlPoint } from '../types';
+import type { ControlPoint } from './types';
 import { fitAffine, fromLocalMeters, latLonToPercent, parseLatLon, percentToLatLon, toLocalMeters, type AffineFit } from './affine';
 
 /** Deterministic PRNG for reproducible noise. */

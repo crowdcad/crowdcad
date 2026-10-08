@@ -1,16 +1,18 @@
 'use client';
 
 import 'maplibre-gl/dist/maplibre-gl.css';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { Map as MlMap, Marker as MlMarker } from 'maplibre-gl';
-import { BASEMAPS, DEFAULT_BASEMAP_ID, resolveBasemap } from '../lib/basemaps';
-import { useIsDark } from '../lib/ui';
+import { BASEMAPS, DEFAULT_BASEMAP_ID, resolveBasemap } from '@/lib/geo/basemaps';
+import { useIsDark } from '@/lib/geo/ui';
 import styles from './basemap.module.css';
-import { TAK_MODULE_MARKER } from '../marker';
-import type { LatLon } from '../types';
+import type { LatLon } from '@/lib/geo/types';
 
 /**
- * An interactive basemap (MapLibre) for aligning maps and viewing history.
+ * An interactive basemap (MapLibre): the live map behind map alignment,
+ * drawn areas, posts and zones on geo layers, the dispatch live map and the
+ * TAK history view.
  *
  * The event map image and heat cells are drawn above the map in plain DOM
  * and canvas, so the image never has to be loaded into WebGL (which would
@@ -40,6 +42,29 @@ export interface HeatPoint {
   secs: number;
 }
 
+/** A polygon or line in real coordinates, drawn above the image (zones, drawn areas, a shape being drawn). */
+export interface GeoShape {
+  id: string;
+  coords: { lat: number; lng: number }[];
+  color: string;
+  /** Closed and filled (a zone or area), or an open line with its vertices (a shape being drawn). */
+  closed: boolean;
+  fillOpacity?: number;
+  dashed?: boolean;
+}
+
+/** Any React content pinned to a position: posts, team markers. */
+export interface GeoPin {
+  key: string;
+  lat: number;
+  lng: number;
+  node: React.ReactNode;
+  /** Lets the pin be dragged to a new position. */
+  onDragEnd?: (p: { lat: number; lng: number }) => void;
+  /** Which part of the content sits on the position. */
+  anchor?: 'center' | 'bottom';
+}
+
 /** A request to move the view; change `key` to apply it again. */
 export interface BasemapViewRequest {
   key: number;
@@ -64,6 +89,10 @@ export interface BasemapViewProps {
   cursor?: 'crosshair' | 'grab';
   /** Zoom with Ctrl/Cmd + scroll (two fingers on touch) so the page still scrolls over the map. */
   cooperativeGestures?: boolean;
+  shapes?: GeoShape[];
+  pins?: GeoPin[];
+  /** Content above the map, unscaled (controls, panels). */
+  children?: React.ReactNode;
 }
 
 type Maplibre = typeof import('maplibre-gl');
@@ -80,6 +109,73 @@ export const loadMaplibre = () =>
   }));
 
 const r6 = (n: number) => Number(n.toFixed(6));
+
+/** The live map, for content that adds its own pins (GeoPins) as a child of BasemapView. */
+export const GeoMapContext = createContext<{ map: MlMap; ml: Maplibre } | null>(null);
+
+/**
+ * Pins on the enclosing BasemapView: one MapLibre marker per key, holding a
+ * React portal, so content updates without recreating markers. Usable by any
+ * child of BasemapView (for example the TAK module's live positions).
+ */
+export function GeoPins({ pins }: { pins: GeoPin[] }) {
+  const ctx = useContext(GeoMapContext);
+  const pinEls = useRef(new Map<string, { el: HTMLDivElement; marker: MlMarker | null }>());
+  for (const pin of pins) {
+    if (!pinEls.current.has(pin.key) && typeof document !== 'undefined') {
+      const el = document.createElement('div');
+      // Above the image overlay and shapes (later siblings of the map), like MapLibre's own controls.
+      el.style.zIndex = '2';
+      pinEls.current.set(pin.key, { el, marker: null });
+    }
+  }
+  const handlers = useRef(new Map<string, GeoPin['onDragEnd']>());
+  handlers.current = new Map(pins.map((p) => [p.key, p.onDragEnd]));
+  useEffect(() => {
+    if (!ctx) return;
+    const keep = new Set(pins.map((p) => p.key));
+    for (const [key, entry] of pinEls.current) {
+      if (!keep.has(key)) {
+        entry.marker?.remove();
+        pinEls.current.delete(key);
+      }
+    }
+    for (const pin of pins) {
+      const entry = pinEls.current.get(pin.key);
+      if (!entry) continue;
+      if (!entry.marker) {
+        entry.marker = new ctx.ml.Marker({ element: entry.el, anchor: pin.anchor ?? 'center' }).setLngLat([pin.lng, pin.lat]).addTo(ctx.map);
+        entry.marker.on('dragend', () => {
+          const ll = entry.marker!.getLngLat();
+          handlers.current.get(pin.key)?.({ lat: ll.lat, lng: ll.lng });
+        });
+      } else {
+        entry.marker.setLngLat([pin.lng, pin.lat]);
+      }
+      entry.marker.setDraggable(!!pin.onDragEnd);
+    }
+  });
+  // On unmount (or the map going away), take the markers off the map but keep their elements, which the
+  // portals below render into; a remount (React's development double mount included) adds them back.
+  useEffect(
+    () => () => {
+      for (const entry of pinEls.current.values()) {
+        entry.marker?.remove();
+        entry.marker = null;
+      }
+    },
+    [ctx],
+  );
+  return (
+    <>
+      {pins.map((pin) => {
+        const entry = pinEls.current.get(pin.key);
+        return entry ? createPortal(pin.node, entry.el, pin.key) : null;
+      })}
+    </>
+  );
+}
+
 
 function markerElement(m: BasemapMarker): HTMLElement {
   const el = document.createElement('div');
@@ -112,6 +208,9 @@ export default function BasemapView({
   onCenterChange,
   cursor = 'crosshair',
   cooperativeGestures = false,
+  shapes,
+  pins,
+  children,
 }: BasemapViewProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
@@ -123,9 +222,10 @@ export default function BasemapView({
   const [loadError, setLoadError] = useState<string | null>(null);
 
   // Latest props for the per-frame handlers, which must not wait for React.
-  const live = useRef({ image, heat, heatCellM, natural: null as { w: number; h: number } | null });
+  const live = useRef({ image, heat, heatCellM, shapes, natural: null as { w: number; h: number } | null });
   live.current.image = image;
   live.current.heat = heat;
+  live.current.shapes = shapes;
   live.current.heatCellM = heatCellM;
   const clickRef = useRef(onMapClick);
   clickRef.current = onMapClick;
@@ -174,6 +274,7 @@ export default function BasemapView({
     }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, w, h);
+    drawShapes(map, ctx);
     const cells = live.current.heat;
     if (!cells?.length) return;
     let max = 0;
@@ -189,6 +290,38 @@ export default function BasemapView({
       ctx.globalAlpha = 0.15 + 0.7 * Math.sqrt(c.secs / max);
       ctx.fillRect(p.x - size / 2, p.y - size / 2, size, size);
     }
+  };
+
+  /** Zones, drawn areas and the shape being drawn. */
+  const drawShapes = (map: MlMap, ctx: CanvasRenderingContext2D) => {
+    for (const shape of live.current.shapes ?? []) {
+      if (shape.coords.length === 0) continue;
+      const pts = shape.coords.map((c) => map.project([c.lng, c.lat]));
+      ctx.globalAlpha = 1;
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = shape.color;
+      ctx.setLineDash(shape.dashed ? [6, 4] : []);
+      ctx.beginPath();
+      pts.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
+      if (shape.closed && pts.length > 2) {
+        ctx.closePath();
+        ctx.fillStyle = shape.color;
+        ctx.globalAlpha = shape.fillOpacity ?? 0.2;
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+      ctx.stroke();
+      if (!shape.closed) {
+        ctx.fillStyle = shape.color;
+        for (const p of pts) {
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+    }
+    ctx.setLineDash([]);
+    ctx.globalAlpha = 1;
   };
 
   const sync = () => {
@@ -294,8 +427,8 @@ export default function BasemapView({
 
   return (
     <div
-      className={`relative overflow-hidden ${styles.map} ${onMapClick && cursor === 'crosshair' ? styles.crosshair : ''} ${className ?? ''}`}
-      data-tak-module={TAK_MODULE_MARKER}
+      // Positioned relative unless the caller positions it (e.g. absolute inset-0); Tailwind's relative would win.
+      className={`${/\b(absolute|fixed)\b/.test(className ?? '') ? '' : 'relative'} overflow-hidden ${styles.map} ${onMapClick && cursor === 'crosshair' ? styles.crosshair : ''} ${className ?? ''}`}
     >
       {/* Inline position: MapLibre's stylesheet sets position: relative on the map element. */}
       <div ref={containerRef} style={{ position: 'absolute', inset: 0, cursor: onMapClick ? cursor : undefined }} />
@@ -317,6 +450,10 @@ export default function BasemapView({
         )}
         <canvas ref={heatRef} className="absolute inset-0 h-full w-full" />
       </div>
+      <GeoMapContext.Provider value={ready && mapRef.current && mlRef.current ? { map: mapRef.current, ml: mlRef.current } : null}>
+        {pins?.length ? <GeoPins pins={pins} /> : null}
+        {children}
+      </GeoMapContext.Provider>
       {loadError && (
         <p className="absolute bottom-8 left-2 right-2 rounded bg-surface-deepest/90 px-2 py-1 text-xs text-status-red">
           Basemap unavailable ({loadError}). You can still type coordinates, or pick &quot;No basemap&quot;.

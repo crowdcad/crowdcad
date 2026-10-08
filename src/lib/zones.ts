@@ -1,4 +1,6 @@
 import type { Call, DispatchZone, Layer, Post, Zone } from '@/app/types';
+import { isGeoLayer } from '@/lib/geo/layers';
+import { postLatLng, zoneLatLngs } from '@/lib/geo/positions';
 
 /** Resolves an event's dispatch zones. Unlike clinics, there's no default fallback zone — "All Calls" already covers every call regardless of dispatch zones. */
 export function getEventDispatchZones(zones: DispatchZone[] | undefined): DispatchZone[] {
@@ -46,19 +48,23 @@ export function pointInPolygon(point: { x: number; y: number }, polygon: { x: nu
 
 /**
  * Locates a post by name among `layers` and returns every zone (on that
- * post's own layer) whose polygon contains it. A post with no coordinates
+ * post's own layer) whose polygon contains it. A post with no position
  * (free-text location, no map) or no name match returns no zones. Checks
- * every layer in case more than one has a post with this name.
+ * every layer in case more than one has a post with this name. On a geo
+ * layer (P8, D64) the test runs in coordinates, so posts and zones outside
+ * the venue image count too.
  */
 export function findZonesForPost(postName: string, layers: Layer[]): Zone[] {
   const matches: Zone[] = [];
   for (const layer of layers) {
-    const post = (layer.posts || []).find(
-      (p): p is CoordinatedPost => typeof p !== 'string' && isCoordinatedPost(p) && p.name === postName
-    );
+    const post = (layer.posts || []).find((p) => typeof p !== 'string' && p.name === postName);
     if (!post) continue;
+    const at = isGeoLayer(layer) ? postLatLng(post, layer) : null;
     for (const zone of layer.zones || []) {
-      if (zone.points.length >= 3 && pointInPolygon(post, zone.points)) {
+      const coords = at ? zoneLatLngs(zone, layer) : null;
+      if (at && coords) {
+        if (pointInPolygon({ x: at.lng, y: at.lat }, coords.map((c) => ({ x: c.lng, y: c.lat })))) matches.push(zone);
+      } else if (isCoordinatedPost(post) && zone.points.length >= 3 && pointInPolygon(post, zone.points)) {
         matches.push(zone);
       }
     }

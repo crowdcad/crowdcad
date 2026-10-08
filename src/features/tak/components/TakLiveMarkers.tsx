@@ -4,7 +4,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import type { Layer, Staff, Supervisor } from '@/app/types';
 import { useTakEvent } from '../data/hub';
 import { alignmentFor } from '../data/alignmentStore';
-import { latLonToPercent } from '../lib/affine';
+import { latLonToPercent } from '@/lib/geo/affine';
 import { isStale, teamPositions } from '../lib/linking';
 import { takTeams } from '../lib/teamIds';
 import { TAK_MODULE_MARKER } from '../marker';

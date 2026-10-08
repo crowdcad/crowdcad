@@ -1,5 +1,5 @@
 import { parseLatLon } from './affine';
-import type { LatLon } from '../types';
+import type { LatLon } from './types';
 
 /**
  * Place search for the alignment basemap (D55). Uses a Photon geocoder

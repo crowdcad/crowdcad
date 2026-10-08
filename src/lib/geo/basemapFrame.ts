@@ -1,5 +1,5 @@
 import { M_PER_DEG, percentToLatLon } from './affine';
-import type { AffineTransform, LatLon } from '../types';
+import type { AffineTransform, LatLon } from './types';
 
 /**
  * Geometry for drawing a basemap in an aligned map image's frame (D56).

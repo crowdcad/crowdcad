@@ -1,4 +1,4 @@
-import type { TakMapAlignment } from '@/features/tak';
+import type { MapAlignment, MapArea } from '@/lib/geo/types';
 
 export type Post =
   | string
@@ -8,7 +8,10 @@ export type Post =
     y: number | null; // percentage of height
     isClinic?: boolean;
     clinicId?: string; // stable id, set once when isClinic first becomes true
-    lat?: number | null; // source lat/long from a GIS import, for provenance only — rendering always uses x/y
+    // Real coordinates. On a geo layer (aligned image or drawn area, see src/lib/geo/layers.ts) they are the
+    // post's position, and x/y are set only when the post is inside the image. On an image layer they are
+    // provenance from a GIS import and rendering uses x/y.
+    lat?: number | null;
     lng?: number | null;
   };
 
@@ -23,6 +26,7 @@ export interface Zone {
   name: string;
   color: string; // hex, e.g. "#3b82f6"
   points: { x: number; y: number }[]; // percent-of-image polygon vertices, in order
+  coords?: { lat: number; lng: number }[]; // the same polygon in real coordinates, on a geo layer
   isDispatchZone?: boolean; // when true, gets its own "{name} Calls" tab in the dispatch view
 }
 
@@ -45,8 +49,12 @@ export interface Layer {
   posts: Post[];
   zones?: Zone[];
   geoBounds?: GeoBounds; // present when this layer's mapUrl was georeferenced via a GIS import
-  /** TAK (optional, in development): this map's real-world alignment, set in venue setup. Core never reads it. */
-  takAlignment?: TakMapAlignment;
+  /** The image's real-world alignment (venue setup's Map alignment step). Makes this a geo layer. */
+  alignment?: MapAlignment;
+  /** The same, from venues aligned while this was a TAK-only step; still read. */
+  takAlignment?: MapAlignment;
+  /** A drawn area of interest for a layer with no image; makes this a geo layer centered on it. */
+  area?: MapArea;
 }
 
 export interface Venue {
@@ -59,8 +67,6 @@ export interface Venue {
   userId: string;
   sharedWith?: string[]; // Array of emails
   isOrgVenue?: boolean; // Visible to all users on this instance, set by an admin
-  /** TAK (optional, in development): venue setup shows the TAK alignment step. Core reads it only to show that step. */
-  takEnabled?: boolean;
 }
 
 export interface Event {

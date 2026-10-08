@@ -5,7 +5,7 @@ import { Button, Select, SelectItem, Slider, Switch } from '@heroui/react';
 import { ChevronDown, ChevronUp, Link2Off, Radio } from 'lucide-react';
 import type { Event, Layer } from '@/app/types';
 import { refreshAlignments, useTakEvent } from '../data/hub';
-import { PREF, usePref } from '../data/prefs';
+import { PREF, usePref } from '@/lib/geo/prefs';
 import { alignmentFor, alignmentMatches, copyVenueAlignmentsToEvent } from '../data/alignmentStore';
 import {
   clearLive,
@@ -17,14 +17,14 @@ import {
   type TakBridge,
   type TakEventConfig,
 } from '../data/takStore';
-import { BASEMAPS, DEFAULT_UNDERLAY_ID, NO_BASEMAP_ID, resolveBasemap, validChoice } from '../lib/basemaps';
-import { ACCENT_SLIDER_CLASSNAMES, ACCENT_SWITCH_CLASSNAMES, useIsDark } from '../lib/ui';
+import { BASEMAPS, DEFAULT_UNDERLAY_ID, NO_BASEMAP_ID, resolveBasemap, validChoice } from '@/lib/geo/basemaps';
+import { ACCENT_SLIDER_CLASSNAMES, ACCENT_SWITCH_CLASSNAMES, useIsDark } from '@/lib/geo/ui';
 import { isStale, unassignedDevices } from '../lib/linking';
 import { takTeams } from '../lib/teamIds';
 import { TAK_MODULE_MARKER } from '../marker';
 import type { HistoryMode } from '../types';
-import BasemapPicker from './BasemapPicker';
-import HelpTip from './HelpTip';
+import BasemapPicker from '@/components/geo/BasemapPicker';
+import HelpTip from '@/components/geo/HelpTip';
 import { DEFAULT_IMAGE_OPACITY } from './TakBasemapUnderlay';
 
 export interface TakEventPanelProps {
@@ -112,7 +112,7 @@ export default function TakEventPanel({ eventId, event, uid, isOwner, layers }: 
   // The venue was aligned (or re-aligned) after this event copied it.
   const venueNewer = layers.some((l) => {
     const v = tak.venueAlignments[l.id];
-    return !!v && alignmentMatches(v, l.mapUrl) && l.takAlignment?.updatedAt !== v.updatedAt;
+    return !!v && alignmentMatches(v, l.mapUrl) && (l.alignment ?? l.takAlignment)?.updatedAt !== v.updatedAt;
   });
   const [copying, setCopying] = useState(false);
   const copyFromVenue = async () => {
@@ -251,7 +251,7 @@ export default function TakEventPanel({ eventId, event, uid, isOwner, layers }: 
                     <p key={l.id} className="truncate">
                       {l.name}:{' '}
                       <span className="text-surface-faint">
-                        {a ? (a.residualM === null ? 'aligned' : `aligned, about ${a.residualM.toFixed(1)} m`) : l.takAlignment ? 'image changed since alignment' : 'not aligned'}
+                        {a ? (a.residualM === null ? 'aligned' : `aligned, about ${a.residualM.toFixed(1)} m`) : l.alignment || l.takAlignment ? 'image changed since alignment' : 'not aligned'}
                       </span>
                     </p>
                   );

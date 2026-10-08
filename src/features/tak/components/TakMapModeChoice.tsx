@@ -8,7 +8,7 @@ import { alignmentFor, loadAlignments, loadVenueAlignments } from '../data/align
 import { deleteEventConfig, getEventConfig, listAllowedBridges, saveEventConfig, type TakBridge } from '../data/takStore';
 import { TAK_MODULE_MARKER } from '../marker';
 import type { HistoryMode, TakMapAlignment } from '../types';
-import HelpTip from './HelpTip';
+import HelpTip from '@/components/geo/HelpTip';
 
 /**
  * The event builder's single TAK choice: "Map: Standard (default) / TAK live
@@ -155,7 +155,7 @@ export default function TakMapModeChoice({ eventId, uid, mapMode, onMapModeChang
               <p key={l.id} className="truncate text-sm">
                 {l.name}:{' '}
                 <span className="text-surface-faint">
-                  {alignmentFor(l, alignments, venueAlignments) ? 'aligned' : l.takAlignment ? 'image changed since alignment, align it again in venue setup' : 'not aligned yet'}
+                  {alignmentFor(l, alignments, venueAlignments) ? 'aligned' : l.alignment || l.takAlignment ? 'image changed since alignment, align it again in venue setup' : 'not aligned yet'}
                 </span>
               </p>
             ))}
