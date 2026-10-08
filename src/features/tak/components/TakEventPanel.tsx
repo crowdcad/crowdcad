@@ -4,9 +4,9 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Button, Select, SelectItem, Slider, Switch } from '@heroui/react';
 import { ChevronDown, ChevronUp, Link2Off, Radio } from 'lucide-react';
 import type { Event, Layer } from '@/app/types';
-import { useTakEvent } from '../data/hub';
+import { refreshAlignments, useTakEvent } from '../data/hub';
 import { PREF, usePref } from '../data/prefs';
-import { alignmentFor } from '../data/alignmentStore';
+import { alignmentFor, alignmentMatches, copyVenueAlignmentsToEvent } from '../data/alignmentStore';
 import {
   clearLive,
   linkDevice,
@@ -17,13 +17,14 @@ import {
   type TakBridge,
   type TakEventConfig,
 } from '../data/takStore';
-import { BASEMAPS, NO_BASEMAP_ID, resolveBasemap, validChoice } from '../lib/basemaps';
+import { BASEMAPS, DEFAULT_UNDERLAY_ID, NO_BASEMAP_ID, resolveBasemap, validChoice } from '../lib/basemaps';
 import { useIsDark } from '../lib/ui';
 import { isStale, unassignedDevices } from '../lib/linking';
 import { takTeams } from '../lib/teamIds';
 import { TAK_MODULE_MARKER } from '../marker';
 import type { HistoryMode } from '../types';
 import BasemapPicker from './BasemapPicker';
+import HelpTip from './HelpTip';
 import { DEFAULT_IMAGE_OPACITY } from './TakBasemapUnderlay';
 
 export interface TakEventPanelProps {
@@ -54,10 +55,10 @@ export default function TakEventPanel({ eventId, event, uid, isOwner, layers }: 
   const [now, setNow] = useState(() => Date.now());
   const [bridges, setBridges] = useState<TakBridge[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [underlayId, setUnderlayId] = usePref<string>(PREF.underlayBasemap, NO_BASEMAP_ID);
+  const [underlayId, setUnderlayId] = usePref<string>(PREF.underlayBasemap, DEFAULT_UNDERLAY_ID);
   const [imageOpacity, setImageOpacity] = usePref<number>(PREF.imageOpacity, DEFAULT_IMAGE_OPACITY);
   const dark = useIsDark();
-  const underlay = resolveBasemap(underlayId, NO_BASEMAP_ID, BASEMAPS, dark);
+  const underlay = resolveBasemap(underlayId, DEFAULT_UNDERLAY_ID, BASEMAPS, dark);
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 10_000);
@@ -108,6 +109,25 @@ export default function TakEventPanel({ eventId, event, uid, isOwner, layers }: 
   const unassigned = unassignedDevices(tak.live, tak.links);
   const teamName = (id: string) => teams.find((t) => t.id === id)?.name ?? 'Unknown team';
 
+  // The venue was aligned (or re-aligned) after this event copied it.
+  const venueNewer = layers.some((l) => {
+    const v = tak.venueAlignments[l.id];
+    return !!v && alignmentMatches(v, l.mapUrl) && l.takAlignment?.updatedAt !== v.updatedAt;
+  });
+  const [copying, setCopying] = useState(false);
+  const copyFromVenue = async () => {
+    setCopying(true);
+    setError(null);
+    try {
+      await copyVenueAlignmentsToEvent(eventId);
+      refreshAlignments(eventId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not copy the venue alignment.');
+    } finally {
+      setCopying(false);
+    }
+  };
+
   const dotClass = !linked ? 'bg-surface-faint' : connected ? 'bg-status-green' : 'bg-status-red';
 
   return (
@@ -152,9 +172,15 @@ export default function TakEventPanel({ eventId, event, uid, isOwner, layers }: 
             )}
           </section>
 
-          {layers.some((l) => alignmentFor(l, tak.alignments)) && (
+          {layers.some((l) => alignmentFor(l, tak.alignments, tak.venueAlignments)) && (
             <section className="space-y-2">
-              <BasemapPicker label="Basemap under the map (just for you)" className="w-full" value={validChoice(underlayId, NO_BASEMAP_ID)} onChange={setUnderlayId} />
+              <BasemapPicker
+                label={
+                  <span className="inline-flex items-center gap-1">
+                    Basemap under the map <HelpTip text="Only changes what you see on this computer." />
+                  </span>
+                }
+                className="w-full" value={validChoice(underlayId, DEFAULT_UNDERLAY_ID)} onChange={setUnderlayId} />
               {underlay.id !== NO_BASEMAP_ID && (
                 <Slider
                   size="sm"
@@ -212,9 +238,12 @@ export default function TakEventPanel({ eventId, event, uid, isOwner, layers }: 
                 )}
               </div>
               <div className="space-y-1">
-                <p className="text-xs text-surface-faint">Maps</p>
+                <p className="inline-flex items-center gap-1 text-xs text-surface-faint">
+                  Maps
+                  <HelpTip text="Maps are aligned in venue setup (Venues, edit the venue, TAK alignment). Events use the venue's current alignment." />
+                </p>
                 {layers.filter((l) => l.mapUrl).map((l) => {
-                  const a = alignmentFor(l, tak.alignments);
+                  const a = alignmentFor(l, tak.alignments, tak.venueAlignments);
                   return (
                     <p key={l.id} className="truncate">
                       {l.name}:{' '}
@@ -224,10 +253,13 @@ export default function TakEventPanel({ eventId, event, uid, isOwner, layers }: 
                     </p>
                   );
                 })}
-                {layers.some((l) => l.mapUrl && !alignmentFor(l, tak.alignments)) && (
-                  <p className="text-xs text-surface-faint">
-                    Maps are aligned in venue setup (Venues, edit the venue, TAK alignment). Events created afterwards use the alignment.
-                  </p>
+                {isOwner && venueNewer && (
+                  <div className="flex items-center gap-1">
+                    <Button size="sm" variant="flat" isLoading={copying} onPress={() => void copyFromVenue()}>
+                      Share the venue&apos;s alignment
+                    </Button>
+                    <HelpTip text="The venue was aligned after this event was created. You see the venue's alignment already; this copies it into the event so every dispatcher sees positions too." />
+                  </div>
                 )}
               </div>
             </section>
@@ -280,9 +312,6 @@ export default function TakEventPanel({ eventId, event, uid, isOwner, layers }: 
             </section>
           )}
 
-          {isOwner && config?.historyMode !== 'off' && (
-            <p className="text-xs text-surface-faint">Location history and the heat map are on the event summary page after the event ends.</p>
-          )}
 
           {(error || tak.error) && <p className="text-status-red">{error || tak.error}</p>}
         </div>

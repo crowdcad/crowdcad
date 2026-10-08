@@ -14,7 +14,7 @@ export default function BasemapPicker({
 }: {
   value: string;
   onChange: (id: string) => void;
-  label?: string;
+  label?: React.ReactNode;
   className?: string;
   /** Choices to leave out, e.g. "none" where a basemap is the point. */
   omit?: string[];

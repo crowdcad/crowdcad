@@ -133,6 +133,10 @@ export default function BasemapView({
   centerRef.current = onCenterChange;
   const dark = useIsDark();
   const option = resolveBasemap(basemapId, DEFAULT_BASEMAP_ID, BASEMAPS, dark);
+  // MapLibre loads asynchronously; the map is created with whatever style is current by then.
+  const styleRef = useRef(option.style);
+  styleRef.current = option.style;
+  const appliedStyle = useRef<typeof option.style | null>(null);
 
   /** Positions the image over the map with a CSS matrix from three projected corners. */
   const placeImage = () => {
@@ -202,7 +206,7 @@ export default function BasemapView({
       mlRef.current = ml;
       const map = new ml.Map({
         container: containerRef.current,
-        style: option.style,
+        style: styleRef.current,
         center: [0, 20],
         zoom: 1,
         attributionControl: { compact: true },
@@ -213,6 +217,7 @@ export default function BasemapView({
       map.touchZoomRotate.disableRotation();
       map.addControl(new ml.NavigationControl({ showCompass: false }), 'top-right');
       mapRef.current = map;
+      appliedStyle.current = styleRef.current;
       // 'move' fires inside the map's render frame, before it paints, so DOM
       // written here appears in the same frame as the map.
       map.on('move', () => syncRef.current());
@@ -244,10 +249,11 @@ export default function BasemapView({
   }, []);
 
   useEffect(() => {
-    if (!mapRef.current) return;
+    if (!mapRef.current || appliedStyle.current === option.style) return;
+    appliedStyle.current = option.style;
     setLoadError(null);
     mapRef.current.setStyle(option.style);
-  }, [option.style]);
+  }, [option.style, ready]);
 
   // Overlays follow prop changes immediately (not only on the next move).
   useEffect(() => {

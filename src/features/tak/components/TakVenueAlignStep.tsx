@@ -8,6 +8,7 @@ import { alignmentFor } from '../data/alignmentStore';
 import { TAK_MODULE_MARKER } from '../marker';
 import type { TakMapAlignment } from '../types';
 import AlignMap from './AlignMap';
+import HelpTip from './HelpTip';
 
 /**
  * Venue setup's TAK alignment step (touchpoint l, D61), after Map. Each map
@@ -30,11 +31,10 @@ export default function TakVenueAlignStep({ uid, layers, onAlignmentChange }: Ta
   return (
     <div className="flex h-full flex-col gap-3 overflow-y-auto pb-2 text-surface-light" data-tak-module={TAK_MODULE_MARKER}>
       <div>
-        <h3 className="text-xl font-semibold">TAK alignment</h3>
-        <p className="text-sm text-surface-faint">
-          Match each map to real-world positions so TAK devices appear in the right place. Alignments are saved with the
-          venue when you create or update it, and events created afterwards use them.
-        </p>
+        <h3 className="inline-flex items-center gap-1.5 text-xl font-semibold">
+          TAK alignment
+          <HelpTip text="Match each map to real-world positions so TAK devices appear in the right place. Points are kept as you add them and saved with the venue when you create or update it. Events use the venue's alignment." />
+        </h3>
       </div>
 
       {mapLayers.length === 0 ? (
@@ -74,7 +74,7 @@ export default function TakVenueAlignStep({ uid, layers, onAlignmentChange }: Ta
                   {layer.name}:{' '}
                   <span className="text-surface-faint">
                     {savedId === layer.id
-                      ? 'alignment kept; it is saved with the venue'
+                      ? 'aligned; saved with the venue when you create or update it'
                       : alignmentFor(layer)
                         ? 'aligned'
                         : layer.takAlignment
@@ -100,10 +100,9 @@ export default function TakVenueAlignStep({ uid, layers, onAlignmentChange }: Ta
                 layer={{ id: layer.id, name: layer.name, mapUrl: layer.mapUrl! }}
                 ownerUid={uid}
                 initial={layer.takAlignment}
-                saveLabel="Keep this alignment"
-                onSave={(a) => {
+                onChange={(a) => {
                   onAlignmentChange(layer.id, a);
-                  setSavedId(layer.id);
+                  setSavedId(a ? layer.id : null);
                 }}
               />
             </>

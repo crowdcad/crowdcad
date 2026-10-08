@@ -6,7 +6,7 @@ import { Download } from 'lucide-react';
 import type { Event, Layer } from '@/app/types';
 import { useAuth } from '@/hooks/useauth';
 import { getEventVenueLayers } from '@/lib/zones';
-import { alignmentFor, loadAlignments } from '../data/alignmentStore';
+import { alignmentFor, loadAlignments, loadVenueAlignments } from '../data/alignmentStore';
 import { PREF, usePref } from '../data/prefs';
 import { loadHistory } from '../data/takStore';
 import { percentToLatLon } from '../lib/affine';
@@ -18,6 +18,7 @@ import { takTeams } from '../lib/teamIds';
 import { TAK_MODULE_MARKER } from '../marker';
 import type { TakMapAlignment } from '../types';
 import BasemapPicker from './BasemapPicker';
+import HelpTip from './HelpTip';
 import BasemapView, { type BasemapViewRequest } from './BasemapView';
 
 /**
@@ -38,10 +39,14 @@ const NO_IMAGE = '__none__';
 const HEAT_CELL_M = 5;
 
 /** Post positions from aligned layers, for "time on post". */
-export function postLocations(layers: Layer[], alignments: Record<string, TakMapAlignment>): PostLocation[] {
+export function postLocations(
+  layers: Layer[],
+  alignments: Record<string, TakMapAlignment>,
+  venueAlignments: Record<string, TakMapAlignment> = {},
+): PostLocation[] {
   const out: PostLocation[] = [];
   for (const layer of layers) {
-    const a = alignmentFor(layer, alignments);
+    const a = alignmentFor(layer, alignments, venueAlignments);
     if (!a) continue;
     for (const post of layer.posts ?? []) {
       if (typeof post === 'string' || post.x === null || post.y === null) continue;
@@ -71,6 +76,7 @@ export default function TakEventSummary({ eventId, event, className }: TakEventS
   const isOwner = !!user && user.uid === event.userId;
   const [history, setHistory] = useState<HistorySegment[] | null>(null);
   const [alignments, setAlignments] = useState<Record<string, TakMapAlignment>>({});
+  const [venueAlignments, setVenueAlignments] = useState<Record<string, TakMapAlignment>>({});
   const [error, setError] = useState<string | null>(null);
   const [basemapId, setBasemapId] = usePref<string>(PREF.alignBasemap, DEFAULT_BASEMAP_ID);
   const [imageLayerId, setImageLayerId] = useState<string | null>(null);
@@ -79,11 +85,12 @@ export default function TakEventSummary({ eventId, event, className }: TakEventS
   useEffect(() => {
     if (!isOwner) return;
     let alive = true;
-    Promise.all([loadHistory(eventId), loadAlignments(eventId)])
-      .then(([h, a]) => {
+    Promise.all([loadHistory(eventId), loadAlignments(eventId), loadVenueAlignments(eventId)])
+      .then(([h, a, v]) => {
         if (!alive) return;
         setHistory(h);
         setAlignments(a);
+        setVenueAlignments(v);
       })
       .catch((err: unknown) => alive && setError(err instanceof Error ? err.message : 'Could not load location history.'));
     return () => {
@@ -92,31 +99,33 @@ export default function TakEventSummary({ eventId, event, className }: TakEventS
   }, [eventId, isOwner]);
 
   const layers = useMemo(() => getEventVenueLayers(event), [event]);
-  const aligned = useMemo(() => layers.filter((l) => alignmentFor(l, alignments)), [layers, alignments]);
+  const aligned = useMemo(() => layers.filter((l) => alignmentFor(l, alignments, venueAlignments)), [layers, alignments, venueAlignments]);
   const teams = useMemo(() => takTeams(event.staff, event.supervisor), [event.staff, event.supervisor]);
   const teamName = (id: string) => teams.find((t) => t.id === id)?.name ?? 'Unknown team';
   const heat = useMemo(() => (history ? heatCells(history) : []), [history]);
-  const posts = useMemo(() => postLocations(layers, alignments), [layers, alignments]);
+  const posts = useMemo(() => postLocations(layers, alignments, venueAlignments), [layers, alignments, venueAlignments]);
   const stats = useMemo(() => (history ? teamHistoryStats(history, posts) : []), [history, posts]);
 
   const view = useMemo<BasemapViewRequest | undefined>(() => {
-    const pts = heat.length ? heat : aligned.flatMap((l) => imageCorners(alignmentFor(l, alignments)!));
+    const pts = heat.length ? heat : aligned.flatMap((l) => imageCorners(alignmentFor(l, alignments, venueAlignments)!));
     if (!pts.length) return undefined;
     const lats = pts.map((p) => p.lat);
     const lons = pts.map((p) => p.lon);
     return { key: 1, bounds: [Math.min(...lons), Math.min(...lats), Math.max(...lons), Math.max(...lats)] };
-  }, [heat, aligned, alignments]);
+  }, [heat, aligned, alignments, venueAlignments]);
 
   if (!isOwner) return null;
 
   const imageLayer = imageLayerId === NO_IMAGE ? undefined : (aligned.find((l) => l.id === imageLayerId) ?? aligned[0]);
-  const imageAlignment = alignmentFor(imageLayer, alignments);
+  const imageAlignment = alignmentFor(imageLayer, alignments, venueAlignments);
 
   return (
     <section className={className} data-tak-module={TAK_MODULE_MARKER}>
       <div className="px-4 py-3">
-        <span className="font-semibold">Location history (TAK)</span>
-        <div className="text-sm text-surface-faint">Only you, the event owner, can see this.</div>
+        <span className="inline-flex items-center gap-1 font-semibold">
+          Location history (TAK)
+          <HelpTip text="Only you, the event owner, can see this. The heat map shows time spent in each 5 m square, darker for longer. Tracked time counts each position report for up to 60 seconds." />
+        </span>
       </div>
       <div className="space-y-4 px-4 pb-4">
         {error && <p className="text-sm text-status-red">{error}</p>}
@@ -197,10 +206,6 @@ export default function TakEventSummary({ eventId, event, className }: TakEventS
               cursor="grab"
               cooperativeGestures
             />
-            <p className="text-xs text-surface-faint">
-              Heat map: time spent in each 5 m square, darker for longer. Tracked time counts each position report for up
-              to 60 seconds.
-            </p>
             {posts.length === 0 && <p className="text-xs text-surface-faint">Align an event map that has posts to see time on post.</p>}
             <div className="grid gap-2 md:grid-cols-2">
               {stats.map((s) => {

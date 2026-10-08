@@ -32,6 +32,7 @@ import {
 import { TAK_MODULE_MARKER } from '../marker';
 import type { HistoryMode } from '../types';
 import { TAK_INPUT_CLASSNAMES } from '../lib/ui';
+import HelpTip from './HelpTip';
 
 /**
  * Admin > TAK: TAK servers (bridges) for this CrowdCAD. Only admins see this
@@ -382,17 +383,17 @@ function AddTakServerWizard({
               <div className="flex gap-2">
                 <Input classNames={TAK_INPUT_CLASSNAMES} label="TAK username" value={tak.username} onValueChange={(username) => setTak((t) => ({ ...t, username }))} />
                 <Input classNames={TAK_INPUT_CLASSNAMES}
-                  label="TAK password or token"
+                  label={
+                    <span className="inline-flex items-center gap-1">
+                      TAK password or token
+                      <HelpTip text="These only go into the bridge's settings on the next screen; CrowdCAD does not save them. The user's real password works better than an Enroll QR token: a token may only work once, and the bridge signs in again each time it renews its certificate." />
+                    </span>
+                  }
                   type="password"
                   value={tak.password}
                   onValueChange={(password) => setTak((t) => ({ ...t, password }))}
                 />
               </div>
-              <p className="text-surface-faint">
-                These only go into the bridge&apos;s settings on the next screen. CrowdCAD does not save them. The user&apos;s real password
-                works better than an Enroll QR token: a token may only work once, and the bridge signs in again each time it renews its
-                certificate.
-              </p>
             </>
           )}
 
@@ -514,8 +515,10 @@ export default function TakAdminSection({ adminUid }: TakAdminSectionProps) {
     <section className="space-y-3" data-tak-module={TAK_MODULE_MARKER}>
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-xl font-semibold">TAK</h3>
-          <p className="text-sm text-surface-faint">TAK servers that can send live team positions to CrowdCAD events. In development.</p>
+          <h3 className="inline-flex items-center gap-1.5 text-xl font-semibold">
+            TAK
+            <HelpTip text="TAK servers that can send live team positions to CrowdCAD events. In development." />
+          </h3>
         </div>
         <Button size="sm" className="bg-accent text-surface-light" startContent={<Plus className="h-4 w-4" />} onPress={() => setWizard({ rotating: null })}>
           Add TAK server

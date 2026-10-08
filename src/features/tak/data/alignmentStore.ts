@@ -75,17 +75,67 @@ export function alignmentMatches(alignment: TakMapAlignment | undefined, mapUrl:
 }
 
 /**
- * A layer's current alignment: its own (set in venue setup, D61, and copied
- * into each event's venue snapshot), else one saved on the event before
- * that (the takMapAlignment collection, read only now). Undefined when
- * neither matches the layer's image.
+ * A layer's current alignment, from (in order): the venue's own layer as it
+ * is now (set in venue setup, D61), the copy in the event's venue snapshot,
+ * or an alignment saved on the event before venue setup did it (the
+ * takMapAlignment collection, read only now). Each counts only while it was
+ * made for the image the layer shows. Undefined when none matches.
  */
 export function alignmentFor(
   layer: { id: string; mapUrl?: string; takAlignment?: TakMapAlignment } | undefined,
   legacy: Record<string, TakMapAlignment> = {},
+  venue: Record<string, TakMapAlignment> = {},
 ): TakMapAlignment | undefined {
   if (!layer) return undefined;
-  if (alignmentMatches(layer.takAlignment, layer.mapUrl)) return layer.takAlignment;
-  const old = legacy[layer.id];
-  return alignmentMatches(old, layer.mapUrl) ? old : undefined;
+  for (const a of [venue[layer.id], layer.takAlignment, legacy[layer.id]]) {
+    if (alignmentMatches(a, layer.mapUrl)) return a;
+  }
+  return undefined;
+}
+
+type VenueRecord = { id?: string; layers?: { id: string; mapUrl?: string; takAlignment?: TakMapAlignment }[] };
+
+async function eventVenue(eventId: string): Promise<{ event: { venue?: VenueRecord }; venueId: string | null }> {
+  const snap = await dbService.getDocument<{ venue?: VenueRecord }>('events', eventId);
+  const event = snap.data ?? {};
+  return { event, venueId: event.venue?.id ?? null };
+}
+
+/**
+ * The alignments on the event's venue as it is now, by layer id. Lets an
+ * event use a venue aligned after the event was created. Empty when the
+ * venue is gone or the reader can't read it (e.g. a dispatcher it isn't
+ * shared with): they use the event's copy instead.
+ */
+export async function loadVenueAlignments(eventId: string): Promise<Record<string, TakMapAlignment>> {
+  try {
+    const { venueId } = await eventVenue(eventId);
+    if (!venueId) return {};
+    const venue = await dbService.getDocument<VenueRecord>('venues', venueId);
+    const out: Record<string, TakMapAlignment> = {};
+    for (const l of venue.data?.layers ?? []) if (l.takAlignment) out[l.id] = fromRecord(l.takAlignment);
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Copies the venue's current alignments into the event's venue snapshot
+ * (event owner), so everyone who can read the event gets them. Returns how
+ * many maps were updated.
+ */
+export async function copyVenueAlignmentsToEvent(eventId: string): Promise<number> {
+  const { event, venueId } = await eventVenue(eventId);
+  if (!venueId || !event.venue?.layers) return 0;
+  const fromVenue = await loadVenueAlignments(eventId);
+  let changed = 0;
+  const layers = event.venue.layers.map((l) => {
+    const a = fromVenue[l.id];
+    if (!a || !alignmentMatches(a, l.mapUrl) || l.takAlignment?.updatedAt === a.updatedAt) return l;
+    changed++;
+    return { ...l, takAlignment: a };
+  });
+  if (changed) await dbService.updateDocument('events', eventId, { venue: { ...event.venue, layers } });
+  return changed;
 }

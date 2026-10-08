@@ -4,10 +4,11 @@ import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Radio, RadioGroup, Select, SelectItem } from '@heroui/react';
 import type { Layer } from '@/app/types';
-import { alignmentFor, loadAlignments } from '../data/alignmentStore';
+import { alignmentFor, loadAlignments, loadVenueAlignments } from '../data/alignmentStore';
 import { deleteEventConfig, getEventConfig, listAllowedBridges, saveEventConfig, type TakBridge } from '../data/takStore';
 import { TAK_MODULE_MARKER } from '../marker';
 import type { HistoryMode, TakMapAlignment } from '../types';
+import HelpTip from './HelpTip';
 
 /**
  * The event builder's single TAK choice: "Map: Standard (default) / TAK live
@@ -38,6 +39,7 @@ export default function TakMapModeChoice({ eventId, uid, mapMode, onMapModeChang
   const [bridgeUid, setBridgeUid] = useState<string | null>(null);
   const [historyMode, setHistoryMode] = useState<HistoryMode>('summary');
   const [alignments, setAlignments] = useState<Record<string, TakMapAlignment>>({});
+  const [venueAlignments, setVenueAlignments] = useState<Record<string, TakMapAlignment>>({});
   const [error, setError] = useState<string | null>(null);
   const tak = mapMode === 'tak';
 
@@ -57,6 +59,7 @@ export default function TakMapModeChoice({ eventId, uid, mapMode, onMapModeChang
       })
       .catch(() => {});
     void loadAlignments(eventId).then(setAlignments).catch(() => {});
+    void loadVenueAlignments(eventId).then(setVenueAlignments);
   }, [tak, eventId]);
 
   const persist = async (nextBridge: string | null, nextMode: HistoryMode) => {
@@ -143,16 +146,16 @@ export default function TakMapModeChoice({ eventId, uid, mapMode, onMapModeChang
             ))}
           </Select>
           <div className="space-y-1">
-            <p className="text-xs text-surface-faint">
-              Live positions appear on a map once it is aligned. Maps are aligned in venue setup, in the venue&apos;s TAK
-              alignment step.
+            <p className="inline-flex items-center gap-1 text-xs text-surface-faint">
+              Maps
+              <HelpTip text="Live positions appear on a map once it is aligned. Maps are aligned in venue setup, in the venue's TAK alignment step." />
             </p>
             {mapLayers.length === 0 && <p className="text-xs text-surface-faint">This venue has no map images yet.</p>}
             {mapLayers.map((l) => (
               <p key={l.id} className="truncate text-sm">
                 {l.name}:{' '}
                 <span className="text-surface-faint">
-                  {alignmentFor(l, alignments) ? 'aligned' : l.takAlignment ? 'image changed since alignment, align it again in venue setup' : 'not aligned yet'}
+                  {alignmentFor(l, alignments, venueAlignments) ? 'aligned' : l.takAlignment ? 'image changed since alignment, align it again in venue setup' : 'not aligned yet'}
                 </span>
               </p>
             ))}

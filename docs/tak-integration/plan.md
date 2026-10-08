@@ -123,6 +123,8 @@ Updated at the end of each phase.
   - **Basemaps:** Light, Dark, Streets and No basemap, with "Match light/dark mode" (Light or Dark) as the default. MapLibre's controls follow the theme.
   - **History export (D62):** the summary exports the 5-minute history as CSV and the heat map as CSV or GeoJSON.
   - **Text fields:** a global rule in `globals.css` removes the focus ring inside every HeroUI text field (see `docs/COMPONENTS.md`).
+  - **Underlay fixes (D63):** the basemap under the dispatch map is on by default for aligned maps ("Match light/dark mode"; "No basemap" turns it off), and Dark uses OpenFreeMap's Fiord style, since its "dark" style is as dark as CrowdCAD's own theme. Events read their venue's current alignment, and the owner can share it into the event for every dispatcher. The venue step keeps points as they are placed, with no separate save button.
+  - **Help icons:** explanations that were subtitles are now hoverable question marks next to their titles, as in core's FieldLabel.
   - **Not yet done:** a sharper underlay re-render after zooming in past about 2x; touch gestures for the align basemap on phones; copying an older event-level alignment into the venue; P8.
 
 **Overall:** P0 to P6 are built, and P1 is verified on real hardware. The open items are the rest of the P4 check and a first release (P6). See below.

@@ -11,7 +11,7 @@ import {
   type TakEventStatus,
   type TakLivePosition,
 } from './takStore';
-import { loadAlignments } from './alignmentStore';
+import { loadAlignments, loadVenueAlignments } from './alignmentStore';
 import type { TakMapAlignment } from '../types';
 
 /**
@@ -26,11 +26,13 @@ export interface TakEventState {
   live: TakLivePosition[];
   status: TakEventStatus | null;
   alignments: Record<string, TakMapAlignment>;
+  /** Alignments on the event's venue as it is now (empty if it can't be read). */
+  venueAlignments: Record<string, TakMapAlignment>;
   loaded: boolean;
   error: string | null;
 }
 
-const EMPTY: TakEventState = { config: null, links: [], live: [], status: null, alignments: {}, loaded: false, error: null };
+const EMPTY: TakEventState = { config: null, links: [], live: [], status: null, alignments: {}, venueAlignments: {}, loaded: false, error: null };
 
 interface Entry {
   state: TakEventState;
@@ -55,6 +57,7 @@ function open(eventId: string): Entry {
   ];
   let alive = true;
   void loadAlignments(eventId).then((alignments) => alive && set({ alignments }), fail);
+  void loadVenueAlignments(eventId).then((venueAlignments) => alive && set({ venueAlignments }));
   entry.stop = () => {
     alive = false;
     for (const u of unsubs) u();
@@ -62,12 +65,12 @@ function open(eventId: string): Entry {
   return entry;
 }
 
-/** Re-reads map alignments after an "Align map" save. */
+/** Re-reads map alignments (the event's and its venue's). */
 export function refreshAlignments(eventId: string): void {
   const entry = entries.get(eventId);
   if (!entry) return;
-  void loadAlignments(eventId).then((alignments) => {
-    entry.state = { ...entry.state, alignments };
+  void Promise.all([loadAlignments(eventId), loadVenueAlignments(eventId)]).then(([alignments, venueAlignments]) => {
+    entry.state = { ...entry.state, alignments, venueAlignments };
     for (const l of entry.listeners) l(entry.state);
   });
 }

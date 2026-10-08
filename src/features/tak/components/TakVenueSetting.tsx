@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Switch } from '@heroui/react';
 import { listAllBridges, listAllowedBridges } from '../data/takStore';
 import { TAK_MODULE_MARKER } from '../marker';
+import HelpTip from './HelpTip';
 
 /**
  * Venue Configuration's TAK switch (touchpoint l, D61). Turning it on adds
@@ -34,28 +35,27 @@ export default function TakVenueSetting({ uid, enabled, onChange }: TakVenueSett
   const unavailable = hasServer === false;
   return (
     <div className="space-y-1" data-tak-module={TAK_MODULE_MARKER}>
-      <Switch
-        size="sm"
-        isSelected={enabled}
-        isDisabled={hasServer === null || (unavailable && !enabled)}
-        onValueChange={onChange}
-        classNames={{ wrapper: 'group-data-[selected=true]:bg-accent' }}
-      >
-        TAK live tracking
-      </Switch>
-      <p className="text-xs text-surface-faint">
-        {unavailable ? (
-          <>
-            Needs a TAK server. Set one up in{' '}
-            <Link href="/profile" className="text-accent underline">
-              Settings (Admin, TAK)
-            </Link>
-            , or ask an admin to give you access to one.
-          </>
-        ) : (
-          'Adds a TAK alignment step after Map, where you match each map to real-world positions so TAK devices appear in the right place.'
-        )}
-      </p>
+      <div className="flex items-center gap-1.5">
+        <Switch
+          size="sm"
+          isSelected={enabled}
+          isDisabled={hasServer === null || (unavailable && !enabled)}
+          onValueChange={onChange}
+          classNames={{ wrapper: 'group-data-[selected=true]:bg-accent' }}
+        >
+          TAK live tracking
+        </Switch>
+        <HelpTip text="Adds a TAK alignment step after Map, where you match each map to real-world positions so TAK devices appear in the right place." />
+      </div>
+      {unavailable && (
+        <p className="text-xs text-surface-faint">
+          Needs a TAK server. Set one up in{' '}
+          <Link href="/profile" className="text-accent underline">
+            Settings (Admin, TAK)
+          </Link>
+          , or ask an admin to give you access to one.
+        </p>
+      )}
     </div>
   );
 }

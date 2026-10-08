@@ -355,3 +355,12 @@ The same end-to-end scenario runs against the Firebase emulator and a local Pock
 ### D62. The owner can export location history
 - **What.** On the event summary, the owner exports the 5-minute history (team, device, time, mean position, spread, reports, seconds) as CSV, and the heat map as CSV or GeoJSON (5 m squares with seconds, for GIS tools).
 - **How.** Built in the browser from what the summary already loaded. Nothing is sent anywhere, and only the event owner can load history in the first place.
+
+### D63. The dispatch basemap is on by default and follows the venue
+- **The finding.** A real test showed no basemap around the event map. The venue's alignment was never saved, because the step only kept points after a separate "Keep this alignment" click. The event, created before any alignment, had none in its snapshot. The underlay was also off by default, and OpenFreeMap's "dark" style (#0c0c0c) is invisible on CrowdCAD's dark theme.
+- **The changes.**
+  - The venue step reports every change of points, so the alignment is kept as it is made and saved with the venue.
+  - Events read their venue's current alignment as well as their own copy (D61), preferring the venue's. When the venue is newer, the event owner can share it into the event, so dispatchers who can't read the venue see positions too.
+  - The underlay defaults to "Match light/dark mode" for aligned maps; "No basemap" turns it off for that viewer.
+  - "Dark" uses OpenFreeMap's Fiord style, a dark blue-gray that stays readable on the dark theme.
+  - A render that can't finish because the browser tab is in the background waits for the tab to be shown instead of using up a retry; retries are 5 s apart.

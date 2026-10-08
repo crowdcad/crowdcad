@@ -6,7 +6,7 @@ import { useTakEvent } from '../data/hub';
 import { alignmentFor } from '../data/alignmentStore';
 import { PREF, usePref } from '../data/prefs';
 import { snapshotFrame, type BasemapFrame } from '../lib/basemapFrame';
-import { BASEMAPS, NO_BASEMAP_ID, resolveBasemap } from '../lib/basemaps';
+import { BASEMAPS, DEFAULT_UNDERLAY_ID, NO_BASEMAP_ID, resolveBasemap } from '../lib/basemaps';
 import { useIsDark } from '../lib/ui';
 import { TAK_MODULE_MARKER } from '../marker';
 import { loadMaplibre } from './BasemapView';
@@ -41,8 +41,8 @@ const RENDER_DELAY_MS = 300;
 /** Gives up on a render that hasn't finished loading tiles by then. */
 const RENDER_TIMEOUT_MS = 20_000;
 /** Tries again after a failed render (e.g. offline), this many times. */
-const RETRY_DELAY_MS = 30_000;
-const MAX_ATTEMPTS = 3;
+const RETRY_DELAY_MS = 5_000;
+const MAX_ATTEMPTS = 5;
 
 interface Snapshot {
   url: string;
@@ -51,11 +51,11 @@ interface Snapshot {
 
 export default function TakBasemapUnderlay({ eventId, layer, rect, setImageOpacity }: TakBasemapUnderlayProps) {
   const tak = useTakEvent(eventId);
-  const [basemapId] = usePref<string>(PREF.underlayBasemap, NO_BASEMAP_ID);
+  const [basemapId] = usePref<string>(PREF.underlayBasemap, DEFAULT_UNDERLAY_ID);
   const [opacity] = usePref<number>(PREF.imageOpacity, DEFAULT_IMAGE_OPACITY);
   const dark = useIsDark();
-  const option = resolveBasemap(basemapId, NO_BASEMAP_ID, BASEMAPS, dark);
-  const alignment = alignmentFor(layer, tak.alignments);
+  const option = resolveBasemap(basemapId, DEFAULT_UNDERLAY_ID, BASEMAPS, dark);
+  const alignment = alignmentFor(layer, tak.alignments, tak.venueAlignments);
   const active = option.id !== NO_BASEMAP_ID && !!alignment;
 
   const dpr = typeof window === 'undefined' ? 1 : window.devicePixelRatio || 1;
@@ -118,6 +118,18 @@ export default function TakBasemapUnderlay({ eventId, layer, rect, setImageOpaci
       clearTimeout(timer);
       map?.remove();
       setRendering(null);
+      // A browser tab in the background doesn't draw, so the render can't finish: try again once it is
+      // shown, without using up an attempt.
+      if (document.hidden) {
+        const onShow = () => {
+          if (document.hidden) return;
+          document.removeEventListener('visibilitychange', onShow);
+          setAttempt((a) => a);
+          setRendering(rendering);
+        };
+        document.addEventListener('visibilitychange', onShow);
+        return;
+      }
       setAttempt((a) => a + 1);
     };
     const finish = () => {
@@ -204,7 +216,13 @@ export default function TakBasemapUnderlay({ eventId, layer, rect, setImageOpaci
     <div ref={rootRef} className="pointer-events-none absolute inset-0" data-tak-module={TAK_MODULE_MARKER} aria-hidden>
       {shown && (
         // eslint-disable-next-line @next/next/no-img-element -- a rendered picture from a blob URL
-        <img src={shown.url} alt="" draggable={false} className="max-w-none select-none" style={box(shown.frame)} />
+        <img
+          src={shown.url}
+          alt=""
+          draggable={false}
+          className="max-w-none select-none"
+          style={box(shown.frame)}
+        />
       )}
       {rendering && (
         // Off-screen render target: laid out at full size so WebGL draws it, but never visible.

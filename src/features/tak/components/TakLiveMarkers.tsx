@@ -33,7 +33,7 @@ export default function TakLiveMarkers({ eventId, staff, supervisor, layer, rect
 
   const teams = useMemo(() => takTeams(staff, supervisor), [staff, supervisor]);
   const positions = useMemo(() => teamPositions(tak.live, tak.links, teams), [tak.live, tak.links, teams]);
-  const alignment = alignmentFor(layer, tak.alignments);
+  const alignment = alignmentFor(layer, tak.alignments, tak.venueAlignments);
   if (!layer || !alignment) return null;
   const showLive = !!tak.config?.enabled;
 

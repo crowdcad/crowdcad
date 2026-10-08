@@ -53,7 +53,7 @@ export function usePref<T>(key: string, fallback: T): [T, (value: T) => void] {
 export const PREF = {
   /** Basemap in "Align map" and the history view. */
   alignBasemap: 'alignBasemap',
-  /** Basemap under the dispatch map ("none" by default, so the map looks as before). */
+  /** Basemap under the dispatch map of an aligned event map ("auto" by default; "none" turns it off). */
   underlayBasemap: 'underlayBasemap',
   /** Opacity of the event map image over a basemap, 0.2 to 1. */
   imageOpacity: 'imageOpacity',

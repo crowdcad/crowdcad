@@ -21,6 +21,8 @@ export const NO_BASEMAP_ID = 'none';
 /** Follows CrowdCAD's light or dark mode: Light (Positron) or Dark. The default. */
 export const AUTO_BASEMAP_ID = 'auto';
 export const DEFAULT_BASEMAP_ID = AUTO_BASEMAP_ID;
+/** The dispatch map's basemap under an aligned event map: on, following the theme, unless the viewer turns it off. */
+export const DEFAULT_UNDERLAY_ID = AUTO_BASEMAP_ID;
 const LIGHT_ID = 'positron';
 const DARK_ID = 'dark';
 
@@ -36,7 +38,9 @@ const NONE: BasemapOption = { id: NO_BASEMAP_ID, label: 'No basemap', style: bla
 
 const OPENFREEMAP: BasemapOption[] = [
   { id: LIGHT_ID, label: 'Light', style: 'https://tiles.openfreemap.org/styles/positron', attribution: OSM_CREDIT },
-  { id: DARK_ID, label: 'Dark', style: 'https://tiles.openfreemap.org/styles/dark', attribution: OSM_CREDIT },
+  // OpenFreeMap's "dark" style is nearly black (#0c0c0c), the same as CrowdCAD's dark theme, so streets around
+  // an event map disappear; "fiord" is a dark blue-gray that stays readable on it.
+  { id: DARK_ID, label: 'Dark', style: 'https://tiles.openfreemap.org/styles/fiord', attribution: OSM_CREDIT },
   { id: 'liberty', label: 'Streets', style: 'https://tiles.openfreemap.org/styles/liberty', attribution: OSM_CREDIT },
 ];
 
