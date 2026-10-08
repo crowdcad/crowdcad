@@ -344,3 +344,14 @@ The same end-to-end scenario runs against the Firebase emulator and a local Pock
 - **Align and summary maps (interactive).** Still a live MapLibre map. The image and heat canvas are repositioned directly in the map's `move` handler, which runs in the frame the map draws, and markers are MapLibre markers. No React render happens per frame.
 - **Dispatch map.** The basemap is rendered once, off-screen, in the image's frame, covering the image plus its longer side again on every side, at twice the screen resolution (capped at a 4096-pixel canvas). The pixels are kept as a picture and the map discarded. The picture sits in the same zoomed and panned container as the event map, so it moves with it exactly. It is rendered again only when the alignment, the basemap or the map's size changes, and the old picture stays until the new one is ready.
 - **Not stored.** The picture lives only in the viewer's browser. Saving it with the event would need a data contract change, and some imagery providers prohibit storing rendered tiles.
+
+### D61. Maps are aligned in venue setup
+- **Requested** 2026-10-07 by the maintainer: alignment belongs to the venue, since a venue's map does not change between events.
+- **Where.** Venue Configuration gets a "TAK live tracking" switch (touchpoint l). It is disabled, with a link to Settings, until the user has a TAK server: one they are allowed on, or for an admin any. When on, a "TAK alignment" step follows Map, full page rather than a modal.
+- **Storage.** Each alignment is kept on its layer (`Layer.takAlignment`) and saved with the venue. Events copy the venue at creation, so they carry it, and everyone who can read the event can read it, with no new collection or rule. It applies only while the layer still shows the image it was made for. A new image aligned before the venue is saved is matched by its preview URL and moved to the uploaded URL on save.
+- **Events.** The event builder's TAK choice and the dispatch panel no longer align maps; they show each map's status and point to venue setup. Events aligned earlier keep working through the event-level `takMapAlignment`, now read only.
+- **Not covered yet.** Events created before a venue is aligned keep their snapshot without it; re-creating the event, or aligning in the venue before creating events, picks it up.
+
+### D62. The owner can export location history
+- **What.** On the event summary, the owner exports the 5-minute history (team, device, time, mean position, spread, reports, seconds) as CSV, and the heat map as CSV or GeoJSON (5 m squares with seconds, for GIS tools).
+- **How.** Built in the browser from what the summary already loaded. Nothing is sent anywhere, and only the event owner can load history in the first place.

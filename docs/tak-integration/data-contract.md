@@ -1,6 +1,6 @@
 # TAK integration: data contract
 
-**Contract version: 0.4.1 (draft).** TAK support is in development and is an optional add-on. Nothing here is released, and the contract may change until 1.0.0.
+**Contract version: 0.5.0 (draft).** TAK support is in development and is an optional add-on. Nothing here is released, and the contract may change until 1.0.0.
 
 This document defines every record the TAK integration adds, who writes each one, and what the access rules enforce. It covers both backends: Firebase (the default) and PocketBase (opt-in with `NEXT_PUBLIC_BACKEND=pocketbase`). The bridge reaches both through one adapter interface, so behavior is the same on either.
 
@@ -50,6 +50,8 @@ Both are optional fields. They are absent on standard events and on all existing
 
 | Record | Field | Meaning | Written by |
 |---|---|---|---|
+| `venues/{venueId}` | `takEnabled?: boolean` | Set in venue setup. `true` shows the venue's TAK alignment step. Core reads it only for that | Venue owner or admin (existing venue rules) |
+| `venues/{venueId}.layers[]` and each event's `venue.layers[]` snapshot | `takAlignment?` (same shape as the map alignment below) | A layer's alignment, set in venue setup and copied into each event created from the venue. Applies only while its `mapUrl` equals the layer's | Venue owner or admin; events carry the copy taken when they were created |
 | `events/{eventId}` | `mapMode?: 'standard' \| 'tak'` | Unset or `'standard'` means a standard event. `'tak'` tells event pages to load the TAK module | Event owner or admin (a protected field: shared and org-event users cannot change it) |
 | `Staff`, `Supervisor` (inside `events`) | `id?: string` | Opaque team id | Generated when a team is created. Backfilled only for TAK events |
 
@@ -63,7 +65,7 @@ Both are optional fields. They are absent on standard events and on all existing
 | `bridgeAccounts/{bridgeUid}/deviceMappings/{deviceUid}` | `teamName`, `callsign`, `updatedAt`, `updatedBy` | Admins; users in `allowedUsers` (create and update, when they link a device manually) | Admins; users in `allowedUsers` |
 | `bridgeAccounts/{bridgeUid}/status/current` | `lastSeenAt`, `takConnected`, `version`, `linkedEventCount`, `devicesSeen`, `lastPositionAt`, `takError` | The bridge | Admins; users in `allowedUsers` |
 | `events/{eventId}/takConfig/current` | `eventId`, `bridgeUid` (or null), `enabled`, `closed`, `historyMode`, `updatedAt` | Event owner. `bridgeUid` may be set only if the owner is in that bridge's `allowedUsers`. The end-event flow sets `closed: true` (owner or admin) | Anyone who can read the event; the linked bridge |
-| `events/{eventId}/takMapAlignment/{layerId}` | `mapUrl`, `naturalWidth`, `naturalHeight`, `controlPoints[]`, `origin`, `transform`, `residualM`, `ownerUid`, `updatedAt` | Event owner | Anyone who can read the event. Not the bridge |
+| `events/{eventId}/takMapAlignment/{layerId}` | `mapUrl`, `naturalWidth`, `naturalHeight`, `controlPoints[]`, `origin`, `transform`, `residualM`, `ownerUid`, `updatedAt` | Event owner. No longer written by the app since 0.5.0; read as a fallback for events aligned before then | Anyone who can read the event. Not the bridge |
 | `events/{eventId}/takDeviceLinks/{deviceUid}` | `teamId`, `linkedAt`, `method` (`auto` or `manual`), `linkedBy` | Anyone who can dispatch the event, except bridge accounts | Anyone who can read the event; the linked bridge |
 | `events/{eventId}/takLive/{deviceUid}` | `lat`, `lon`, `hae`, `ce`, `course`, `speed`, `callsign`, `cotType`, `deviceTime`, `receivedAt`, `bridgeUid` | The linked bridge, while `enabled` and not `closed`. The bridge also deletes | Anyone who can read the event |
 | `events/{eventId}/takHistory/{segmentId}` | `deviceUid`, `teamId`, `startedAt`, `endedAt`, `windows[]`, `grid`, `bridgeUid` (doc id: URL-encoded `segmentId`) | The linked bridge, while the config is enabled and `historyMode != off`. Unlike live positions, this is allowed after close, so open segments can be ended | Event owner only (v1) |
@@ -194,6 +196,7 @@ PocketBase collections are flat, so each one carries `event` and/or `bridge` as 
 
 ## Changelog
 
+- 0.5.0 (2026-10-07): additive. Map alignment moves to venue setup (D61): `Layer.takAlignment` on venue layers, copied into events through their venue snapshot, and `Venue.takEnabled`. No new collections or rules. The event `takMapAlignment` collection and PocketBase `tak_map_alignment` are read only, as a fallback for older events.
 - 0.4.1 (2026-10-07): behavior note, no schema change. A history segment's last position is credited until the segment ends, capped at 60 s, and `endedAt` is the end of that credited time (D58).
 - 0.4.0 (2026-10-07): additive. Bridge status gains `devicesSeen` (distinct TAK devices since the bridge started), `lastPositionAt` (ms, 0 if none) and `takError` (the last TAK connection problem in plain words, empty when connected; never secrets). PocketBase `tak_bridge_status` gains the same fields; the setup script adds them to existing installs. Readers treat them as optional, since older bridges do not write them.
 - 0.3.0 (2026-10-07):
