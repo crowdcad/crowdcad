@@ -1,14 +1,13 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Button, Modal, ModalBody, ModalContent, Radio, RadioGroup, Select, SelectItem } from '@heroui/react';
-import { MapPinned } from 'lucide-react';
+import Link from 'next/link';
+import { Radio, RadioGroup, Select, SelectItem } from '@heroui/react';
 import type { Layer } from '@/app/types';
-import { loadAlignments } from '../data/alignmentStore';
+import { alignmentFor, loadAlignments } from '../data/alignmentStore';
 import { deleteEventConfig, getEventConfig, listAllowedBridges, saveEventConfig, type TakBridge } from '../data/takStore';
 import { TAK_MODULE_MARKER } from '../marker';
 import type { HistoryMode, TakMapAlignment } from '../types';
-import AlignMap from './AlignMap';
 
 /**
  * The event builder's single TAK choice: "Map: Standard (default) / TAK live
@@ -39,7 +38,6 @@ export default function TakMapModeChoice({ eventId, uid, mapMode, onMapModeChang
   const [bridgeUid, setBridgeUid] = useState<string | null>(null);
   const [historyMode, setHistoryMode] = useState<HistoryMode>('summary');
   const [alignments, setAlignments] = useState<Record<string, TakMapAlignment>>({});
-  const [aligning, setAligning] = useState<Layer | null>(null);
   const [error, setError] = useState<string | null>(null);
   const tak = mapMode === 'tak';
 
@@ -103,7 +101,15 @@ export default function TakMapModeChoice({ eventId, uid, mapMode, onMapModeChang
           TAK live tracking
         </Radio>
       </RadioGroup>
-      {noBridges && !tak && <p className="text-xs text-surface-faint">Ask your admin to set up TAK.</p>}
+      {noBridges && !tak && (
+        <p className="text-xs text-surface-faint">
+          TAK live tracking needs a TAK server. Set one up in{' '}
+          <Link href="/profile" className="text-accent underline">
+            Settings (Admin, TAK)
+          </Link>
+          , or ask an admin to give you access to one.
+        </p>
+      )}
 
       {tak && (
         <div className="space-y-2 rounded-lg border border-surface-liner p-3">
@@ -138,43 +144,23 @@ export default function TakMapModeChoice({ eventId, uid, mapMode, onMapModeChang
           </Select>
           <div className="space-y-1">
             <p className="text-xs text-surface-faint">
-              Live positions appear on a map once it is aligned. Align now, or later from the dispatch map&apos;s TAK panel.
+              Live positions appear on a map once it is aligned. Maps are aligned in venue setup, in the venue&apos;s TAK
+              alignment step.
             </p>
             {mapLayers.length === 0 && <p className="text-xs text-surface-faint">This venue has no map images yet.</p>}
             {mapLayers.map((l) => (
-              <div key={l.id} className="flex items-center justify-between gap-2 text-sm">
-                <span className="truncate">
-                  {l.name}: <span className="text-surface-faint">{alignments[l.id]?.mapUrl === l.mapUrl ? 'aligned' : 'not aligned'}</span>
+              <p key={l.id} className="truncate text-sm">
+                {l.name}:{' '}
+                <span className="text-surface-faint">
+                  {alignmentFor(l, alignments) ? 'aligned' : l.takAlignment ? 'image changed since alignment, align it again in venue setup' : 'not aligned yet'}
                 </span>
-                <Button size="sm" variant="flat" startContent={<MapPinned className="h-4 w-4" />} onPress={() => setAligning(l)}>
-                  Align map now
-                </Button>
-              </div>
+              </p>
             ))}
           </div>
           {error && <p className="text-sm text-status-red">{error}</p>}
         </div>
       )}
 
-      <Modal isOpen={!!aligning} onClose={() => setAligning(null)} size="5xl" scrollBehavior="inside">
-        <ModalContent>
-          <ModalBody className="py-5">
-            {aligning && (
-              <AlignMap
-                eventId={eventId}
-                layer={{ id: aligning.id, name: aligning.name, mapUrl: aligning.mapUrl! }}
-                ownerUid={uid}
-                initial={alignments[aligning.id]}
-                onSaved={(a) => {
-                  setAlignments((prev) => ({ ...prev, [aligning.id]: a }));
-                  setAligning(null);
-                }}
-                onCancel={() => setAligning(null)}
-              />
-            )}
-          </ModalBody>
-        </ModalContent>
-      </Modal>
     </div>
   );
 }

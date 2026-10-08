@@ -3,10 +3,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { Layer } from '@/app/types';
 import { useTakEvent } from '../data/hub';
-import { alignmentMatches } from '../data/alignmentStore';
+import { alignmentFor } from '../data/alignmentStore';
 import { PREF, usePref } from '../data/prefs';
 import { snapshotFrame, type BasemapFrame } from '../lib/basemapFrame';
-import { NO_BASEMAP_ID, resolveBasemap } from '../lib/basemaps';
+import { BASEMAPS, NO_BASEMAP_ID, resolveBasemap } from '../lib/basemaps';
+import { useIsDark } from '../lib/ui';
 import { TAK_MODULE_MARKER } from '../marker';
 import { loadMaplibre } from './BasemapView';
 
@@ -52,9 +53,10 @@ export default function TakBasemapUnderlay({ eventId, layer, rect, setImageOpaci
   const tak = useTakEvent(eventId);
   const [basemapId] = usePref<string>(PREF.underlayBasemap, NO_BASEMAP_ID);
   const [opacity] = usePref<number>(PREF.imageOpacity, DEFAULT_IMAGE_OPACITY);
-  const option = resolveBasemap(basemapId, NO_BASEMAP_ID);
-  const alignment = layer ? tak.alignments[layer.id] : undefined;
-  const active = option.id !== NO_BASEMAP_ID && !!layer && alignmentMatches(alignment, layer.mapUrl);
+  const dark = useIsDark();
+  const option = resolveBasemap(basemapId, NO_BASEMAP_ID, BASEMAPS, dark);
+  const alignment = alignmentFor(layer, tak.alignments);
+  const active = option.id !== NO_BASEMAP_ID && !!alignment;
 
   const dpr = typeof window === 'undefined' ? 1 : window.devicePixelRatio || 1;
   // Rounded so sub-pixel layout changes don't trigger a new render.

@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import type { Layer, Staff, Supervisor } from '@/app/types';
 import { useTakEvent } from '../data/hub';
-import { alignmentMatches } from '../data/alignmentStore';
+import { alignmentFor } from '../data/alignmentStore';
 import { latLonToPercent } from '../lib/affine';
 import { isStale, teamPositions } from '../lib/linking';
 import { takTeams } from '../lib/teamIds';
@@ -33,8 +33,8 @@ export default function TakLiveMarkers({ eventId, staff, supervisor, layer, rect
 
   const teams = useMemo(() => takTeams(staff, supervisor), [staff, supervisor]);
   const positions = useMemo(() => teamPositions(tak.live, tak.links, teams), [tak.live, tak.links, teams]);
-  const alignment = layer ? tak.alignments[layer.id] : undefined;
-  if (!layer || !alignmentMatches(alignment, layer.mapUrl)) return null;
+  const alignment = alignmentFor(layer, tak.alignments);
+  if (!layer || !alignment) return null;
   const showLive = !!tak.config?.enabled;
 
   return (

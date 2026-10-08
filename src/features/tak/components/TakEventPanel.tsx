@@ -1,12 +1,12 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { Button, Modal, ModalBody, ModalContent, Select, SelectItem, Slider, Switch } from '@heroui/react';
-import { ChevronDown, ChevronUp, Link2Off, MapPinned, Radio } from 'lucide-react';
+import { Button, Select, SelectItem, Slider, Switch } from '@heroui/react';
+import { ChevronDown, ChevronUp, Link2Off, Radio } from 'lucide-react';
 import type { Event, Layer } from '@/app/types';
-import { refreshAlignments, useTakEvent } from '../data/hub';
+import { useTakEvent } from '../data/hub';
 import { PREF, usePref } from '../data/prefs';
-import { alignmentMatches } from '../data/alignmentStore';
+import { alignmentFor } from '../data/alignmentStore';
 import {
   clearLive,
   linkDevice,
@@ -17,12 +17,12 @@ import {
   type TakBridge,
   type TakEventConfig,
 } from '../data/takStore';
-import { NO_BASEMAP_ID, resolveBasemap } from '../lib/basemaps';
+import { BASEMAPS, NO_BASEMAP_ID, resolveBasemap, validChoice } from '../lib/basemaps';
+import { useIsDark } from '../lib/ui';
 import { isStale, unassignedDevices } from '../lib/linking';
 import { takTeams } from '../lib/teamIds';
 import { TAK_MODULE_MARKER } from '../marker';
 import type { HistoryMode } from '../types';
-import AlignMap from './AlignMap';
 import BasemapPicker from './BasemapPicker';
 import { DEFAULT_IMAGE_OPACITY } from './TakBasemapUnderlay';
 
@@ -53,11 +53,11 @@ export default function TakEventPanel({ eventId, event, uid, isOwner, layers }: 
   const [open, setOpen] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const [bridges, setBridges] = useState<TakBridge[]>([]);
-  const [aligning, setAligning] = useState<Layer | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [underlayId, setUnderlayId] = usePref<string>(PREF.underlayBasemap, NO_BASEMAP_ID);
   const [imageOpacity, setImageOpacity] = usePref<number>(PREF.imageOpacity, DEFAULT_IMAGE_OPACITY);
-  const underlay = resolveBasemap(underlayId, NO_BASEMAP_ID);
+  const dark = useIsDark();
+  const underlay = resolveBasemap(underlayId, NO_BASEMAP_ID, BASEMAPS, dark);
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 10_000);
@@ -152,9 +152,9 @@ export default function TakEventPanel({ eventId, event, uid, isOwner, layers }: 
             )}
           </section>
 
-          {layers.some((l) => alignmentMatches(tak.alignments[l.id], l.mapUrl)) && (
+          {layers.some((l) => alignmentFor(l, tak.alignments)) && (
             <section className="space-y-2">
-              <BasemapPicker label="Basemap under the map (just for you)" className="w-full" value={underlay.id} onChange={setUnderlayId} />
+              <BasemapPicker label="Basemap under the map (just for you)" className="w-full" value={validChoice(underlayId, NO_BASEMAP_ID)} onChange={setUnderlayId} />
               {underlay.id !== NO_BASEMAP_ID && (
                 <Slider
                   size="sm"
@@ -214,22 +214,21 @@ export default function TakEventPanel({ eventId, event, uid, isOwner, layers }: 
               <div className="space-y-1">
                 <p className="text-xs text-surface-faint">Maps</p>
                 {layers.filter((l) => l.mapUrl).map((l) => {
-                  const a = tak.alignments[l.id];
-                  const ok = alignmentMatches(a, l.mapUrl);
+                  const a = alignmentFor(l, tak.alignments);
                   return (
-                    <div key={l.id} className="flex items-center justify-between gap-2">
-                      <span className="truncate">
-                        {l.name}:{' '}
-                        <span className="text-surface-faint">
-                          {ok ? (a!.residualM === null ? 'aligned' : `aligned, about ${a!.residualM.toFixed(1)} m`) : a ? 'image changed, align again' : 'not aligned'}
-                        </span>
+                    <p key={l.id} className="truncate">
+                      {l.name}:{' '}
+                      <span className="text-surface-faint">
+                        {a ? (a.residualM === null ? 'aligned' : `aligned, about ${a.residualM.toFixed(1)} m`) : l.takAlignment ? 'image changed since alignment' : 'not aligned'}
                       </span>
-                      <Button size="sm" variant="flat" startContent={<MapPinned className="h-4 w-4" />} onPress={() => setAligning(l)}>
-                        Align
-                      </Button>
-                    </div>
+                    </p>
                   );
                 })}
+                {layers.some((l) => l.mapUrl && !alignmentFor(l, tak.alignments)) && (
+                  <p className="text-xs text-surface-faint">
+                    Maps are aligned in venue setup (Venues, edit the venue, TAK alignment). Events created afterwards use the alignment.
+                  </p>
+                )}
               </div>
             </section>
           )}
@@ -289,25 +288,6 @@ export default function TakEventPanel({ eventId, event, uid, isOwner, layers }: 
         </div>
       )}
 
-      <Modal isOpen={!!aligning} onClose={() => setAligning(null)} size="5xl" scrollBehavior="inside">
-        <ModalContent>
-          <ModalBody className="py-5">
-            {aligning && (
-              <AlignMap
-                eventId={eventId}
-                layer={{ id: aligning.id, name: aligning.name, mapUrl: aligning.mapUrl! }}
-                ownerUid={uid}
-                initial={tak.alignments[aligning.id]}
-                onSaved={() => {
-                  refreshAlignments(eventId);
-                  setAligning(null);
-                }}
-                onCancel={() => setAligning(null)}
-              />
-            )}
-          </ModalBody>
-        </ModalContent>
-      </Modal>
     </div>
   );
 }

@@ -1,0 +1,35 @@
+/*
+ * MapLibre's own controls (zoom +/- and the attribution "i") follow
+ * CrowdCAD's light and dark themes. The dark theme is the `dark` class on
+ * <html> (see app/layout.tsx).
+ */
+.map :global(.maplibregl-ctrl-group),
+.map :global(.maplibregl-ctrl-attrib) {
+  background: rgb(255 255 255 / 0.92);
+  color: #1f2328;
+}
+
+:global(.dark) .map :global(.maplibregl-ctrl-group),
+:global(.dark) .map :global(.maplibregl-ctrl-attrib) {
+  background: rgb(24 26 31 / 0.92);
+  color: #e6e8eb;
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.12);
+}
+
+:global(.dark) .map :global(.maplibregl-ctrl-group button + button) {
+  border-top-color: rgb(255 255 255 / 0.12);
+}
+
+:global(.dark) .map :global(.maplibregl-ctrl-group button:not(:disabled):hover) {
+  background-color: rgb(255 255 255 / 0.08);
+}
+
+/* The control icons are dark SVG backgrounds; invert them in the dark theme. */
+:global(.dark) .map :global(.maplibregl-ctrl-icon),
+:global(.dark) .map :global(.maplibregl-ctrl-attrib-button) {
+  filter: invert(1);
+}
+
+:global(.dark) .map :global(.maplibregl-ctrl-attrib a) {
+  color: #c9ced6;
+}

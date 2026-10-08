@@ -1,11 +1,20 @@
 import { describe, expect, it, vi } from 'vitest';
-import { basemapOptions, NO_BASEMAP_ID, resolveBasemap } from './basemaps';
+import { AUTO_BASEMAP_ID, basemapChoices, basemapOptions, NO_BASEMAP_ID, resolveBasemap } from './basemaps';
 import { geocoderUrl, parsePhotonResults, searchPlaces } from './geocode';
 
 describe('basemapOptions', () => {
-  it('offers no basemap plus the OpenFreeMap styles by default', () => {
-    const ids = basemapOptions(undefined).map((o) => o.id);
-    expect(ids).toEqual([NO_BASEMAP_ID, 'positron', 'liberty', 'bright', 'dark', 'fiord']);
+  it('offers Light, Dark, Streets and no basemap by default, with "match light/dark mode" first', () => {
+    const opts = basemapOptions(undefined);
+    expect(opts.map((o) => o.id)).toEqual(['positron', 'dark', 'liberty', NO_BASEMAP_ID]);
+    expect(basemapChoices(opts).map((o) => o.id)).toEqual([AUTO_BASEMAP_ID, 'positron', 'dark', 'liberty', NO_BASEMAP_ID]);
+    expect(basemapChoices(basemapOptions('off')).map((o) => o.id)).toEqual([NO_BASEMAP_ID]);
+  });
+
+  it('"auto" follows the theme', () => {
+    const opts = basemapOptions(undefined);
+    expect(resolveBasemap(AUTO_BASEMAP_ID, AUTO_BASEMAP_ID, opts, false).id).toBe('positron');
+    expect(resolveBasemap(AUTO_BASEMAP_ID, AUTO_BASEMAP_ID, opts, true).id).toBe('dark');
+    expect(resolveBasemap('gone', AUTO_BASEMAP_ID, opts, true).id).toBe('dark');
   });
 
   it('"off" leaves only no basemap', () => {
@@ -21,7 +30,7 @@ describe('basemapOptions', () => {
         { id: NO_BASEMAP_ID, label: 'x', style: 'y' },
       ]),
     );
-    expect(opts.map((o) => o.id)).toEqual([NO_BASEMAP_ID, 'liberty', 'bright', 'dark', 'fiord', 'satellite', 'positron']);
+    expect(opts.map((o) => o.id)).toEqual(['dark', 'liberty', 'satellite', 'positron', NO_BASEMAP_ID]);
     const sat = opts.find((o) => o.id === 'satellite')!;
     expect(sat.attribution).toBe('Example imagery');
     expect(typeof sat.style).toBe('object');
@@ -29,7 +38,7 @@ describe('basemapOptions', () => {
   });
 
   it('ignores a malformed setting', () => {
-    expect(basemapOptions('{not json').length).toBe(6);
+    expect(basemapOptions('{not json').length).toBe(4);
   });
 
   it('resolves unknown ids to the fallback', () => {

@@ -2,12 +2,14 @@
 
 import React, { useMemo, useRef, useState } from 'react';
 import { Button, Input, Slider } from '@heroui/react';
-import { Crosshair, LocateFixed, Search, Trash2, ZoomIn, ZoomOut } from 'lucide-react';
+import { Crosshair, LocateFixed, Trash2 } from 'lucide-react';
+import { useZoomPan } from '@/hooks/useZoomPan';
+import { MAP_CHECKER_BG } from '@/lib/mapStyles';
+import MapZoomControls from '@/components/ui/map-zoom-controls';
 import { fitAffine, parseLatLon } from '../lib/affine';
 import { imageCorners } from '../lib/basemapFrame';
-import { DEFAULT_BASEMAP_ID, resolveBasemap } from '../lib/basemaps';
+import { DEFAULT_BASEMAP_ID, validChoice } from '../lib/basemaps';
 import { searchPlaces, type PlaceResult } from '../lib/geocode';
-import { saveAlignment } from '../data/alignmentStore';
 import { TAK_INPUT_CLASSNAMES } from '../lib/ui';
 import { PREF, usePref } from '../data/prefs';
 import { TAK_MODULE_MARKER } from '../marker';
@@ -16,20 +18,24 @@ import BasemapPicker from './BasemapPicker';
 import BasemapView, { type BasemapMarker, type BasemapViewRequest } from './BasemapView';
 
 /**
- * "Align map": ties an event map image to real-world coordinates with control
+ * "Align map": ties a venue map image to real-world coordinates with control
  * points, for TAK live positions and heat maps. Each point is a spot clicked
  * on the image plus the same spot clicked on a basemap (or typed
  * coordinates). Once 3 points exist, the image is previewed on the basemap.
- * It renders its own image and never touches the core map components or the
- * layer's existing data.
+ *
+ * It only computes the alignment; `onSave` decides where it is kept (the
+ * venue's layer, D61).
  */
 export interface AlignMapProps {
-  eventId: string;
   layer: { id: string; name: string; mapUrl: string };
   ownerUid: string;
   initial?: TakMapAlignment;
-  onSaved?: (alignment: TakMapAlignment) => void;
+  onSave: (alignment: TakMapAlignment) => void | Promise<void>;
+  saveLabel?: string;
   onCancel?: () => void;
+  cancelLabel?: string;
+  /** Height of the two map panes. */
+  paneClassName?: string;
 }
 
 /** Error levels for the summary line, in meters. */
@@ -37,6 +43,8 @@ const GOOD_M = 5;
 const FAIR_M = 15;
 /** Below this spread across the image (percent of width and height), points are too close together. */
 const MIN_SPREAD_PCT = 40;
+/** A press that moves further than this is a pan, not a click. */
+const CLICK_SLOP_PX = 4;
 
 function boundsOf(points: LatLon[]): [number, number, number, number] {
   const lats = points.map((p) => p.lat);
@@ -44,7 +52,16 @@ function boundsOf(points: LatLon[]): [number, number, number, number] {
   return [Math.min(...lons), Math.min(...lats), Math.max(...lons), Math.max(...lats)];
 }
 
-export default function AlignMap({ eventId, layer, ownerUid, initial, onSaved, onCancel }: AlignMapProps) {
+export default function AlignMap({
+  layer,
+  ownerUid,
+  initial,
+  onSave,
+  saveLabel = 'Save alignment',
+  onCancel,
+  cancelLabel = 'Later',
+  paneClassName = 'h-[55vh] min-h-[320px]',
+}: AlignMapProps) {
   const sameImage = initial?.mapUrl === layer.mapUrl;
   const [points, setPoints] = useState<ControlPoint[]>(sameImage ? initial!.controlPoints : []);
   const [natural, setNatural] = useState<{ w: number; h: number } | null>(null);
@@ -53,7 +70,6 @@ export default function AlignMap({ eventId, layer, ownerUid, initial, onSaved, o
   const [pendingGeo, setPendingGeo] = useState<LatLon | null>(null);
   const [coordInput, setCoordInput] = useState('');
   const [coordError, setCoordError] = useState<string | null>(null);
-  const [zoom, setZoom] = useState(1);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [basemapId, setBasemapId] = usePref<string>(PREF.alignBasemap, DEFAULT_BASEMAP_ID);
@@ -67,7 +83,11 @@ export default function AlignMap({ eventId, layer, ownerUid, initial, onSaved, o
   const [view, setView] = useState<BasemapViewRequest | undefined>(() =>
     sameImage && initial!.controlPoints.length ? { key: 1, bounds: boundsOf(initial!.controlPoints) } : undefined,
   );
-  const basemap = resolveBasemap(basemapId);
+  const basemapChoice = validChoice(basemapId, DEFAULT_BASEMAP_ID);
+
+  // The image pane pans and zooms like CrowdCAD's other maps; zooming out past fit shows margin around it.
+  const zp = useZoomPan({ minScale: 0.5, maxScale: 8 });
+  const pressAt = useRef<{ x: number; y: number } | null>(null);
 
   const fit = useMemo(() => (natural ? fitAffine(points, natural.w, natural.h) : null), [points, natural]);
   const fitOk = fit && !('error' in fit) ? fit : null;
@@ -81,6 +101,9 @@ export default function AlignMap({ eventId, layer, ownerUid, initial, onSaved, o
   };
 
   const handleImageClick = (e: React.MouseEvent<HTMLImageElement>) => {
+    const start = pressAt.current;
+    if (start && Math.hypot(e.clientX - start.x, e.clientY - start.y) > CLICK_SLOP_PX) return; // a pan, not a click
+    // The rect already includes the pan/zoom transform.
     const rect = e.currentTarget.getBoundingClientRect();
     const x = ((e.clientX - rect.left) / rect.width) * 100;
     const y = ((e.clientY - rect.top) / rect.height) * 100;
@@ -141,20 +164,18 @@ export default function AlignMap({ eventId, layer, ownerUid, initial, onSaved, o
     if (!fitOk || !natural) return;
     setSaving(true);
     setSaveError(null);
-    const alignment: TakMapAlignment = {
-      mapUrl: layer.mapUrl,
-      naturalWidth: natural.w,
-      naturalHeight: natural.h,
-      controlPoints: points,
-      origin: fitOk.origin,
-      transform: fitOk.transform,
-      residualM: fitOk.residualM,
-      ownerUid,
-      updatedAt: Date.now(),
-    };
     try {
-      await saveAlignment(eventId, layer.id, alignment);
-      onSaved?.(alignment);
+      await onSave({
+        mapUrl: layer.mapUrl,
+        naturalWidth: natural.w,
+        naturalHeight: natural.h,
+        controlPoints: points,
+        origin: fitOk.origin,
+        transform: fitOk.transform,
+        residualM: fitOk.residualM,
+        ownerUid,
+        updatedAt: Date.now(),
+      });
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : 'Could not save the alignment.');
     } finally {
@@ -165,7 +186,7 @@ export default function AlignMap({ eventId, layer, ownerUid, initial, onSaved, o
   const next = (() => {
     if (pendingImg) return 'Now click the same spot on the basemap, or type its coordinates below.';
     if (pendingGeo) return 'Now click the same spot on your map image.';
-    return 'Click a spot on your map image, then the same spot on the basemap (either order).';
+    return 'Click a spot on your map image, then the same spot on the basemap (either order). Drag to move either map.';
   })();
 
   const summary = (() => {
@@ -179,7 +200,10 @@ export default function AlignMap({ eventId, layer, ownerUid, initial, onSaved, o
 
   // Points bunched in one part of the image fit there but guess everywhere else.
   const spread = points.length
-    ? Math.min(Math.max(...points.map((p) => p.x)) - Math.min(...points.map((p) => p.x)), Math.max(...points.map((p) => p.y)) - Math.min(...points.map((p) => p.y)))
+    ? Math.min(
+        Math.max(...points.map((p) => p.x)) - Math.min(...points.map((p) => p.x)),
+        Math.max(...points.map((p) => p.y)) - Math.min(...points.map((p) => p.y)),
+      )
     : 0;
   const bunched = !!fitOk && spread < MIN_SPREAD_PCT;
 
@@ -187,38 +211,31 @@ export default function AlignMap({ eventId, layer, ownerUid, initial, onSaved, o
     ...points.map((p, i) => ({ lat: p.lat, lon: p.lon, label: String(i + 1), tone: 'point' as const })),
     ...(pendingGeo ? [{ ...pendingGeo, label: '', tone: 'pending' as const }] : []),
   ];
+  // Markers keep their on-screen size while the image zooms.
+  const markerScale = { transform: `translate(-50%, -50%) scale(${1 / zp.scale})` };
 
   return (
     <div className="flex flex-col gap-3 text-surface-light" data-tak-module={TAK_MODULE_MARKER}>
-      <div>
-        <h3 className="text-lg font-semibold">Align map: {layer.name}</h3>
-        <p className="text-sm text-surface-faint">
-          Pick at least 3 spots you can identify on both maps, spread across the image. Corners of buildings, path
-          junctions and field markings work well. More points give a better estimate of accuracy.
-        </p>
-      </div>
-
       <div className="flex flex-wrap items-end gap-2">
-        <BasemapPicker value={basemap.id} onChange={setBasemapId} />
+        <BasemapPicker value={basemapChoice} onChange={setBasemapId} omit={['none']} />
         <form
-          className="flex min-w-[240px] flex-1 items-end gap-2"
+          className="min-w-[240px] flex-1"
           onSubmit={(e) => {
             e.preventDefault();
             void runSearch();
           }}
         >
-          <Input classNames={TAK_INPUT_CLASSNAMES}
+          <Input
+            classNames={TAK_INPUT_CLASSNAMES}
             size="sm"
-            label="Find a place or coordinates"
+            label="Find a place or coordinates (press Enter)"
             placeholder="Venue name, address, or 37.7694, -122.4862"
             value={query}
             onValueChange={setQuery}
             isInvalid={Boolean(searchError)}
             errorMessage={searchError ?? undefined}
+            description={searching ? 'Searching…' : undefined}
           />
-          <Button type="submit" size="sm" isIconOnly aria-label="Search" isLoading={searching} className="mb-0.5">
-            <Search className="h-4 w-4" />
-          </Button>
         </form>
       </div>
       {results && results.length > 1 && (
@@ -238,51 +255,59 @@ export default function AlignMap({ eventId, layer, ownerUid, initial, onSaved, o
       </p>
 
       <div className="grid gap-3 md:grid-cols-2">
-        <div className="relative">
-          <div className="absolute right-2 top-2 z-10 flex gap-1">
-            <Button isIconOnly size="sm" radius="full" variant="flat" aria-label="Zoom out" onPress={() => setZoom((z) => Math.max(1, z - 0.5))}>
-              <ZoomOut className="h-4 w-4" />
-            </Button>
-            <Button isIconOnly size="sm" radius="full" variant="flat" aria-label="Zoom in" onPress={() => setZoom((z) => Math.min(4, z + 0.5))}>
-              <ZoomIn className="h-4 w-4" />
-            </Button>
-          </div>
-          <div className="relative h-[50vh] overflow-auto rounded-lg border border-surface-liner bg-surface-deepest">
-            <div className="relative" style={{ width: `${zoom * 100}%` }}>
+        <div
+          className={`relative overflow-hidden rounded-lg border border-surface-liner ${paneClassName}`}
+          style={{ ...MAP_CHECKER_BG, cursor: zp.isPanning ? 'grabbing' : 'grab', touchAction: 'none' }}
+          onWheel={zp.handleWheel}
+          onMouseDown={(e) => {
+            pressAt.current = { x: e.clientX, y: e.clientY };
+            zp.handleMouseDown(e);
+          }}
+          onMouseMove={zp.handleMouseMove}
+          onMouseUp={zp.handleMouseUp}
+          onMouseLeave={zp.handleMouseUp}
+          onTouchStart={zp.handleTouchStart}
+          onTouchMove={zp.handleTouchMove}
+          onTouchEnd={zp.handleTouchEnd}
+        >
+          <div
+            className="flex h-full w-full items-center justify-center p-6"
+            style={{
+              transform: `translate(${zp.position.x}px, ${zp.position.y}px) scale(${zp.scale})`,
+              transformOrigin: 'center center',
+              transition: zp.isPanning ? 'none' : 'transform 0.1s ease-out',
+            }}
+          >
+            <div className="relative">
               {/* eslint-disable-next-line @next/next/no-img-element -- plain img: the alignment needs the image's natural size and exact click geometry */}
               <img
                 src={layer.mapUrl}
                 alt={`Map: ${layer.name}`}
-                className="block w-full cursor-crosshair select-none"
+                className="block max-w-full cursor-crosshair select-none"
+                style={{ maxHeight: 'calc(55vh - 3rem)' }}
                 draggable={false}
                 onLoad={(e) => setNatural({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })}
                 onClick={handleImageClick}
               />
               {points.map((p, i) => (
-                <div
-                  key={i}
-                  className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2"
-                  style={{ left: `${p.x}%`, top: `${p.y}%` }}
-                >
+                <div key={i} className="pointer-events-none absolute" style={{ left: `${p.x}%`, top: `${p.y}%`, ...markerScale }}>
                   <Crosshair className="h-5 w-5 text-status-blue drop-shadow" />
                   <span className="absolute left-5 top-0 whitespace-nowrap rounded bg-surface-deepest/90 px-1 text-xs">{i + 1}</span>
                 </div>
               ))}
               {pendingImg && (
-                <div
-                  className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2"
-                  style={{ left: `${pendingImg.x}%`, top: `${pendingImg.y}%` }}
-                >
+                <div className="pointer-events-none absolute" style={{ left: `${pendingImg.x}%`, top: `${pendingImg.y}%`, ...markerScale }}>
                   <Crosshair className="h-6 w-6 animate-pulse text-accent" />
                 </div>
               )}
             </div>
           </div>
+          <MapZoomControls onZoomIn={() => zp.zoomIn(0.5)} onZoomOut={() => zp.zoomOut(0.5)} onReset={zp.resetZoom} />
         </div>
 
         <BasemapView
-          className="h-[50vh] rounded-lg border border-surface-liner"
-          basemapId={basemap.id}
+          className={`rounded-lg border border-surface-liner ${paneClassName}`}
+          basemapId={basemapChoice}
           onMapClick={handleMapClick}
           markers={mapMarkers}
           image={fitOk && showOverlay ? { url: layer.mapUrl, corners: imageCorners(fitOk), opacity } : null}
@@ -317,7 +342,8 @@ export default function AlignMap({ eventId, layer, ownerUid, initial, onSaved, o
         <div className="flex flex-wrap items-end gap-2 rounded-lg border border-surface-liner bg-surface-deep p-3">
           {pendingImg && (
             <>
-              <Input classNames={TAK_INPUT_CLASSNAMES}
+              <Input
+                classNames={TAK_INPUT_CLASSNAMES}
                 size="sm"
                 label="Or type its position (latitude, longitude)"
                 placeholder="45.0012, -100.0021"
@@ -401,11 +427,11 @@ export default function AlignMap({ eventId, layer, ownerUid, initial, onSaved, o
       <div className="flex justify-end gap-2">
         {onCancel && (
           <Button variant="flat" onPress={onCancel}>
-            Later
+            {cancelLabel}
           </Button>
         )}
         <Button className="bg-accent text-surface-light" isDisabled={!fitOk || saving} isLoading={saving} onPress={save}>
-          Save alignment
+          {saveLabel}
         </Button>
       </div>
     </div>

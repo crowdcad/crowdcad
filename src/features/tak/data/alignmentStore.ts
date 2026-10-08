@@ -73,3 +73,19 @@ export async function deleteAlignment(eventId: string, layerId: string): Promise
 export function alignmentMatches(alignment: TakMapAlignment | undefined, mapUrl: string | undefined): boolean {
   return Boolean(alignment && mapUrl && alignment.mapUrl === mapUrl);
 }
+
+/**
+ * A layer's current alignment: its own (set in venue setup, D61, and copied
+ * into each event's venue snapshot), else one saved on the event before
+ * that (the takMapAlignment collection, read only now). Undefined when
+ * neither matches the layer's image.
+ */
+export function alignmentFor(
+  layer: { id: string; mapUrl?: string; takAlignment?: TakMapAlignment } | undefined,
+  legacy: Record<string, TakMapAlignment> = {},
+): TakMapAlignment | undefined {
+  if (!layer) return undefined;
+  if (alignmentMatches(layer.takAlignment, layer.mapUrl)) return layer.takAlignment;
+  const old = legacy[layer.id];
+  return alignmentMatches(old, layer.mapUrl) ? old : undefined;
+}

@@ -1,3 +1,5 @@
+import type { TakMapAlignment } from '@/features/tak';
+
 export type Post =
   | string
   | {
@@ -43,6 +45,8 @@ export interface Layer {
   posts: Post[];
   zones?: Zone[];
   geoBounds?: GeoBounds; // present when this layer's mapUrl was georeferenced via a GIS import
+  /** TAK (optional, in development): this map's real-world alignment, set in venue setup. Core never reads it. */
+  takAlignment?: TakMapAlignment;
 }
 
 export interface Venue {
@@ -55,6 +59,8 @@ export interface Venue {
   userId: string;
   sharedWith?: string[]; // Array of emails
   isOrgVenue?: boolean; // Visible to all users on this instance, set by an admin
+  /** TAK (optional, in development): venue setup shows the TAK alignment step. Core reads it only to show that step. */
+  takEnabled?: boolean;
 }
 
 export interface Event {

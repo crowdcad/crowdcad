@@ -2,7 +2,7 @@
 
 'use client';
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/hooks/useauth';
@@ -54,6 +54,14 @@ import {
 } from 'lucide-react';
 
 
+// TAK live tracking (optional, in development): the venue's TAK switch and
+// alignment step (touchpoint l), compiled out entirely unless NEXT_PUBLIC_TAK
+// is exactly "on".
+const TakVenueSetting =
+  process.env.NEXT_PUBLIC_TAK === 'on' ? lazy(() => import('@/features/tak').then((m) => ({ default: m.TakVenueSetting }))) : null;
+const TakVenueAlignStep =
+  process.env.NEXT_PUBLIC_TAK === 'on' ? lazy(() => import('@/features/tak').then((m) => ({ default: m.TakVenueAlignStep }))) : null;
+
 // Props: none required for this page
 
 interface EquipmentWithLocation extends Equipment {
@@ -74,6 +82,7 @@ export default function VenueManagementPageClient() {
     name: string;
     equipment: EquipmentWithLocation[];
     layers: Layer[];
+    takEnabled?: boolean;
   }>({
     name: '',
     equipment: [],
@@ -216,7 +225,9 @@ export default function VenueManagementPageClient() {
   const [editingEquipmentIndex, setEditingEquipmentIndex] = useState<number | null>(null);
   const [equipmentEditInput, setEquipmentEditInput] = useState('');
 
-  const STEP_ORDER = ['basics', 'map', 'locations', 'equipment', 'review'] as const;
+  // TAK (optional): its alignment step follows Map when the venue turns TAK on.
+  const takStep = process.env.NEXT_PUBLIC_TAK === 'on' && !!TakVenueAlignStep && !!venueData.takEnabled;
+  const STEP_ORDER: string[] = ['basics', 'map', ...(takStep ? ['tak'] : []), 'locations', 'equipment', 'review'];
   const [currentStepId, setCurrentStepId] = useState<string>('basics');
 
 
@@ -292,6 +303,7 @@ export default function VenueManagementPageClient() {
               name: venue.name,
               equipment: venue.equipment || [],
               layers,
+              takEnabled: venue.takEnabled,
             });
             setCurrentLayer(0);
           }
@@ -810,7 +822,11 @@ export default function VenueManagementPageClient() {
 
       // Update current layer's mapUrl if new map uploaded
       const updatedLayers = venueData.layers.map((layer, idx) => {
-        const layerData = idx === (pendingLayer ?? currentLayer) && newMapUrl ? { ...layer, mapUrl: newMapUrl } : layer;
+        let layerData = idx === (pendingLayer ?? currentLayer) && newMapUrl ? { ...layer, mapUrl: newMapUrl } : layer;
+        // A TAK alignment made against the new image's local preview follows it to its uploaded URL.
+        if (layerData !== layer && layer.takAlignment && layer.takAlignment.mapUrl === previewUrl) {
+          layerData = { ...layerData, takAlignment: { ...layer.takAlignment, mapUrl: newMapUrl! } };
+        }
         // Remove undefined properties from each layer
         const filteredLayer: Record<string, unknown> = {};
         Object.entries(layerData).forEach(([key, value]) => {
@@ -828,6 +844,11 @@ export default function VenueManagementPageClient() {
         posts: allPosts.map(item => item.post),
         userId,
       };
+
+      // TAK (optional): saved only once the venue has turned it on or off.
+      if (venueData.takEnabled !== undefined) {
+        dataToSave.takEnabled = venueData.takEnabled;
+      }
 
       // Only add mapUrl if it exists
       if (venueData.layers?.[0]?.mapUrl) {
@@ -1008,7 +1029,7 @@ export default function VenueManagementPageClient() {
     : venueData.layers;
   // The Map step always renders full-width (header + its own interactive
   // map), never the half-split every other map-showing step uses.
-  const showMapPanel = currentStepId !== 'basics' && currentStepId !== 'map' && currentStepId !== 'review';
+  const showMapPanel = currentStepId !== 'basics' && currentStepId !== 'map' && currentStepId !== 'tak' && currentStepId !== 'review';
   const showMapColumn = showMapPanel && hasMapForStep;
   // The interactive editor (place/drag markers) only applies to Locations
   // (placing a location directly on the map); Equipment and Review just
@@ -1408,6 +1429,17 @@ export default function VenueManagementPageClient() {
             input: 'text-surface-light outline-none focus:outline-none data-[focus=true]:outline-none',
           }}
         />
+        {TakVenueSetting && userId && (
+          <Suspense fallback={null}>
+            <div className="mt-6">
+              <TakVenueSetting
+                uid={userId}
+                enabled={!!venueData.takEnabled}
+                onChange={(enabled) => setVenueData((prev) => ({ ...prev, takEnabled: enabled }))}
+              />
+            </div>
+          </Suspense>
+        )}
       </div>
     </div>
   );
@@ -1629,12 +1661,41 @@ export default function VenueManagementPageClient() {
   const steps: WizardStep[] = [
     { id: 'basics', label: 'Venue Configuration', component: basicsStep, isComplete: hasName },
     { id: 'map', label: 'Map', component: mapFloorsStep, isComplete: hasName },
+    ...(TakVenueAlignStep && takStep && userId
+      ? [
+          {
+            id: 'tak',
+            label: 'TAK alignment',
+            component: (
+              <Suspense fallback={null}>
+                <TakVenueAlignStep
+                  uid={userId}
+                  layers={layersForMapDisplay}
+                  onAlignmentChange={(layerId, alignment) =>
+                    setVenueData((prev) => ({
+                      ...prev,
+                      layers: prev.layers.map((l) => {
+                        if (l.id !== layerId) return l;
+                        if (alignment) return { ...l, takAlignment: alignment };
+                        const rest = { ...l };
+                        delete rest.takAlignment;
+                        return rest;
+                      }),
+                    }))
+                  }
+                />
+              </Suspense>
+            ),
+            isComplete: hasName,
+          },
+        ]
+      : []),
     { id: 'locations', label: 'Locations', component: locationsStep, isComplete: hasName },
     { id: 'equipment', label: 'Equipment', component: equipmentStep, isComplete: hasName },
     { id: 'review', label: 'Review', component: reviewStep, isComplete: hasName },
   ];
 
-  const stepIdx = STEP_ORDER.indexOf(currentStepId as (typeof STEP_ORDER)[number]);
+  const stepIdx = STEP_ORDER.indexOf(currentStepId);
   const isFirstStep = stepIdx <= 0;
   const isLastStep = stepIdx === STEP_ORDER.length - 1;
   const goNext = () => {

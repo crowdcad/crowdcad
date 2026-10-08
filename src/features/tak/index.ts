@@ -18,7 +18,9 @@ export { default as TakBasemapUnderlay, type TakBasemapUnderlayProps } from './c
 export { default as TakEventSummary, type TakEventSummaryProps } from './components/TakEventSummary'; // (k) event summary, D57
 export { default as TakMapModeChoice, type TakMapModeChoiceProps } from './components/TakMapModeChoice'; // (b) event creation
 export { default as TakAdminSection, type TakAdminSectionProps } from './components/TakAdminSection'; // (c) Admin settings
+export { default as TakVenueSetting, type TakVenueSettingProps } from './components/TakVenueSetting'; // (l) venue setup, D61
+export { default as TakVenueAlignStep, type TakVenueAlignStepProps } from './components/TakVenueAlignStep'; // (l) venue setup, D61
 export { onEventEnded } from './lifecycle'; // (d) end-event flow
 
-export { alignmentMatches, deleteAlignment, loadAlignments, saveAlignment } from './data/alignmentStore';
+export { alignmentFor, alignmentMatches, deleteAlignment, loadAlignments, saveAlignment } from './data/alignmentStore';
 export { fitAffine, latLonToPercent, percentToLatLon, parseLatLon } from './lib/affine';

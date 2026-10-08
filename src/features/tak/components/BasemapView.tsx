@@ -3,7 +3,9 @@
 import 'maplibre-gl/dist/maplibre-gl.css';
 import React, { useEffect, useRef, useState } from 'react';
 import type { Map as MlMap, Marker as MlMarker } from 'maplibre-gl';
-import { resolveBasemap } from '../lib/basemaps';
+import { BASEMAPS, DEFAULT_BASEMAP_ID, resolveBasemap } from '../lib/basemaps';
+import { useIsDark } from '../lib/ui';
+import styles from './basemap.module.css';
 import { TAK_MODULE_MARKER } from '../marker';
 import type { LatLon } from '../types';
 
@@ -129,7 +131,8 @@ export default function BasemapView({
   clickRef.current = onMapClick;
   const centerRef = useRef(onCenterChange);
   centerRef.current = onCenterChange;
-  const option = resolveBasemap(basemapId);
+  const dark = useIsDark();
+  const option = resolveBasemap(basemapId, DEFAULT_BASEMAP_ID, BASEMAPS, dark);
 
   /** Positions the image over the map with a CSS matrix from three projected corners. */
   const placeImage = () => {
@@ -284,7 +287,7 @@ export default function BasemapView({
   }, [view?.key, ready]);
 
   return (
-    <div className={`relative overflow-hidden ${className ?? ''}`} data-tak-module={TAK_MODULE_MARKER}>
+    <div className={`relative overflow-hidden ${styles.map} ${className ?? ''}`} data-tak-module={TAK_MODULE_MARKER}>
       {/* Inline position: MapLibre's stylesheet sets position: relative on the map element. */}
       <div ref={containerRef} style={{ position: 'absolute', inset: 0, cursor: onMapClick ? cursor : undefined }} />
       <div className="pointer-events-none absolute inset-0 overflow-hidden">

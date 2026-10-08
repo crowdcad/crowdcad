@@ -2,20 +2,24 @@
 
 import React from 'react';
 import { Select, SelectItem } from '@heroui/react';
-import { BASEMAPS } from '../lib/basemaps';
+import { basemapChoices } from '../lib/basemaps';
 
-/** Basemap style choice (D55). */
+/** Basemap style choice (D55). "Match light/dark mode" is the default where Light and Dark both exist. */
 export default function BasemapPicker({
   value,
   onChange,
   label = 'Basemap',
   className = 'w-48',
+  omit = [],
 }: {
   value: string;
   onChange: (id: string) => void;
   label?: string;
   className?: string;
+  /** Choices to leave out, e.g. "none" where a basemap is the point. */
+  omit?: string[];
 }) {
+  const choices = basemapChoices().filter((c) => !omit.includes(c.id));
   return (
     <Select
       size="sm"
@@ -28,7 +32,7 @@ export default function BasemapPicker({
         if (typeof id === 'string') onChange(id);
       }}
     >
-      {BASEMAPS.map((o) => (
+      {choices.map((o) => (
         <SelectItem key={o.id}>{o.label}</SelectItem>
       ))}
     </Select>

@@ -1,17 +1,19 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { Select, SelectItem, Slider } from '@heroui/react';
+import { Button, Select, SelectItem, Slider } from '@heroui/react';
+import { Download } from 'lucide-react';
 import type { Event, Layer } from '@/app/types';
 import { useAuth } from '@/hooks/useauth';
 import { getEventVenueLayers } from '@/lib/zones';
-import { alignmentMatches, loadAlignments } from '../data/alignmentStore';
+import { alignmentFor, loadAlignments } from '../data/alignmentStore';
 import { PREF, usePref } from '../data/prefs';
 import { loadHistory } from '../data/takStore';
 import { percentToLatLon } from '../lib/affine';
 import { imageCorners } from '../lib/basemapFrame';
-import { DEFAULT_BASEMAP_ID, resolveBasemap } from '../lib/basemaps';
+import { DEFAULT_BASEMAP_ID, validChoice } from '../lib/basemaps';
 import { heatCells, teamHistoryStats, type HistorySegment, type PostLocation } from '../lib/historyStats';
+import { exportFileName, heatCsv, heatGeoJson, historyCsv } from '../lib/historyExport';
 import { takTeams } from '../lib/teamIds';
 import { TAK_MODULE_MARKER } from '../marker';
 import type { TakMapAlignment } from '../types';
@@ -32,19 +34,31 @@ export interface TakEventSummaryProps {
 }
 
 const NO_IMAGE = '__none__';
+/** The bridge's heat-map grid size. */
+const HEAT_CELL_M = 5;
 
 /** Post positions from aligned layers, for "time on post". */
 export function postLocations(layers: Layer[], alignments: Record<string, TakMapAlignment>): PostLocation[] {
   const out: PostLocation[] = [];
   for (const layer of layers) {
-    const a = alignments[layer.id];
-    if (!a || !alignmentMatches(a, layer.mapUrl)) continue;
+    const a = alignmentFor(layer, alignments);
+    if (!a) continue;
     for (const post of layer.posts ?? []) {
       if (typeof post === 'string' || post.x === null || post.y === null) continue;
       out.push({ name: post.name, ...percentToLatLon(a, post.x, post.y) });
     }
   }
   return out;
+}
+
+/** Saves text as a file in the browser. */
+function download(name: string, text: string, type: string) {
+  const url = URL.createObjectURL(new Blob([text], { type }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
 function hm(secs: number): string {
@@ -78,7 +92,7 @@ export default function TakEventSummary({ eventId, event, className }: TakEventS
   }, [eventId, isOwner]);
 
   const layers = useMemo(() => getEventVenueLayers(event), [event]);
-  const aligned = useMemo(() => layers.filter((l) => alignmentMatches(alignments[l.id], l.mapUrl)), [layers, alignments]);
+  const aligned = useMemo(() => layers.filter((l) => alignmentFor(l, alignments)), [layers, alignments]);
   const teams = useMemo(() => takTeams(event.staff, event.supervisor), [event.staff, event.supervisor]);
   const teamName = (id: string) => teams.find((t) => t.id === id)?.name ?? 'Unknown team';
   const heat = useMemo(() => (history ? heatCells(history) : []), [history]);
@@ -86,7 +100,7 @@ export default function TakEventSummary({ eventId, event, className }: TakEventS
   const stats = useMemo(() => (history ? teamHistoryStats(history, posts) : []), [history, posts]);
 
   const view = useMemo<BasemapViewRequest | undefined>(() => {
-    const pts = heat.length ? heat : aligned.flatMap((l) => imageCorners(alignments[l.id]!));
+    const pts = heat.length ? heat : aligned.flatMap((l) => imageCorners(alignmentFor(l, alignments)!));
     if (!pts.length) return undefined;
     const lats = pts.map((p) => p.lat);
     const lons = pts.map((p) => p.lon);
@@ -96,7 +110,7 @@ export default function TakEventSummary({ eventId, event, className }: TakEventS
   if (!isOwner) return null;
 
   const imageLayer = imageLayerId === NO_IMAGE ? undefined : (aligned.find((l) => l.id === imageLayerId) ?? aligned[0]);
-  const imageAlignment = imageLayer ? alignments[imageLayer.id] : undefined;
+  const imageAlignment = alignmentFor(imageLayer, alignments);
 
   return (
     <section className={className} data-tak-module={TAK_MODULE_MARKER}>
@@ -115,8 +129,36 @@ export default function TakEventSummary({ eventId, event, className }: TakEventS
         )}
         {history && history.length > 0 && (
           <>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                variant="flat"
+                startContent={<Download className="h-4 w-4" />}
+                onPress={() => download(exportFileName(event.name, 'tak-history.csv'), historyCsv(history, teamName), 'text/csv;charset=utf-8')}
+              >
+                Export history (CSV)
+              </Button>
+              <Button
+                size="sm"
+                variant="flat"
+                startContent={<Download className="h-4 w-4" />}
+                onPress={() => download(exportFileName(event.name, 'tak-heatmap.csv'), heatCsv(heat, HEAT_CELL_M), 'text/csv;charset=utf-8')}
+              >
+                Export heat map (CSV)
+              </Button>
+              <Button
+                size="sm"
+                variant="flat"
+                startContent={<Download className="h-4 w-4" />}
+                onPress={() =>
+                  download(exportFileName(event.name, 'tak-heatmap.geojson'), heatGeoJson(heat, HEAT_CELL_M), 'application/geo+json')
+                }
+              >
+                Export heat map (GeoJSON)
+              </Button>
+            </div>
             <div className="flex flex-wrap items-end gap-3">
-              <BasemapPicker value={resolveBasemap(basemapId).id} onChange={setBasemapId} />
+              <BasemapPicker value={validChoice(basemapId, DEFAULT_BASEMAP_ID)} onChange={setBasemapId} omit={['none']} />
               {aligned.length > 0 && (
                 <Select
                   size="sm"
@@ -148,7 +190,7 @@ export default function TakEventSummary({ eventId, event, className }: TakEventS
             </div>
             <BasemapView
               className="h-[60vh] min-h-[320px] rounded border border-surface-liner"
-              basemapId={resolveBasemap(basemapId).id}
+              basemapId={validChoice(basemapId, DEFAULT_BASEMAP_ID)}
               image={imageLayer && imageAlignment ? { url: imageLayer.mapUrl!, corners: imageCorners(imageAlignment), opacity } : null}
               heat={heat}
               view={view}

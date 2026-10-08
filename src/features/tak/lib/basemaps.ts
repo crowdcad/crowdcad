@@ -18,7 +18,11 @@ export interface BasemapOption {
 }
 
 export const NO_BASEMAP_ID = 'none';
-export const DEFAULT_BASEMAP_ID = 'positron';
+/** Follows CrowdCAD's light or dark mode: Light (Positron) or Dark. The default. */
+export const AUTO_BASEMAP_ID = 'auto';
+export const DEFAULT_BASEMAP_ID = AUTO_BASEMAP_ID;
+const LIGHT_ID = 'positron';
+const DARK_ID = 'dark';
 
 const OSM_CREDIT = '© OpenStreetMap contributors, © OpenMapTiles, OpenFreeMap';
 
@@ -31,11 +35,9 @@ const blankStyle: StyleSpecification = {
 const NONE: BasemapOption = { id: NO_BASEMAP_ID, label: 'No basemap', style: blankStyle, attribution: '' };
 
 const OPENFREEMAP: BasemapOption[] = [
-  { id: 'positron', label: 'Light (Positron)', style: 'https://tiles.openfreemap.org/styles/positron', attribution: OSM_CREDIT },
-  { id: 'liberty', label: 'Streets (Liberty)', style: 'https://tiles.openfreemap.org/styles/liberty', attribution: OSM_CREDIT },
-  { id: 'bright', label: 'Bright', style: 'https://tiles.openfreemap.org/styles/bright', attribution: OSM_CREDIT },
-  { id: 'dark', label: 'Dark', style: 'https://tiles.openfreemap.org/styles/dark', attribution: OSM_CREDIT },
-  { id: 'fiord', label: 'Dark blue (Fiord)', style: 'https://tiles.openfreemap.org/styles/fiord', attribution: OSM_CREDIT },
+  { id: LIGHT_ID, label: 'Light', style: 'https://tiles.openfreemap.org/styles/positron', attribution: OSM_CREDIT },
+  { id: DARK_ID, label: 'Dark', style: 'https://tiles.openfreemap.org/styles/dark', attribution: OSM_CREDIT },
+  { id: 'liberty', label: 'Streets', style: 'https://tiles.openfreemap.org/styles/liberty', attribution: OSM_CREDIT },
 ];
 
 /** One entry of NEXT_PUBLIC_TAK_BASEMAPS: a style URL, or raster tiles. */
@@ -82,7 +84,7 @@ function fromExtra(e: ExtraBasemap): BasemapOption | null {
 
 /**
  * The basemaps offered, from NEXT_PUBLIC_TAK_BASEMAPS:
- * - unset: No basemap plus the OpenFreeMap styles;
+ * - unset: the OpenFreeMap styles (Light, Dark, Streets) plus No basemap;
  * - "off": No basemap only (no requests to outside map services);
  * - a JSON array: the OpenFreeMap styles plus these entries, each
  *   {"id","label","style"} or {"id","label","tiles","attribution"}.
@@ -101,13 +103,35 @@ export function basemapOptions(setting: string | undefined): BasemapOption[] {
     }
   }
   const replaced = new Set(extras.map((e) => e.id));
-  return [NONE, ...OPENFREEMAP.filter((o) => !replaced.has(o.id)), ...extras];
+  return [...OPENFREEMAP.filter((o) => !replaced.has(o.id)), ...extras, NONE];
+}
+
+/** What the picker lists: "Match theme" first when both Light and Dark exist. */
+export function basemapChoices(options = BASEMAPS): { id: string; label: string }[] {
+  const auto = options.some((o) => o.id === LIGHT_ID) && options.some((o) => o.id === DARK_ID);
+  return [...(auto ? [{ id: AUTO_BASEMAP_ID, label: 'Match light/dark mode' }] : []), ...options.map(({ id, label }) => ({ id, label }))];
 }
 
 /** The configured basemaps for this build. */
 export const BASEMAPS: BasemapOption[] = basemapOptions(process.env.NEXT_PUBLIC_TAK_BASEMAPS);
 
-/** A known basemap id, or the fallback when the id is unknown (e.g. removed by configuration). */
-export function resolveBasemap(id: string | null | undefined, fallback = DEFAULT_BASEMAP_ID, options = BASEMAPS): BasemapOption {
-  return options.find((o) => o.id === id) ?? options.find((o) => o.id === fallback) ?? options[0]!;
+/**
+ * A known basemap for an id, "auto" resolved for the current theme; the
+ * fallback when the id is unknown (e.g. removed by configuration).
+ */
+export function resolveBasemap(
+  id: string | null | undefined,
+  fallback: string = DEFAULT_BASEMAP_ID,
+  options = BASEMAPS,
+  dark = false,
+): BasemapOption {
+  const find = (x: string | null | undefined) =>
+    x === AUTO_BASEMAP_ID ? options.find((o) => o.id === (dark ? DARK_ID : LIGHT_ID)) : options.find((o) => o.id === x);
+  return find(id) ?? find(fallback) ?? options[0]!;
+}
+
+/** `id` when the picker offers it, otherwise `fallback` (e.g. a stored choice removed by configuration). */
+export function validChoice(id: string | null | undefined, fallback: string, options = BASEMAPS): string {
+  const ids = basemapChoices(options).map((c) => c.id);
+  return id && ids.includes(id) ? id : ids.includes(fallback) ? fallback : ids[0]!;
 }
