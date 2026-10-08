@@ -164,11 +164,17 @@ PocketBase stores these as opaque `json` fields with no server-side schema; the 
 | Field | Type | Description |
 |---|---|---|
 | `name` | string | Post name. |
-| `x`, `y` | number \| null | Position as a percentage of map width/height. |
+| `x`, `y` | number \| null | Position as a percentage of map width/height. On a geo layer, null when the post is outside the image. |
+| `lat`, `lng` | number \| null (optional) | Real coordinates. On a geo layer (an aligned image or a drawn area) they are the post's position; on an image-only layer they are provenance from a GIS import, and rendering uses `x`/`y`. |
 | `isClinic` | bool (optional) | Marks this post as a clinic. |
 | `clinicId` | string (optional) | Stable id, generated once when `isClinic` first becomes true. Survives the post being renamed later; used to match this post against `events.clinics` entries. |
 
-**`Layer`**: `id`, `name`, `mapUrl?`, `posts: Post[]`, `zones?: Zone[]`, `geoBounds?` (present when the layer's `mapUrl` was georeferenced via a GIS import).
+**`Layer`**: `id`, `name`, `mapUrl?`, `posts: Post[]`, `zones?: Zone[]`, `geoBounds?` (present when the layer's `mapUrl` was georeferenced via a GIS import), and the real-world map fields below. A layer is a **geo layer** when its image has a current alignment or it has a drawn area (`src/lib/geo/layers.ts`); geo layers show on a live map in venue setup and dispatch.
+| Field | Type | Description |
+|---|---|---|
+| `alignment` | object (optional) | The image's real-world alignment: `mapUrl` (the image it was made for; it applies only while equal to the layer's), `naturalWidth`, `naturalHeight`, `controlPoints[]` (`x`, `y` in image percent, `lat`, `lon`), `origin` (`lat`, `lon`), `transform` (`a`..`f`: local meters east/north to image percent), `residualM` (estimated error in meters, null with 3 points), `ownerUid`, `updatedAt`. Set in venue setup's Map alignment step, or from `geoBounds` for a GIS import. |
+| `takAlignment` | object (optional) | The same shape, written while alignment was a TAK-only step. Read when `alignment` is absent; not written any more. |
+| `area` | `{ polygon: {lat,lng}[] }` (optional) | A drawn area of interest for a layer with no image: the layer is the live map centered on it. Three or more points. |
 
 **`Clinic`**: `id` (matches a clinic-flagged `Post.clinicId`), `name` (kept in sync with that post's current name). `events.clinics: Clinic[]` is populated additively from the event's `venue.posts` (see `src/lib/clinics.ts`'s `syncClinicsFromVenue`).
 
@@ -178,7 +184,8 @@ PocketBase stores these as opaque `json` fields with no server-side schema; the 
 | `id` | string | Stable id, generated once when the zone is drawn and kept through renames, recolors and edits. |
 | `name` | string | Zone name. |
 | `color` | string | Hex color used to render the polygon, e.g. `"#3b82f6"`. |
-| `points` | `{x,y}[]` | Polygon vertices, in order, each a percentage of map width/height (same coordinate system as `Post.x`/`Post.y`). |
+| `points` | `{x,y}[]` | Polygon vertices, in order, each a percentage of map width/height (same coordinate system as `Post.x`/`Post.y`). Empty for a zone drawn on a drawn-area layer. |
+| `coords` | `{lat,lng}[]` (optional) | The same polygon in real coordinates, on a geo layer. Zone membership on a geo layer is tested in coordinates. |
 | `isDispatchZone` | bool (optional) | Marks this zone as a dispatch zone with its own "{name} Calls" tab in the dispatch view. |
 
 **`DispatchZone`**: `id` (matches a dispatch-zone-flagged `Zone.id`), `name` (kept in sync with that zone's current name). `events.dispatchZones: DispatchZone[]` is populated additively from the event's `venue.layers[].zones` (see `src/lib/zones.ts`'s `syncDispatchZonesFromVenue`). A call is routed into a dispatch zone's tab purely by geometry: whether `call.location` names a post whose coordinates fall inside that zone's polygon (`src/lib/zones.ts`'s `findZonesForPost`/`getCallZoneIds`). `Call` has no `zoneId` field.
