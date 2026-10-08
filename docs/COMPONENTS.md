@@ -77,10 +77,13 @@ const steps: WizardStep[] = [
 
 ## Text inputs: no inner focus ring
 
-HeroUI's `Input`, `Textarea` and `Autocomplete` already show focus on their wrapper, and the browser adds a second ring on the inner `<input>`. That inner ring keeps coming back on new fields, so every free-text or search field removes it on the `input` slot:
+`src/app/globals.css` removes both rings below for every HeroUI field (the `[data-slot="input-wrapper"]` and `[data-slot="input"]` rules), so new fields are covered without anything extra. Root's own `globals.css` carries the same rule. Keep it when editing either file.
+
+HeroUI's `Input`, `Textarea` and `Autocomplete` can show two rings inside the field: the browser's outline on the inner `<input>`, and HeroUI's blue ring on the wrapper, which appears on keyboard focus and on `autoFocus`. They keep coming back on new fields, so every free-text or search field removes both, on the `input` and `inputWrapper` slots:
 
 ```tsx
 const inputClassNames = {
+  inputWrapper: 'group-data-[focus-visible=true]:ring-0 group-data-[focus-visible=true]:ring-offset-0',
   input: 'outline-none focus:outline-none data-[focus=true]:outline-none focus:ring-0 focus-visible:ring-0',
 };
 
@@ -88,7 +91,8 @@ const inputClassNames = {
 <Autocomplete inputProps={{ classNames: inputClassNames }} />
 ```
 
-- Merge it into the field's existing `classNames` (label, wrapper and so on) rather than replacing them. Examples: the Add Call modal (`quickcallmodal.tsx`), event creation's `inputClassNames`, `cardFieldClassNames` in `trackingcardparts.tsx`.
+- Merge it into the field's existing `classNames` (label, wrapper and so on) rather than replacing them. Examples: the dispatch map's location search (`venuemaptab.tsx`), event creation's `selectClassNames`, the Add Call modal (`quickcallmodal.tsx`, `input` slot).
+- Check it with keyboard focus (Tab into the field) or an `autoFocus` field, not only a mouse click: a click doesn't show the wrapper ring.
 - TAK fields use `TAK_INPUT_CLASSNAMES` from `src/features/tak/lib/ui.ts`.
 - Keep focus visible: this removes only the duplicate inner ring, not the wrapper's focus styling.
 
