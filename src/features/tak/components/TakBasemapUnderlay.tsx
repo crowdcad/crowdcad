@@ -37,8 +37,11 @@ export const DEFAULT_IMAGE_OPACITY = 0.7;
 export const UNDERLAY_MARGIN = 1;
 /** Waits this long after a change (e.g. window resizing) before rendering again. */
 const RENDER_DELAY_MS = 300;
-/** Uses whatever has loaded by then if some tiles never arrive. */
+/** Gives up on a render that hasn't finished loading tiles by then. */
 const RENDER_TIMEOUT_MS = 20_000;
+/** Tries again after a failed render (e.g. offline), this many times. */
+const RETRY_DELAY_MS = 30_000;
+const MAX_ATTEMPTS = 3;
 
 interface Snapshot {
   url: string;
@@ -69,19 +72,37 @@ export default function TakBasemapUnderlay({ eventId, layer, rect, setImageOpaci
 
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [rendering, setRendering] = useState<BasemapFrame | null>(null);
-  const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+  const [visible, setVisible] = useState(false);
+  const rootRef = useRef<HTMLDivElement | null>(null);
   const renderRef = useRef<HTMLDivElement | null>(null);
   const urls = useRef<string[]>([]);
 
+  // The map can be mounted while hidden (another dispatch tab is showing). A
+  // hidden element has no size, so MapLibre would load nothing: wait until
+  // the map is on screen.
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    const check = () => setVisible(el.clientWidth > 0 && el.clientHeight > 0);
+    check();
+    const ro = new ResizeObserver(check);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [active]);
+
+  // A new frame or basemap starts over.
+  useEffect(() => setAttempt(0), [frame, option.style]);
+
   // Ask for a new picture when the frame or basemap changes, after a short pause.
   useEffect(() => {
-    if (!frame) {
+    if (!frame || !visible || attempt >= MAX_ATTEMPTS) {
       setRendering(null);
       return;
     }
-    const t = setTimeout(() => setRendering(frame), RENDER_DELAY_MS);
+    const t = setTimeout(() => setRendering(frame), attempt === 0 ? RENDER_DELAY_MS : RETRY_DELAY_MS);
     return () => clearTimeout(t);
-  }, [frame, option.style]);
+  }, [frame, option.style, visible, attempt]);
 
   // Render it off-screen once, keep the pixels, discard the map.
   useEffect(() => {
@@ -89,23 +110,33 @@ export default function TakBasemapUnderlay({ eventId, layer, rect, setImageOpaci
     let done = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let map: import('maplibre-gl').Map | null = null;
-    const finish = () => {
-      if (done || !map) return;
+    // A failed or incomplete render keeps the previous picture and tries again later.
+    const fail = () => {
       done = true;
       clearTimeout(timer);
+      map?.remove();
+      setRendering(null);
+      setAttempt((a) => a + 1);
+    };
+    const finish = () => {
+      if (done || !map) return;
       const m = map;
+      // Only keep a complete picture: never a blank or half-loaded one.
+      if (!m.isStyleLoaded() || !m.areTilesLoaded()) return fail();
+      done = true;
+      clearTimeout(timer);
       m.getCanvas().toBlob((blob) => {
         m.remove();
-        if (!blob) return setFailed(true);
+        if (!blob) return fail();
         const url = URL.createObjectURL(blob);
         urls.current.push(url);
-        setFailed(false);
         setSnapshot({ url, frame: rendering });
         setRendering(null);
       });
     };
     void loadMaplibre().then((ml) => {
       if (done || !renderRef.current) return;
+      if (renderRef.current.clientWidth === 0) return fail();
       map = new ml.Map({
         container: renderRef.current,
         style: option.style,
@@ -120,15 +151,10 @@ export default function TakBasemapUnderlay({ eventId, layer, rect, setImageOpaci
         canvasContextAttributes: { preserveDrawingBuffer: true },
       });
       map.on('error', () => {
-        if (map && !map.isStyleLoaded()) {
-          done = true;
-          clearTimeout(timer);
-          map.remove();
-          setFailed(true);
-        }
+        if (!done && map && !map.isStyleLoaded()) fail();
       });
       map.once('idle', finish);
-      timer = setTimeout(finish, RENDER_TIMEOUT_MS);
+      timer = setTimeout(() => !done && fail(), RENDER_TIMEOUT_MS);
     });
     return () => {
       if (!done) {
@@ -156,7 +182,7 @@ export default function TakBasemapUnderlay({ eventId, layer, rect, setImageOpaci
     [],
   );
 
-  const shown = active && snapshot && !failed ? snapshot : null;
+  const shown = active && snapshot ? snapshot : null;
   useEffect(() => {
     setImageOpacity(shown ? opacity : 1);
   }, [shown, opacity, setImageOpacity]);
@@ -173,7 +199,7 @@ export default function TakBasemapUnderlay({ eventId, layer, rect, setImageOpaci
     transformOrigin: 'center center',
   });
   return (
-    <div className="pointer-events-none absolute inset-0" data-tak-module={TAK_MODULE_MARKER} aria-hidden>
+    <div ref={rootRef} className="pointer-events-none absolute inset-0" data-tak-module={TAK_MODULE_MARKER} aria-hidden>
       {shown && (
         // eslint-disable-next-line @next/next/no-img-element -- a rendered picture from a blob URL
         <img src={shown.url} alt="" draggable={false} className="max-w-none select-none" style={box(shown.frame)} />
