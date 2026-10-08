@@ -432,13 +432,39 @@ Make alignment quicker and easier to check, and give dispatchers real-world cont
 - A per-event default basemap chosen by the owner (would add a field to `takConfig`; a data contract change, so it needs approval).
 - Tile caching or a self-hosted tile option documented for events with poor connectivity.
 
-### P8: Basemap-only events (proposed, needs approval)
-Events that use a basemap instead of an uploaded map image. This changes core, not just the TAK module, so it is a separate decision (D59).
+### P8: Geo maps (core, approved 2026-10-08)
+Maps become real-world maps for every venue, not only for TAK (D64). Approved by the maintainer: the work stays on `integration/tak`; the dispatch map is a live map for aligned layers; existing posts and zones get coordinates when an aligned venue is saved.
 
-- **Shape (proposed):** a map layer gains an optional `basemap` (style id plus a default view) as an alternative to `mapUrl`. Posts on such a layer store `lat`/`lon` instead of `x`/`y` percent.
-- **Affected core areas:** venue management (layer editor, post placement), event creation, the dispatch map, the zone breakdown on the summary page, and both backends' schema and rules.
-- **Interim option inside TAK only:** a TAK event's layer could use a basemap snapshot as its image with an automatic alignment. This needs no schema change but stores a static picture.
-- **Not started.** It needs a maintainer decision on the data model first.
+**Data model (core types, additive):**
+- `Layer.alignment?`: the image's real-world alignment (the shape `takAlignment` had). `takAlignment` is still read for venues aligned before this.
+- `Layer.area?`: a drawn area of interest, `{ polygon: { lat, lng }[] }`, for a layer with no image. The live map centers on it.
+- `Post.lat` / `Post.lng`: the post's position on a geo layer. They were provenance only (GIS import); on an aligned or drawn-area layer they are now authoritative, and `x`/`y` stay set when the post is inside the image (and null outside it).
+- `Zone.coords?`: the polygon in `{ lat, lng }`, alongside `points` (image percent) when inside the image.
+- A layer is a **geo layer** when it has an alignment that matches its image, or an area. Everything else is an **image layer** and behaves exactly as before.
+
+**Venue setup:**
+- **Map** offers three sources: upload an image, import GIS content (its bounds become an alignment automatically), or **draw an area** on the live map (click points around the area of interest).
+- **Map alignment** follows Map for image layers: the aligner from P7, for any venue (no TAK switch). Optional; skipping it keeps an image layer.
+- **Locations** follows alignment. On a geo layer, posts and zones are placed on the live map, anywhere, including outside the image.
+- Saving an aligned venue fills `lat`/`lng` and zone `coords` for posts and zones that only had image percentages, from the alignment.
+
+**Event and dispatch:**
+- The dispatch Map tab shows a **live map** for geo layers: MapLibre with the venue image warped on top (opacity), posts, zones, team, supervisor and equipment markers, location search, and Add Call from a post or team, all by coordinates. Image layers, and a live map that can't load (offline), use today's image map.
+- TAK reads the core alignment; on a live map its positions are drawn by coordinates directly, with no frame math.
+- The summary's zone breakdown tests membership in coordinates on geo layers.
+
+**Phases:**
+- **G1 Core alignment and map sources.** Move the map code (alignment math, basemaps, aligner, live map view) from `src/features/tak/` to core (`src/lib/geo/`, `src/components/geo/`); `Layer.alignment`; the venue Map step's three sources; the general Map alignment step; remove the venue TAK switch.
+- **G2 Locations on the live map.** Post and zone placement on geo layers; conversion on save.
+- **G3 Dispatch live map.** The live map view with every marker type, search, Add Call, floors, and the TAK overlay.
+- **G4 Zones and summary.** Coordinate-based zone membership; the summary zone breakdown and heat map on geo layers.
+- **G5 Contract and tests.** ICD and data contract, PocketBase setup script, e2e coverage for a drawn-area venue and an aligned venue, the footprint check.
+
+**Accept:**
+- A venue with only a drawn area can be dispatched on a live map, with posts placed anywhere.
+- An aligned image venue shows the image warped on the live map; posts outside the image work everywhere a post works (Add Call, search, zones).
+- Image-only venues and existing events look and behave exactly as before; existing e2e suites pass unchanged.
+- Offline, a geo layer falls back to the image map without errors.
 
 ### Later
 - v1.1: posts as static CoT markers over 8089.

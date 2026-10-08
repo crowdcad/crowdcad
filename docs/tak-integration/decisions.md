@@ -364,3 +364,10 @@ The same end-to-end scenario runs against the Firebase emulator and a local Pock
   - The underlay defaults to "Match light/dark mode" for aligned maps; "No basemap" turns it off for that viewer.
   - "Dark" uses OpenFreeMap's Fiord style, a dark blue-gray that stays readable on the dark theme.
   - A render that can't finish because the browser tab is in the background waits for the tab to be shown instead of using up a retry; retries are 5 s apart.
+
+### D64. Maps become real-world maps in core (P8)
+- **Requested** 2026-10-08 by the maintainer, superseding the TAK-only alignment of D61 and the deferral in D59.
+- **Why.** Alignment helps any venue, not only TAK ones: posts can sit on real coordinates outside the venue image, an area can be drawn with no image at all, and the live map stays sharp at street level without re-rendering a picture.
+- **Why the image map existed.** Core's dispatch map positions everything as a percentage of the image, and it predates alignment. Warping works both ways (a basemap into the image's frame, or the image onto a live map); the image map stays for unaligned layers and offline use.
+- **Decisions.** The live map is the dispatch view for geo layers (image on top). Work stays on `integration/tak`. Existing posts and zones get coordinates when an aligned venue is saved, keeping their percentages so nothing moves and older versions still read them.
+- **Venue TAK switch removed.** Map alignment is a general venue step, so the TAK switch from D61 goes; TAK is still chosen per event.
