@@ -231,19 +231,23 @@ export default function VenueManagementPageClient() {
   const [currentStepId, setCurrentStepId] = useState<string>('basics');
 
 
+  // One local URL per chosen map file. Making it inside the preview effect
+  // below created a new URL (and reset zoom/pan) on every layer change,
+  // e.g. each marker edit or TAK alignment point, while a new image was
+  // still unsaved; anything keyed by the image URL then started over.
+  const mapFileUrl = useMemo(() => (mapFile ? URL.createObjectURL(mapFile) : null), [mapFile]);
+  useEffect(() => {
+    if (!mapFileUrl) return;
+    // Reset zoom/pan when a new image is chosen
+    setScale(1);
+    setPosition({ x: 0, y: 0 });
+    return () => URL.revokeObjectURL(mapFileUrl);
+  }, [mapFileUrl, setPosition, setScale]);
+
   // Update preview when a new map file is selected
   useEffect(() => {
-    if (mapFile && pendingLayer === currentLayer) {
-      const url = URL.createObjectURL(mapFile);
-      setPreviewUrl(url);
-      // Reset zoom/pan when new image loads
-      setScale(1);
-      setPosition({ x: 0, y: 0 });
-      return () => URL.revokeObjectURL(url);
-    } else {
-      setPreviewUrl(venueData.layers[currentLayer]?.mapUrl || null);
-    }
-  }, [mapFile, pendingLayer, currentLayer, venueData.layers, setPosition, setScale]);
+    setPreviewUrl(mapFileUrl && pendingLayer === currentLayer ? mapFileUrl : venueData.layers[currentLayer]?.mapUrl || null);
+  }, [mapFileUrl, pendingLayer, currentLayer, venueData.layers]);
 
   // Auto-focus marker name input when pending marker is set
   useEffect(() => {
