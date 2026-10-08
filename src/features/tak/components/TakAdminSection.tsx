@@ -196,7 +196,7 @@ function BridgeRow({
       <Modal isOpen={confirmRevoke} onClose={() => setConfirmRevoke(false)}>
         <ModalContent>
           <ModalHeader>Revoke {bridge.label}?</ModalHeader>
-          <ModalBody>
+          <ModalBody className="minimal-scrollbar">
             <p className="text-sm">
               The bridge loses all access immediately and stops updating every event it is linked to. To replace it, use Rotate
               instead. This can&apos;t be undone.
@@ -251,7 +251,7 @@ function Choice({
 
 function CopyBlock({ text }: { text: string }) {
   return (
-    <Snippet symbol="" className="w-full" classNames={{ pre: 'whitespace-pre-wrap break-all text-xs' }}>
+    <Snippet symbol="" className="w-full" classNames={{ pre: 'minimal-scrollbar whitespace-pre-wrap break-all text-xs' }}>
       {text}
     </Snippet>
   );
@@ -334,7 +334,7 @@ function AddTakServerWizard({
         <ModalHeader>
           {rotating ? `Rotate ${rotating.label}` : 'Add TAK server'} ({step} of 4)
         </ModalHeader>
-        <ModalBody className="space-y-3 text-sm">
+        <ModalBody className="minimal-scrollbar space-y-3 text-sm">
           {step === 1 && (
             <>
               <Input classNames={TAK_INPUT_CLASSNAMES} label="Name for this TAK server" placeholder="e.g. Main TAK server" value={label} onValueChange={setLabel} autoFocus />

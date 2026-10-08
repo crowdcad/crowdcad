@@ -920,11 +920,15 @@ export function VenueMapWithPosts({
           width: '100%',
           height: '100%',
           touchAction: onTouchStart ? 'none' : undefined,
+          userSelect: 'none',
         }}
         onMouseDown={onMouseDown}
         onMouseMove={onMouseMove}
         onMouseUp={onMouseUp}
         onMouseLeave={onMouseUp}
+        // A press anywhere on the map pans it. Without this, the browser can start its own drag of an image on
+        // the map (or a text selection) instead, most often just beside the map image.
+        onDragStart={(e) => e.preventDefault()}
         onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}

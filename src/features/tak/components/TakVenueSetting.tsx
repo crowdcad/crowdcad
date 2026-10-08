@@ -6,6 +6,7 @@ import { Switch } from '@heroui/react';
 import { listAllBridges, listAllowedBridges } from '../data/takStore';
 import { TAK_MODULE_MARKER } from '../marker';
 import HelpTip from './HelpTip';
+import { ACCENT_SWITCH_CLASSNAMES } from '../lib/ui';
 
 /**
  * Venue Configuration's TAK switch (touchpoint l, D61). Turning it on adds
@@ -41,7 +42,7 @@ export default function TakVenueSetting({ uid, enabled, onChange }: TakVenueSett
           isSelected={enabled}
           isDisabled={hasServer === null || (unavailable && !enabled)}
           onValueChange={onChange}
-          classNames={{ wrapper: 'group-data-[selected=true]:bg-accent' }}
+          classNames={ACCENT_SWITCH_CLASSNAMES}
         >
           TAK live tracking
         </Switch>

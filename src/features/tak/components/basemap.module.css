@@ -33,3 +33,11 @@
 :global(.dark) .map :global(.maplibregl-ctrl-attrib a) {
   color: #c9ced6;
 }
+
+/* Placing points: a crosshair instead of MapLibre's hand; a closed hand while dragging. */
+.crosshair :global(.maplibregl-canvas-container.maplibregl-interactive) {
+  cursor: crosshair;
+}
+.crosshair :global(.maplibregl-canvas-container.maplibregl-interactive:active) {
+  cursor: grabbing;
+}

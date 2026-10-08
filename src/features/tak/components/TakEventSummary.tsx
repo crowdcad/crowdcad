@@ -16,6 +16,7 @@ import { heatCells, teamHistoryStats, type HistorySegment, type PostLocation } f
 import { exportFileName, heatCsv, heatGeoJson, historyCsv } from '../lib/historyExport';
 import { takTeams } from '../lib/teamIds';
 import { TAK_MODULE_MARKER } from '../marker';
+import { ACCENT_SLIDER_CLASSNAMES } from '../lib/ui';
 import type { TakMapAlignment } from '../types';
 import BasemapPicker from './BasemapPicker';
 import HelpTip from './HelpTip';
@@ -194,6 +195,7 @@ export default function TakEventSummary({ eventId, event, className }: TakEventS
                   value={opacity}
                   onChange={(v) => setOpacity(Array.isArray(v) ? v[0]! : v)}
                   getValue={(v) => `${Math.round((Array.isArray(v) ? v[0]! : v) * 100)}%`}
+                  classNames={ACCENT_SLIDER_CLASSNAMES}
                 />
               )}
             </div>

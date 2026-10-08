@@ -293,7 +293,10 @@ export default function BasemapView({
   }, [view?.key, ready]);
 
   return (
-    <div className={`relative overflow-hidden ${styles.map} ${className ?? ''}`} data-tak-module={TAK_MODULE_MARKER}>
+    <div
+      className={`relative overflow-hidden ${styles.map} ${onMapClick && cursor === 'crosshair' ? styles.crosshair : ''} ${className ?? ''}`}
+      data-tak-module={TAK_MODULE_MARKER}
+    >
       {/* Inline position: MapLibre's stylesheet sets position: relative on the map element. */}
       <div ref={containerRef} style={{ position: 'absolute', inset: 0, cursor: onMapClick ? cursor : undefined }} />
       <div className="pointer-events-none absolute inset-0 overflow-hidden">

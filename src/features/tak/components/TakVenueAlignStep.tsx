@@ -29,7 +29,7 @@ export default function TakVenueAlignStep({ uid, layers, onAlignmentChange }: Ta
   const layer = mapLayers.find((l) => l.id === selectedId) ?? mapLayers[0];
 
   return (
-    <div className="flex h-full flex-col gap-3 overflow-y-auto pb-2 text-surface-light" data-tak-module={TAK_MODULE_MARKER}>
+    <div className="minimal-scrollbar flex h-full flex-col gap-3 overflow-y-auto pb-2 text-surface-light" data-tak-module={TAK_MODULE_MARKER}>
       <div>
         <h3 className="inline-flex items-center gap-1.5 text-xl font-semibold">
           TAK alignment

@@ -18,7 +18,7 @@ import {
   type TakEventConfig,
 } from '../data/takStore';
 import { BASEMAPS, DEFAULT_UNDERLAY_ID, NO_BASEMAP_ID, resolveBasemap, validChoice } from '../lib/basemaps';
-import { useIsDark } from '../lib/ui';
+import { ACCENT_SLIDER_CLASSNAMES, ACCENT_SWITCH_CLASSNAMES, useIsDark } from '../lib/ui';
 import { isStale, unassignedDevices } from '../lib/linking';
 import { takTeams } from '../lib/teamIds';
 import { TAK_MODULE_MARKER } from '../marker';
@@ -130,8 +130,19 @@ export default function TakEventPanel({ eventId, event, uid, isOwner, layers }: 
 
   const dotClass = !linked ? 'bg-surface-faint' : connected ? 'bg-status-green' : 'bg-status-red';
 
+  const showAttribution = !!underlay.attribution && layers.some((l) => alignmentFor(l, tak.alignments, tak.venueAlignments));
+
   return (
-    <div className="absolute bottom-3 left-3 z-30 max-w-[min(92vw,380px)] text-surface-light" data-tak-module={TAK_MODULE_MARKER}>
+    <>
+    {showAttribution && (
+      <p
+        className="absolute bottom-1 right-2 z-30 max-w-[60%] truncate rounded bg-surface-deepest/80 px-1.5 text-[10px] text-surface-faint"
+        data-tak-module={TAK_MODULE_MARKER}
+      >
+        {underlay.attribution}
+      </p>
+    )}
+    <div className="absolute bottom-3 left-3 z-30 w-[min(92vw,380px)] max-w-[min(92vw,380px)] text-surface-light" data-tak-module={TAK_MODULE_MARKER}>
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
@@ -151,12 +162,9 @@ export default function TakEventPanel({ eventId, event, uid, isOwner, layers }: 
         {unassigned.length > 0 && <span className="rounded-full bg-status-yellow/20 px-1.5 text-status-yellow">{unassigned.length} unassigned</span>}
         {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5" />}
       </button>
-      {underlay.attribution && (
-        <p className="mt-1 w-max max-w-full rounded bg-surface-deepest/80 px-1.5 text-[10px] text-surface-faint">{underlay.attribution}</p>
-      )}
 
       {open && (
-        <div className="mt-2 max-h-[60vh] space-y-3 overflow-auto rounded-lg border border-surface-liner bg-surface-deepest/95 p-3 text-sm shadow-lg">
+        <div className="minimal-scrollbar mt-2 max-h-[60vh] space-y-3 overflow-y-auto overflow-x-hidden rounded-lg border border-surface-liner bg-surface-deepest/95 p-3 text-sm shadow-lg">
           <section>
             <p>
               {!bridgeUid
@@ -174,13 +182,7 @@ export default function TakEventPanel({ eventId, event, uid, isOwner, layers }: 
 
           {layers.some((l) => alignmentFor(l, tak.alignments, tak.venueAlignments)) && (
             <section className="space-y-2">
-              <BasemapPicker
-                label={
-                  <span className="inline-flex items-center gap-1">
-                    Basemap under the map <HelpTip text="Only changes what you see on this computer." />
-                  </span>
-                }
-                className="w-full" value={validChoice(underlayId, DEFAULT_UNDERLAY_ID)} onChange={setUnderlayId} />
+              <BasemapPicker label="Basemap" className="w-full" value={validChoice(underlayId, DEFAULT_UNDERLAY_ID)} onChange={setUnderlayId} />
               {underlay.id !== NO_BASEMAP_ID && (
                 <Slider
                   size="sm"
@@ -191,6 +193,7 @@ export default function TakEventPanel({ eventId, event, uid, isOwner, layers }: 
                   value={imageOpacity}
                   onChange={(v) => setImageOpacity(Array.isArray(v) ? v[0]! : v)}
                   getValue={(v) => `${Math.round((Array.isArray(v) ? v[0]! : v) * 100)}%`}
+                  classNames={ACCENT_SLIDER_CLASSNAMES}
                 />
               )}
             </section>
@@ -228,7 +231,7 @@ export default function TakEventPanel({ eventId, event, uid, isOwner, layers }: 
                 ))}
               </Select>
               <div className="flex items-center justify-between">
-                <Switch size="sm" isSelected={config?.enabled ?? false} isDisabled={!bridgeUid || event.ended} onValueChange={(v) => void updateConfig({ enabled: v })}>
+                <Switch size="sm" classNames={ACCENT_SWITCH_CLASSNAMES} isSelected={config?.enabled ?? false} isDisabled={!bridgeUid || event.ended} onValueChange={(v) => void updateConfig({ enabled: v })}>
                   Live tracking on
                 </Switch>
                 {bridgeUid && !event.ended && (
@@ -318,5 +321,6 @@ export default function TakEventPanel({ eventId, event, uid, isOwner, layers }: 
       )}
 
     </div>
+    </>
   );
 }
