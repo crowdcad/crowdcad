@@ -9,11 +9,12 @@ import MapZoomControls from '@/components/ui/map-zoom-controls';
 import { fitAffine, parseLatLon } from '@/lib/geo/affine';
 import { imageCorners } from '@/lib/geo/basemapFrame';
 import { DEFAULT_BASEMAP_ID, validChoice } from '@/lib/geo/basemaps';
-import { searchPlaces, type PlaceResult } from '@/lib/geo/geocode';
+import type { PlaceResult } from '@/lib/geo/geocode';
 import { ACCENT_SLIDER_CLASSNAMES } from '@/lib/geo/ui';
 import { PREF, usePref } from '@/lib/geo/prefs';
 import type { ControlPoint, LatLon, MapAlignment } from '@/lib/geo/types';
 import BasemapPicker from './BasemapPicker';
+import PlaceSearch from './PlaceSearch';
 import BasemapView, { type BasemapMarker, type BasemapViewRequest } from './BasemapView';
 
 /**
@@ -82,10 +83,6 @@ export default function AlignMap({
   const [basemapId, setBasemapId] = usePref<string>(PREF.alignBasemap, DEFAULT_BASEMAP_ID);
   const [opacity, setOpacity] = useState(0.6);
   const [showOverlay, setShowOverlay] = useState(true);
-  const [query, setQuery] = useState('');
-  const [results, setResults] = useState<PlaceResult[] | null>(null);
-  const [searching, setSearching] = useState(false);
-  const [searchError, setSearchError] = useState<string | null>(null);
   const centerRef = useRef<LatLon | undefined>(undefined);
   const [view, setView] = useState<BasemapViewRequest | undefined>(() =>
     sameImage && initial!.controlPoints.length ? { key: 1, bounds: boundsOf(initial!.controlPoints) } : undefined,
@@ -166,22 +163,6 @@ export default function AlignMap({
       key: (v?.key ?? 0) + 1,
       ...(r.bbox ? { bounds: r.bbox } : { center: { lat: r.lat, lon: r.lon }, zoom: 17 }),
     }));
-    setResults(null);
-  };
-
-  const runSearch = async () => {
-    setSearchError(null);
-    setSearching(true);
-    try {
-      const found = await searchPlaces(query, centerRef.current);
-      setResults(found);
-      if (found.length === 1) goTo(found[0]!);
-      if (found.length === 0) setSearchError('No places found. Try a different name or an address.');
-    } catch (err) {
-      setSearchError(err instanceof Error ? err.message : 'Place search failed.');
-    } finally {
-      setSearching(false);
-    }
   };
 
   const build = (): MapAlignment | null =>
@@ -266,36 +247,30 @@ export default function AlignMap({
     <div className="flex flex-col gap-3 text-surface-light">
       <div className="flex flex-wrap items-end gap-2">
         <BasemapPicker value={basemapChoice} onChange={setBasemapId} omit={['none']} />
-        <form
-          className="min-w-[240px] flex-1"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void runSearch();
-          }}
-        >
-          <Input
-                        size="sm"
-            label="Find a place or coordinates (press Enter)"
-            placeholder="Venue name, address, or 37.7694, -122.4862"
-            value={query}
-            onValueChange={setQuery}
-            isInvalid={Boolean(searchError)}
-            errorMessage={searchError ?? undefined}
-            description={searching ? 'Searching…' : undefined}
-          />
-        </form>
+        <PlaceSearch className="flex-1" near={() => centerRef.current} onPick={goTo} />
+        {fitOk && (
+          <div className="flex items-end gap-3 text-sm">
+            <label className="flex h-12 items-center gap-2 whitespace-nowrap">
+              <input type="checkbox" className="accent-accent" checked={showOverlay} onChange={(e) => setShowOverlay(e.target.checked)} />
+              Show my map
+            </label>
+            {showOverlay && (
+              <Slider
+                size="sm"
+                label="Map opacity"
+                className="w-40"
+                minValue={0.1}
+                maxValue={1}
+                step={0.05}
+                value={opacity}
+                onChange={(v) => setOpacity(Array.isArray(v) ? v[0]! : v)}
+                getValue={(v) => `${Math.round((Array.isArray(v) ? v[0]! : v) * 100)}%`}
+                classNames={ACCENT_SLIDER_CLASSNAMES}
+              />
+            )}
+          </div>
+        )}
       </div>
-      {results && results.length > 1 && (
-        <ul className="minimal-scrollbar max-h-40 overflow-y-auto rounded-lg border border-surface-liner bg-surface-deep text-sm">
-          {results.map((r, i) => (
-            <li key={i}>
-              <button type="button" className="w-full px-3 py-1.5 text-left hover:bg-surface-liner/30" onClick={() => goTo(r)}>
-                {r.label}
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
 
       <p className="text-sm font-medium" role="status">
         {next}
@@ -378,29 +353,6 @@ export default function AlignMap({
           onCenterChange={(c) => (centerRef.current = c)}
         />
       </div>
-
-      {fitOk && (
-        <div className="flex flex-wrap items-center gap-4 text-sm">
-          <label className="flex items-center gap-2">
-            <input type="checkbox" className="accent-accent" checked={showOverlay} onChange={(e) => setShowOverlay(e.target.checked)} />
-            Show my map on the basemap
-          </label>
-          {showOverlay && (
-            <Slider
-              size="sm"
-              label="Map opacity"
-              className="max-w-xs"
-              minValue={0.1}
-              maxValue={1}
-              step={0.05}
-              value={opacity}
-              onChange={(v) => setOpacity(Array.isArray(v) ? v[0]! : v)}
-              getValue={(v) => `${Math.round((Array.isArray(v) ? v[0]! : v) * 100)}%`}
-              classNames={ACCENT_SLIDER_CLASSNAMES}
-            />
-          )}
-        </div>
-      )}
 
       {(pendingImg || pendingGeo) && (
         <div className="flex flex-wrap items-end gap-2 rounded-lg border border-surface-liner bg-surface-deep p-3">

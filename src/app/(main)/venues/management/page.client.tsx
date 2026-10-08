@@ -228,7 +228,9 @@ export default function VenueManagementPageClient() {
   const [editingEquipmentIndex, setEditingEquipmentIndex] = useState<number | null>(null);
   const [equipmentEditInput, setEquipmentEditInput] = useState('');
 
-  const STEP_ORDER: string[] = ['basics', 'map', 'align', 'locations', 'equipment', 'review'];
+  // Map alignment only applies to map images; a venue with none (no map, or only drawn areas) skips it.
+  const hasMapImage = venueData.layers.some((l) => !!l.mapUrl) || !!mapFile;
+  const STEP_ORDER: string[] = ['basics', 'map', ...(hasMapImage ? ['align'] : []), 'locations', 'equipment', 'review'];
   const [currentStepId, setCurrentStepId] = useState<string>('basics');
 
 
@@ -1817,7 +1819,7 @@ export default function VenueManagementPageClient() {
   const steps: WizardStep[] = [
     { id: 'basics', label: 'Venue Configuration', component: basicsStep, isComplete: hasName },
     { id: 'map', label: 'Map', component: mapFloorsStep, isComplete: hasName },
-    {
+    ...(hasMapImage ? [{
       id: 'align',
       label: 'Map alignment',
       component: userId ? (
@@ -1840,7 +1842,7 @@ export default function VenueManagementPageClient() {
         />
       ) : null,
       isComplete: hasName,
-    },
+    }] : []),
     { id: 'locations', label: 'Locations', component: locationsStep, isComplete: hasName },
     { id: 'equipment', label: 'Equipment', component: equipmentStep, isComplete: hasName },
     { id: 'review', label: 'Review', component: reviewStep, isComplete: hasName },
