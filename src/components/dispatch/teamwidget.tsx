@@ -2,6 +2,7 @@ import React from 'react';
 import { Event, Staff } from '@/app/types';
 import TeamCard from '@/components/dispatch/teamcard';
 import TeamCardCondensed from '@/components/dispatch/teamcard-condensed';
+import { resolvePostName } from '@/lib/locationLabel';
 
 type TeamWidgetProps = {
   staff: Staff;
@@ -41,7 +42,8 @@ const TeamWidget = React.memo(function TeamWidget(props: TeamWidgetProps) {
   } = props;
 
   const CardComponent = cardViewMode === 'condensed' ? TeamCardCondensed : TeamCard;
-  const canLocateOnMap = !!hasVenueMap && !!staff.location && !!knownMapLocations?.has(staff.location);
+  // A live-tracking label ("Near Gate A") locates at its post.
+  const canLocateOnMap = !!hasVenueMap && !!knownMapLocations && !!resolvePostName(staff.location, (name) => knownMapLocations.has(name));
 
   return (
     <CardComponent

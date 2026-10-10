@@ -3,6 +3,7 @@
 import React from 'react';
 import type { Call, Clinic, Equipment, Layer, Post, Staff, Supervisor } from '@/app/types';
 import { postLatLng } from '@/lib/geo/positions';
+import { resolvePostName } from '@/lib/locationLabel';
 import GeoLayerMap from '@/components/geo/GeoLayerMap';
 import type { GeoPin } from '@/components/geo/BasemapView';
 import { EquipmentMarker, PostMarker, SupervisorMarker, TeamMarker, type ImageRect, type MapOverlay } from '@/components/modals/event/venuemapmodal';
@@ -65,6 +66,7 @@ export default function GeoVenueMap({
     if (at && post.name) placed.set(post.name, { post, at });
   }
   const atPin = (post: PostObject): PostObject => ({ ...post, x: 0, y: 0 });
+  const isPostName = (name: string) => placed.has(name);
 
   const pins: GeoPin[] = [];
   for (const [name, { post, at }] of placed) {
@@ -90,10 +92,11 @@ export default function GeoVenueMap({
   // Teams sharing a post are staggered, as on the image map.
   const occupancy: Record<string, number> = {};
   for (const team of staff) {
-    const p = team.location ? placed.get(team.location) : undefined;
-    if (!p) continue;
-    const staggerIndex = occupancy[team.location] ?? 0;
-    occupancy[team.location] = staggerIndex + 1;
+    const postName = resolvePostName(team.location, isPostName);
+    const p = postName ? placed.get(postName) : undefined;
+    if (!postName || !p) continue;
+    const staggerIndex = occupancy[postName] ?? 0;
+    occupancy[postName] = staggerIndex + 1;
     pins.push({
       key: `team:${team.team}`,
       lat: p.at.lat,
@@ -115,7 +118,8 @@ export default function GeoVenueMap({
     });
   }
   for (const sup of supervisor) {
-    const p = sup.location ? placed.get(sup.location) : undefined;
+    const postName = resolvePostName(sup.location, isPostName);
+    const p = postName ? placed.get(postName) : undefined;
     if (!p) continue;
     pins.push({
       key: `supervisor:${sup.team}`,
@@ -126,7 +130,8 @@ export default function GeoVenueMap({
   }
 
   return (
-    <GeoLayerMap className={className} layer={layer} showPosts={false} extraPins={pins} focus={focus}>
+    // The basemap controls live in the Map tab's top bar (venuemaptab.tsx).
+    <GeoLayerMap className={className} layer={layer} showPosts={false} showControls={false} extraPins={pins} focus={focus}>
       {overlay?.geoMarkers?.({ layer, layerIndex })}
       {overlay?.chrome}
     </GeoLayerMap>

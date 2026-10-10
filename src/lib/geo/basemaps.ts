@@ -110,10 +110,10 @@ export function basemapOptions(setting: string | undefined): BasemapOption[] {
   return [...OPENFREEMAP.filter((o) => !replaced.has(o.id)), ...extras, NONE];
 }
 
-/** What the picker lists: "Match theme" first when both Light and Dark exist. */
+/** What the picker lists: "System" (Light or Dark, following the theme) first when both exist. */
 export function basemapChoices(options = BASEMAPS): { id: string; label: string }[] {
   const auto = options.some((o) => o.id === LIGHT_ID) && options.some((o) => o.id === DARK_ID);
-  return [...(auto ? [{ id: AUTO_BASEMAP_ID, label: 'Match light/dark mode' }] : []), ...options.map(({ id, label }) => ({ id, label }))];
+  return [...(auto ? [{ id: AUTO_BASEMAP_ID, label: 'System' }] : []), ...options.map(({ id, label }) => ({ id, label }))];
 }
 
 /** The configured basemaps for this build. */

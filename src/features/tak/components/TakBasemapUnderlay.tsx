@@ -21,8 +21,8 @@ import { loadMaplibre } from '@/components/geo/BasemapView';
  * again only when the alignment, the basemap or the map's size changes; the
  * previous picture stays until the new one is ready.
  *
- * Off by default; each viewer picks a basemap and the image's opacity in the
- * TAK panel. Nothing renders for a layer without a current alignment.
+ * Each viewer picks a basemap and the image's opacity in the Map tab's top
+ * bar (TakBasemapToolbar). Nothing renders for a layer without a current alignment.
  */
 export interface TakBasemapUnderlayProps {
   eventId: string;

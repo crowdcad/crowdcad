@@ -74,6 +74,8 @@ const TakBasemapUnderlay =
   process.env.NEXT_PUBLIC_TAK === 'on' ? lazy(() => import('@/features/tak').then((m) => ({ default: m.TakBasemapUnderlay }))) : null;
 const TakGeoMarkers =
   process.env.NEXT_PUBLIC_TAK === 'on' ? lazy(() => import('@/features/tak').then((m) => ({ default: m.TakGeoMarkers }))) : null;
+const TakBasemapToolbar =
+  process.env.NEXT_PUBLIC_TAK === 'on' ? lazy(() => import('@/features/tak').then((m) => ({ default: m.TakBasemapToolbar }))) : null;
 
 interface DispatchRoutePageProps {
   params: Promise<{ eventId: string }>;
@@ -3202,7 +3204,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
   // TAK live tracking (optional): only TAK events get the map overlay, and
   // only builds with NEXT_PUBLIC_TAK=on contain it at all.
   const takOverlay: MapOverlay | undefined =
-    process.env.NEXT_PUBLIC_TAK === 'on' && TakLiveMarkers && TakEventPanel && TakBasemapUnderlay && TakGeoMarkers &&
+    process.env.NEXT_PUBLIC_TAK === 'on' && TakLiveMarkers && TakEventPanel && TakBasemapUnderlay && TakGeoMarkers && TakBasemapToolbar &&
     event.mapMode === 'tak' && !isLiteMode && user && eventId
       ? {
           geoMarkers: () => (
@@ -3232,6 +3234,11 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
                 rect={ctx.rect}
                 scale={ctx.scale}
               />
+            </Suspense>
+          ),
+          toolbar: (ctx) => (
+            <Suspense fallback={null}>
+              <TakBasemapToolbar eventId={eventId} layer={ctx.layer} />
             </Suspense>
           ),
           chrome: (

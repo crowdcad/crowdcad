@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
-import { Slider } from '@heroui/react';
 import { Hospital, MapPin } from 'lucide-react';
 import type { Layer } from '@/app/types';
 import { imageCorners } from '@/lib/geo/basemapFrame';
@@ -9,9 +8,26 @@ import { DEFAULT_BASEMAP_ID, validChoice } from '@/lib/geo/basemaps';
 import { areaBounds, layerAlignment, layerArea } from '@/lib/geo/layers';
 import { boundsOf, postLatLng, zoneLatLngs, type LatLng } from '@/lib/geo/positions';
 import { PREF, usePref } from '@/lib/geo/prefs';
-import { ACCENT_SLIDER_CLASSNAMES } from '@/lib/geo/ui';
-import BasemapPicker from './BasemapPicker';
+import BasemapToolbar from './BasemapToolbar';
 import BasemapView, { type BasemapViewRequest, type GeoPin, type GeoShape } from './BasemapView';
+
+const DEFAULT_GEO_IMAGE_OPACITY = 0.7;
+
+/** The basemap choice and, for an aligned layer, the image's opacity: for a toolbar above the map. */
+export function GeoLayerMapControls({ layer }: { layer: Layer }) {
+  const [basemapId, setBasemapId] = usePref<string>(PREF.alignBasemap, DEFAULT_BASEMAP_ID);
+  const [opacity, setOpacity] = usePref<number>(PREF.imageOpacity, DEFAULT_GEO_IMAGE_OPACITY);
+  const aligned = !!layerAlignment(layer) && !!layer.mapUrl;
+  return (
+    <BasemapToolbar
+      value={validChoice(basemapId, DEFAULT_BASEMAP_ID)}
+      onChange={setBasemapId}
+      omit={['none']}
+      opacity={aligned ? opacity : undefined}
+      onOpacityChange={setOpacity}
+    />
+  );
+}
 
 /**
  * A venue layer on the live map (P8, D64): the layer's image warped onto the
@@ -60,8 +76,8 @@ export default function GeoLayerMap({
   showPosts = true,
   focus,
 }: GeoLayerMapProps) {
-  const [basemapId, setBasemapId] = usePref<string>(PREF.alignBasemap, DEFAULT_BASEMAP_ID);
-  const [opacity, setOpacity] = usePref<number>(PREF.imageOpacity, 0.7);
+  const [basemapId] = usePref<string>(PREF.alignBasemap, DEFAULT_BASEMAP_ID);
+  const [opacity] = usePref<number>(PREF.imageOpacity, DEFAULT_GEO_IMAGE_OPACITY);
   const alignment = layerAlignment(layer);
   const area = layerArea(layer);
 
@@ -139,23 +155,8 @@ export default function GeoLayerMap({
       view={focusView && (!view || focusView.key > view.req.key) ? focusView : view?.req}
     >
       {showControls && (
-        <div className="absolute left-2 top-2 z-10 flex flex-wrap items-center gap-2 rounded-lg bg-surface-deepest/90 p-1.5 shadow">
-          <BasemapPicker value={validChoice(basemapId, DEFAULT_BASEMAP_ID)} onChange={setBasemapId} omit={['none']} className="w-40" label="Basemap" />
-          {alignment && (
-            <Slider
-              size="sm"
-              aria-label="Map image opacity"
-              label="Map image"
-              className="w-32"
-              minValue={0}
-              maxValue={1}
-              step={0.05}
-              value={opacity}
-              onChange={(v) => setOpacity(Array.isArray(v) ? v[0]! : v)}
-              getValue={(v) => `${Math.round((Array.isArray(v) ? v[0]! : v) * 100)}%`}
-              classNames={ACCENT_SLIDER_CLASSNAMES}
-            />
-          )}
+        <div className="absolute left-2 top-2 z-10">
+          <GeoLayerMapControls layer={layer} />
         </div>
       )}
       {children}

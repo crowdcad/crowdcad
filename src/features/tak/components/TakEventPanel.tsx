@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { Button, Select, SelectItem, Slider, Switch } from '@heroui/react';
+import { Button, Select, SelectItem, Switch } from '@heroui/react';
 import { ChevronDown, ChevronUp, Link2Off, Radio } from 'lucide-react';
 import type { Event, Layer } from '@/app/types';
 import { refreshAlignments, useTakEvent } from '../data/hub';
@@ -17,15 +17,13 @@ import {
   type TakBridge,
   type TakEventConfig,
 } from '../data/takStore';
-import { BASEMAPS, DEFAULT_UNDERLAY_ID, NO_BASEMAP_ID, resolveBasemap, validChoice } from '@/lib/geo/basemaps';
-import { ACCENT_SLIDER_CLASSNAMES, ACCENT_SWITCH_CLASSNAMES, useIsDark } from '@/lib/geo/ui';
+import { BASEMAPS, DEFAULT_UNDERLAY_ID, resolveBasemap } from '@/lib/geo/basemaps';
+import { ACCENT_SWITCH_CLASSNAMES, useIsDark } from '@/lib/geo/ui';
 import { isStale, unassignedDevices } from '../lib/linking';
 import { takTeams } from '../lib/teamIds';
 import { TAK_MODULE_MARKER } from '../marker';
 import type { HistoryMode } from '../types';
-import BasemapPicker from '@/components/geo/BasemapPicker';
 import HelpTip from '@/components/geo/HelpTip';
-import { DEFAULT_IMAGE_OPACITY } from './TakBasemapUnderlay';
 
 export interface TakEventPanelProps {
   eventId: string;
@@ -55,8 +53,7 @@ export default function TakEventPanel({ eventId, event, uid, isOwner, layers }: 
   const [now, setNow] = useState(() => Date.now());
   const [bridges, setBridges] = useState<TakBridge[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [underlayId, setUnderlayId] = usePref<string>(PREF.underlayBasemap, DEFAULT_UNDERLAY_ID);
-  const [imageOpacity, setImageOpacity] = usePref<number>(PREF.imageOpacity, DEFAULT_IMAGE_OPACITY);
+  const [underlayId] = usePref<string>(PREF.underlayBasemap, DEFAULT_UNDERLAY_ID);
   const dark = useIsDark();
   const underlay = resolveBasemap(underlayId, DEFAULT_UNDERLAY_ID, BASEMAPS, dark);
 
@@ -179,25 +176,6 @@ export default function TakEventPanel({ eventId, event, uid, isOwner, layers }: 
               </p>
             )}
           </section>
-
-          {layers.some((l) => alignmentFor(l, tak.alignments, tak.venueAlignments)) && (
-            <section className="space-y-2">
-              <BasemapPicker label="Basemap" className="w-full" value={validChoice(underlayId, DEFAULT_UNDERLAY_ID)} onChange={setUnderlayId} />
-              {underlay.id !== NO_BASEMAP_ID && (
-                <Slider
-                  size="sm"
-                  label="Event map opacity"
-                  minValue={0.2}
-                  maxValue={1}
-                  step={0.05}
-                  value={imageOpacity}
-                  onChange={(v) => setImageOpacity(Array.isArray(v) ? v[0]! : v)}
-                  getValue={(v) => `${Math.round((Array.isArray(v) ? v[0]! : v) * 100)}%`}
-                  classNames={ACCENT_SLIDER_CLASSNAMES}
-                />
-              )}
-            </section>
-          )}
 
           {isOwner && (
             <section className="space-y-2">

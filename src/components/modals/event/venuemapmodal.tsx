@@ -9,6 +9,7 @@ import { getEquipmentIconType } from '@/lib/equipmentIcon';
 import { getStatusColor } from '@/lib/statusColors';
 import { STATUS_COLORS_HEX } from '@/lib/colorTokens';
 import VenueMapZones from '@/components/venue-management/VenueMapZones';
+import { resolvePostName } from '@/lib/locationLabel';
 
 function StatusTimer({ since }: { since: number }) {
   const [elapsed, setElapsed] = React.useState(0);
@@ -686,6 +687,8 @@ export interface MapOverlay {
   markers?: (ctx: { layer: Layer | undefined; layerIndex: number; rect: { x: number; y: number; width: number; height: number }; scale: number }) => React.ReactNode;
   /** Rendered above the map, unscaled (panels, badges). */
   chrome?: React.ReactNode;
+  /** On the dispatch Map tab, compact controls for an image layer, shown in the top bar beside the location search. */
+  toolbar?: (ctx: { layer: Layer | undefined; layerIndex: number }) => React.ReactNode;
   /**
    * On the live map of a geo layer (P8, D64), content rendered inside the map, where it can add its own pins with
    * GeoPins (src/components/geo/BasemapView.tsx). Image layers use `markers` instead.
@@ -791,6 +794,7 @@ export function VenueMapWithPosts({
 
   const mapUrl = layers[currentLayer]?.mapUrl || '';
   const posts = layers[currentLayer]?.posts || [];
+  const isPostName = (name: string) => posts.some((p) => typeof p !== 'string' && p.name === name);
 
   // Update container size when component mounts and on resize
   useEffect(() => {
@@ -1016,11 +1020,12 @@ export function VenueMapWithPosts({
               // stacking on top of each other — see TeamMarker's staggerStep.
               const postOccupancy: { [postName: string]: number } = {};
               return staff.map((team) => {
-                const postObj = posts.find(p => (typeof p === "string" ? p : p.name) === team.location);
-                if (!postObj || typeof postObj === "string") return null;
+                const postName = resolvePostName(team.location, isPostName);
+                const postObj = postName ? posts.find(p => typeof p !== "string" && p.name === postName) : undefined;
+                if (!postName || !postObj || typeof postObj === "string") return null;
 
-                const staggerIndex = postOccupancy[team.location] ?? 0;
-                postOccupancy[team.location] = staggerIndex + 1;
+                const staggerIndex = postOccupancy[postName] ?? 0;
+                postOccupancy[postName] = staggerIndex + 1;
 
                 return (
                   <TeamMarker
@@ -1040,7 +1045,8 @@ export function VenueMapWithPosts({
               });
             })()}
             {supervisor.map((sup) => {
-              const postObj = posts.find(p => (typeof p === "string" ? p : p.name) === sup.location);
+              const postName = resolvePostName(sup.location, isPostName);
+              const postObj = postName ? posts.find(p => typeof p !== "string" && p.name === postName) : undefined;
               if (!postObj || typeof postObj === "string") return null;
 
               return (

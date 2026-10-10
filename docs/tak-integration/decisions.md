@@ -361,7 +361,7 @@ The same end-to-end scenario runs against the Firebase emulator and a local Pock
 - **The changes.**
   - The venue step reports every change of points, so the alignment is kept as it is made and saved with the venue.
   - Events read their venue's current alignment as well as their own copy (D61), preferring the venue's. When the venue is newer, the event owner can share it into the event, so dispatchers who can't read the venue see positions too.
-  - The underlay defaults to "Match light/dark mode" for aligned maps; "No basemap" turns it off for that viewer.
+  - The underlay defaults to "System" for aligned maps; "No basemap" turns it off for that viewer.
   - "Dark" uses OpenFreeMap's Fiord style, a dark blue-gray that stays readable on the dark theme.
   - A render that can't finish because the browser tab is in the background waits for the tab to be shown instead of using up a retry; retries are 5 s apart.
 
@@ -371,3 +371,13 @@ The same end-to-end scenario runs against the Firebase emulator and a local Pock
 - **Why the image map existed.** Core's dispatch map positions everything as a percentage of the image, and it predates alignment. Warping works both ways (a basemap into the image's frame, or the image onto a live map); the image map stays for unaligned layers and offline use.
 - **Decisions.** The live map is the dispatch view for geo layers (image on top). Work stays on `integration/tak`. Existing posts and zones get coordinates when an aligned venue is saved, keeping their percentages so nothing moves and older versions still read them.
 - **Venue TAK switch removed.** Map alignment is a general venue step, so the TAK switch from D61 goes; TAK is still chosen per event.
+
+### D65. Live location labels fill a team's Location
+- **Requested** 2026-10-09 by the maintainer, who chose writing the Location field over a read-only hint beside it.
+- **The label.** The nearest post with coordinates: its name within 25 m, "Near Gate A" within 100 m, else "250 m from Gate A" (rounded to 50 m, "1.2 km" past 1 km). Nothing is reverse geocoded; with no placed posts there is no label.
+- **No flicker.** The current post is kept until another is 10 m closer; a distance band is left only 8 m past its edge; a far distance changes only when it moves by about 40 m; and a new label must hold for 20 s before it is written.
+- **Who is changed.** Only teams and supervisors whose status is Available and who are not in the clinic, so a team on a call keeps the call's location. A write happens when the label changes (or a team becomes available again), never to re-assert it, so a dispatcher's own edit stays until the team moves. Each write is a transaction that applies only if the Location is still what the writer saw, logs "Post changed to … (TAK)", and keeps the team's timer unless the post changed.
+- **Many dispatchers.** Every open dispatch page computes the same label from the same positions; the first write lands and the rest find nothing to change.
+- **Elsewhere.** Map pins, "View on map" and the team marker place a label like "Near Gate A" at its post (`src/lib/locationLabel.ts`); a post really named "Near …" still matches itself first.
+- **Map controls.** The basemap choice and image opacity moved from the TAK panel and the map's corner into the Map tab's top bar, styled like the location search, and opacity is a percentage field instead of a slider. "Match light/dark mode" is now "System".
+

@@ -11,9 +11,11 @@ import { VenueMapWithPosts, type MapOverlay } from '@/components/modals/event/ve
 import dynamic from 'next/dynamic';
 import { isGeoLayer } from '@/lib/geo/layers';
 import { isPlacedPost, postLatLng } from '@/lib/geo/positions';
+import { resolvePostName } from '@/lib/locationLabel';
 
 // The live map for geo layers (P8, D64), loaded only when a venue has one.
 const GeoVenueMap = dynamic(() => import('./GeoVenueMap'), { ssr: false });
+const GeoLayerMapControls = dynamic(() => import('@/components/geo/GeoLayerMap').then((m) => m.GeoLayerMapControls), { ssr: false });
 
 /** A request to jump to and highlight a specific team on the map. requestId
  *  must change (e.g. Date.now()) each time, including re-clicking the same
@@ -195,7 +197,10 @@ export default function VenueMapTab({
   }, [focusEquipmentRequest?.requestId]);
 
   /** Switches to the layer holding a placed post and, on a live map, flies to it. */
-  function focusLocation(postName: string) {
+  function focusLocation(location: string) {
+    // A live-tracking label ("Near Gate A") focuses its post.
+    const postName =
+      resolvePostName(location, (name) => layers.some((layer) => (layer.posts || []).some((p) => typeof p !== 'string' && p.name === name))) ?? location;
     const layerIdx = layers.findIndex((layer) => (layer.posts || []).some((post) => isPlacedPost(post, layer) && post.name === postName));
     if (layerIdx < 0) return;
     setCurrentLayer(layerIdx);
@@ -277,7 +282,15 @@ export default function VenueMapTab({
           </span>
         )}
 
-        <div className="ml-auto w-full max-w-xs">
+        <div className="ml-auto flex min-w-0 items-center gap-2">
+          {currentLayerData && isGeoLayer(currentLayerData) ? (
+            <GeoLayerMapControls layer={currentLayerData} />
+          ) : (
+            overlay?.toolbar?.({ layer: currentLayerData, layerIndex: safeCurrentLayer })
+          )}
+        </div>
+
+        <div className="w-full max-w-xs">
           <Autocomplete
             aria-label="Search locations"
             placeholder="Find a location..."
