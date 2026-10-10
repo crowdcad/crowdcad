@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { Radio, RadioGroup, Select, SelectItem } from '@heroui/react';
 import type { Layer } from '@/app/types';
 import { alignmentFor, loadAlignments, loadVenueAlignments } from '../data/alignmentStore';
-import { deleteEventConfig, getEventConfig, listAllowedBridges, saveEventConfig, type TakBridge } from '../data/takStore';
+import { deleteEventConfig, getEventConfig, listAllowedBridges, saveEventConfig, type TakBridge, type TakEventConfig } from '../data/takStore';
 import { TAK_MODULE_MARKER } from '../marker';
 import type { HistoryMode, TakMapAlignment } from '../types';
 import HelpTip from '@/components/geo/HelpTip';
@@ -15,10 +15,13 @@ import HelpTip from '@/components/geo/HelpTip';
  * tracking". Standard events write nothing. Choosing TAK writes the event's
  * TAK config (bridge, history mode) as the owner changes it, and sets the
  * event's mapMode through onMapModeChange, which the event builder saves with
- * the rest of the event.
+ * the rest of the event. A new event has no id until the builder finishes, so
+ * with eventId null nothing is written: the config goes to
+ * onPendingConfigChange instead, for the builder to save once the event exists.
  */
 export interface TakMapModeChoiceProps {
-  eventId: string;
+  eventId: string | null;
+  onPendingConfigChange?: (config: TakEventConfig | null) => void;
   uid: string;
   mapMode: 'standard' | 'tak' | undefined;
   onMapModeChange: (mode: 'standard' | 'tak') => void;
@@ -34,7 +37,7 @@ const HISTORY_LABELS: Record<HistoryMode, string> = {
   detailed: 'Detailed: summary, plus positions while teams are on calls',
 };
 
-export default function TakMapModeChoice({ eventId, uid, mapMode, onMapModeChange, layers }: TakMapModeChoiceProps) {
+export default function TakMapModeChoice({ eventId, onPendingConfigChange, uid, mapMode, onMapModeChange, layers }: TakMapModeChoiceProps) {
   const [bridges, setBridges] = useState<TakBridge[] | null>(null);
   const [bridgeUid, setBridgeUid] = useState<string | null>(null);
   const [historyMode, setHistoryMode] = useState<HistoryMode>('summary');
@@ -49,7 +52,7 @@ export default function TakMapModeChoice({ eventId, uid, mapMode, onMapModeChang
 
   // Existing TAK settings (editing an event).
   useEffect(() => {
-    if (!tak) return;
+    if (!tak || !eventId) return;
     void getEventConfig(eventId)
       .then((c) => {
         if (c) {
@@ -64,8 +67,13 @@ export default function TakMapModeChoice({ eventId, uid, mapMode, onMapModeChang
 
   const persist = async (nextBridge: string | null, nextMode: HistoryMode) => {
     setError(null);
+    const config: TakEventConfig = { bridgeUid: nextBridge, enabled: true, closed: false, historyMode: nextMode };
+    if (!eventId) {
+      onPendingConfigChange?.(config);
+      return;
+    }
     try {
-      await saveEventConfig(eventId, { bridgeUid: nextBridge, enabled: true, closed: false, historyMode: nextMode });
+      await saveEventConfig(eventId, config);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save TAK settings.');
     }
@@ -74,7 +82,8 @@ export default function TakMapModeChoice({ eventId, uid, mapMode, onMapModeChang
   const chooseMode = async (mode: 'standard' | 'tak') => {
     onMapModeChange(mode);
     if (mode === 'standard') {
-      await deleteEventConfig(eventId).catch(() => {});
+      if (!eventId) onPendingConfigChange?.(null);
+      else await deleteEventConfig(eventId).catch(() => {});
       return;
     }
     // Preselect when exactly one bridge is available.
