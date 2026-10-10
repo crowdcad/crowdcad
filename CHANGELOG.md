@@ -20,12 +20,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 
 ### Fixed
 
+- **Backing out of event setup no longer leaves an empty event.** "Start New Event" (and "Save & Start Event" in the venue builder) used to write a draft event as soon as the builder opened. The builder now opens at `/events/new/create?venueId=…` and the event is written only when "Create Event" is pressed.
 - **Docker builds work from a fresh clone.** `Dockerfile` copied `next-env.d.ts`, which is gitignored, so `docker compose up --build` failed in the builder stage for anyone who had not run Next locally first.
 - **PocketBase runs natively on Apple Silicon.** `Dockerfile.pocketbase` now downloads the release matching the host CPU (`amd64` or `arm64`) using BuildKit's `TARGETARCH`. Before this it always pulled `amd64` and ran under emulation on ARM Macs.
 - **Venue and event creation work from other devices on the LAN.** `crypto.randomUUID()` only exists on HTTPS or `localhost`, so a teammate opening the app at `http://192.168.x.x:3000` hit an error when adding layers, markers, areas or equipment. A new `randomId()` helper in `src/lib/utils.ts` falls back to `crypto.getRandomValues`.
 
 ### Changed
 
+- **Event Summary shows Staff Logs, Call Logs and Surge Log side by side** in three columns. Surge Log is always shown (with 0 activations when there were none); Data Collection Sessions moved to its own row.
+- **Dispatch location dropdowns no longer animate on click.** The chevron on the team, equipment and call location fields, the map's location search and the Add Call location field only flips; the button press, ripple and hover background are gone.
 - **Documentation overhaul.** Setup guides now include the `npm install` step the PocketBase scripts need, the Firebase console steps (Email/Password, Firestore, optional Storage on Blaze), deploying `firestore.rules`, LAN access, updating a fork from `upstream` and redeploying. The user guide and architecture docs match the current wizards and dispatch board. All markdown follows a new plain style (see "Docs style" in `CONTRIBUTING.md`).
 
 ---

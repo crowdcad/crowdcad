@@ -1,6 +1,6 @@
 'use client';
 
-import { useRouter, useParams } from 'next/navigation';
+import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import React, { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { Event, Venue, Staff, Supervisor, Post, Equipment, EventEquipment } from '@/app/types';
 import { authService, dbService } from '@/lib/services';
@@ -33,9 +33,11 @@ const GeoLayerMap = dynamic(() => import('@/components/geo/GeoLayerMap'), { ssr:
 import { MAP_CHECKER_BG } from '@/lib/mapStyles';
 import LoadingScreen from '@/components/ui/loading-screen';
 import { newTeamId } from '@/lib/teamId';
+import { NEW_EVENT_ID } from '@/lib/newEvent';
 
 // TAK live tracking (optional, in development): the map-mode choice is
 // compiled out entirely unless NEXT_PUBLIC_TAK is exactly "on".
+import type { TakEventConfig } from '@/features/tak';
 const TakMapModeChoice =
   process.env.NEXT_PUBLIC_TAK === 'on' ? lazy(() => import('@/features/tak').then((m) => ({ default: m.TakMapModeChoice }))) : null;
 
@@ -44,11 +46,29 @@ const getPostName = (post: Post): string => {
   return typeof post === 'string' ? post : post.name;
 };
 
+// Migrate old venue format (posts/mapUrl on the venue) to the layered format.
+const withLayers = (venue: Venue): Venue =>
+  venue.layers
+    ? venue
+    : {
+        ...venue,
+        layers: [{
+          id: randomId(),
+          name: 'Main Floor',
+          posts: venue.posts || [],
+          mapUrl: venue.mapUrl,
+        }],
+      };
 
 export default function EventCreation() {
   const router = useRouter();
   const params = useParams();
   const eventId = params?.eventId as string | undefined;
+  const searchParams = useSearchParams();
+  // A new event isn't written until handleSubmit; until then it only has the
+  // venue it's being built for.
+  const isNew = eventId === NEW_EVENT_ID;
+  const newEventVenueId = searchParams?.get('venueId') ?? null;
 
   const { certifications } = useCertifications();
 
@@ -85,7 +105,10 @@ export default function EventCreation() {
   const containerRef = useRef<HTMLDivElement>(null);
   const [, setContainerSize] = useState<{ width: number; height: number }>({ width: 0, height: 0 });
   const imgRef = useRef<HTMLImageElement>(null);
-  const submittedRef = useRef(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  // A new event's TAK settings, held until the event exists (TakMapModeChoice
+  // saves them itself for an existing event).
+  const [pendingTakConfig, setPendingTakConfig] = useState<TakEventConfig | null>(null);
 
   // Pan/zoom state, mirroring the dispatch page's own venue map modal
   // (VenueMapModal) exactly, since VenueMapWithPosts is shared with it.
@@ -178,10 +201,11 @@ export default function EventCreation() {
     setEventData(prev => ({ ...prev, scheduleStart: start, scheduleEnd: end }));
   }, [scheduleFrom, scheduleTo, eventData.date]);
 
-  // Autosave postingTimes to the draft event document when they change.
-  // Debounced to avoid excessive writes while the user is adjusting inputs.
+  // Autosave postingTimes to an existing draft event document when they change.
+  // Debounced to avoid excessive writes while the user is adjusting inputs. A
+  // new event has no document yet — everything is saved by handleSubmit.
   useEffect(() => {
-    if (!eventId) return;
+    if (!eventId || isNew) return;
     const times = eventData.postingTimes || [];
     const timeout = setTimeout(async () => {
       try {
@@ -194,119 +218,76 @@ export default function EventCreation() {
     }, 600);
 
     return () => clearTimeout(timeout);
-  }, [eventId, eventData.postingTimes]);
+  }, [eventId, isNew, eventData.postingTimes]);
 
   type FirestoreTimestamp = { seconds: number; nanoseconds: number };
 
   useEffect(() => {
-    if (eventId) {
-          
-      const fetchEvent = async () => {
-        try {
-          const docSnap = await dbService.getDocument<Event>('events', eventId);
+    if (!eventId) return;
 
-          if (docSnap.exists && docSnap.data) {
-            const data = docSnap.data;
-            
-            
-            let dateString = '';
-            if (typeof data.date === 'string') {
-              const d = new Date(data.date);
-              dateString = isNaN(d.getTime()) ? '' : d.toISOString().split('T')[0];
-            } else if (
-              typeof data.date === 'object' &&
-              data.date !== null &&
-              'seconds' in data.date &&
-              typeof (data.date as FirestoreTimestamp).seconds === 'number'
-            ) {
-              const ts = data.date as FirestoreTimestamp;
-              const d = new Date(ts.seconds * 1000);
-              dateString = d.toISOString().split('T')[0];
-            }
-            
-            // Migrate old venue format to new format with layers
-            let venue = data.venue;
-            if (venue && !venue.layers) {
-              
-              // Convert old format to new format
-              venue = {
-                ...venue,
-                layers: [{
-                  id: randomId(),
-                  name: 'Main Floor',
-                  posts: venue.posts || [],
-                  mapUrl: venue.mapUrl,
-                }]
-              };
-            }
-            
-            // Ensure eventEquipment is initialized and venue structure is preserved
-            const updatedData = { 
-              ...data, 
-              date: dateString,
-              eventEquipment: data.eventEquipment || [],
-              venue: venue || {} as Venue
-            };
-            
-            
-            
-            setEventData(updatedData);
-          } else {
-            console.error('Event document does not exist!');
-          }
-        } catch (error) {
-          console.error('Error fetching event:', error);
-        } finally {
-          setLoading(false);
-        }
-      };
-      fetchEvent();
-    } else {
-        const createDraft = async () => {
-        setLoading(true);
-        const user = authService.currentUser;
-        if (!user) {
-          setLoading(false);
+    // New event: only load the venue it's being built for.
+    const fetchVenue = async () => {
+      try {
+        if (!newEventVenueId) {
+          console.error('No venue given for the new event!');
           return;
         }
-          // Ensure postingTimes are computed and included in the draft at creation time
-          const times = postingTimes;
-
-          const draft = {
-            ...eventData,
-            postingTimes: times.length > 0 ? times : eventData.postingTimes,
-            userId: user.uid,
-            date: new Date(eventData.date!).toISOString(),
-            createdAt: new Date().toISOString(),
-            status: 'draft',
-          };
-        const newId = await dbService.addDocument('events', stripUndefined(draft));
-        setEventData(prev => ({ ...prev, userId: user.uid }));
-        router.replace(`/events/${newId}/create`);
+        const venueSnap = await dbService.getDocument<Venue>('venues', newEventVenueId);
+        if (venueSnap.exists && venueSnap.data) {
+          const venue = withLayers({ ...venueSnap.data, id: newEventVenueId });
+          setEventData(prev => ({ ...prev, venue }));
+        } else {
+          console.error('Venue document does not exist!');
+        }
+      } catch (error) {
+        console.error('Error fetching venue:', error);
+      } finally {
         setLoading(false);
-      };
-      createDraft();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+      }
+    };
 
-  // Cleanup effect - disabled to prevent deleting events during page reloads
-  // The venue selection page handles cleanup of old abandoned drafts
-  // useEffect(() => {
-  //   return () => {
-  //     if (!submittedRef.current && eventId) {
-  //       const docRef = doc(db, 'events', eventId);
-  //       getDoc(docRef).then(docSnap => {
-  //         if (docSnap.exists()) {
-  //           const data = docSnap.data() as Partial<Event> | undefined;
-  //           if (data?.status === 'draft') {
-  //             deleteDoc(docRef);
-  //           }
-  //         }
-  //       });
-  //     }
-  //   };
-  // }, [eventId]);
+    const fetchEvent = async () => {
+      try {
+        const docSnap = await dbService.getDocument<Event>('events', eventId);
+
+        if (docSnap.exists && docSnap.data) {
+          const data = docSnap.data;
+
+          let dateString = '';
+          if (typeof data.date === 'string') {
+            const d = new Date(data.date);
+            dateString = isNaN(d.getTime()) ? '' : d.toISOString().split('T')[0];
+          } else if (
+            typeof data.date === 'object' &&
+            data.date !== null &&
+            'seconds' in data.date &&
+            typeof (data.date as FirestoreTimestamp).seconds === 'number'
+          ) {
+            const ts = data.date as FirestoreTimestamp;
+            const d = new Date(ts.seconds * 1000);
+            dateString = d.toISOString().split('T')[0];
+          }
+
+          // Ensure eventEquipment is initialized and venue structure is preserved
+          setEventData({
+            ...data,
+            date: dateString,
+            eventEquipment: data.eventEquipment || [],
+            venue: data.venue ? withLayers(data.venue) : {} as Venue,
+          });
+        } else {
+          console.error('Event document does not exist!');
+        }
+      } catch (error) {
+        console.error('Error fetching event:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (isNew) fetchVenue();
+    else fetchEvent();
+  }, [eventId, isNew, newEventVenueId]);
 
   const handleSaveTeam = (team: TeamDraft, editIdx: number | null) => {
     const members = team.members.map(
@@ -370,94 +351,70 @@ export default function EventCreation() {
   };
 
   const handleSubmit = async () => {
-    submittedRef.current = true;
-    try {
-      const user = authService.currentUser;
-      if (!user) {
-        alert('You must be logged in to create an event.');
-        return;
-      }
-      if (!eventData.name?.trim()) {
-        alert('Please enter an event name.');
-        return;
-      }
-      const dateValue = new Date(eventData.date!);
-      if (isNaN(dateValue.getTime())) {
-        alert('Invalid event date');
-        return;
-      }
+    if (isSubmitting) return;
+    const user = authService.currentUser;
+    if (!user) {
+      alert('You must be logged in to create an event.');
+      return;
+    }
+    if (!eventData.name?.trim()) {
+      alert('Please enter an event name.');
+      return;
+    }
+    const dateValue = new Date(eventData.date!);
+    if (isNaN(dateValue.getTime())) {
+      alert('Invalid event date');
+      return;
+    }
 
+    setIsSubmitting(true);
+    try {
       // Compute postingTimes right before save in case state hasn't flushed.
       const computedTimes = postingTimes;
-      console.log('handleSubmit computed postingTimes:', computedTimes, 'eventData.postingTimes:', eventData.postingTimes);
 
-      // Populate clinics from venue-designated clinic posts right before save.
-      const computedClinics = syncClinicsFromVenue(eventData.venue, eventData.clinics);
-      // Same, for venue-designated dispatch zones.
-      const computedDispatchZones = syncDispatchZonesFromVenue(eventData.venue, eventData.dispatchZones);
+      const fields = {
+        ...eventData,
+        postingTimes: computedTimes.length > 0 ? computedTimes : eventData.postingTimes,
+        // Populate clinics and dispatch zones from the venue's designated posts right before save.
+        clinics: syncClinicsFromVenue(eventData.venue, eventData.clinics),
+        dispatchZones: syncDispatchZonesFromVenue(eventData.venue, eventData.dispatchZones),
+        userId: user.uid,
+        date: dateValue.toISOString(),
+        status: 'active' as const,
+      };
 
-      let eventDocId = eventId;
-      if (eventDocId) {
-        try {
-          const docSnap2 = await dbService.getDocument('events', eventDocId);
-          if (docSnap2.exists) {
-            await dbService.updateDocument('events', eventDocId, stripUndefined({
-              ...eventData,
-              postingTimes: computedTimes.length > 0 ? computedTimes : eventData.postingTimes,
-              clinics: computedClinics,
-              dispatchZones: computedDispatchZones,
-              userId: user.uid,
-              date: dateValue.toISOString(),
-              updatedAt: new Date().toISOString(),
-              status: 'active',
-            }) as Record<string, unknown>);
-            // eslint-disable-next-line no-console
-            console.log('Event updated:', { eventId: eventDocId, postingTimes: eventData.postingTimes || [] });
-          } else {
-            eventDocId = await dbService.addDocument('events', stripUndefined({
-              ...eventData,
-              postingTimes: computedTimes.length > 0 ? computedTimes : eventData.postingTimes,
-              clinics: computedClinics,
-              dispatchZones: computedDispatchZones,
-              userId: user.uid,
-              date: dateValue.toISOString(),
-              createdAt: new Date().toISOString(),
-              status: 'active',
-            }));
-            // eslint-disable-next-line no-console
-            console.log('Event created (branch new):', { eventId: eventDocId, postingTimes: eventData.postingTimes || [] });
-          }
-        } catch (error) {
-          console.error('Error checking/updating document:', error);
-          eventDocId = await dbService.addDocument('events', stripUndefined({
-            ...eventData,
-            clinics: computedClinics,
-            dispatchZones: computedDispatchZones,
-            userId: user.uid,
-            date: dateValue.toISOString(),
-            createdAt: new Date().toISOString(),
-            status: 'active',
-          }));
-          // eslint-disable-next-line no-console
-          console.log('Event created (catch):', { eventId: eventDocId, postingTimes: eventData.postingTimes || [] });
-        }
+      // This is the first write for a new event. An older draft (created
+      // before events were deferred) is updated in place, unless it has since
+      // been cleaned up.
+      const draftExists = !isNew && !!eventId && (await dbService.getDocument('events', eventId)).exists;
+      let eventDocId: string;
+      if (draftExists) {
+        await dbService.updateDocument('events', eventId!, stripUndefined({
+          ...fields,
+          updatedAt: new Date().toISOString(),
+        }) as Record<string, unknown>);
+        eventDocId = eventId!;
       } else {
         eventDocId = await dbService.addDocument('events', stripUndefined({
-          ...eventData,
-          clinics: computedClinics,
-          dispatchZones: computedDispatchZones,
-          userId: user.uid,
-          date: dateValue.toISOString(),
+          ...fields,
           createdAt: new Date().toISOString(),
-          status: 'active',
         }));
-        // eslint-disable-next-line no-console
-        console.log('Event created (no eventId):', { eventId: eventDocId, postingTimes: eventData.postingTimes || [] });
       }
-      router.push(`/events/${eventDocId}/dispatch`);
+      if (process.env.NEXT_PUBLIC_TAK === 'on' && !draftExists && eventData.mapMode === 'tak' && pendingTakConfig) {
+        try {
+          const { saveEventConfig } = await import('@/features/tak');
+          await saveEventConfig(eventDocId, pendingTakConfig);
+        } catch (err) {
+          console.error('Failed to save TAK settings:', err);
+          alert(`Event created, but its TAK settings could not be saved: ${(err as Error).message}`);
+        }
+      }
+      // Replace, so Back from dispatch can't return to the builder and create the event twice.
+      router.replace(`/events/${eventDocId}/dispatch`);
     } catch (error) {
       console.error('Creation failed:', error);
       alert(`Creation failed: ${(error as Error).message}`);
+      setIsSubmitting(false);
     }
   };
 
@@ -535,7 +492,8 @@ export default function EventCreation() {
         <Suspense fallback={null}>
         <div className="mt-4">
           <TakMapModeChoice
-            eventId={eventId}
+            eventId={isNew ? null : eventId}
+            onPendingConfigChange={setPendingTakConfig}
             uid={authService.currentUser.uid}
             mapMode={eventData.mapMode}
             onMapModeChange={(mode) => setEventData((prev) => ({ ...prev, mapMode: mode }))}
@@ -722,6 +680,7 @@ export default function EventCreation() {
       size="md"
       onPress={isLastStep ? handleSubmit : goNext}
       isDisabled={currentStepId === 'basics' && !hasRequiredBasics}
+      isLoading={isLastStep && isSubmitting}
       className="px-6 bg-accent hover:bg-accent/90 text-surface-light"
     >
       {isLastStep ? 'Create Event' : 'Continue'}

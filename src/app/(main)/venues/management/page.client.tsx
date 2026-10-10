@@ -14,6 +14,7 @@ import { hasDuplicateClinicName, isClinicPost } from '@/lib/clinics';
 import { hasDuplicateZoneName } from '@/lib/zones';
 import { getNextZoneColor } from '@/lib/zoneColors';
 import { randomId, stripUndefined } from '@/lib/utils';
+import { newEventCreatePath } from '@/lib/newEvent';
 import { uploadWithRetry } from '@/lib/uploadUtils';
 import { useZoomPan } from '@/hooks/useZoomPan';
 import { MAP_CHECKER_BG } from '@/lib/mapStyles';
@@ -870,23 +871,8 @@ export default function VenueManagementPageClient() {
       }
 
       if (options?.createEvent) {
-        const savedVenue = { id: savedVenueId, ...sanitizedDataToSave } as Venue;
-        const newEvent = {
-          name: '',
-          date: new Date(),
-          venue: savedVenue,
-          postingTimes: [],
-          staff: [],
-          supervisor: [],
-          userId,
-          calls: [],
-          eventPosts: [],
-          eventEquipment: [],
-          status: 'draft',
-          createdAt: new Date().toISOString(),
-        };
-        const newEventId = await dbService.addDocument('events', stripUndefined(newEvent));
-        router.push(`/events/${newEventId}/create`);
+        // The event itself is only written when the builder's setup finishes.
+        router.push(newEventCreatePath(savedVenueId));
       } else {
         router.push('/venues/selection');
       }
