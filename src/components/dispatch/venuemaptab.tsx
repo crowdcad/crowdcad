@@ -11,7 +11,9 @@ import { VenueMapWithPosts, type MapOverlay } from '@/components/modals/event/ve
 import dynamic from 'next/dynamic';
 import { isGeoLayer } from '@/lib/geo/layers';
 import { isPlacedPost, postLatLng } from '@/lib/geo/positions';
-import { resolvePostName } from '@/lib/locationLabel';
+import { layerAlignment } from '@/lib/geo/layers';
+import { latLonToPercent } from '@/lib/geo/affine';
+import type { UnitPosition } from '@/lib/unitTracking';
 
 // The live map for geo layers (P8, D64), loaded only when a venue has one.
 const GeoVenueMap = dynamic(() => import('./GeoVenueMap'), { ssr: false });
@@ -158,10 +160,7 @@ export default function VenueMapTab({
   useEffect(() => {
     if (!focusTeamRequest) return;
     const team = staff.find((s) => s.team === focusTeamRequest.teamName);
-    const location = team?.location;
-    if (location) {
-      focusLocation(location);
-    }
+    focusUnit(focusTeamRequest.teamName, team?.location);
     setSelectedTeamName(focusTeamRequest.teamName);
     resetZoom();
     onTeamFocusHandled?.();
@@ -172,10 +171,7 @@ export default function VenueMapTab({
   useEffect(() => {
     if (!focusSupervisorRequest) return;
     const sup = supervisor.find((s) => s.team === focusSupervisorRequest.supervisorName);
-    const location = sup?.location;
-    if (location) {
-      focusLocation(location);
-    }
+    focusUnit(focusSupervisorRequest.supervisorName, sup?.location);
     setSelectedSupervisorName(focusSupervisorRequest.supervisorName);
     resetZoom();
     onSupervisorFocusHandled?.();
@@ -197,10 +193,36 @@ export default function VenueMapTab({
   }, [focusEquipmentRequest?.requestId]);
 
   /** Switches to the layer holding a placed post and, on a live map, flies to it. */
-  function focusLocation(location: string) {
-    // A live-tracking label ("Near Gate A") focuses its post.
-    const postName =
-      resolvePostName(location, (name) => layers.some((layer) => (layer.posts || []).some((p) => typeof p !== 'string' && p.name === name))) ?? location;
+  /** A team or supervisor: its live position on a TAK event (D66), else the post its Location names. */
+  function focusUnit(name: string, location: string | undefined) {
+    const tracking = overlay?.unitTracking;
+    if (!tracking) {
+      if (location) focusLocation(location);
+      return;
+    }
+    const p = tracking.positions[name];
+    if (p) focusPosition(p);
+  }
+
+  /** Shows a live position: the current layer if it can, else a live-map layer, else an image layer covering it. */
+  function focusPosition(p: UnitPosition) {
+    const tracking = overlay?.unitTracking;
+    const onImage = (layer: Layer) => {
+      const a = tracking?.alignments[layer.id] ?? layerAlignment(layer);
+      if (!a) return false;
+      const { x, y } = latLonToPercent(a, { lat: p.lat, lon: p.lon });
+      return x >= 0 && x <= 100 && y >= 0 && y <= 100;
+    };
+    const shows = (layer: Layer) => isGeoLayer(layer) || onImage(layer);
+    const current = layers[safeCurrentLayer];
+    let idx = current && shows(current) ? safeCurrentLayer : layers.findIndex(isGeoLayer);
+    if (idx < 0) idx = layers.findIndex(onImage);
+    if (idx < 0) return;
+    setCurrentLayer(idx);
+    setGeoFocus(isGeoLayer(layers[idx]) ? { key: Date.now(), lat: p.lat, lng: p.lon } : null);
+  }
+
+  function focusLocation(postName: string) {
     const layerIdx = layers.findIndex((layer) => (layer.posts || []).some((post) => isPlacedPost(post, layer) && post.name === postName));
     if (layerIdx < 0) return;
     setCurrentLayer(layerIdx);

@@ -13,6 +13,7 @@ import {
   TeamMapButton,
   TeamActionsMenu,
   TeamMemberList,
+  TeamPostSchedule,
   TeamActivityLog,
 } from './teamcardparts';
 
@@ -21,7 +22,7 @@ import {
 // teamcard-condensed.tsx for the compact layout; shared pieces live in
 // teamcardparts.tsx.
 export default function TeamCard(props: TeamCardProps) {
-  const { staff, event, sinceMs, onStatusChange, onLocationChange, updateEvent, hasVenueMap } = props;
+  const { staff, event, sinceMs, onStatusChange, onLocationChange, updateEvent, hasVenueMap, locationTracked, onPostAssignment } = props;
   const { t } = useDispatchTerms();
   const [expanded, setExpanded] = useState(false);
   const timer = useMMSS(sinceMs);
@@ -63,12 +64,29 @@ export default function TeamCard(props: TeamCardProps) {
           model={model}
           onStatusChange={onStatusChange}
           onLocationChange={onLocationChange}
+          locationTracked={locationTracked}
         />
 
         <DispatchMotionCell isOpen={expanded} animate={true} className="mt-3" overflowVisibleWhenOpen>
           <div onClick={e => e.stopPropagation()} aria-hidden={!expanded}>
-            <div className="text-xs font-bold text-surface-light mb-1">{t('Team')}</div>
-            <TeamMemberList staff={staff} className="space-y-1 mb-3" />
+            {onPostAssignment ? (
+              // TAK event with a posting schedule: the team's posts opposite its members (D66).
+              <div className="grid grid-cols-2 gap-3 mb-3">
+                <div className="min-w-0">
+                  <div className="text-xs font-bold text-surface-light mb-1">{t('Team')}</div>
+                  <TeamMemberList staff={staff} className="space-y-1" />
+                </div>
+                <div className="min-w-0 text-right">
+                  <div className="text-xs font-bold text-surface-light mb-1">{t('Post')}</div>
+                  <TeamPostSchedule staff={staff} event={event} onPostAssignment={onPostAssignment} className="space-y-1" alignRight />
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="text-xs font-bold text-surface-light mb-1">{t('Team')}</div>
+                <TeamMemberList staff={staff} className="space-y-1 mb-3" />
+              </>
+            )}
 
             <div className="text-xs font-bold text-surface-light mb-1">{t('Activity Log')}</div>
             <TeamActivityLog staff={staff} event={event} updateEvent={updateEvent} />

@@ -56,6 +56,8 @@ import { buildLogSummaryCsv } from '@/lib/csvFormat';
 import { downloadTextFile } from '@/lib/downloadFile';
 import { formatAgeSex, parseAgeSex } from '@/lib/ageSex';
 import { getActivePostingTime } from '@/lib/postingTimes';
+import { keepTrackedLocations } from '@/lib/teamLocationGuard';
+import type { UnitTracking } from '@/lib/unitTracking';
 import { stampStatusSince, deriveStatusSinceFromLogs } from '@/lib/teamStatusSince';
 import { newTeamId } from '@/lib/teamId';
 import { isGeoLayer } from '@/lib/geo/layers';
@@ -64,16 +66,12 @@ import { isPlacedPost } from '@/lib/geo/positions';
 // TAK live tracking (optional, in development): loaded only for TAK events,
 // and compiled out entirely unless NEXT_PUBLIC_TAK is exactly "on".
 // React.lazy rather than next/dynamic: with the flag off this adds nothing to the page.
-const TakLiveMarkers =
-  process.env.NEXT_PUBLIC_TAK === 'on' ? lazy(() => import('@/features/tak').then((m) => ({ default: m.TakLiveMarkers }))) : null;
 const TakEventPanel =
   process.env.NEXT_PUBLIC_TAK === 'on' ? lazy(() => import('@/features/tak').then((m) => ({ default: m.TakEventPanel }))) : null;
 const TakEventAgent =
   process.env.NEXT_PUBLIC_TAK === 'on' ? lazy(() => import('@/features/tak').then((m) => ({ default: m.TakEventAgent }))) : null;
 const TakBasemapUnderlay =
   process.env.NEXT_PUBLIC_TAK === 'on' ? lazy(() => import('@/features/tak').then((m) => ({ default: m.TakBasemapUnderlay }))) : null;
-const TakGeoMarkers =
-  process.env.NEXT_PUBLIC_TAK === 'on' ? lazy(() => import('@/features/tak').then((m) => ({ default: m.TakGeoMarkers }))) : null;
 const TakBasemapToolbar =
   process.env.NEXT_PUBLIC_TAK === 'on' ? lazy(() => import('@/features/tak').then((m) => ({ default: m.TakBasemapToolbar }))) : null;
 
@@ -107,6 +105,8 @@ const LEFT_PANEL_TABS: LeftPanelTab[] = ['teams', 'supervisors', 'equipment'];
 export default function DispatchPage({ params }: DispatchRoutePageProps) {
   const [event, setEvent] = useState<Event | undefined>(undefined);
   const [postAssignments, setPostAssignments] = useState<PostAssignment>({});
+  // Live unit positions on a TAK event, reported by the TAK module's agent (D66).
+  const [unitTracking, setUnitTracking] = useState<UnitTracking | null>(null);
   // const handleBulkPostAssignment = (newAssignments: PostAssignment) => {
   //   setPostAssignments(newAssignments);
   // };
@@ -316,7 +316,11 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
 
   const updateEvent = useCallback(async (
     updateInput: Partial<Event> | ((current: Event) => Partial<Event>),
-    options?: { bypassEndedCheck?: boolean }
+    options?: {
+      bypassEndedCheck?: boolean;
+      /** Units whose Location this write may change on a live-tracking event (a manual edit); see keepTrackedLocations. */
+      locationEdits?: string[];
+    }
   ) => {
     if (!eventId) return;
 
@@ -336,7 +340,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
 
         const updates = stampStatusSince(
           currentEvent,
-          typeof updateInput === 'function' ? updateInput(currentEvent) : updateInput
+          keepTrackedLocations(currentEvent, typeof updateInput === 'function' ? updateInput(currentEvent) : updateInput, options?.locationEdits)
         );
 
         const nextEvent = {
@@ -374,7 +378,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
           updates = updateInput;
         }
 
-        tx.update('events', eventId, removeUndefinedDeep(stampStatusSince(currentEvent, updates)));
+        tx.update('events', eventId, removeUndefinedDeep(stampStatusSince(currentEvent, keepTrackedLocations(currentEvent, updates, options?.locationEdits))));
       });
     } catch (error) {
       if (error instanceof Error && error.message === 'EVENT_ENDED') {
@@ -981,17 +985,19 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
   }, [event, updateEvent, postAssignments]);
 
   const handleSupervisorLocationChange = useCallback(async (supervisor: Staff, newLocation: string) => {
+    // On a live-tracking event Location is where the unit is, never its post, and never sets a status (D66).
+    const tracked = event?.mapMode === 'tak';
     const updatedSupervisors = event?.supervisor.map(s =>
       s.team === supervisor.team
         ? {
             ...s,
             location: newLocation,
-            status: newLocation === 'Clinic' && s.status === 'Available' ? 'In Clinic' : s.status, // Changed from 'Available'
+            status: !tracked && newLocation === 'Clinic' && s.status === 'Available' ? 'In Clinic' : s.status, // Changed from 'Available'
             log: [
               ...(s.log || []),
               {
                 timestamp: Date.now(),
-                message: `${new Date().getHours().toString().padStart(2, '0')}${new Date().getMinutes().toString().padStart(2, '0')} - Post changed to ${newLocation}`
+                message: `${new Date().getHours().toString().padStart(2, '0')}${new Date().getMinutes().toString().padStart(2, '0')} - ${tracked ? 'Location' : 'Post'} changed to ${newLocation}`
               }
             ]
           }
@@ -1001,7 +1007,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     await updateEvent({ 
       supervisor: updatedSupervisors,
       postAssignments
-    });
+    }, { locationEdits: [supervisor.team] });
   }, [event, updateEvent, postAssignments]);
 
   // Helper to convert equipment data to EquipmentItem format
@@ -2455,22 +2461,24 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
   }, [updateEvent]);
 
   const handleLocationChange = useCallback(async (staff: Staff, newLocation: string) => {
+    // On a live-tracking event Location is where the team is, never its post, and never sets a status (D66).
+    const tracked = event?.mapMode === 'tak';
     const updatedStaff = event?.staff.map(t =>
       t.team === staff.team
         ? addTeamLog(
             {
               ...t,
               location: newLocation,
-              status: newLocation === 'Clinic' && t.status === 'Available' ? 'In Clinic' : t.status,
+              status: !tracked && newLocation === 'Clinic' && t.status === 'Available' ? 'In Clinic' : t.status,
             },
-            `Post changed to ${newLocation}`
+            `${tracked ? 'Location' : 'Post'} changed to ${newLocation}`
           )
         : t
     );
     await updateEvent({ 
       staff: updatedStaff,
       postAssignments // Explicitly preserve postAssignments
-    });
+    }, { locationEdits: [staff.team] });
   }, [event, updateEvent, addTeamLog, postAssignments]); // Add postAssignments dependency
 
   const handleAddTeamToCall = async (callId: string, team: string) => {
@@ -3204,14 +3212,11 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
   // TAK live tracking (optional): only TAK events get the map overlay, and
   // only builds with NEXT_PUBLIC_TAK=on contain it at all.
   const takOverlay: MapOverlay | undefined =
-    process.env.NEXT_PUBLIC_TAK === 'on' && TakLiveMarkers && TakEventPanel && TakBasemapUnderlay && TakGeoMarkers && TakBasemapToolbar &&
+    process.env.NEXT_PUBLIC_TAK === 'on' && TakEventPanel && TakBasemapUnderlay && TakBasemapToolbar &&
     event.mapMode === 'tak' && !isLiteMode && user && eventId
       ? {
-          geoMarkers: () => (
-            <Suspense fallback={null}>
-              <TakGeoMarkers eventId={eventId} staff={event.staff || []} supervisor={event.supervisor || []} />
-            </Suspense>
-          ),
+          // Team and supervisor markers sit at their live positions only (D66).
+          unitTracking: unitTracking ?? { positions: {}, alignments: {} },
           underlay: (ctx) => (
             <Suspense fallback={null}>
               <TakBasemapUnderlay
@@ -3221,18 +3226,6 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
                 container={ctx.container}
                 scale={ctx.scale}
                 setImageOpacity={ctx.setImageOpacity}
-              />
-            </Suspense>
-          ),
-          markers: (ctx) => (
-            <Suspense fallback={null}>
-              <TakLiveMarkers
-                eventId={eventId}
-                staff={event.staff || []}
-                supervisor={event.supervisor || []}
-                layer={ctx.layer}
-                rect={ctx.rect}
-                scale={ctx.scale}
               />
             </Suspense>
           ),
@@ -3253,7 +3246,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
   const takAgent =
     process.env.NEXT_PUBLIC_TAK === 'on' && TakEventAgent && event.mapMode === 'tak' && !isLiteMode && user && eventId ? (
       <Suspense fallback={null}>
-        <TakEventAgent eventId={eventId} event={event} uid={user.uid} />
+        <TakEventAgent eventId={eventId} event={event} uid={user.uid} onTracking={setUnitTracking} />
       </Suspense>
     ) : null;
 
@@ -3403,6 +3396,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     cardViewMode,
     hasVenueMap: hasVenueMapImage,
     knownMapLocations,
+    unitTracking: event.mapMode === 'tak' ? unitTracking : null,
     onRefreshTeamPost: refreshTeamFromSchedule,
     onNewCall: (teamName: string) => openAddCallModal({ assignedTeam: teamName }),
   };
@@ -3414,6 +3408,8 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     onEditTeam: handleEditTeam,
     onDeleteTeam: handleDeleteTeam,
     onViewOnMap: viewTeamOnMap,
+    // On a TAK event with a posting schedule, each team's posts are listed and edited in its card (D66).
+    onPostAssignment: event.mapMode === 'tak' && (event.postingTimes || []).length > 0 ? handlePostAssignment : undefined,
   };
   const supervisorListProps: SupervisorListProps = {
     ...sharedTeamListProps,

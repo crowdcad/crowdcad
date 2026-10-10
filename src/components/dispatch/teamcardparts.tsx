@@ -10,7 +10,7 @@ import {
   Dropdown, DropdownTrigger, DropdownMenu, DropdownItem,
   Select, SelectItem, Autocomplete, AutocompleteItem, Button,
 } from '@heroui/react';
-import { MapPin, MoreVertical, Map as MapIcon } from 'lucide-react';
+import { MapPin, MoreVertical, Map as MapIcon, Radio } from 'lucide-react';
 import type { Clinic, Event, Staff } from '@/app/types';
 import TrackingTextEntry from '@/components/dispatch/trackingtextentry';
 import { deriveTeamVisualStatus, getStatusColor } from '@/lib/statusColors';
@@ -20,6 +20,7 @@ import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
 import { getEventClinics } from '@/lib/clinics';
 import { getEquipmentIconType, type EquipmentIconType } from '@/lib/equipmentIcon';
 import { textToLog } from '@/lib/logText';
+import { parseTimeToMinutes } from '@/lib/postingTimes';
 
 export type TeamCardProps = {
   staff: Staff;
@@ -38,6 +39,10 @@ export type TeamCardProps = {
   onViewOnMap?: (teamName: string) => void;
   /** Whether this team's current location is an actual pin on the map — the button still shows, but disabled, when it's a free-text/non-post value like Roaming or an unrecognized location. */
   canLocateOnMap?: boolean;
+  /** Location comes from live tracking (a connected TAK device) and can't be edited (D66). */
+  locationTracked?: boolean;
+  /** Edits this team's post for one posting time; when given, the card lists the team's posts (TAK events with a schedule, D66). */
+  onPostAssignment?: (time: string, post: string, team: string) => void;
 };
 
 const stopPropagation = (e: React.SyntheticEvent) => e.stopPropagation();
@@ -155,7 +160,8 @@ export function TeamStatusSelect({
       onSelectionChange={(keys) => {
         const val = Array.from(keys as Set<string>)[0] || '';
         if (!val) return;
-        if (val === 'Available') {
+        // On a live-tracking event Location is where the team is, so a status change never moves it (D66).
+        if (val === 'Available' && event.mapMode !== 'tak') {
           const targetLocation =
             staff.originalPost ||
             event.pendingAssignments?.[staff.team]?.post ||
@@ -190,7 +196,37 @@ export function TeamStatusSelect({
   );
 }
 
+/** Read-only Location while live tracking writes it (D66), shaped like the editable field. */
+function TrackedLocation({ location }: { location: string }) {
+  const { t } = useDispatchTerms();
+  return (
+    <div
+      className="flex h-8 min-w-0 items-center gap-1 rounded-full border border-surface-liner bg-surface-deep px-3 text-sm text-surface-light"
+      title={`${location || t('No location')} (live from TAK; not editable while connected)`}
+      aria-label="Location (live)"
+    >
+      <Radio className="h-[18px] w-[18px] shrink-0 text-status-green" aria-hidden />
+      <span className="min-w-0 truncate pl-1">{location || t('No location')}</span>
+    </div>
+  );
+}
+
 export function TeamLocationInput({
+  staff,
+  event,
+  onLocationChange,
+  tracked,
+}: {
+  staff: Staff;
+  event: Event;
+  onLocationChange: TeamCardProps['onLocationChange'];
+  tracked?: boolean;
+}) {
+  if (tracked) return <TrackedLocation location={staff.location} />;
+  return <EditableTeamLocation staff={staff} event={event} onLocationChange={onLocationChange} />;
+}
+
+function EditableTeamLocation({
   staff,
   event,
   onLocationChange,
@@ -271,14 +307,16 @@ export function TeamControlsRow(props: {
   model: TeamStatusModel;
   onStatusChange: TeamCardProps['onStatusChange'];
   onLocationChange: TeamCardProps['onLocationChange'];
+  locationTracked?: boolean;
 }) {
+  const { locationTracked, ...statusProps } = props;
   return (
     <div className="flex items-center gap-3">
       <div onClick={stopPropagation} onKeyDown={stopPropagation} className="min-w-0 flex-[1]">
-        <TeamStatusSelect {...props} />
+        <TeamStatusSelect {...statusProps} />
       </div>
       <div onClick={stopPropagation} onKeyDown={stopPropagation} className="min-w-0 flex-[1.5]">
-        <TeamLocationInput staff={props.staff} event={props.event} onLocationChange={props.onLocationChange} />
+        <TeamLocationInput staff={props.staff} event={props.event} onLocationChange={props.onLocationChange} tracked={locationTracked} />
       </div>
     </div>
   );
@@ -366,6 +404,88 @@ export function TeamMemberList({ staff, className }: { staff: Staff; className?:
       {memberLines.length === 0 && (
         <div className="text-xs text-surface-faint italic">{t('No members')}</div>
       )}
+    </div>
+  );
+}
+
+export interface TeamPostSlot {
+  time: string;
+  /** The next posting time, where this one's shift ends (none for the last). */
+  until?: string;
+  post: string | null;
+}
+
+/** A team's post for each posting time, in time order (D66). */
+export function teamPostSlots(event: Pick<Event, 'postingTimes' | 'postAssignments'>, team: string): TeamPostSlot[] {
+  const times = [...(event.postingTimes || [])]
+    .filter((time) => parseTimeToMinutes(time) !== null)
+    .sort((a, b) => parseTimeToMinutes(a)! - parseTimeToMinutes(b)!);
+  return times.map((time, i) => {
+    const slot = event.postAssignments?.[time] || {};
+    return { time, until: times[i + 1], post: Object.keys(slot).find((p) => slot[p] === team) ?? null };
+  });
+}
+
+const UNASSIGNED_POST = '__unassigned__';
+
+/**
+ * The team's posts by posting time, styled like the member list beside it,
+ * each editable (a click picks another post). Posts follow the posting
+ * schedule; the team's Location is tracked separately (D66).
+ */
+export function TeamPostSchedule({
+  staff,
+  event,
+  onPostAssignment,
+  className,
+  alignRight,
+}: {
+  staff: Staff;
+  event: Event;
+  onPostAssignment: NonNullable<TeamCardProps['onPostAssignment']>;
+  className?: string;
+  alignRight?: boolean;
+}) {
+  const { t } = useDispatchTerms();
+  const slots = useMemo(() => teamPostSlots(event, staff.team), [event, staff.team]);
+  const posts = useMemo(
+    () => Array.from(new Set((event.eventPosts || []).map((p) => (typeof p === 'string' ? p : p.name)).filter(Boolean))),
+    [event.eventPosts]
+  );
+
+  return (
+    <div className={className}>
+      {slots.map((slot) => (
+        <Dropdown key={slot.time} placement={alignRight ? 'bottom-end' : 'bottom-start'}>
+          <DropdownTrigger>
+            <button
+              type="button"
+              className={`block w-full truncate text-xs text-surface-faint hover:text-surface-light ${alignRight ? 'text-right' : 'text-left'}`}
+              aria-label={`Post from ${slot.time}: ${slot.post ?? 'unassigned'}. Change`}
+            >
+              {slot.post ? t(slot.post) : t('Unassigned')} ({slot.time}{slot.until ? `–${slot.until}` : '+'})
+            </button>
+          </DropdownTrigger>
+          <DropdownMenu
+            aria-label={`Post from ${slot.time}`}
+            selectionMode="single"
+            selectedKeys={new Set([slot.post ?? UNASSIGNED_POST])}
+            className="max-h-64 overflow-y-auto"
+            onAction={(key) => {
+              const post = key === UNASSIGNED_POST ? null : (key as string);
+              if (post === slot.post) return;
+              if (post) onPostAssignment(slot.time, post, staff.team);
+              else if (slot.post) onPostAssignment(slot.time, slot.post, '');
+            }}
+          >
+            {[
+              <DropdownItem key={UNASSIGNED_POST}>{t('Unassigned')}</DropdownItem>,
+              ...posts.map((p) => <DropdownItem key={p}>{t(p)}</DropdownItem>),
+            ]}
+          </DropdownMenu>
+        </Dropdown>
+      ))}
+      {slots.length === 0 && <div className="text-xs text-surface-faint italic">{t('No posting times')}</div>}
     </div>
   );
 }

@@ -2,26 +2,21 @@ import type { Event, Staff, Supervisor } from '@/app/types';
 import { dbService } from '@/lib/services';
 
 /**
- * Writes live location labels into teams' Location (D65), in a transaction
- * so concurrent dispatch edits are never overwritten. A change applies only
- * when the team is still where the caller last saw it (`from`), so a
- * dispatcher's edit made meanwhile wins, and only to available teams, so a
- * team on a call or in the clinic keeps the location dispatch gave it.
+ * Writes live location labels into units' Location (D65, D66), in a
+ * transaction so concurrent dispatch edits are never overwritten. Every
+ * connected unit is tracked whatever its status: a team on a call or in the
+ * clinic still shows where it actually is, and its status is never changed.
+ * A change applies only when the unit is still where the caller last saw it
+ * (`from`). The unit's timer is left alone: it follows status.
  */
 export interface AutoLocationChange {
   teamId: string;
   /** The Location the caller saw; the change is skipped if it differs now. */
   from: string;
   label: string;
-  /** True when the team moved to a different post (its timer restarts). */
-  newPost: boolean;
 }
 
 type Unit = Staff | Supervisor;
-
-export function eligibleForAutoLocation(unit: Pick<Unit, 'status' | 'location'>): boolean {
-  return unit.status === 'Available' && unit.location !== 'Clinic';
-}
 
 function hhmm(d: Date): string {
   return d.getHours().toString().padStart(2, '0') + d.getMinutes().toString().padStart(2, '0');
@@ -32,14 +27,12 @@ export function applyChanges<T extends Unit>(units: T[], changes: AutoLocationCh
   const byId = new Map(changes.map((c) => [c.teamId, c]));
   const out = units.map((u) => {
     const c = u.id ? byId.get(u.id) : undefined;
-    if (!c || (u.location || '') !== c.from || u.location === c.label || !eligibleForAutoLocation(u)) return u;
+    if (!c || (u.location || '') !== c.from || u.location === c.label) return u;
     applied++;
     return {
       ...u,
       location: c.label,
-      // Moving closer to or farther from the same post keeps its timer.
-      statusSince: c.newPost ? now.getTime() : u.statusSince ?? now.getTime(),
-      log: [...(u.log || []), { timestamp: now.getTime(), message: `${hhmm(now)} - Post changed to ${c.label} (TAK)` }],
+      log: [...(u.log || []), { timestamp: now.getTime(), message: `${hhmm(now)} - Location changed to ${c.label}` }],
     };
   });
   return { units: out, applied };

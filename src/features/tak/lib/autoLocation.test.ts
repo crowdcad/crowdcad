@@ -103,24 +103,23 @@ describe('postPoints', () => {
 describe('applyChanges', () => {
   const now = new Date(T0);
   const team = (over: Partial<Staff>): Staff => ({ id: 't1', team: 'Team 1', location: 'Gate A', status: 'Available', members: [], ...over });
+  const change = (from: string, label: string) => [{ teamId: 't1', from, label }];
 
-  it('fills the location of an available team, logs it and keeps the timer on the same post', () => {
-    const { units, applied } = applyChanges([team({ statusSince: 5 })], [{ teamId: 't1', from: 'Gate A', label: 'Near Gate A', newPost: false }], now);
+  it('writes the location, logs "Location changed to" and leaves status and timer alone', () => {
+    const { units, applied } = applyChanges([team({ statusSince: 5 })], change('Gate A', 'Near Gate A'), now);
     expect(applied).toBe(1);
-    expect(units[0]!.location).toBe('Near Gate A');
-    expect(units[0]!.statusSince).toBe(5);
-    expect(units[0]!.log?.at(-1)?.message).toMatch(/Post changed to Near Gate A \(TAK\)$/);
+    expect(units[0]).toMatchObject({ location: 'Near Gate A', status: 'Available', statusSince: 5 });
+    expect(units[0]!.log?.at(-1)?.message).toMatch(/ - Location changed to Near Gate A$/);
   });
 
-  it('restarts the timer at a new post', () => {
-    const { units } = applyChanges([team({ statusSince: 5 })], [{ teamId: 't1', from: 'Gate A', label: 'Gate B', newPost: true }], now);
-    expect(units[0]!.statusSince).toBe(T0);
+  it('tracks teams on a call or in the clinic too, without touching their status', () => {
+    expect(applyChanges([team({ status: 'En Route', location: 'Stage' })], change('Stage', 'Near Gate B'), now).units[0])
+      .toMatchObject({ location: 'Near Gate B', status: 'En Route' });
+    expect(applyChanges([team({ status: 'In Clinic', location: 'Clinic' })], change('Clinic', 'Gate A'), now).units[0])
+      .toMatchObject({ location: 'Gate A', status: 'In Clinic' });
   });
 
-  it("skips teams on a call, in the clinic, or edited since (a dispatcher's edit wins)", () => {
-    const change = [{ teamId: 't1', from: 'Gate A', label: 'Gate B', newPost: true }];
-    expect(applyChanges([team({ status: 'En Route' })], change, now).applied).toBe(0);
-    expect(applyChanges([team({ location: 'Clinic', status: 'Available' })], [{ ...change[0]!, from: 'Clinic' }], now).applied).toBe(0);
-    expect(applyChanges([team({ location: 'Roaming' })], change, now).applied).toBe(0);
+  it('skips a unit whose Location changed since it was read', () => {
+    expect(applyChanges([team({ location: 'Roaming' })], change('Gate A', 'Gate B'), now).applied).toBe(0);
   });
 });

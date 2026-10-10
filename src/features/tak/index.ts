@@ -10,10 +10,8 @@ export { TAK_MODULE_MARKER } from './marker';
 export type { AffineTransform, ControlPoint, HistoryMode, LatLon, TakMapAlignment } from './types';
 
 // Components, each used by one core touchpoint.
-export { default as TakLiveMarkers, type TakLiveMarkersProps } from './components/TakLiveMarkers'; // (a) map overlay
-export { default as TakGeoMarkers, type TakGeoMarkersProps } from './components/TakGeoMarkers'; // (a) map overlay, live map (P8)
 export { default as TakEventPanel, type TakEventPanelProps } from './components/TakEventPanel'; // (a) map overlay
-export { default as TakEventAgent, type TakEventAgentProps } from './components/TakEventAgent'; // (a) headless, D46
+export { default as TakEventAgent, type TakEventAgentProps } from './components/TakEventAgent'; // (a) headless, D46; reports live positions, D66
 export { default as TakBasemapUnderlay, type TakBasemapUnderlayProps } from './components/TakBasemapUnderlay'; // (j) map underlay, D56
 export { default as TakBasemapToolbar, type TakBasemapToolbarProps } from './components/TakBasemapToolbar'; // (j) underlay controls, Map tab top bar
 export { default as TakEventSummary, type TakEventSummaryProps } from './components/TakEventSummary'; // (k) event summary, D57

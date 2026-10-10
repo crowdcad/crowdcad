@@ -3,7 +3,6 @@
 import React from 'react';
 import type { Call, Clinic, Equipment, Layer, Post, Staff, Supervisor } from '@/app/types';
 import { postLatLng } from '@/lib/geo/positions';
-import { resolvePostName } from '@/lib/locationLabel';
 import GeoLayerMap from '@/components/geo/GeoLayerMap';
 import type { GeoPin } from '@/components/geo/BasemapView';
 import { EquipmentMarker, PostMarker, SupervisorMarker, TeamMarker, type ImageRect, type MapOverlay } from '@/components/modals/event/venuemapmodal';
@@ -66,7 +65,6 @@ export default function GeoVenueMap({
     if (at && post.name) placed.set(post.name, { post, at });
   }
   const atPin = (post: PostObject): PostObject => ({ ...post, x: 0, y: 0 });
-  const isPostName = (name: string) => placed.has(name);
 
   const pins: GeoPin[] = [];
   for (const [name, { post, at }] of placed) {
@@ -89,14 +87,61 @@ export default function GeoVenueMap({
       node: <EquipmentMarker equipment={equip} post={atPin(p.post)} rect={AT_PIN} scale={1} isSelected={selectedEquipmentName === equip.name} />,
     });
   }
+  const tracking = overlay?.unitTracking;
+  // Live tracking: each unit at its own position, or not at all (D66).
+  if (tracking) {
+    for (const team of staff) {
+      const p = tracking.positions[team.team];
+      if (!p) continue;
+      pins.push({
+        key: `team:${team.team}`,
+        lat: p.lat,
+        lng: p.lon,
+        node: (
+          <TeamMarker
+            team={team}
+            post={{ name: team.team, x: 0, y: 0 }}
+            rect={AT_PIN}
+            teamTimers={teamTimers}
+            calls={calls}
+            clinics={clinics}
+            scale={1}
+            isSelected={selectedTeamName === team.team}
+            onAddCall={onAddCallForTeam}
+            exact
+            faded={p.stale}
+          />
+        ),
+      });
+    }
+    for (const sup of supervisor) {
+      const p = tracking.positions[sup.team];
+      if (!p) continue;
+      pins.push({
+        key: `supervisor:${sup.team}`,
+        lat: p.lat,
+        lng: p.lon,
+        node: (
+          <SupervisorMarker
+            supervisor={sup}
+            post={{ name: sup.team, x: 0, y: 0 }}
+            rect={AT_PIN}
+            scale={1}
+            isSelected={selectedSupervisorName === sup.team}
+            exact
+            faded={p.stale}
+          />
+        ),
+      });
+    }
+  }
   // Teams sharing a post are staggered, as on the image map.
   const occupancy: Record<string, number> = {};
-  for (const team of staff) {
-    const postName = resolvePostName(team.location, isPostName);
-    const p = postName ? placed.get(postName) : undefined;
-    if (!postName || !p) continue;
-    const staggerIndex = occupancy[postName] ?? 0;
-    occupancy[postName] = staggerIndex + 1;
+  for (const team of tracking ? [] : staff) {
+    const p = team.location ? placed.get(team.location) : undefined;
+    if (!p) continue;
+    const staggerIndex = occupancy[team.location] ?? 0;
+    occupancy[team.location] = staggerIndex + 1;
     pins.push({
       key: `team:${team.team}`,
       lat: p.at.lat,
@@ -117,9 +162,8 @@ export default function GeoVenueMap({
       ),
     });
   }
-  for (const sup of supervisor) {
-    const postName = resolvePostName(sup.location, isPostName);
-    const p = postName ? placed.get(postName) : undefined;
+  for (const sup of tracking ? [] : supervisor) {
+    const p = sup.location ? placed.get(sup.location) : undefined;
     if (!p) continue;
     pins.push({
       key: `supervisor:${sup.team}`,

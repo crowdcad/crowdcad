@@ -14,6 +14,7 @@ import {
   TeamMapButton,
   TeamActionsMenu,
   TeamMemberList,
+  TeamPostSchedule,
   TeamActivityLog,
 } from './teamcardparts';
 
@@ -21,7 +22,7 @@ import {
 // members, timer and activity log all revealed on expand. Shared pieces live
 // in teamcardparts.tsx.
 export default function TeamCardCondensed(props: TeamCardProps) {
-  const { staff, event, sinceMs, onStatusChange, onLocationChange, updateEvent, hasVenueMap } = props;
+  const { staff, event, sinceMs, onStatusChange, onLocationChange, updateEvent, hasVenueMap, locationTracked, onPostAssignment } = props;
   const { t } = useDispatchTerms();
   const [expanded, setExpanded] = useState(false);
   const timer = useMMSS(sinceMs);
@@ -64,6 +65,7 @@ export default function TeamCardCondensed(props: TeamCardProps) {
             model={model}
             onStatusChange={onStatusChange}
             onLocationChange={onLocationChange}
+            locationTracked={locationTracked}
           />
 
           {/* Team members and timer row */}
@@ -72,6 +74,12 @@ export default function TeamCardCondensed(props: TeamCardProps) {
               <div className="text-xs font-semibold text-surface-light pt-2 mb-1">{t('Team Members')}</div>
               <TeamMemberList staff={staff} className="space-y-0.5" />
             </div>
+            {onPostAssignment && (
+              <div className="flex-1 min-w-0">
+                <div className="text-xs font-semibold text-surface-light pt-2 mb-1">{t('Post')}</div>
+                <TeamPostSchedule staff={staff} event={event} onPostAssignment={onPostAssignment} className="space-y-0.5" />
+              </div>
+            )}
             <div className="flex-shrink-0 pt-2">
               <div className="text-base font-semibold text-surface-light tabular-nums">
                 {timer}

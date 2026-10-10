@@ -378,6 +378,15 @@ The same end-to-end scenario runs against the Firebase emulator and a local Pock
 - **No flicker.** The current post is kept until another is 10 m closer; a distance band is left only 8 m past its edge; a far distance changes only when it moves by about 40 m; and a new label must hold for 20 s before it is written.
 - **Who is changed.** Only teams and supervisors whose status is Available and who are not in the clinic, so a team on a call keeps the call's location. A write happens when the label changes (or a team becomes available again), never to re-assert it, so a dispatcher's own edit stays until the team moves. Each write is a transaction that applies only if the Location is still what the writer saw, logs "Post changed to … (TAK)", and keeps the team's timer unless the post changed.
 - **Many dispatchers.** Every open dispatch page computes the same label from the same positions; the first write lands and the rest find nothing to change.
-- **Elsewhere.** Map pins, "View on map" and the team marker place a label like "Near Gate A" at its post (`src/lib/locationLabel.ts`); a post really named "Near …" still matches itself first.
+- **Elsewhere.** (Superseded by D66: markers follow live positions, so labels are no longer mapped back to posts.)
 - **Map controls.** The basemap choice and image opacity moved from the TAK panel and the map's corner into the Map tab's top bar, styled like the location search, and opacity is a percentage field instead of a slider. "Match light/dark mode" is now "System".
+
+### D66. On TAK events, Location is where a unit is, not its post
+- **Requested** 2026-10-09 by the maintainer, refining D65.
+- **Tracked, whatever the status.** Every unit with a fresh TAK position (a linked device heard from in the last 2 minutes) has its Location written from that position, on a call or in the clinic too. Only Location changes: status is never set from location, and the call's location is never affected. The log reads "Location changed to …". The unit's timer follows status, not these writes.
+- **Nothing else moves Location.** On a TAK event, call assignment, status changes, auto-detach and schedule changes keep a unit's Location as it was (`keepTrackedLocations` in the dispatch page's single write path). A schedule change changes the unit's post (`originalPost` and the posting schedule) and logs "Post changed to …". A manual edit still works for a unit that isn't connected.
+- **Not editable while connected.** A connected unit's Location shows as a read-only field with a live icon.
+- **Posts in the card.** On a TAK event with a posting schedule, a team's card lists its post for each posting time ("Gate A (0800–1200)") opposite its members, in the same style, and each line can be changed there; changes go through the posting schedule.
+- **Markers.** Team and supervisor markers are drawn only at their TAK positions (faded when stale), never beside the post their Location names; post pins are unchanged. "View on map" goes to the live position. The TAK module reports positions to the dispatch page (`TakEventAgent.onTracking`, a core `UnitTracking`); its own dot markers are gone.
+- **Supersedes** D65's "available teams only" and "write only when the label changes" rules: connected units are kept at their label.
 

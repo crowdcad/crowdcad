@@ -9,7 +9,9 @@ import { getEquipmentIconType } from '@/lib/equipmentIcon';
 import { getStatusColor } from '@/lib/statusColors';
 import { STATUS_COLORS_HEX } from '@/lib/colorTokens';
 import VenueMapZones from '@/components/venue-management/VenueMapZones';
-import { resolvePostName } from '@/lib/locationLabel';
+import type { UnitTracking } from '@/lib/unitTracking';
+import { latLonToPercent } from '@/lib/geo/affine';
+import { layerAlignment } from '@/lib/geo/layers';
 
 function StatusTimer({ since }: { since: number }) {
   const [elapsed, setElapsed] = React.useState(0);
@@ -416,6 +418,10 @@ interface TeamMarkerProps {
   onAddCall?: (teamName: string) => void;
   /** How many other teams at this same post were already placed before this one (0 for the first) — staggers each additional team a bit further right so a shared post/call doesn't stack their pins on top of each other. */
   staggerIndex?: number;
+  /** Drawn exactly at `post`'s position (a live position, D66) rather than offset beside a post pin. */
+  exact?: boolean;
+  /** Drawn faded (a live position that hasn't been updated for a while). */
+  faded?: boolean;
 }
 
 export function TeamMarker({
@@ -428,6 +434,8 @@ export function TeamMarker({
   isSelected,
   onAddCall,
   staggerIndex = 0,
+  exact = false,
+  faded = false,
 }: TeamMarkerProps) {
   const [hovered, setHovered] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -457,7 +465,7 @@ export function TeamMarker({
   // between a team and its post stays a constant size across zoom levels
   // (same treatment as the icon's own counter-scale below), instead of
   // growing when zoomed out and shrinking when zoomed in.
-  const teamOffset = 10 / scale;
+  const teamOffset = exact ? 0 : 10 / scale;
   // Extra teams sharing this exact post (e.g. several teams attached to the
   // same call) step further right one at a time, also counter-scaled so the
   // on-screen spacing between them stays constant too.
@@ -497,6 +505,7 @@ export function TeamMarker({
         transform: `translate(-50%, -50%) scale(${emphasis})`,
         transformOrigin: 'center center',
         zIndex: isSelected || expanded ? 999 : 25,
+        opacity: faded ? 0.45 : 1,
         cursor: 'pointer',
         transition: 'transform 0.15s ease-out',
       }}
@@ -587,9 +596,12 @@ interface SupervisorMarkerProps {
   scale: number;
   /** True when this supervisor was just navigated to (e.g. via their card's "view on map" button) — draws the same attention arrow/enlarge a selected post gets. */
   isSelected?: boolean;
+  /** Drawn exactly at `post`'s position (a live position, D66) rather than offset beside a post pin. */
+  exact?: boolean;
+  faded?: boolean;
 }
 
-export function SupervisorMarker({ supervisor, post, rect, scale, isSelected }: SupervisorMarkerProps) {
+export function SupervisorMarker({ supervisor, post, rect, scale, isSelected, exact = false, faded = false }: SupervisorMarkerProps) {
   const [hovered, setHovered] = useState(false);
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
   const markerRef = useRef<HTMLDivElement>(null);
@@ -602,7 +614,7 @@ export function SupervisorMarker({ supervisor, post, rect, scale, isSelected }: 
   // equipment item sharing the exact same post don't stack on top of each
   // other. Counter-scaled the same way as the other markers' offsets so the
   // on-screen gap stays constant across zoom levels.
-  const supervisorOffset = 10 / scale;
+  const supervisorOffset = exact ? 0 : 10 / scale;
   const left = rect.x + (post.x / 100) * rect.width + supervisorOffset;
   const top = rect.y + (post.y / 100) * rect.height + supervisorOffset;
 
@@ -631,6 +643,7 @@ export function SupervisorMarker({ supervisor, post, rect, scale, isSelected }: 
         transform: `translate(-50%, -50%) scale(${emphasis})`,
         transformOrigin: 'center center',
         zIndex: isSelected ? 999 : 25,
+        opacity: faded ? 0.45 : 1,
         cursor: 'default',
         transition: 'transform 0.15s ease-out',
       }}
@@ -689,6 +702,11 @@ export interface MapOverlay {
   chrome?: React.ReactNode;
   /** On the dispatch Map tab, compact controls for an image layer, shown in the top bar beside the location search. */
   toolbar?: (ctx: { layer: Layer | undefined; layerIndex: number }) => React.ReactNode;
+  /**
+   * Live unit positions (a TAK event, D66). When given, team and supervisor markers are drawn only at these
+   * positions, never beside the post named by their Location; post pins are unchanged.
+   */
+  unitTracking?: UnitTracking;
   /**
    * On the live map of a geo layer (P8, D64), content rendered inside the map, where it can add its own pins with
    * GeoPins (src/components/geo/BasemapView.tsx). Image layers use `markers` instead.
@@ -794,7 +812,6 @@ export function VenueMapWithPosts({
 
   const mapUrl = layers[currentLayer]?.mapUrl || '';
   const posts = layers[currentLayer]?.posts || [];
-  const isPostName = (name: string) => posts.some((p) => typeof p !== 'string' && p.name === name);
 
   // Update container size when component mounts and on resize
   useEffect(() => {
@@ -1013,19 +1030,68 @@ export function VenueMapWithPosts({
                 />
               );
             })}
-            {(() => {
+            {overlay?.unitTracking ? (() => {
+              // Live tracking: each unit at its own position, or not at all (D66).
+              const tracking = overlay.unitTracking;
+              const layer = layers[currentLayer];
+              const alignment = layer ? tracking.alignments[layer.id] ?? layerAlignment(layer) : undefined;
+              if (!alignment) return null;
+              const at = (name: string) => {
+                const p = tracking.positions[name];
+                if (!p) return null;
+                const { x, y } = latLonToPercent(alignment, { lat: p.lat, lon: p.lon });
+                return x < 0 || x > 100 || y < 0 || y > 100 ? null : { post: { name, x, y }, faded: p.stale };
+              };
+              return (
+                <>
+                  {staff.map((team) => {
+                    const pos = at(team.team);
+                    return pos && (
+                      <TeamMarker
+                        key={team.team}
+                        team={team}
+                        post={pos.post}
+                        rect={rect}
+                        teamTimers={teamTimers}
+                        calls={calls}
+                        clinics={clinics}
+                        scale={scale}
+                        isSelected={!!selectedTeamName && team.team === selectedTeamName}
+                        onAddCall={onAddCallForTeam}
+                        exact
+                        faded={pos.faded}
+                      />
+                    );
+                  })}
+                  {supervisor.map((sup) => {
+                    const pos = at(sup.team);
+                    return pos && (
+                      <SupervisorMarker
+                        key={sup.team}
+                        supervisor={sup}
+                        post={pos.post}
+                        rect={rect}
+                        scale={scale}
+                        isSelected={!!selectedSupervisorName && sup.team === selectedSupervisorName}
+                        exact
+                        faded={pos.faded}
+                      />
+                    );
+                  })}
+                </>
+              );
+            })() : (() => {
               // Teams sharing the exact same post (e.g. several teams
               // attached to the same call, all still logged at that post)
               // get staggered further right one at a time instead of
               // stacking on top of each other — see TeamMarker's staggerStep.
               const postOccupancy: { [postName: string]: number } = {};
               return staff.map((team) => {
-                const postName = resolvePostName(team.location, isPostName);
-                const postObj = postName ? posts.find(p => typeof p !== "string" && p.name === postName) : undefined;
-                if (!postName || !postObj || typeof postObj === "string") return null;
+                const postObj = posts.find(p => (typeof p === "string" ? p : p.name) === team.location);
+                if (!postObj || typeof postObj === "string") return null;
 
-                const staggerIndex = postOccupancy[postName] ?? 0;
-                postOccupancy[postName] = staggerIndex + 1;
+                const staggerIndex = postOccupancy[team.location] ?? 0;
+                postOccupancy[team.location] = staggerIndex + 1;
 
                 return (
                   <TeamMarker
@@ -1044,9 +1110,8 @@ export function VenueMapWithPosts({
                 );
               });
             })()}
-            {supervisor.map((sup) => {
-              const postName = resolvePostName(sup.location, isPostName);
-              const postObj = postName ? posts.find(p => typeof p !== "string" && p.name === postName) : undefined;
+            {!overlay?.unitTracking && supervisor.map((sup) => {
+              const postObj = posts.find(p => (typeof p === "string" ? p : p.name) === sup.location);
               if (!postObj || typeof postObj === "string") return null;
 
               return (

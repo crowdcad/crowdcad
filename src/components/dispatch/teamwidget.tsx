@@ -2,7 +2,7 @@ import React from 'react';
 import { Event, Staff } from '@/app/types';
 import TeamCard from '@/components/dispatch/teamcard';
 import TeamCardCondensed from '@/components/dispatch/teamcard-condensed';
-import { resolvePostName } from '@/lib/locationLabel';
+import { isUnitConnected, type UnitTracking } from '@/lib/unitTracking';
 
 type TeamWidgetProps = {
   staff: Staff;
@@ -21,6 +21,9 @@ type TeamWidgetProps = {
   onViewOnMap?: (teamName: string) => void;
   /** Every post name actually placeable on the map — gates whether the "view on map" button is clickable (disabled if this team/supervisor's location isn't one of them). */
   knownMapLocations?: Set<string>;
+  /** Live positions on a TAK event (D66); null otherwise. */
+  unitTracking?: UnitTracking | null;
+  onPostAssignment?: (time: string, post: string, team: string) => void;
 };
 
 const TeamWidget = React.memo(function TeamWidget(props: TeamWidgetProps) {
@@ -39,11 +42,15 @@ const TeamWidget = React.memo(function TeamWidget(props: TeamWidgetProps) {
     hasVenueMap,
     onViewOnMap,
     knownMapLocations,
+    unitTracking,
+    onPostAssignment,
   } = props;
 
   const CardComponent = cardViewMode === 'condensed' ? TeamCardCondensed : TeamCard;
-  // A live-tracking label ("Near Gate A") locates at its post.
-  const canLocateOnMap = !!hasVenueMap && !!knownMapLocations && !!resolvePostName(staff.location, (name) => knownMapLocations.has(name));
+  // With live tracking the map shows where the unit is, whatever its Location says.
+  const canLocateOnMap = !!hasVenueMap && (unitTracking
+    ? !!unitTracking.positions[staff.team]
+    : !!staff.location && !!knownMapLocations?.has(staff.location));
 
   return (
     <CardComponent
@@ -60,6 +67,8 @@ const TeamWidget = React.memo(function TeamWidget(props: TeamWidgetProps) {
       hasVenueMap={hasVenueMap}
       onViewOnMap={onViewOnMap}
       canLocateOnMap={canLocateOnMap}
+      locationTracked={isUnitConnected(unitTracking, staff.team)}
+      onPostAssignment={onPostAssignment}
     />
   );
 });

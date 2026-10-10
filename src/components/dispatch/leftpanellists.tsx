@@ -9,6 +9,7 @@ import type { Event, Staff, Supervisor, EquipmentItem } from '@/app/types';
 import TeamWidget from '@/components/dispatch/teamwidget';
 import EquipmentCard from '@/components/dispatch/equipmentcard';
 import { sortTeams, type TeamSortMode } from '@/lib/teamSort';
+import type { UnitTracking } from '@/lib/unitTracking';
 
 type SharedTeamListProps = {
   event: Event;
@@ -18,6 +19,8 @@ type SharedTeamListProps = {
   cardViewMode: 'normal' | 'condensed';
   hasVenueMap: boolean;
   knownMapLocations: Set<string>;
+  /** Live positions on a TAK event (D66); null otherwise. */
+  unitTracking?: UnitTracking | null;
   onRefreshTeamPost: (team: string) => void;
   onNewCall: (team: string) => void;
 };
@@ -33,10 +36,12 @@ export type TeamListProps = SharedTeamListProps & {
   onEditTeam: (staff: Staff) => void;
   onDeleteTeam: (team: string) => void;
   onViewOnMap: (team: string) => void;
+  /** Edits a team's post for one posting time (shown in the card on TAK events with a schedule). */
+  onPostAssignment?: (time: string, post: string, team: string) => void;
 };
 
 export function TeamList({
-  sortMode, onStatusChange, onLocationChange, onEditTeam, onDeleteTeam, onViewOnMap,
+  sortMode, onStatusChange, onLocationChange, onEditTeam, onDeleteTeam, onViewOnMap, onPostAssignment,
   emptyText, ...shared
 }: TeamListProps & { emptyText: React.ReactNode }) {
   const staff = shared.event.staff;
@@ -52,6 +57,7 @@ export function TeamList({
           onEditTeam={onEditTeam}
           onDeleteTeam={onDeleteTeam}
           onViewOnMap={onViewOnMap}
+          onPostAssignment={onPostAssignment}
           {...shared}
         />
       ))}

@@ -2,23 +2,27 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Event } from '@/app/types';
+import type { MapAlignment } from '@/lib/geo/types';
+import type { UnitTracking } from '@/lib/unitTracking';
 import { useTakEvent } from '../data/hub';
 import { linkDevice, listMappings, saveCallState, type TakDeviceMapping } from '../data/takStore';
 import { isStale, proposeAutoLinks, teamIdsOnCall, teamPositions } from '../lib/linking';
 import { ensureTeamIds, takTeams } from '../lib/teamIds';
 import { alignmentFor } from '../data/alignmentStore';
-import { eligibleForAutoLocation, saveAutoLocations, type AutoLocationChange } from '../data/autoLocationStore';
+import { saveAutoLocations, type AutoLocationChange } from '../data/autoLocationStore';
 import { EMPTY_TRACK, postPoints, step, type TrackState } from '../lib/autoLocation';
 import { getEventVenueLayers } from '@/lib/zones';
-import { resolvePostName } from '@/lib/locationLabel';
 
 /**
  * Background work for an open TAK event's dispatch page, with no UI. It runs
  * whichever tab is showing:
  * - gives teams created before team ids existed an id (TAK events only);
  * - auto-links devices (remembered mapping first, then a unique callsign);
- * - fills available teams' Location from their position: the nearest post,
- *   in words when not at it, steadied by hysteresis (D65);
+ * - fills every connected unit's Location from its position, whatever its
+ *   status: the nearest post, in words when not at it, steadied by
+ *   hysteresis (D65, D66);
+ * - reports live positions to the dispatch page (`onTracking`), which draws
+ *   team markers there and locks connected units' Location (D66);
  * - in Detailed history mode, publishes which teams are on a call, as opaque
  *   team ids only, so the bridge can keep extra points during calls without
  *   reading the event.
@@ -27,9 +31,11 @@ export interface TakEventAgentProps {
   eventId: string;
   event: Event;
   uid: string;
+  /** Live positions by unit name, and the alignment for each layer. */
+  onTracking?: (tracking: UnitTracking) => void;
 }
 
-export default function TakEventAgent({ eventId, event, uid }: TakEventAgentProps) {
+export default function TakEventAgent({ eventId, event, uid, onTracking }: TakEventAgentProps) {
   const tak = useTakEvent(eventId);
   const [mappings, setMappings] = useState<TakDeviceMapping[]>([]);
   const attempted = useRef(new Set<string>());
@@ -61,44 +67,72 @@ export default function TakEventAgent({ eventId, event, uid }: TakEventAgentProp
     }
   }, [active, tak.live, tak.links, teams, mappings, eventId, uid]);
 
-  // Live location labels (D65). Every open dispatch page computes the same
-  // labels from the same positions; the write is a no-op once one has landed.
+  // Live location labels (D65, D66). Every open dispatch page computes the
+  // same labels from the same positions; the write is a no-op once one has landed.
   const tracks = useRef(new Map<string, TrackState>());
-  const wasEligible = useRef(new Map<string, boolean>());
+  const inFlight = useRef(new Set<string>());
   const [tick, setTick] = useState(0);
   useEffect(() => {
     if (!active) return;
     const t = setInterval(() => setTick((n) => n + 1), 5_000);
     return () => clearInterval(t);
   }, [active]);
-  const posts = useMemo(
-    () => postPoints(getEventVenueLayers(event), (l) => alignmentFor(l, tak.alignments, tak.venueAlignments)),
-    [event, tak.alignments, tak.venueAlignments],
-  );
+  const layers = useMemo(() => getEventVenueLayers(event), [event]);
+  const alignments = useMemo(() => {
+    const out: Record<string, MapAlignment> = {};
+    for (const l of layers) {
+      const a = alignmentFor(l, tak.alignments, tak.venueAlignments);
+      if (a) out[l.id] = a;
+    }
+    return out;
+  }, [layers, tak.alignments, tak.venueAlignments]);
+  const posts = useMemo(() => postPoints(layers, (l) => alignments[l.id]), [layers, alignments]);
+  const positions = useMemo(() => teamPositions(tak.live, tak.links, teams), [tak.live, tak.links, teams]);
+
   useEffect(() => {
     if (!active || !posts.length) return;
     const now = Date.now();
-    const byTeam = new Map(teamPositions(tak.live, tak.links, teams).map((tp) => [tp.team.id, tp.position]));
-    const isPost = (name: string) => posts.some((p) => p.name === name);
+    const byTeam = new Map(positions.map((tp) => [tp.team.id, tp.position]));
     const changes: AutoLocationChange[] = [];
     for (const unit of [...(event.staff ?? []), ...(event.supervisor ?? [])]) {
       if (!unit.id) continue;
       const fix = byTeam.get(unit.id);
+      const connected = !!fix && !isStale(fix, now);
       const prev = tracks.current.get(unit.id) ?? EMPTY_TRACK;
-      const next = step(prev, fix && !isStale(fix, now) ? { lat: fix.lat, lon: fix.lon } : null, posts, now);
+      const next = step(prev, connected ? { lat: fix!.lat, lon: fix!.lon } : null, posts, now);
       tracks.current.set(unit.id, next);
       const label = next.current?.label;
-      const eligible = eligibleForAutoLocation(unit);
-      const becameEligible = eligible && wasEligible.current.get(unit.id) === false;
-      wasEligible.current.set(unit.id, eligible);
-      // Write only when the label changes (or the team is back from a call), so a dispatcher's own edit
-      // stays until the team moves.
-      if (!label || !eligible || unit.location === label || (label === prev.current?.label && !becameEligible)) continue;
-      changes.push({ teamId: unit.id, from: unit.location || '', label, newPost: resolvePostName(unit.location, isPost) !== next.current!.post });
+      // A connected unit's Location is kept at its label: it can't be edited meanwhile, and no other write moves it.
+      if (!connected || !label || unit.location === label) continue;
+      const key = `${unit.id}:${label}`;
+      if (inFlight.current.has(key)) continue;
+      inFlight.current.add(key);
+      changes.push({ teamId: unit.id, from: unit.location || '', label });
     }
-    if (changes.length) void saveAutoLocations(eventId, changes).catch(() => {});
+    if (changes.length) {
+      void saveAutoLocations(eventId, changes)
+        .catch(() => {})
+        .finally(() => changes.forEach((c) => inFlight.current.delete(`${c.teamId}:${c.label}`)));
+    }
     // tick lets a pending label take effect after its dwell without a new position.
-  }, [active, posts, tak.live, tak.links, teams, event.staff, event.supervisor, eventId, tick]);
+  }, [active, posts, positions, event.staff, event.supervisor, eventId, tick]);
+
+  // Live positions for the dispatch page: markers and locked Locations (D66).
+  const lastReport = useRef('');
+  useEffect(() => {
+    if (!onTracking) return;
+    const now = Date.now();
+    const tracking: UnitTracking = { positions: {}, alignments };
+    if (config?.enabled && !config.closed) {
+      for (const { team, position } of positions) {
+        tracking.positions[team.name] = { lat: position.lat, lon: position.lon, stale: isStale(position, now) };
+      }
+    }
+    const key = JSON.stringify(tracking);
+    if (key === lastReport.current) return;
+    lastReport.current = key;
+    onTracking(tracking);
+  }, [onTracking, positions, alignments, config?.enabled, config?.closed, tick]);
 
   const onCall = useMemo(() => teamIdsOnCall(event.calls, teams), [event.calls, teams]);
   useEffect(() => {
