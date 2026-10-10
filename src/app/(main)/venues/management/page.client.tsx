@@ -3,6 +3,7 @@
 'use client';
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import dynamic from 'next/dynamic';
 import Image from 'next/image';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/hooks/useauth';
@@ -16,6 +17,8 @@ import { randomId, stripUndefined } from '@/lib/utils';
 import { uploadWithRetry } from '@/lib/uploadUtils';
 import { useZoomPan } from '@/hooks/useZoomPan';
 import { MAP_CHECKER_BG } from '@/lib/mapStyles';
+import { isGeoLayer, layerArea } from '@/lib/geo/layers';
+import { postAt, withCoordinates, zonePointsFor, type LatLng } from '@/lib/geo/positions';
 import NewLayerModal from '@/components/modals/venue/newlayer';
 import GeoJsonImportModal from '@/components/modals/venue/geojsonimport';
 import LocationEditModal from '@/components/modals/venue/locationedit';
@@ -53,6 +56,13 @@ import {
   HousePlus,
 } from 'lucide-react';
 
+
+// Real-world maps (P8, D64): the Map alignment step and the drawn-area map
+// source. Loaded on demand, so the live map's code stays out of this page's
+// first load.
+const MapAlignmentStep = dynamic(() => import('@/components/venue-management/MapAlignmentStep'), { ssr: false });
+const AreaEditor = dynamic(() => import('@/components/geo/AreaEditor'), { ssr: false });
+const GeoLayerMap = dynamic(() => import('@/components/geo/GeoLayerMap'), { ssr: false });
 
 // Props: none required for this page
 
@@ -105,6 +115,8 @@ export default function VenueManagementPageClient() {
   // naming dialog, mirroring pendingMarker's place-then-name flow.
   const [pendingZone, setPendingZone] = useState<{
     points: { x: number; y: number }[];
+    /** Set when the zone is drawn on the live map (a geo layer): its vertices in coordinates. */
+    coords?: LatLng[];
     layerIdx: number;
     isDrawing: boolean;
   } | null>(null);
@@ -216,23 +228,29 @@ export default function VenueManagementPageClient() {
   const [editingEquipmentIndex, setEditingEquipmentIndex] = useState<number | null>(null);
   const [equipmentEditInput, setEquipmentEditInput] = useState('');
 
-  const STEP_ORDER = ['basics', 'map', 'locations', 'equipment', 'review'] as const;
+  // Map alignment only applies to map images; a venue with none (no map, or only drawn areas) skips it.
+  const hasMapImage = venueData.layers.some((l) => !!l.mapUrl) || !!mapFile;
+  const STEP_ORDER: string[] = ['basics', 'map', ...(hasMapImage ? ['align'] : []), 'locations', 'equipment', 'review'];
   const [currentStepId, setCurrentStepId] = useState<string>('basics');
 
 
+  // One local URL per chosen map file. Making it inside the preview effect
+  // below created a new URL (and reset zoom/pan) on every layer change,
+  // e.g. each marker edit or TAK alignment point, while a new image was
+  // still unsaved; anything keyed by the image URL then started over.
+  const mapFileUrl = useMemo(() => (mapFile ? URL.createObjectURL(mapFile) : null), [mapFile]);
+  useEffect(() => {
+    if (!mapFileUrl) return;
+    // Reset zoom/pan when a new image is chosen
+    setScale(1);
+    setPosition({ x: 0, y: 0 });
+    return () => URL.revokeObjectURL(mapFileUrl);
+  }, [mapFileUrl, setPosition, setScale]);
+
   // Update preview when a new map file is selected
   useEffect(() => {
-    if (mapFile && pendingLayer === currentLayer) {
-      const url = URL.createObjectURL(mapFile);
-      setPreviewUrl(url);
-      // Reset zoom/pan when new image loads
-      setScale(1);
-      setPosition({ x: 0, y: 0 });
-      return () => URL.revokeObjectURL(url);
-    } else {
-      setPreviewUrl(venueData.layers[currentLayer]?.mapUrl || null);
-    }
-  }, [mapFile, pendingLayer, currentLayer, venueData.layers, setPosition, setScale]);
+    setPreviewUrl(mapFileUrl && pendingLayer === currentLayer ? mapFileUrl : venueData.layers[currentLayer]?.mapUrl || null);
+  }, [mapFileUrl, pendingLayer, currentLayer, venueData.layers]);
 
   // Auto-focus marker name input when pending marker is set
   useEffect(() => {
@@ -260,7 +278,7 @@ export default function VenueManagementPageClient() {
         setZoneNameInput('');
         setZoneColorInput('');
         setZoneIsDispatchZoneInput(false);
-      } else if (e.key === 'Enter' && pendingZone.isDrawing && pendingZone.points.length >= 3) {
+      } else if (e.key === 'Enter' && pendingZone.isDrawing && (pendingZone.coords ?? pendingZone.points).length >= 3) {
         setPendingZone((prev) => (prev ? { ...prev, isDrawing: false } : prev));
       }
     };
@@ -477,7 +495,7 @@ export default function VenueManagementPageClient() {
     if (!pendingZone) return;
 
     const name = zoneNameInput.trim();
-    if (!name || pendingZone.points.length < 3) {
+    if (!name || (pendingZone.coords ?? pendingZone.points).length < 3) {
       cancelZoneDrawing();
       return;
     }
@@ -491,7 +509,8 @@ export default function VenueManagementPageClient() {
       id: randomId(),
       name,
       color: zoneColorInput || getNextZoneColor(venueData.layers[pendingZone.layerIdx]?.zones || []),
-      points: pendingZone.points,
+      points: pendingZone.coords ? zonePointsFor(pendingZone.coords, layersForMapDisplay[pendingZone.layerIdx]) : pendingZone.points,
+      ...(pendingZone.coords ? { coords: pendingZone.coords } : {}),
       isDispatchZone: zoneIsDispatchZoneInput,
     };
 
@@ -810,7 +829,13 @@ export default function VenueManagementPageClient() {
 
       // Update current layer's mapUrl if new map uploaded
       const updatedLayers = venueData.layers.map((layer, idx) => {
-        const layerData = idx === (pendingLayer ?? currentLayer) && newMapUrl ? { ...layer, mapUrl: newMapUrl } : layer;
+        let layerData = idx === (pendingLayer ?? currentLayer) && newMapUrl ? { ...layer, mapUrl: newMapUrl } : layer;
+        // An alignment made against the new image's local preview follows it to its uploaded URL.
+        if (layerData !== layer && layer.alignment && layer.alignment.mapUrl === previewUrl) {
+          layerData = { ...layerData, alignment: { ...layer.alignment, mapUrl: newMapUrl! } };
+        }
+        // On an aligned layer, posts and zones placed on the image also get coordinates (D64).
+        layerData = withCoordinates(layerData);
         // Remove undefined properties from each layer
         const filteredLayer: Record<string, unknown> = {};
         Object.entries(layerData).forEach(([key, value]) => {
@@ -996,7 +1021,7 @@ export default function VenueManagementPageClient() {
     setCurrentLayer(Math.max(0, currentLayer - 1));
   };
 
-  const hasMapForStep = Boolean(previewUrl);
+  const hasMapForStep = Boolean(previewUrl) || !!layerArea(venueData.layers[currentLayer]);
   // A just-uploaded map isn't in venueData.layers yet — it only becomes a
   // real mapUrl there once the venue is saved (handleSubmit uploads it and
   // patches this layer in). The interactive map already shows it via
@@ -1008,7 +1033,7 @@ export default function VenueManagementPageClient() {
     : venueData.layers;
   // The Map step always renders full-width (header + its own interactive
   // map), never the half-split every other map-showing step uses.
-  const showMapPanel = currentStepId !== 'basics' && currentStepId !== 'map' && currentStepId !== 'review';
+  const showMapPanel = currentStepId !== 'basics' && currentStepId !== 'map' && currentStepId !== 'align' && currentStepId !== 'review';
   const showMapColumn = showMapPanel && hasMapForStep;
   // The interactive editor (place/drag markers) only applies to Locations
   // (placing a location directly on the map); Equipment and Review just
@@ -1088,6 +1113,13 @@ export default function VenueManagementPageClient() {
             className="text-xs text-surface-light/60 underline transition hover:text-status-blue"
           >
             Or import a GIS map with pre-placed points and areas
+          </button>
+          <button
+            type="button"
+            onClick={() => setCurrentArea({ polygon: [] })}
+            className="text-xs text-surface-light/60 underline transition hover:text-status-blue"
+          >
+            Or draw the area on the real map, with no image
           </button>
         </div>
       </Card>
@@ -1389,7 +1421,140 @@ export default function VenueManagementPageClient() {
     </div>
   );
 
-  const rightPanelContent = currentStepId === 'locations' ? locationsMapPanel : readOnlyMapPanel;
+  // A geo layer (aligned image or drawn area) places and shows locations on the live map (P8, D64).
+  const currentDisplayLayer = layersForMapDisplay[currentLayer];
+  const currentIsGeo = !!currentDisplayLayer && isGeoLayer(currentDisplayLayer);
+
+  const handleGeoMapClick = (p: LatLng) => {
+    if (!currentDisplayLayer) return;
+    if (isAddAreaMode) {
+      if (!pendingZone) {
+        setZoneColorInput(getNextZoneColor(venueData.layers[currentLayer]?.zones || []));
+        setPendingZone({ points: [], coords: [p], layerIdx: currentLayer, isDrawing: true });
+      } else if (pendingZone.isDrawing) {
+        setPendingZone({ ...pendingZone, coords: [...(pendingZone.coords ?? []), p] });
+      }
+      return;
+    }
+    if (!isAddMarkerMode || pendingMarker) return;
+    const newPost = postAt({ name: '', x: null, y: null }, p, currentDisplayLayer);
+    setVenueData((prev) => {
+      const newLayers = [...prev.layers];
+      newLayers[currentLayer] = { ...newLayers[currentLayer], posts: [...newLayers[currentLayer].posts, newPost] };
+      return { ...prev, layers: newLayers };
+    });
+    setPendingMarker({ x: newPost.x ?? 0, y: newPost.y ?? 0, layerIdx: currentLayer, postIdx: venueData.layers[currentLayer].posts.length });
+    setMarkerNameInput('');
+    setMarkerIsClinicInput(false);
+  };
+
+  const moveGeoPost = (postIdx: number, p: LatLng) => {
+    if (!currentDisplayLayer) return;
+    setVenueData((prev) => {
+      const newLayers = [...prev.layers];
+      const posts = [...newLayers[currentLayer].posts];
+      const post = posts[postIdx];
+      if (!post || typeof post === 'string') return prev;
+      posts[postIdx] = postAt(post, p, currentDisplayLayer);
+      newLayers[currentLayer] = { ...newLayers[currentLayer], posts };
+      return { ...prev, layers: newLayers };
+    });
+  };
+
+  const geoDrawing = pendingZone?.isDrawing && pendingZone.coords ? pendingZone : null;
+  const geoLocationsPanel = currentDisplayLayer ? (
+    <div className="flex flex-col h-full">
+      <div className="flex flex-shrink-0 flex-wrap items-center gap-2 pb-2">
+        <MarkerModeToggleButton
+          isAddMarkerMode={isAddMarkerMode}
+          onToggle={() => {
+            if (!isAddMarkerMode) cancelZoneDrawing();
+            setIsAddAreaMode(false);
+            setIsAddMarkerMode(!isAddMarkerMode);
+          }}
+        />
+        <AreaModeToggleButton
+          isAddAreaMode={isAddAreaMode}
+          onToggle={() => {
+            if (!isAddAreaMode) {
+              if (pendingMarker) cancelMarkerName();
+              setIsAddMarkerMode(false);
+            } else {
+              cancelZoneDrawing();
+            }
+            setIsAddAreaMode(!isAddAreaMode);
+          }}
+        />
+        {geoDrawing && (geoDrawing.coords?.length ?? 0) >= 3 && (
+          <Button size="sm" className="bg-accent text-surface-light" onPress={() => setPendingZone({ ...geoDrawing, isDrawing: false })}>
+            Finish area
+          </Button>
+        )}
+        <span className="text-xs text-surface-faint">
+          {isAddMarkerMode
+            ? 'Click anywhere on the map to place a location. Drag a location to move it.'
+            : isAddAreaMode
+              ? geoDrawing
+                ? `${geoDrawing.coords?.length ?? 0} points placed. Add at least 3, then press Finish area or Enter.`
+                : 'Click on the map to start placing the area\'s points.'
+              : 'Drag a location to move it.'}
+        </span>
+      </div>
+      <div className="relative min-h-0 flex-1 overflow-hidden rounded-t-sm">
+        <GeoLayerMap
+          className="absolute inset-0"
+          layer={currentDisplayLayer}
+          onMapClick={isAddMarkerMode || isAddAreaMode ? handleGeoMapClick : undefined}
+          cursor={isAddMarkerMode || isAddAreaMode ? 'crosshair' : 'grab'}
+          onPostMove={moveGeoPost}
+          draftZone={geoDrawing ? { coords: geoDrawing.coords ?? [], color: zoneColorInput || '#3eb1fd' } : null}
+        />
+        {pendingMarker && (
+          <PendingMarkerDialog
+            markerNameInput={markerNameInput}
+            markerInputRef={markerInputRef}
+            setMarkerNameInput={setMarkerNameInput}
+            markerIsClinicInput={markerIsClinicInput}
+            setMarkerIsClinicInput={setMarkerIsClinicInput}
+            onConfirm={confirmMarkerName}
+            onCancel={cancelMarkerName}
+          />
+        )}
+        {pendingZone && !pendingZone.isDrawing && (
+          <PendingZoneDialog
+            zoneNameInput={zoneNameInput}
+            zoneNameInputRef={zoneNameInputRef}
+            setZoneNameInput={setZoneNameInput}
+            zoneColorInput={zoneColorInput}
+            setZoneColorInput={setZoneColorInput}
+            zoneIsDispatchZoneInput={zoneIsDispatchZoneInput}
+            setZoneIsDispatchZoneInput={setZoneIsDispatchZoneInput}
+            onConfirm={confirmZoneName}
+            onCancel={cancelZoneDrawing}
+          />
+        )}
+      </div>
+      {simpleLayerBar}
+    </div>
+  ) : null;
+
+  const geoReadOnlyPanel = currentDisplayLayer ? (
+    <div className="flex flex-col h-full">
+      <div className="relative min-h-0 flex-1 overflow-hidden rounded-t-sm">
+        <GeoLayerMap className="absolute inset-0" layer={currentDisplayLayer} />
+      </div>
+      {simpleLayerBar}
+    </div>
+  ) : null;
+
+  const rightPanelContent =
+    currentStepId === 'locations'
+      ? currentIsGeo
+        ? geoLocationsPanel
+        : locationsMapPanel
+      : currentIsGeo
+        ? geoReadOnlyPanel
+        : readOnlyMapPanel;
 
   const basicsStep = (
     <div className="flex h-full items-center justify-center">
@@ -1412,10 +1577,35 @@ export default function VenueManagementPageClient() {
     </div>
   );
 
+  // A layer drawn as an area on the real map instead of an image (P8, D64).
+  const currentArea = !venueData.layers[currentLayer]?.mapUrl && !mapFile ? venueData.layers[currentLayer]?.area : undefined;
+  const setCurrentArea = (area: Layer['area'] | null) =>
+    setVenueData((prev) => ({
+      ...prev,
+      layers: prev.layers.map((l, i) => {
+        if (i !== currentLayer) return l;
+        const rest = { ...l };
+        delete rest.area;
+        return area ? { ...rest, area } : rest;
+      }),
+    }));
+  const areaEditor = (
+    <div className="minimal-scrollbar flex h-full flex-col gap-2 overflow-y-auto">
+      <AreaEditor area={currentArea?.polygon.length ? currentArea : undefined} onChange={(area) => setCurrentArea(area ?? { polygon: [] })} />
+      <button
+        type="button"
+        onClick={() => setCurrentArea(null)}
+        className="self-start text-xs text-surface-light/60 underline transition hover:text-status-blue"
+      >
+        Use an image instead
+      </button>
+    </div>
+  );
+
   const mapFloorsStep = (
     <div className="flex flex-col h-full">
       {mapStepHeader}
-      <div className="flex-1 min-h-0">{hasMapForStep ? interactiveMapPanel : mapUploadPrompt}</div>
+      <div className="flex-1 min-h-0">{previewUrl ? interactiveMapPanel : currentArea ? areaEditor : mapUploadPrompt}</div>
     </div>
   );
 
@@ -1629,12 +1819,36 @@ export default function VenueManagementPageClient() {
   const steps: WizardStep[] = [
     { id: 'basics', label: 'Venue Configuration', component: basicsStep, isComplete: hasName },
     { id: 'map', label: 'Map', component: mapFloorsStep, isComplete: hasName },
+    ...(hasMapImage ? [{
+      id: 'align',
+      label: 'Map alignment',
+      component: userId ? (
+        <MapAlignmentStep
+          uid={userId}
+          layers={layersForMapDisplay}
+          onAlignmentChange={(layerId, alignment) =>
+            setVenueData((prev) => ({
+              ...prev,
+              layers: prev.layers.map((l) => {
+                if (l.id !== layerId) return l;
+                const rest = { ...l };
+                delete rest.takAlignment;
+                if (alignment) return { ...rest, alignment };
+                delete rest.alignment;
+                return rest;
+              }),
+            }))
+          }
+        />
+      ) : null,
+      isComplete: hasName,
+    }] : []),
     { id: 'locations', label: 'Locations', component: locationsStep, isComplete: hasName },
     { id: 'equipment', label: 'Equipment', component: equipmentStep, isComplete: hasName },
     { id: 'review', label: 'Review', component: reviewStep, isComplete: hasName },
   ];
 
-  const stepIdx = STEP_ORDER.indexOf(currentStepId as (typeof STEP_ORDER)[number]);
+  const stepIdx = STEP_ORDER.indexOf(currentStepId);
   const isFirstStep = stepIdx <= 0;
   const isLastStep = stepIdx === STEP_ORDER.length - 1;
   const goNext = () => {

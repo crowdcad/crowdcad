@@ -9,6 +9,9 @@ import { getEquipmentIconType } from '@/lib/equipmentIcon';
 import { getStatusColor } from '@/lib/statusColors';
 import { STATUS_COLORS_HEX } from '@/lib/colorTokens';
 import VenueMapZones from '@/components/venue-management/VenueMapZones';
+import type { UnitTracking } from '@/lib/unitTracking';
+import { latLonToPercent } from '@/lib/geo/affine';
+import { layerAlignment } from '@/lib/geo/layers';
 
 function StatusTimer({ since }: { since: number }) {
   const [elapsed, setElapsed] = React.useState(0);
@@ -40,7 +43,7 @@ function isPostObject(post: unknown): post is { name: string; x: number; y: numb
   );
 }
 
-interface ImageRect {
+export interface ImageRect {
   x: number;
   y: number;
   width: number;
@@ -58,7 +61,7 @@ interface PostMarkerProps {
   onAddCall?: (postName: string) => void;
 }
 
-function PostMarker({ post, rect, scale, isSelected, onAddCall }: PostMarkerProps) {
+export function PostMarker({ post, rect, scale, isSelected, onAddCall }: PostMarkerProps) {
   const [hovered, setHovered] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
@@ -246,7 +249,7 @@ interface EquipmentMarkerProps {
   isSelected?: boolean;
 }
 
-function EquipmentMarker({
+export function EquipmentMarker({
   equipment,
   post,
   rect,
@@ -415,9 +418,13 @@ interface TeamMarkerProps {
   onAddCall?: (teamName: string) => void;
   /** How many other teams at this same post were already placed before this one (0 for the first) — staggers each additional team a bit further right so a shared post/call doesn't stack their pins on top of each other. */
   staggerIndex?: number;
+  /** Drawn exactly at `post`'s position (a live position, D66) rather than offset beside a post pin. */
+  exact?: boolean;
+  /** Drawn faded (a live position that hasn't been updated for a while). */
+  faded?: boolean;
 }
 
-function TeamMarker({
+export function TeamMarker({
   team,
   post,
   rect,
@@ -427,6 +434,8 @@ function TeamMarker({
   isSelected,
   onAddCall,
   staggerIndex = 0,
+  exact = false,
+  faded = false,
 }: TeamMarkerProps) {
   const [hovered, setHovered] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -456,7 +465,7 @@ function TeamMarker({
   // between a team and its post stays a constant size across zoom levels
   // (same treatment as the icon's own counter-scale below), instead of
   // growing when zoomed out and shrinking when zoomed in.
-  const teamOffset = 10 / scale;
+  const teamOffset = exact ? 0 : 10 / scale;
   // Extra teams sharing this exact post (e.g. several teams attached to the
   // same call) step further right one at a time, also counter-scaled so the
   // on-screen spacing between them stays constant too.
@@ -496,6 +505,7 @@ function TeamMarker({
         transform: `translate(-50%, -50%) scale(${emphasis})`,
         transformOrigin: 'center center',
         zIndex: isSelected || expanded ? 999 : 25,
+        opacity: faded ? 0.45 : 1,
         cursor: 'pointer',
         transition: 'transform 0.15s ease-out',
       }}
@@ -586,9 +596,12 @@ interface SupervisorMarkerProps {
   scale: number;
   /** True when this supervisor was just navigated to (e.g. via their card's "view on map" button) — draws the same attention arrow/enlarge a selected post gets. */
   isSelected?: boolean;
+  /** Drawn exactly at `post`'s position (a live position, D66) rather than offset beside a post pin. */
+  exact?: boolean;
+  faded?: boolean;
 }
 
-function SupervisorMarker({ supervisor, post, rect, scale, isSelected }: SupervisorMarkerProps) {
+export function SupervisorMarker({ supervisor, post, rect, scale, isSelected, exact = false, faded = false }: SupervisorMarkerProps) {
   const [hovered, setHovered] = useState(false);
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
   const markerRef = useRef<HTMLDivElement>(null);
@@ -601,7 +614,7 @@ function SupervisorMarker({ supervisor, post, rect, scale, isSelected }: Supervi
   // equipment item sharing the exact same post don't stack on top of each
   // other. Counter-scaled the same way as the other markers' offsets so the
   // on-screen gap stays constant across zoom levels.
-  const supervisorOffset = 10 / scale;
+  const supervisorOffset = exact ? 0 : 10 / scale;
   const left = rect.x + (post.x / 100) * rect.width + supervisorOffset;
   const top = rect.y + (post.y / 100) * rect.height + supervisorOffset;
 
@@ -630,6 +643,7 @@ function SupervisorMarker({ supervisor, post, rect, scale, isSelected }: Supervi
         transform: `translate(-50%, -50%) scale(${emphasis})`,
         transformOrigin: 'center center',
         zIndex: isSelected ? 999 : 25,
+        opacity: faded ? 0.45 : 1,
         cursor: 'default',
         transition: 'transform 0.15s ease-out',
       }}
@@ -680,6 +694,39 @@ function SupervisorMarker({ supervisor, post, rect, scale, isSelected }: Supervi
   );
 }
 
+/** Optional add-on layer for the map, e.g. TAK live tracking. Omitted, the map renders exactly as before. */
+export interface MapOverlay {
+  /** Rendered inside the zoomed/panned map, like the built-in markers. `rect` is the image's contained rect in container pixels. */
+  markers?: (ctx: { layer: Layer | undefined; layerIndex: number; rect: { x: number; y: number; width: number; height: number }; scale: number }) => React.ReactNode;
+  /** Rendered above the map, unscaled (panels, badges). */
+  chrome?: React.ReactNode;
+  /** On the dispatch Map tab, compact controls for an image layer, shown in the top bar beside the location search. */
+  toolbar?: (ctx: { layer: Layer | undefined; layerIndex: number }) => React.ReactNode;
+  /**
+   * Live unit positions (a TAK event, D66). When given, team and supervisor markers are drawn only at these
+   * positions, never beside the post named by their Location; post pins are unchanged.
+   */
+  unitTracking?: UnitTracking;
+  /**
+   * On the live map of a geo layer (P8, D64), content rendered inside the map, where it can add its own pins with
+   * GeoPins (src/components/geo/BasemapView.tsx). Image layers use `markers` instead.
+   */
+  geoMarkers?: (ctx: { layer: Layer | undefined; layerIndex: number }) => React.ReactNode;
+  /**
+   * Rendered beneath the map image, inside the zoomed/panned map (e.g. a basemap). `container` is the map box in
+   * unscaled pixels. `setImageOpacity` lets it fade the image so what is beneath shows through; the image returns to
+   * fully opaque when no underlay is given.
+   */
+  underlay?: (ctx: {
+    layer: Layer | undefined;
+    layerIndex: number;
+    rect: { x: number; y: number; width: number; height: number };
+    container: { width: number; height: number };
+    scale: number;
+    setImageOpacity: (opacity: number) => void;
+  }) => React.ReactNode;
+}
+
 export interface VenueMapWithPostsProps {
   layers: Layer[];
   currentLayer: number;
@@ -720,6 +767,8 @@ export interface VenueMapWithPostsProps {
   onAddCallAtPost?: (postName: string) => void;
   /** Same, but from clicking a team marker — prefills the assigned team instead of the location. */
   onAddCallForTeam?: (teamName: string) => void;
+  /** Optional add-on layer (see MapOverlay). */
+  overlay?: MapOverlay;
 }
 
 export function VenueMapWithPosts({
@@ -751,10 +800,13 @@ export function VenueMapWithPosts({
   selectedEquipmentName,
   onAddCallAtPost,
   onAddCallForTeam,
+  overlay,
 }: VenueMapWithPostsProps) {
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   const [naturalSize, setNaturalSize] = useState({ width: 0, height: 0 });
   const [imageLoaded, setImageLoaded] = useState(false);
+  const [underlayImageOpacity, setUnderlayImageOpacity] = useState(1);
+  const imageOpacity = overlay?.underlay ? underlayImageOpacity : 1;
   const containerRef = useRef<HTMLDivElement | null>(null);
   const imgContainerRef = useRef<HTMLDivElement | null>(null);
 
@@ -894,22 +946,39 @@ export function VenueMapWithPosts({
           width: '100%',
           height: '100%',
           touchAction: onTouchStart ? 'none' : undefined,
+          userSelect: 'none',
         }}
         onMouseDown={onMouseDown}
         onMouseMove={onMouseMove}
         onMouseUp={onMouseUp}
         onMouseLeave={onMouseUp}
+        // A press anywhere on the map pans it. Without this, the browser can start its own drag of an image on
+        // the map (or a text selection) instead, most often just beside the map image.
+        onDragStart={(e) => e.preventDefault()}
         onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
       >
+        {/* An add-on underlay (see MapOverlay) sits beneath the image: z-index -1 within this transformed container. */}
+        {overlay?.underlay && shouldRenderMarkers && (
+          <div style={{ position: 'absolute', inset: 0, zIndex: -1, pointerEvents: 'none' }}>
+            {overlay.underlay({
+              layer: layers[currentLayer],
+              layerIndex: currentLayer,
+              rect,
+              container: containerSize,
+              scale,
+              setImageOpacity: setUnderlayImageOpacity,
+            })}
+          </div>
+        )}
         <Image
           ref={imgRef}
           src={mapUrl}
           alt="Venue Map"
           width={1200}
           height={800}
-          style={{ width: '100%', height: '100%', objectFit: 'contain', userSelect: 'none' }}
+          style={{ width: '100%', height: '100%', objectFit: 'contain', userSelect: 'none', opacity: imageOpacity }}
           unoptimized
           onLoad={handleImageLoad}
           draggable={false}
@@ -961,7 +1030,57 @@ export function VenueMapWithPosts({
                 />
               );
             })}
-            {(() => {
+            {overlay?.unitTracking ? (() => {
+              // Live tracking: each unit at its own position, or not at all (D66).
+              const tracking = overlay.unitTracking;
+              const layer = layers[currentLayer];
+              const alignment = layer ? tracking.alignments[layer.id] ?? layerAlignment(layer) : undefined;
+              if (!alignment) return null;
+              const at = (name: string) => {
+                const p = tracking.positions[name];
+                if (!p) return null;
+                const { x, y } = latLonToPercent(alignment, { lat: p.lat, lon: p.lon });
+                return x < 0 || x > 100 || y < 0 || y > 100 ? null : { post: { name, x, y }, faded: p.stale };
+              };
+              return (
+                <>
+                  {staff.map((team) => {
+                    const pos = at(team.team);
+                    return pos && (
+                      <TeamMarker
+                        key={team.team}
+                        team={team}
+                        post={pos.post}
+                        rect={rect}
+                        teamTimers={teamTimers}
+                        calls={calls}
+                        clinics={clinics}
+                        scale={scale}
+                        isSelected={!!selectedTeamName && team.team === selectedTeamName}
+                        onAddCall={onAddCallForTeam}
+                        exact
+                        faded={pos.faded}
+                      />
+                    );
+                  })}
+                  {supervisor.map((sup) => {
+                    const pos = at(sup.team);
+                    return pos && (
+                      <SupervisorMarker
+                        key={sup.team}
+                        supervisor={sup}
+                        post={pos.post}
+                        rect={rect}
+                        scale={scale}
+                        isSelected={!!selectedSupervisorName && sup.team === selectedSupervisorName}
+                        exact
+                        faded={pos.faded}
+                      />
+                    );
+                  })}
+                </>
+              );
+            })() : (() => {
               // Teams sharing the exact same post (e.g. several teams
               // attached to the same call, all still logged at that post)
               // get staggered further right one at a time instead of
@@ -991,7 +1110,7 @@ export function VenueMapWithPosts({
                 );
               });
             })()}
-            {supervisor.map((sup) => {
+            {!overlay?.unitTracking && supervisor.map((sup) => {
               const postObj = posts.find(p => (typeof p === "string" ? p : p.name) === sup.location);
               if (!postObj || typeof postObj === "string") return null;
 
@@ -1008,8 +1127,11 @@ export function VenueMapWithPosts({
             })}
           </>
         )}
+        {overlay?.markers && shouldRenderMarkers &&
+          overlay.markers({ layer: layers[currentLayer], layerIndex: currentLayer, rect, scale })}
       </div>
       </div>
+      {overlay?.chrome}
     </div>
   );
 }

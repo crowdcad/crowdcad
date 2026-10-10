@@ -77,7 +77,7 @@ const SELF_OWNED_CREATE_RULE = `${AUTH_RULE} && @request.body.userId = @request.
 // dispatch fields (calls, staff/supervisor status, equipment) for
 // dispatching to work at all. Mirrors firestore.rules'
 // isEventProtectedFieldsUnchanged().
-const EVENT_PROTECTED_FIELDS = ['userId', 'sharedWith', 'isOrgEvent', 'ended', 'endedAt'];
+const EVENT_PROTECTED_FIELDS = ['userId', 'sharedWith', 'isOrgEvent', 'ended', 'endedAt', 'mapMode'];
 const EVENT_PROTECTED_FIELDS_UNTOUCHED = EVENT_PROTECTED_FIELDS.map(
   (field) => `@request.body.${field}:isset = false`,
 ).join(' && ');
@@ -87,6 +87,11 @@ const EVENT_UPDATE_RULE =
   `userId = @request.auth.id || @request.auth.isAdmin = true || ` +
   `((sharedWith ~ @request.auth.email || isOrgEvent = true) && ${EVENT_PROTECTED_FIELDS_UNTOUCHED})` +
   `)`;
+
+// TAK bridge accounts (in development, optional) are users with
+// role = 'bridge'. They never read or write events; see the TAK section at
+// the end of main() and docs/tak-integration/data-contract.md.
+const NOT_BRIDGE = "@request.auth.role != 'bridge'";
 
 // The built-in `users` auth collection. `isAdmin` is carved out of a
 // self-write everywhere below — without that, any signed-up user could set
@@ -100,11 +105,15 @@ const USERS_RULES = {
   viewRule: `${AUTH_RULE} && (id = @request.auth.id || @request.auth.isAdmin = true)`,
   // Left open for public sign-up (PocketBase's own default), but a create
   // request can't set isAdmin to true on the new account.
-  createRule: '(@request.body.isAdmin:isset = false || @request.body.isAdmin = false)',
+  // A create request can't set isAdmin, and only an admin can create a TAK
+  // bridge account (role = 'bridge').
+  createRule:
+    '(@request.body.isAdmin:isset = false || @request.body.isAdmin = false) && ' +
+    "(@request.body.role:isset = false || @request.body.role = '' || @request.auth.isAdmin = true)",
   updateRule:
     `${AUTH_RULE} && (` +
     `@request.auth.isAdmin = true || ` +
-    `(id = @request.auth.id && @request.body.isAdmin:isset = false)` +
+    `(id = @request.auth.id && @request.body.isAdmin:isset = false && @request.body.role:isset = false)` +
     `)`,
   deleteRule: `${AUTH_RULE} && (id = @request.auth.id || @request.auth.isAdmin = true)`,
 };
@@ -123,7 +132,7 @@ async function getAdminToken() {
   return token;
 }
 
-async function ensureCollection(headers, name, fields, rules) {
+async function ensureCollection(headers, name, fields, rules, indexes = []) {
   const check = await pbFetch(`/api/collections/${name}`, { headers });
   if (check.ok) {
     console.log(`  [skip]   ${name} — already exists`);
@@ -131,6 +140,7 @@ async function ensureCollection(headers, name, fields, rules) {
     // script, before its rules were tightened) — bring its rules up to
     // date too, instead of only ever setting them at creation time.
     await ensureRules(headers, name, rules);
+    await ensureIndexes(headers, name, indexes);
     return;
   }
 
@@ -149,6 +159,7 @@ async function ensureCollection(headers, name, fields, rules) {
       createRule: rules?.createRule ?? authRule,
       updateRule: rules?.updateRule ?? authRule,
       deleteRule: rules?.deleteRule ?? authRule,
+      indexes,
     }),
   });
 
@@ -157,6 +168,27 @@ async function ensureCollection(headers, name, fields, rules) {
     throw new Error(`Failed to create collection '${name}': ${res.status} — ${body}`);
   }
   console.log(`  [create] ${name}`);
+}
+
+/** Adds any of `indexes` (CREATE INDEX statements) missing from an existing collection. */
+async function ensureIndexes(headers, collectionName, indexes) {
+  if (!indexes || indexes.length === 0) return;
+  const res = await pbFetch(`/api/collections/${collectionName}`, { headers });
+  if (!res.ok) throw new Error(`Failed to read collection '${collectionName}': ${res.status}`);
+  const collection = await res.json();
+  const existing = collection.indexes || [];
+  const missing = indexes.filter((i) => !existing.includes(i));
+  if (missing.length === 0) return;
+  const patchRes = await pbFetch(`/api/collections/${collectionName}`, {
+    method: 'PATCH',
+    headers,
+    body: JSON.stringify({ indexes: [...existing, ...missing] }),
+  });
+  if (!patchRes.ok) {
+    const body = await patchRes.text();
+    throw new Error(`Failed to add indexes to '${collectionName}': ${patchRes.status} — ${body}`);
+  }
+  console.log(`  [update] ${collectionName} indexes`);
 }
 
 const RULE_KEYS = ['listRule', 'viewRule', 'createRule', 'updateRule', 'deleteRule'];
@@ -228,6 +260,329 @@ async function ensureField(headers, collectionName, field) {
   console.log(`  [add]    ${collectionName}.${field.name}`);
 }
 
+// =====================================================================
+// TAK integration (in development, optional). Mirrors the TAK block in
+// firestore.rules; see docs/tak-integration/data-contract.md.
+//
+// - Bridge accounts are users with role = 'bridge' plus a tak_bridges
+//   record, both created only by admins. Deleting the tak_bridges record
+//   revokes the bridge: every bridge rule checks it exists.
+// - "Event readers" mirror the events viewRule above (any signed-in
+//   non-bridge user today). Tighten them together with events.
+// - Aliased @collection joins (e.g. @collection.events:ev) keep each
+//   lookup's conditions on the same joined record.
+// =====================================================================
+const TAK_EVENT_READER = `${AUTH_RULE} && ${NOT_BRIDGE}`;
+const takEventOwner = (eventExpr) =>
+  `@collection.events:ev.id ?= ${eventExpr} && @collection.events:ev.userId ?= @request.auth.id`;
+const TAK_IS_BRIDGE =
+  `${AUTH_RULE} && @request.auth.role = 'bridge' && @collection.tak_bridges:self.bridgeUser ?= @request.auth.id`;
+const takLinkedBridge = (eventExpr) =>
+  `${TAK_IS_BRIDGE} && @collection.tak_event_config:lc.event ?= ${eventExpr} && ` +
+  `@collection.tak_event_config:lc.bridge ?= @request.auth.id`;
+const takBridgeCanWrite = (eventExpr) =>
+  `${TAK_IS_BRIDGE} && @collection.tak_event_config:wc.event ?= ${eventExpr} && ` +
+  `@collection.tak_event_config:wc.bridge ?= @request.auth.id && ` +
+  `@collection.tak_event_config:wc.enabled ?= true && @collection.tak_event_config:wc.closed ?= false`;
+const takAllowedUser = (bridgeExpr) =>
+  `${AUTH_RULE} && ${NOT_BRIDGE} && @collection.tak_bridges:ab.bridgeUser ?= ${bridgeExpr} && ` +
+  `@collection.tak_bridges:ab.allowedUsers.id ?= @request.auth.id`;
+const TAK_ADMIN = `${AUTH_RULE} && ${NOT_BRIDGE} && @request.auth.isAdmin = true`;
+const TAK_BODY_HISTORY_MODE =
+  "(@request.body.historyMode:isset = false || @request.body.historyMode = 'off' || " +
+  "@request.body.historyMode = 'summary' || @request.body.historyMode = 'detailed')";
+
+// Bridge status details shown in the TAK setup checklist (data contract v0.4).
+const TAK_BRIDGE_STATUS_DETAIL_FIELDS = [
+  { name: 'devicesSeen', type: 'number' },
+  { name: 'lastPositionAt', type: 'number' },
+  { name: 'takError', type: 'text' },
+];
+
+async function ensureTakCollections(headers) {
+  console.log('\nTAK collections (optional add-on):');
+  const usersCollection = await (await pbFetch('/api/collections/users', { headers })).json();
+
+  await ensureCollection(
+    headers,
+    'tak_bridges',
+    [
+      { name: 'bridgeUser', type: 'text', required: true },
+      { name: 'label', type: 'text', required: true },
+      { name: 'createdBy', type: 'text' },
+      { name: 'allowedUsers', type: 'relation', collectionId: usersCollection.id, maxSelect: 999 },
+      { name: 'defaultHistoryMode', type: 'text' },
+    ],
+    {
+      listRule: `${AUTH_RULE} && (bridgeUser = @request.auth.id || allowedUsers.id ?= @request.auth.id || @request.auth.isAdmin = true)`,
+      viewRule: `${AUTH_RULE} && (bridgeUser = @request.auth.id || allowedUsers.id ?= @request.auth.id || @request.auth.isAdmin = true)`,
+      createRule: `${TAK_ADMIN} && @request.body.createdBy = @request.auth.id && @request.body.bridgeUser != @request.auth.id`,
+      updateRule: `${TAK_ADMIN} && @request.body.createdBy:isset = false && @request.body.bridgeUser:isset = false`,
+      deleteRule: TAK_ADMIN,
+    },
+    ['CREATE UNIQUE INDEX idx_tak_bridges_user ON tak_bridges (bridgeUser)'],
+  );
+
+  await ensureCollection(
+    headers,
+    'tak_device_mappings',
+    [
+      { name: 'bridge', type: 'text', required: true },
+      { name: 'deviceUid', type: 'text', required: true },
+      { name: 'teamName', type: 'text', required: true },
+      { name: 'callsign', type: 'text' },
+      { name: 'updatedBy', type: 'text' },
+    ],
+    {
+      listRule: `${TAK_ADMIN} || ${takAllowedUser('bridge')}`,
+      viewRule: `${TAK_ADMIN} || ${takAllowedUser('bridge')}`,
+      createRule: `(${TAK_ADMIN} || ${takAllowedUser('@request.body.bridge')}) && @request.body.updatedBy = @request.auth.id`,
+      updateRule:
+        `(${TAK_ADMIN} || ${takAllowedUser('bridge')}) && @request.body.updatedBy = @request.auth.id && ` +
+        '@request.body.bridge:isset = false',
+      deleteRule: TAK_ADMIN,
+    },
+    ['CREATE UNIQUE INDEX idx_tak_device_mappings ON tak_device_mappings (bridge, deviceUid)'],
+  );
+
+  await ensureCollection(
+    headers,
+    'tak_bridge_status',
+    [
+      { name: 'bridge', type: 'text', required: true },
+      { name: 'lastSeenAt', type: 'number' },
+      { name: 'takConnected', type: 'bool' },
+      { name: 'version', type: 'text' },
+      { name: 'linkedEventCount', type: 'number' },
+      ...TAK_BRIDGE_STATUS_DETAIL_FIELDS,
+    ],
+    {
+      listRule: `bridge = @request.auth.id || ${TAK_ADMIN} || ${takAllowedUser('bridge')}`,
+      viewRule: `bridge = @request.auth.id || ${TAK_ADMIN} || ${takAllowedUser('bridge')}`,
+      createRule: `${TAK_IS_BRIDGE} && @request.body.bridge = @request.auth.id`,
+      updateRule: `${TAK_IS_BRIDGE} && bridge = @request.auth.id && @request.body.bridge:isset = false`,
+      deleteRule: TAK_ADMIN,
+    },
+    ['CREATE UNIQUE INDEX idx_tak_bridge_status ON tak_bridge_status (bridge)'],
+  );
+  // Added after the collection was first released; ensureCollection skips existing collections.
+  for (const field of TAK_BRIDGE_STATUS_DETAIL_FIELDS) await ensureField(headers, 'tak_bridge_status', field);
+
+  // Linking: the owner may set `bridge` only to a bridge they're allowed to
+  // use. An admin may only change `closed` (the end-event flow).
+  await ensureCollection(
+    headers,
+    'tak_event_config',
+    [
+      { name: 'event', type: 'text', required: true },
+      { name: 'bridge', type: 'text' },
+      { name: 'enabled', type: 'bool' },
+      { name: 'closed', type: 'bool' },
+      { name: 'historyMode', type: 'text' },
+    ],
+    {
+      listRule: `${TAK_EVENT_READER} || (${TAK_IS_BRIDGE} && bridge = @request.auth.id)`,
+      viewRule: `${TAK_EVENT_READER} || (${TAK_IS_BRIDGE} && bridge = @request.auth.id)`,
+      createRule:
+        `${AUTH_RULE} && ${NOT_BRIDGE} && ${takEventOwner('@request.body.event')} && ` +
+        `(@request.body.bridge:isset = false || @request.body.bridge = '' || ${takAllowedUser('@request.body.bridge')}) && ` +
+        TAK_BODY_HISTORY_MODE,
+      updateRule:
+        `${AUTH_RULE} && ${NOT_BRIDGE} && @request.body.event:isset = false && ${TAK_BODY_HISTORY_MODE} && (` +
+        `(${takEventOwner('event')} && (@request.body.bridge:isset = false || @request.body.bridge = '' || ` +
+        `@request.body.bridge = bridge || ${takAllowedUser('@request.body.bridge')})) || ` +
+        '(@request.auth.isAdmin = true && @request.body.bridge:isset = false && @request.body.enabled:isset = false && ' +
+        '@request.body.historyMode:isset = false))',
+      deleteRule: `${AUTH_RULE} && ${NOT_BRIDGE} && ${takEventOwner('event')}`,
+    },
+    ['CREATE UNIQUE INDEX idx_tak_event_config ON tak_event_config (event)'],
+  );
+
+  await ensureCollection(
+    headers,
+    'tak_map_alignment',
+    [
+      { name: 'event', type: 'text', required: true },
+      { name: 'layerId', type: 'text', required: true },
+      { name: 'mapUrl', type: 'text' },
+      { name: 'naturalWidth', type: 'number' },
+      { name: 'naturalHeight', type: 'number' },
+      { name: 'controlPoints', type: 'json' },
+      { name: 'origin', type: 'json' },
+      { name: 'transform', type: 'json' },
+      { name: 'residualM', type: 'number' },
+      { name: 'ownerUid', type: 'text' },
+      { name: 'updatedAt', type: 'number' },
+    ],
+    {
+      listRule: TAK_EVENT_READER,
+      viewRule: TAK_EVENT_READER,
+      createRule: `${AUTH_RULE} && ${NOT_BRIDGE} && ${takEventOwner('@request.body.event')}`,
+      updateRule: `${AUTH_RULE} && ${NOT_BRIDGE} && ${takEventOwner('event')} && @request.body.event:isset = false`,
+      deleteRule: `${AUTH_RULE} && ${NOT_BRIDGE} && ${takEventOwner('event')}`,
+    },
+    ['CREATE UNIQUE INDEX idx_tak_map_alignment ON tak_map_alignment (event, layerId)'],
+  );
+  // Fields added after the first TAK schema version, for existing installs.
+  for (const field of [
+    { name: 'origin', type: 'json' },
+    { name: 'ownerUid', type: 'text' },
+    { name: 'updatedAt', type: 'number' },
+  ]) {
+    await ensureField(headers, 'tak_map_alignment', field);
+  }
+
+  await ensureCollection(
+    headers,
+    'tak_device_links',
+    [
+      { name: 'event', type: 'text', required: true },
+      { name: 'deviceUid', type: 'text', required: true },
+      { name: 'teamId', type: 'text', required: true },
+      { name: 'linkedAt', type: 'number' },
+      { name: 'method', type: 'text' },
+      { name: 'linkedBy', type: 'text' },
+    ],
+    {
+      listRule: `${TAK_EVENT_READER} || ${takLinkedBridge('event')}`,
+      viewRule: `${TAK_EVENT_READER} || ${takLinkedBridge('event')}`,
+      createRule:
+        `${TAK_EVENT_READER} && @request.body.linkedBy = @request.auth.id && ` +
+        "(@request.body.method = 'auto' || @request.body.method = 'manual')",
+      updateRule:
+        `${TAK_EVENT_READER} && @request.body.linkedBy = @request.auth.id && @request.body.event:isset = false && ` +
+        "(@request.body.method:isset = false || @request.body.method = 'auto' || @request.body.method = 'manual')",
+      deleteRule: TAK_EVENT_READER,
+    },
+    ['CREATE UNIQUE INDEX idx_tak_device_links ON tak_device_links (event, deviceUid)'],
+  );
+
+  await ensureCollection(
+    headers,
+    'tak_live',
+    [
+      { name: 'event', type: 'text', required: true },
+      { name: 'bridge', type: 'text', required: true },
+      { name: 'deviceUid', type: 'text', required: true },
+      { name: 'lat', type: 'number' },
+      { name: 'lon', type: 'number' },
+      { name: 'hae', type: 'number' },
+      { name: 'ce', type: 'number' },
+      { name: 'course', type: 'number' },
+      { name: 'speed', type: 'number' },
+      { name: 'callsign', type: 'text' },
+      { name: 'cotType', type: 'text' },
+      { name: 'deviceTime', type: 'number' },
+      { name: 'receivedAt', type: 'number' },
+    ],
+    {
+      listRule: `${TAK_EVENT_READER} || ${takLinkedBridge('event')}`,
+      viewRule: `${TAK_EVENT_READER} || ${takLinkedBridge('event')}`,
+      createRule:
+        `${takBridgeCanWrite('@request.body.event')} && @request.body.bridge = @request.auth.id && ` +
+        '@request.body.lat >= -90 && @request.body.lat <= 90 && @request.body.lon >= -180 && @request.body.lon <= 180',
+      updateRule:
+        `${takBridgeCanWrite('event')} && @request.body.event:isset = false && @request.body.bridge:isset = false && ` +
+        '@request.body.deviceUid:isset = false',
+      deleteRule: `${takLinkedBridge('event')} || (${AUTH_RULE} && ${NOT_BRIDGE} && ${takEventOwner('event')})`,
+    },
+    ['CREATE UNIQUE INDEX idx_tak_live ON tak_live (event, deviceUid)'],
+  );
+
+  // History: owner-only reads in v1. Writes follow the event's historyMode
+  // and, unlike live positions, may continue after close so the bridge can
+  // flush and end its open segments.
+  const historyWrite = (eventExpr, mode) =>
+    `${TAK_IS_BRIDGE} && @collection.tak_event_config:hc.event ?= ${eventExpr} && ` +
+    `@collection.tak_event_config:hc.bridge ?= @request.auth.id && @collection.tak_event_config:hc.enabled ?= true && ` +
+    (mode === 'detailed'
+      ? "@collection.tak_event_config:hc.historyMode ?= 'detailed'"
+      : "@collection.tak_event_config:hc.historyMode ?!= 'off'");
+  const historyRead = `(${AUTH_RULE} && ${NOT_BRIDGE} && ${takEventOwner('event')}) || ${takLinkedBridge('event')}`;
+  await ensureCollection(
+    headers,
+    'tak_history',
+    [
+      { name: 'event', type: 'text', required: true },
+      { name: 'bridge', type: 'text', required: true },
+      { name: 'segmentId', type: 'text', required: true },
+      { name: 'deviceUid', type: 'text' },
+      { name: 'teamId', type: 'text' },
+      { name: 'startedAt', type: 'number' },
+      { name: 'endedAt', type: 'number' },
+      { name: 'windows', type: 'json' },
+      { name: 'grid', type: 'json' },
+    ],
+    {
+      listRule: historyRead,
+      viewRule: historyRead,
+      createRule: `${historyWrite('@request.body.event', 'summary')} && @request.body.bridge = @request.auth.id`,
+      updateRule: `${historyWrite('event', 'summary')} && @request.body.event:isset = false && @request.body.bridge:isset = false`,
+      deleteRule: `${AUTH_RULE} && ${NOT_BRIDGE} && ${takEventOwner('event')}`,
+    },
+    ['CREATE UNIQUE INDEX idx_tak_history ON tak_history (segmentId)'],
+  );
+  await ensureCollection(
+    headers,
+    'tak_history_points',
+    [
+      { name: 'event', type: 'text', required: true },
+      { name: 'bridge', type: 'text', required: true },
+      { name: 'segmentId', type: 'text', required: true },
+      { name: 'chunk', type: 'number' },
+      { name: 'points', type: 'json' },
+    ],
+    {
+      listRule: historyRead,
+      viewRule: historyRead,
+      createRule: `${historyWrite('@request.body.event', 'detailed')} && @request.body.bridge = @request.auth.id`,
+      updateRule: `${historyWrite('event', 'detailed')} && @request.body.event:isset = false && @request.body.bridge:isset = false`,
+      deleteRule: `${AUTH_RULE} && ${NOT_BRIDGE} && ${takEventOwner('event')}`,
+    },
+    ['CREATE UNIQUE INDEX idx_tak_history_points ON tak_history_points (segmentId, chunk)'],
+  );
+
+  // Which teams are on a call (opaque team ids only), published by
+  // dispatchers for Detailed history; read by the linked bridge.
+  await ensureCollection(
+    headers,
+    'tak_call_state',
+    [
+      { name: 'event', type: 'text', required: true },
+      { name: 'teamIdsOnCall', type: 'json' },
+      { name: 'updatedAt', type: 'number' },
+    ],
+    {
+      listRule: `${TAK_EVENT_READER} || ${takLinkedBridge('event')}`,
+      viewRule: `${TAK_EVENT_READER} || ${takLinkedBridge('event')}`,
+      createRule: TAK_EVENT_READER,
+      updateRule: `${TAK_EVENT_READER} && @request.body.event:isset = false`,
+      deleteRule: `${AUTH_RULE} && ${NOT_BRIDGE} && ${takEventOwner('event')}`,
+    },
+    ['CREATE UNIQUE INDEX idx_tak_call_state ON tak_call_state (event)'],
+  );
+
+  await ensureCollection(
+    headers,
+    'tak_event_status',
+    [
+      { name: 'event', type: 'text', required: true },
+      { name: 'bridge', type: 'text', required: true },
+      { name: 'lastSeenAt', type: 'number' },
+      { name: 'takConnected', type: 'bool' },
+      { name: 'liveDeviceCount', type: 'number' },
+    ],
+    {
+      listRule: TAK_EVENT_READER,
+      viewRule: TAK_EVENT_READER,
+      createRule: `${takLinkedBridge('@request.body.event')} && @request.body.bridge = @request.auth.id`,
+      updateRule: `${takLinkedBridge('event')} && @request.body.event:isset = false`,
+      deleteRule: TAK_ADMIN,
+    },
+    ['CREATE UNIQUE INDEX idx_tak_event_status ON tak_event_status (event)'],
+  );
+}
+
 async function main() {
   console.log(`Connecting to PocketBase at ${PB_URL} ...`);
 
@@ -246,6 +601,10 @@ async function main() {
     'Content-Type': 'application/json',
     Authorization: `Bearer ${token}`,
   };
+
+  // `role` on `users` comes first: the rules below refer to
+  // @request.auth.role, and PocketBase rejects rules naming unknown fields.
+  await ensureField(headers, 'users', { name: 'role', type: 'text' });
 
   await ensureCollection(
     headers,
@@ -302,6 +661,7 @@ async function main() {
       { name: 'isOrgEvent', type: 'bool' },
       { name: 'ended', type: 'bool' },
       { name: 'endedAt', type: 'number' },
+      { name: 'mapMode', type: 'text' },
     ],
     {
       // Same reasoning as venues: read stays open, but update is
@@ -309,11 +669,12 @@ async function main() {
       // shared user or org-event member can dispatch (write ordinary
       // fields), but can't touch who owns/can see/can end the event. See
       // EVENT_UPDATE_RULE above (mirrors firestore.rules exactly).
-      listRule: AUTH_RULE,
-      viewRule: AUTH_RULE,
-      createRule: SELF_OWNED_CREATE_RULE,
-      updateRule: EVENT_UPDATE_RULE,
-      deleteRule: OWNER_OR_ADMIN_RULE,
+      // TAK bridge accounts never read or write events (NOT_BRIDGE).
+      listRule: `${AUTH_RULE} && ${NOT_BRIDGE}`,
+      viewRule: `${AUTH_RULE} && ${NOT_BRIDGE}`,
+      createRule: `${SELF_OWNED_CREATE_RULE} && ${NOT_BRIDGE}`,
+      updateRule: `${EVENT_UPDATE_RULE} && ${NOT_BRIDGE}`,
+      deleteRule: `${OWNER_OR_ADMIN_RULE} && ${NOT_BRIDGE}`,
     },
   );
 
@@ -332,6 +693,9 @@ async function main() {
   await ensureField(headers, 'events', { name: 'isOrgEvent', type: 'bool' });
   await ensureField(headers, 'events', { name: 'ended', type: 'bool' });
   await ensureField(headers, 'events', { name: 'endedAt', type: 'number' });
+  // `mapMode` on `events` ('standard' | 'tak'; unset means standard) — set
+  // for deployments where this collection existed before TAK support.
+  await ensureField(headers, 'events', { name: 'mapMode', type: 'text' });
 
   await ensureCollection(
     headers,
@@ -400,6 +764,8 @@ async function main() {
   // deliberately left alone otherwise — PocketBase's own default already
   // allows public sign-up, which this app depends on.
   await ensureRules(headers, 'users', USERS_RULES);
+
+  await ensureTakCollections(headers);
 
   console.log('\nDone. CrowdCAD collections are ready, with owner/admin-scoped access rules applied automatically.');
   console.log(

@@ -9,6 +9,7 @@ import {
   DISPATCH_TERM_CATEGORY_LABELS,
   type DispatchTermCategory,
 } from '@/lib/dispatchVocabulary/terms';
+import { PROFILE_ACTION_BUTTON } from './buttonStyles';
 
 const BLANK_TEMPLATE_ID = '__blank__';
 
@@ -224,8 +225,9 @@ export default function LanguageSection() {
             setCreatingNew((v) => !v);
           }}
           variant="bordered"
+          size="md"
           radius="lg"
-          className="border-surface-liner text-surface-light hover:bg-surface-deep self-start"
+          className={`${PROFILE_ACTION_BUTTON} border-surface-liner text-surface-light hover:bg-surface-deep self-start`}
         >
           New preset
         </Button>

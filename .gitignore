@@ -67,3 +67,9 @@ CLAUDE.md
 
 *-debug.log
 typescript
+
+# TAK credentials (bridge certificate bundles, keys, data packages). Never commit.
+*.p12
+*.pfx
+*.key
+certs/

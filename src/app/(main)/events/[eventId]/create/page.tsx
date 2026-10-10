@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter, useParams } from 'next/navigation';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { Event, Venue, Staff, Supervisor, Post, Equipment, EventEquipment } from '@/app/types';
 import { authService, dbService } from '@/lib/services';
 import { Button, Card, ScrollShadow } from '@heroui/react';
@@ -25,8 +25,19 @@ import AddTeamModal, { TeamDraft } from '@/components/modals/event/addteammodal'
 import AddSupervisorModal from '@/components/modals/event/addsupervisormodal';
 import BulkImportModal from '@/components/modals/event/bulkimportmodal';
 import { VenueMapWithPosts } from '@/components/modals/event/venuemapmodal';
+import dynamic from 'next/dynamic';
+import { isGeoLayer } from '@/lib/geo/layers';
+
+// The live map for venues with an aligned image or a drawn area (P8, D64), loaded only when needed.
+const GeoLayerMap = dynamic(() => import('@/components/geo/GeoLayerMap'), { ssr: false });
 import { MAP_CHECKER_BG } from '@/lib/mapStyles';
 import LoadingScreen from '@/components/ui/loading-screen';
+import { newTeamId } from '@/lib/teamId';
+
+// TAK live tracking (optional, in development): the map-mode choice is
+// compiled out entirely unless NEXT_PUBLIC_TAK is exactly "on".
+const TakMapModeChoice =
+  process.env.NEXT_PUBLIC_TAK === 'on' ? lazy(() => import('@/features/tak').then((m) => ({ default: m.TakMapModeChoice }))) : null;
 
 // Helper to get post name regardless of type
 const getPostName = (post: Post): string => {
@@ -308,6 +319,7 @@ export default function EventCreation() {
         return { ...prev, staff };
       }
       const newStaff: Staff = {
+        id: newTeamId(),
         team: team.name,
         location: "No Post",
         status: "On Break",
@@ -332,6 +344,7 @@ export default function EventCreation() {
   const handleAddSamUnit = () => {
     if (!samName.trim() || !samCert) return;
     const newSupervisor: Supervisor = {
+      id: newTeamId(),
       team: samName.trim(),
       location: 'Roaming',
       status: 'On Break',
@@ -460,7 +473,9 @@ export default function EventCreation() {
   if (loading) return <LoadingScreen label="Loading event data…" />;
   
   const hasVenue = Boolean(eventData.venue?.name && eventData.venue?.layers?.length);
-  const hasMap = hasVenue && Boolean(eventData.venue?.layers?.[currentLayer]?.mapUrl);
+  const currentVenueLayer = eventData.venue?.layers?.[currentLayer];
+  const currentIsGeo = !!currentVenueLayer && isGeoLayer(currentVenueLayer);
+  const hasMap = hasVenue && (Boolean(currentVenueLayer?.mapUrl) || currentIsGeo);
   const allPosts = hasVenue ? (eventData.venue?.layers?.flatMap(layer => layer.posts || []) || []) : [];
   const flattenedPosts = hasVenue ? (eventData.venue?.layers?.flatMap(layer => (layer.posts || []).map(p => ({ post: p, layerName: layer.name }))) || []) : [];
 
@@ -516,6 +531,19 @@ export default function EventCreation() {
         setScheduleTo={setScheduleTo}
         inputClassNames={inputClassNames}
       />
+      {TakMapModeChoice && eventId && authService.currentUser && (
+        <Suspense fallback={null}>
+        <div className="mt-4">
+          <TakMapModeChoice
+            eventId={eventId}
+            uid={authService.currentUser.uid}
+            mapMode={eventData.mapMode}
+            onMapModeChange={(mode) => setEventData((prev) => ({ ...prev, mapMode: mode }))}
+            layers={eventData.venue?.layers ?? []}
+          />
+        </div>
+        </Suspense>
+      )}
     </div>
   );
 
@@ -731,6 +759,11 @@ export default function EventCreation() {
             the same VenueMapWithPosts marker/icon rendering and pan/zoom behavior
             as the dispatch page's own venue map modal. */}
         <div className="w-full flex flex-col flex-1 min-h-0">
+          {currentIsGeo && currentVenueLayer ? (
+          <div className="relative w-full flex-1 min-h-0 overflow-hidden rounded-t-sm">
+            <GeoLayerMap className="absolute inset-0" layer={currentVenueLayer} />
+          </div>
+          ) : (
           <div className="relative w-full flex-1 min-h-0 overflow-hidden rounded-t-sm" style={MAP_CHECKER_BG}>
             <VenueMapWithPosts
               layers={eventData.venue?.layers || []}
@@ -759,6 +792,7 @@ export default function EventCreation() {
               resetButtonClassName="bg-surface-deepest/90 backdrop-blur"
             />
           </div>
+          )}
 
           {/* Bottom Control Bar — merges flush with the map above: square where
               they meet, sharp radius only at the map's top and this bar's bottom. */}

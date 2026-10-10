@@ -29,6 +29,7 @@ import {
   type LiteEventDraft,
   saveLiteEvent,
 } from '@/lib/liteEventStore';
+import { newTeamId } from '@/lib/teamId';
 
 const LICENSES = ['CPR', 'EMT-B', 'EMT-A', 'EMT-P', 'RN', 'MD/DO'];
 
@@ -434,7 +435,7 @@ function LiteCreateContent() {
       }
 
       const members = team.members.map((m) => `${m.name} [${m.cert}]${m.lead ? ' (Lead)' : ''}`);
-      const nextStaff: Staff = { team: team.name, location: 'No Post', status: 'On Break', members };
+      const nextStaff: Staff = { id: newTeamId(), team: team.name, location: 'No Post', status: 'On Break', members };
       return { ...current, staff: [...current.staff, nextStaff] };
     });
   };
@@ -459,6 +460,7 @@ function LiteCreateContent() {
       supervisor: [
         ...current.supervisor,
         {
+          id: newTeamId(),
           team: samName.trim(),
           location: 'Roaming',
           status: 'On Break',

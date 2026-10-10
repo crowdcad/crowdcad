@@ -1,3 +1,5 @@
+import type { MapAlignment, MapArea } from '@/lib/geo/types';
+
 export type Post =
   | string
   | {
@@ -6,7 +8,10 @@ export type Post =
     y: number | null; // percentage of height
     isClinic?: boolean;
     clinicId?: string; // stable id, set once when isClinic first becomes true
-    lat?: number | null; // source lat/long from a GIS import, for provenance only — rendering always uses x/y
+    // Real coordinates. On a geo layer (aligned image or drawn area, see src/lib/geo/layers.ts) they are the
+    // post's position, and x/y are set only when the post is inside the image. On an image layer they are
+    // provenance from a GIS import and rendering uses x/y.
+    lat?: number | null;
     lng?: number | null;
   };
 
@@ -21,6 +26,7 @@ export interface Zone {
   name: string;
   color: string; // hex, e.g. "#3b82f6"
   points: { x: number; y: number }[]; // percent-of-image polygon vertices, in order
+  coords?: { lat: number; lng: number }[]; // the same polygon in real coordinates, on a geo layer
   isDispatchZone?: boolean; // when true, gets its own "{name} Calls" tab in the dispatch view
 }
 
@@ -43,6 +49,12 @@ export interface Layer {
   posts: Post[];
   zones?: Zone[];
   geoBounds?: GeoBounds; // present when this layer's mapUrl was georeferenced via a GIS import
+  /** The image's real-world alignment (venue setup's Map alignment step). Makes this a geo layer. */
+  alignment?: MapAlignment;
+  /** The same, from venues aligned while this was a TAK-only step; still read. */
+  takAlignment?: MapAlignment;
+  /** A drawn area of interest for a layer with no image; makes this a geo layer centered on it. */
+  area?: MapArea;
 }
 
 export interface Venue {
@@ -103,6 +115,9 @@ export interface Event {
   /** Seconds an unassigned ("Pending") call may sit without a team before a surge alert fires. Defaults to 120 (2:00) when unset. */
   unassignedCallSurgeSeconds?: number;
 
+  /** Map mode: unset or 'standard' for a standard event; 'tak' loads the optional TAK live-tracking module. Core reads it only to decide whether to load that module. Owner/admin only. */
+  mapMode?: 'standard' | 'tak';
+
   /** Manually declared "surge" state for the ops team, toggled via the Surge button beside the Calls/Clinic tabs — distinct from the automatic `surgeLimitPercent` threshold indicator. */
   manualSurgeActive?: boolean;
   /** Epoch ms when the current manual surge was started; cleared when surge is turned off. */
@@ -123,6 +138,8 @@ export interface TeamLogEntry {
 }
 
 export interface Staff {
+  /** Stable id, generated at creation and kept across renames (src/lib/teamId.ts). Read only by the optional TAK module; older teams may lack it. */
+  id?: string;
   team: string;
   location: string;
   status: string;
@@ -134,6 +151,8 @@ export interface Staff {
 }
 
 export interface Supervisor {
+  /** Stable id, generated at creation and kept across renames (src/lib/teamId.ts). Read only by the optional TAK module; older entries may lack it. */
+  id?: string;
   team: string;
   location: string;
   status: string;
