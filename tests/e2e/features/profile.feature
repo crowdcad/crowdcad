@@ -9,9 +9,10 @@ Feature: Profile page
   Scenario: Profile info section shows the logged in user email
     Then I should see the logged in user email
 
-  Scenario: Edit Profile button navigates to the edit page
+  Scenario: Edit Profile button opens the edit modal
     When I click the "Edit Profile" button
-    Then the URL should be "/profile/edit"
+    Then I should see the heading "Edit Profile"
+    And the URL should be "/profile"
 
   Scenario: Password fields are collapsed behind a Change Password button by default
     Then I should see the heading "Security"

@@ -83,7 +83,9 @@ export default function EditProfileModal({
             void handleSave();
           }}
         >
-          <ModalHeader className="text-2xl font-bold text-surface">Edit Profile</ModalHeader>
+          <ModalHeader>
+            <h2 className="text-2xl font-bold text-surface">Edit Profile</h2>
+          </ModalHeader>
           <ModalBody className="space-y-3">
             <Input
               label="Full name"
