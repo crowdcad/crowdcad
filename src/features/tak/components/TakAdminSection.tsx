@@ -33,6 +33,7 @@ import { TAK_MODULE_MARKER } from '../marker';
 import type { HistoryMode } from '../types';
 import { TAK_INPUT_CLASSNAMES } from '../lib/ui';
 import HelpTip from '@/components/geo/HelpTip';
+import { PROFILE_ACTION_BUTTON } from '@/components/profile/buttonStyles';
 
 /**
  * Admin > TAK: TAK servers (bridges) for this CrowdCAD. Only admins see this
@@ -520,7 +521,7 @@ export default function TakAdminSection({ adminUid }: TakAdminSectionProps) {
             <HelpTip text="TAK servers that can send live team positions to CrowdCAD events. In development." />
           </h3>
         </div>
-        <Button size="sm" className="bg-accent text-surface-light" startContent={<Plus className="h-4 w-4" />} onPress={() => setWizard({ rotating: null })}>
+        <Button size="md" radius="lg" className={`${PROFILE_ACTION_BUTTON} bg-accent text-surface-light`} startContent={<Plus className="h-4 w-4" />} onPress={() => setWizard({ rotating: null })}>
           Add TAK server
         </Button>
       </div>
