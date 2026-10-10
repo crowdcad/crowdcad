@@ -6,6 +6,7 @@ import { ChevronLeft, ChevronRight, Search } from 'lucide-react';
 import type { Layer, Staff, Supervisor, Equipment, Call, Clinic, Post } from '@/app/types';
 import { useZoomPan } from '@/hooks/useZoomPan';
 import { MAP_CHECKER_BG } from '@/lib/mapStyles';
+import { STATIC_SELECTOR_BUTTON_CLASS, staticSelectorButtonProps } from '@/lib/autocompleteSelector';
 import MapZoomControls from '@/components/ui/map-zoom-controls';
 import { VenueMapWithPosts } from '@/components/modals/event/venuemapmodal';
 
@@ -283,7 +284,9 @@ export default function VenueMapTab({
               // of the dropdown chevron. Overlaying it instead frees that
               // space for text.
               clearButton: 'absolute end-6 top-1/2 -translate-y-1/2',
+              selectorButton: STATIC_SELECTOR_BUTTON_CLASS,
             }}
+            selectorButtonProps={staticSelectorButtonProps}
             inputProps={{
               classNames: {
                 inputWrapper:
