@@ -23,7 +23,7 @@ import { useCertifications } from '@/hooks/useCertifications';
 import { useLiteMode } from '@/lib/LiteContext';
 import { deleteLiteEvent, getLiteEvent, saveLiteEvent } from '@/lib/liteEventStore';
 import { Map as MapIcon, Users, BriefcaseMedical, HousePlus } from "lucide-react";
-import { FaWalkieTalkie } from "react-icons/fa6";
+import CrowdcadRadioIcon from "@/components/ui/crowdcad-radio-icon";
 import DispatchMotionCell from '@/components/dispatch/motioncell';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { CallTrackingTable } from '@/components/dispatch/calltracking';
@@ -3834,7 +3834,9 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
       {/* Main Layout */}
       <div className="relative w-full bg-surface-deepest h-[calc(100vh-72px)]">
         {eventEnded && (
-          <div className="absolute inset-0 z-[100] flex flex-col items-center justify-center gap-3 bg-neutral-700/70 text-center px-6">
+          // Fixed from below the navbar (h-14) to the screen's bottom edge, so it also covers the
+          // mobile tab bar and anything scrolled below; the page container stops short of both.
+          <div className="fixed inset-x-0 top-14 bottom-0 z-[100] flex flex-col items-center justify-center gap-3 bg-neutral-700/70 text-center px-6">
             <p className="text-xl font-semibold text-surface-light">{t('This event has ended')}</p>
             <p className="text-sm text-surface-light/80 max-w-sm">
               {t('Data collection is locked. Go to the Event Summary for a read-only record.')}
@@ -4178,7 +4180,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
                 </div>
               </Tab>
 
-              <Tab key="calls" title={<FaWalkieTalkie className="h-5 w-5" />} aria-label={t('Calls')}>
+              <Tab key="calls" title={<CrowdcadRadioIcon className="h-6 w-6" />} aria-label={t('Calls')}>
                 <div className="space-y-6 pb-20">
                   <div>
                     {(() => {

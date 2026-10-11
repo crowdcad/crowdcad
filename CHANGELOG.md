@@ -20,6 +20,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 
 ### Fixed
 
+- **"This event has ended" covers the whole screen below the navbar**, including the mobile tab bar, so nothing behind it can be pressed.
+- **Event Summary's Zone Breakdown has a full outline**, and each zone row is outlined the same way.
 - **Dispatch map info cards follow their marker.** Hovering or tapping a team, supervisor, equipment or post marker opens its card next to the marker, so it moves with the map and closes when you tap or click elsewhere or start panning. It used to stay open at a fixed spot on the screen, especially on phones. The Add Call popup now also closes when a pan starts on touch.
 - **The mobile Map tab reaches the bottom tab bar** instead of stopping short with empty space below.
 - **Team and supervisor map cards hide "Post" when the event doesn't use posts** (no posting schedule).
@@ -30,6 +32,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 
 ### Changed
 
+- **The mobile Calls tab uses CrowdCAD's own radio icon** (`public/crowdcad_radio_icon.svg`); the `react-icons` dependency is gone.
 - **Venue selection cards are a single solid color.** The translucent, blurred cards and the list's scroll fade made each card darker at the top and bottom.
 - **No press animation on dropdown chevrons or modal close buttons anywhere.** `src/lib/heroStatic.ts` holds the settings, and lint fails an `Autocomplete` or `Modal` without them (see `docs/COMPONENTS.md`).
 - **Event Summary shows Staff Logs, Call Logs and Surge Log side by side** in three columns. Surge Log is always shown (with 0 activations when there were none); Data Collection Sessions moved to its own row.

@@ -6,6 +6,7 @@ import { createPortal } from 'react-dom';
 import type { Map as MlMap, Marker as MlMarker } from 'maplibre-gl';
 import { BASEMAPS, DEFAULT_BASEMAP_ID, resolveBasemap } from '@/lib/geo/basemaps';
 import { useIsDark } from '@/lib/geo/ui';
+import { HEAT_OPACITY, heatColor } from '@/lib/geo/heat';
 import styles from './basemap.module.css';
 import type { LatLon } from '@/lib/geo/types';
 
@@ -293,13 +294,15 @@ export default function BasemapView({
     const a = map.project([cells[0]!.lon, lat0]);
     const b = map.project([cells[0]!.lon + live.current.heatCellM / (111_195 * Math.cos((lat0 * Math.PI) / 180)), lat0]);
     const size = Math.max(2, Math.hypot(b.x - a.x, b.y - a.y));
-    ctx.fillStyle = 'rgb(220, 38, 38)';
+    // One opacity for every cell; the color shows time spent, cool (purple) to hot (red).
+    ctx.globalAlpha = HEAT_OPACITY;
     for (const c of cells) {
       const p = map.project([c.lon, c.lat]);
       if (p.x < -size || p.y < -size || p.x > w + size || p.y > h + size) continue;
-      ctx.globalAlpha = 0.15 + 0.7 * Math.sqrt(c.secs / max);
+      ctx.fillStyle = heatColor(Math.sqrt(c.secs / max));
       ctx.fillRect(p.x - size / 2, p.y - size / 2, size, size);
     }
+    ctx.globalAlpha = 1;
   };
 
   /** Zones, drawn areas and the shape being drawn. */
