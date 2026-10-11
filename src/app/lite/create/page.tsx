@@ -653,7 +653,7 @@ function LiteCreateContent() {
   // Locations added by name; with a map they are placed on it instead.
   const locationsAddRow = (
     <>
-      <div className="flex-shrink-0 flex gap-2 pb-3">
+      <div className="relative flex-shrink-0 flex gap-2 pb-3">
         <Input
           placeholder="e.g., Main Entrance"
           value={locationInput}
@@ -670,12 +670,10 @@ function LiteCreateContent() {
         <Button onPress={addLocation} className="flex-shrink-0 h-10 px-4 text-sm text-surface-light bg-default/40 hover:bg-default/60">
           Add
         </Button>
+        {allPosts.length === 0 && (
+          <TutorialTip className="top-10 mt-2 left-0">Name a location teams will work from, then click Add.</TutorialTip>
+        )}
       </div>
-      {allPosts.length === 0 && (
-        <TutorialTip step={1} className="mb-3 flex-shrink-0">
-          Name a location teams will work from, then click Add.
-        </TutorialTip>
-      )}
     </>
   );
 
@@ -728,7 +726,7 @@ function LiteCreateContent() {
           </Tooltip>
         </h3>
       </div>
-      <div className="flex-shrink-0 flex gap-2 pb-3">
+      <div className="relative flex-shrink-0 flex gap-2 pb-3">
         <Input
           placeholder="e.g., Gurney 1"
           value={equipmentInput}
@@ -745,47 +743,46 @@ function LiteCreateContent() {
         <Button onPress={addEquipment} className="flex-shrink-0 h-10 px-4 text-sm text-surface-light bg-default/40 hover:bg-default/60">
           Add
         </Button>
+        {eventDraft.venue.equipment.length === 0 && (
+          <TutorialTip className="top-10 mt-2 left-0">Name a piece of equipment you will track, like a gurney or AED, then click Add.</TutorialTip>
+        )}
       </div>
-      {eventDraft.venue.equipment.length === 0 ? (
-        <TutorialTip step={1} className="mb-3 flex-shrink-0">
-          Name a piece of equipment you will track, like a gurney or AED, then click Add.
-        </TutorialTip>
-      ) : (
-        allPosts.length > 0 &&
-        !eventEquipment.some((e) => e.defaultLocation) && (
-          <TutorialTip step={2} className="mb-3 flex-shrink-0" arrowClassName={null}>
+      {/* Wraps the list so the default-location tip can sit under the first item's menu without being clipped by the scroll area. */}
+      <div className="relative flex-1 min-h-0 flex flex-col">
+        {allPosts.length > 0 && eventDraft.venue.equipment.length > 0 && !eventEquipment.some((e) => e.defaultLocation) && (
+          <TutorialTip className="top-[52px] right-12" arrowClassName="right-[116px]">
             Optionally, choose where each item starts from its Default location menu.
           </TutorialTip>
-        )
-      )}
-      <ScrollShadow className="space-y-2 pr-2 scrollbar-hide flex-1 min-h-0" hideScrollBar style={{ overflow: 'auto' }}>
-        {eventDraft.venue.equipment.map((item, index) =>
-          locationListItem(
-            item.name,
-            editingEquipmentIndex === index,
-            equipmentEditInput,
-            setEquipmentEditInput,
-            saveEquipmentEdit,
-            cancelEquipmentEdit,
-            () => startEquipmentEdit(index),
-            () => removeEquipment(index),
-            item.id,
-            <Select
-              aria-label={`Default location for ${item.name}`}
-              placeholder="Default location"
-              size="sm"
-              variant="flat"
-              selectedKeys={eventEquipment[index]?.defaultLocation ? [eventEquipment[index]!.defaultLocation!] : []}
-              onSelectionChange={(keys) => setEquipmentDefaultLocation(item.id, (Array.from(keys)[0] as string | undefined) || undefined)}
-              classNames={{ ...selectClassNames, base: 'w-44' }}
-            >
-              {allPosts.map((post) => (
-                <SelectItem key={getPostName(post)}>{getPostName(post)}</SelectItem>
-              ))}
-            </Select>
-          )
         )}
-      </ScrollShadow>
+        <ScrollShadow className="space-y-2 pr-2 scrollbar-hide flex-1 min-h-0" hideScrollBar style={{ overflow: 'auto' }}>
+          {eventDraft.venue.equipment.map((item, index) =>
+            locationListItem(
+              item.name,
+              editingEquipmentIndex === index,
+              equipmentEditInput,
+              setEquipmentEditInput,
+              saveEquipmentEdit,
+              cancelEquipmentEdit,
+              () => startEquipmentEdit(index),
+              () => removeEquipment(index),
+              item.id,
+              <Select
+                aria-label={`Default location for ${item.name}`}
+                placeholder="Default location"
+                size="sm"
+                variant="flat"
+                selectedKeys={eventEquipment[index]?.defaultLocation ? [eventEquipment[index]!.defaultLocation!] : []}
+                onSelectionChange={(keys) => setEquipmentDefaultLocation(item.id, (Array.from(keys)[0] as string | undefined) || undefined)}
+                classNames={{ ...selectClassNames, base: 'w-44' }}
+              >
+                {allPosts.map((post) => (
+                  <SelectItem key={getPostName(post)}>{getPostName(post)}</SelectItem>
+                ))}
+              </Select>
+            )
+          )}
+        </ScrollShadow>
+      </div>
     </div>
   );
 

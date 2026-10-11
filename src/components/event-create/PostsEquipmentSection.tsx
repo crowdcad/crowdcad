@@ -67,7 +67,7 @@ export function PostsSelectionSection({
 
       <div className="space-y-3">
         <div className={`space-y-3 ${!postsEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
-          <div className="flex items-end gap-2">
+          <div className="relative flex items-end gap-2">
             <div className="flex-1 min-w-0">
               <Select
                 label="Select Posts"
@@ -143,9 +143,8 @@ export function PostsSelectionSection({
             >
               Enable All
             </Button>
+            {postsHint && postsEnabled && allPosts.length > 0 && <TutorialTip className="top-full mt-2 left-0">{postsHint}</TutorialTip>}
           </div>
-
-          {postsHint && postsEnabled && allPosts.length > 0 && <TutorialTip step={1}>{postsHint}</TutorialTip>}
 
           {(eventData.eventPosts || []).length > 0 && (
             <div className="flex flex-wrap gap-2">
