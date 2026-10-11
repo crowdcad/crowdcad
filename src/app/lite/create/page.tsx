@@ -8,6 +8,7 @@ import { Time } from '@internationalized/date';
 import { CircleHelp, Pencil, Trash2 } from 'lucide-react';
 import type { Equipment, Event, EventEquipment, Post, Staff, Supervisor, Venue, Zone } from '@/app/types';
 import LoadingScreen from '@/components/ui/loading-screen';
+import TutorialTip from '@/components/ui/TutorialTip';
 import { useScheduleGeneration } from '@/hooks/useScheduleGeneration';
 import { scheduleTimesToWindow, formatTimeValue, parseTimeValue } from '@/lib/scheduleUtils';
 import { syncClinicsFromVenue } from '@/lib/clinics';
@@ -22,7 +23,7 @@ import SupervisorStaffingSection from '@/components/event-create/SupervisorStaff
 import PostingScheduleSection from '@/components/event-create/PostingScheduleSection';
 import { PostsSelectionSection } from '@/components/event-create/PostsEquipmentSection';
 import { WizardShell, StepProgress, ReviewColumns, type WizardStep, type ReviewColumn } from '@/components/wizard';
-import { countLabel, eventConfigReviewFields, staffReviewFields, postScheduleReviewValue, getStepNavigation } from '@/components/wizard/eventReview';
+import { countLabel, eventConfigReviewFields, staffReviewFields, postScheduleReviewValue, getStepNavigation, primaryStepLabel } from '@/components/wizard/eventReview';
 import AddTeamModal, { TeamDraft } from '@/components/modals/event/addteammodal';
 import AddSupervisorModal from '@/components/modals/event/addsupervisormodal';
 import BulkImportModal from '@/components/modals/event/bulkimportmodal';
@@ -568,6 +569,7 @@ function LiteCreateContent() {
         </Tooltip>
       </h3>
       <AreaEditor
+        tutorial
         className="min-h-0 flex-1"
         heightClassName="min-h-[240px] flex-1"
         area={eventDraft.venue.area}
@@ -637,16 +639,20 @@ function LiteCreateContent() {
     </Card>
   );
 
-  const locationsColumn = (
-    <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
-      <div className="flex-shrink-0 pb-3 flex items-center justify-between">
-        <h3 className="text-surface-light font-semibold text-lg inline-flex items-center gap-1.5">
-          Locations
-          <Tooltip content="Posts or areas teams can be assigned to and dispatched between during the event (e.g., Main Entrance, First Aid Tent)." placement="top">
-            <CircleHelp className="w-3.5 h-3.5 text-surface-faint" />
-          </Tooltip>
-        </h3>
-      </div>
+  const locationsHeading = (
+    <div className="flex-shrink-0 pb-3 flex items-center justify-between">
+      <h3 className="text-surface-light font-semibold text-lg inline-flex items-center gap-1.5">
+        Locations
+        <Tooltip content="Posts or areas teams can be assigned to and dispatched between during the event (e.g., Main Entrance, First Aid Tent)." placement="top">
+          <CircleHelp className="w-3.5 h-3.5 text-surface-faint" />
+        </Tooltip>
+      </h3>
+    </div>
+  );
+
+  // Locations added by name; with a map they are placed on it instead.
+  const locationsAddRow = (
+    <>
       <div className="flex-shrink-0 flex gap-2 pb-3">
         <Input
           placeholder="e.g., Main Entrance"
@@ -665,6 +671,16 @@ function LiteCreateContent() {
           Add
         </Button>
       </div>
+      {allPosts.length === 0 && (
+        <TutorialTip step={1} className="mb-3 flex-shrink-0">
+          Name a location teams will work from, then click Add.
+        </TutorialTip>
+      )}
+    </>
+  );
+
+  const locationsList = (
+    <>
       <ScrollShadow className="space-y-2 pr-2 scrollbar-hide flex-1 min-h-0" hideScrollBar style={{ overflow: 'auto' }}>
         {allPosts.map((post, index) =>
           locationListItem(
@@ -699,7 +715,7 @@ function LiteCreateContent() {
           ))}
         </div>
       )}
-    </div>
+    </>
   );
 
   const equipmentColumn = (
@@ -730,6 +746,18 @@ function LiteCreateContent() {
           Add
         </Button>
       </div>
+      {eventDraft.venue.equipment.length === 0 ? (
+        <TutorialTip step={1} className="mb-3 flex-shrink-0">
+          Name a piece of equipment you will track, like a gurney or AED, then click Add.
+        </TutorialTip>
+      ) : (
+        allPosts.length > 0 &&
+        !eventEquipment.some((e) => e.defaultLocation) && (
+          <TutorialTip step={2} className="mb-3 flex-shrink-0" arrowClassName={null}>
+            Optionally, choose where each item starts from its Default location menu.
+          </TutorialTip>
+        )
+      )}
       <ScrollShadow className="space-y-2 pr-2 scrollbar-hide flex-1 min-h-0" hideScrollBar style={{ overflow: 'auto' }}>
         {eventDraft.venue.equipment.map((item, index) =>
           locationListItem(
@@ -764,18 +792,25 @@ function LiteCreateContent() {
   // With a map, the list sits beside it (locations can be placed on it, as in
   // venue setup's GeoLocationsEditor); without one, the list fills the step.
   const locationsStep = mapLayer ? (
-    <div className="flex h-full gap-4 px-6 pt-4">
-      <div className="flex w-[320px] flex-shrink-0 flex-col min-h-0">{locationsColumn}</div>
-      <GeoLocationsEditor
-        className="flex-1 min-w-0 h-full"
-        layer={mapLayer}
-        onAddPost={addMapPost}
-        onMovePost={moveMapPost}
-        onAddZone={addMapZone}
-      />
-    </div>
+    <GeoLocationsEditor
+      className="h-full px-6 pt-4"
+      layer={mapLayer}
+      onAddPost={addMapPost}
+      onMovePost={moveMapPost}
+      onAddZone={addMapZone}
+      heading={locationsHeading}
+      tutorial
+    >
+      {locationsList}
+    </GeoLocationsEditor>
   ) : (
-    <div className="flex h-full px-6 pt-4">{locationsColumn}</div>
+    <div className="flex h-full px-6 pt-4">
+      <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
+        {locationsHeading}
+        {locationsAddRow}
+        {locationsList}
+      </div>
+    </div>
   );
 
   // Same layout as Locations, with the map shown for reference.
@@ -843,6 +878,7 @@ function LiteCreateContent() {
           lastSelectedPostIndex={lastSelectedPostIndex}
           setLastSelectedPostIndex={setLastSelectedPostIndex}
           selectClassNames={selectClassNames}
+          postsHint={eventDraft.eventPosts.length === 0 ? 'Choose the locations teams are posted at, or click Enable All. Uncheck Enable Posts to go without a schedule.' : undefined}
         />
         <PostingScheduleSection
           postsEnabled={postsEnabled}
@@ -931,6 +967,17 @@ function LiteCreateContent() {
 
   const { isFirstStep, isLastStep, goNext, goBack } = getStepNavigation(STEP_ORDER, currentStepId, setCurrentStepId);
 
+  // Whether the user has entered anything in each step yet (Skip until then).
+  const stepHasInput: Record<StepId, boolean> = {
+    basics: true,
+    map: !!eventDraft.venue.area,
+    locations: allPosts.length > 0 || mapZones.length > 0 || !!locationInput.trim(),
+    equipment: eventDraft.venue.equipment.length > 0 || !!equipmentInput.trim(),
+    teams: eventDraft.staff.length > 0 || eventDraft.supervisor.length > 0,
+    postschedule: !postsEnabled || eventDraft.eventPosts.length > 0,
+    review: true,
+  };
+
   const backButton = !isFirstStep && (
     <Button variant="flat" size="md" onPress={goBack} className="px-6">
       Back
@@ -944,7 +991,7 @@ function LiteCreateContent() {
       isDisabled={currentStepId === 'basics' && !hasRequiredBasics}
       className="px-6 bg-accent hover:bg-accent/90 text-surface-light"
     >
-      {isLastStep ? 'Create Event' : 'Continue'}
+      {primaryStepLabel(isLastStep, stepHasInput[currentStepId as StepId])}
     </Button>
   );
 

@@ -20,7 +20,7 @@ export default function DispatchZoneCheckbox({
       <Tooltip
         placement="top"
         className="max-w-xs"
-        content="A dispatch zone gets its own calls tab on the dispatch board: every call at a location inside the area is listed there, so one dispatcher can handle that part of the event. It is drawn with diagonal stripes on the map."
+        content="A dispatch zone gets its own calls tab on the dispatch board: every call at a location inside the area is listed there, so one dispatcher can handle that part of the event."
       >
         <CircleHelp className="h-3.5 w-3.5 flex-shrink-0 text-surface-faint" aria-label="What is a dispatch zone?" />
       </Tooltip>
