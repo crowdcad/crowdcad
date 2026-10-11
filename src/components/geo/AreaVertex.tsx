@@ -49,7 +49,7 @@ export default function AreaVertex({
   if (!first) {
     return (
       <span
-        className="pointer-events-none block h-2.5 w-2.5 rounded-full border-2 border-white"
+        className="pointer-events-none block h-2.5 w-2.5 rounded-circle border-2 border-white"
         style={{ backgroundColor: color, boxShadow: '0 1px 3px rgb(0 0 0 / 0.6)' }}
       />
     );
@@ -62,7 +62,7 @@ export default function AreaVertex({
       role={closable ? 'button' : undefined}
       aria-label={closable ? 'Complete the area' : 'First point'}
       title={closable ? 'Click to complete the area' : undefined}
-      className={`pointer-events-auto block h-5 w-5 rounded-full transition-transform ${closable ? 'cursor-pointer hover:scale-125' : 'cursor-default'}`}
+      className={`pointer-events-auto block h-5 w-5 rounded-circle transition-transform ${closable ? 'cursor-pointer hover:scale-125' : 'cursor-default'}`}
       style={{
         border: `3px solid ${color}`,
         boxShadow: '0 0 0 1.5px white, 0 1px 3px rgb(0 0 0 / 0.6)',

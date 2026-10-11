@@ -199,7 +199,7 @@ function markerElement(m: BasemapMarker): HTMLElement {
   // Above the image overlay, which is a later sibling of the map (like MapLibre's own controls).
   el.style.zIndex = '2';
   const dot = document.createElement('span');
-  dot.className = `block rounded-full border-2 border-white shadow ${
+  dot.className = `block rounded-circle border-2 border-white shadow ${
     m.tone === 'pending' ? 'h-4 w-4 animate-pulse bg-accent' : 'h-3 w-3 bg-status-blue'
   }`;
   el.appendChild(dot);
