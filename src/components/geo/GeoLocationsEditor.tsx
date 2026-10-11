@@ -11,6 +11,7 @@ import AreaModeToggleButton from '@/components/venue-management/AreaModeToggleBu
 import PendingMarkerDialog from '@/components/venue-management/PendingMarkerDialog';
 import PendingZoneDialog from '@/components/venue-management/PendingZoneDialog';
 import { MIN_AREA_POINTS } from './AreaVertex';
+import TutorialTip from '@/components/ui/TutorialTip';
 import GeoLayerMap from './GeoLayerMap';
 
 type PostObject = Exclude<Post, string>;
@@ -19,12 +20,17 @@ type PostObject = Exclude<Post, string>;
  * Places locations and draws areas on a geo layer with no image (Lite mode's
  * map), with the same controls, dialogs and area drawing (AreaVertex) as venue
  * setup's Locations step. The caller keeps the layer; this reports additions.
+ * The marker/area buttons head a side column (under `heading`, above
+ * `children`, e.g. the location list), so the map fills the height beside it.
  */
 export default function GeoLocationsEditor({
   layer,
   onAddPost,
   onMovePost,
   onAddZone,
+  heading,
+  children,
+  tutorial = false,
   className,
 }: {
   layer: Layer;
@@ -33,6 +39,10 @@ export default function GeoLocationsEditor({
   onMovePost: (postIdx: number, p: LatLng) => void;
   /** Returns an error to show, or null once added. */
   onAddZone: (zone: Zone) => string | null;
+  heading?: React.ReactNode;
+  children?: React.ReactNode;
+  /** Lite's tutorial tips: add a marker, then optionally an area. */
+  tutorial?: boolean;
   className?: string;
 }) {
   const [mode, setMode] = useState<'none' | 'marker' | 'area'>('none');
@@ -147,27 +157,42 @@ export default function GeoLocationsEditor({
               : `${count} point${count === 1 ? '' : 's'} placed. Add at least ${MIN_AREA_POINTS - count} more, then click the open circle to complete the area.`
         : 'Drag a location to move it.';
 
+  const tutorialTip = !tutorial
+    ? null
+    : layer.posts.length === 0
+      ? <TutorialTip step={1} className="mt-3 max-w-none" arrowClassName="left-[calc(25%-10px)]">Add a location marker to the map.</TutorialTip>
+      : (layer.zones ?? []).length === 0
+        ? <TutorialTip step={2} className="mt-3 max-w-none" arrowClassName="right-[calc(25%-10px)]">Optionally, label different areas of your map.</TutorialTip>
+        : null;
+
   return (
-    <div className={`flex flex-col ${className ?? ''}`}>
-      <div className="flex flex-shrink-0 flex-wrap items-center gap-2 pb-2">
-        <MarkerModeToggleButton
-          isAddMarkerMode={mode === 'marker'}
-          onToggle={() => {
-            cancelZone();
-            setMode(mode === 'marker' ? 'none' : 'marker');
-          }}
-        />
-        <AreaModeToggleButton
-          isAddAreaMode={mode === 'area'}
-          onToggle={() => {
-            cancelMarker();
-            cancelZone();
-            setMode(mode === 'area' ? 'none' : 'area');
-          }}
-        />
-        <span className="text-xs text-surface-faint">{hint}</span>
+    <div className={`flex gap-4 ${className ?? ''}`}>
+      <div className="flex w-[320px] flex-shrink-0 flex-col min-h-0">
+        {heading}
+        <div className="grid flex-shrink-0 grid-cols-2 gap-2">
+          <MarkerModeToggleButton
+            className="w-full"
+            isAddMarkerMode={mode === 'marker'}
+            onToggle={() => {
+              cancelZone();
+              setMode(mode === 'marker' ? 'none' : 'marker');
+            }}
+          />
+          <AreaModeToggleButton
+            className="w-full"
+            isAddAreaMode={mode === 'area'}
+            onToggle={() => {
+              cancelMarker();
+              cancelZone();
+              setMode(mode === 'area' ? 'none' : 'area');
+            }}
+          />
+        </div>
+        {tutorialTip}
+        {hint && <p className="flex-shrink-0 pt-2 pb-3 text-xs leading-snug text-surface-faint">{hint}</p>}
+        {children}
       </div>
-      <div className="relative min-h-0 flex-1 overflow-hidden rounded-sm">
+      <div className="relative min-w-0 flex-1 overflow-hidden rounded-sm">
         <GeoLayerMap
           className="absolute inset-0"
           layer={layer}

@@ -2,6 +2,7 @@ import React from 'react';
 import { Button, ButtonGroup, Card, Dropdown, DropdownTrigger, DropdownMenu, DropdownItem, ScrollShadow } from '@heroui/react';
 import { Trash2, ChevronDown, Pencil } from 'lucide-react';
 import type { Staff } from '@/app/types';
+import TutorialTip from '@/components/ui/TutorialTip';
 
 type Props = {
   staff: Staff[];
@@ -60,12 +61,10 @@ export default function TeamStaffingSection({
           </Dropdown>
         </ButtonGroup>
         {addTeamHint && staff.length === 0 && (
-          // Same colors as the Add Team button, so it follows light and dark mode with it.
-          <div role="note" className="absolute right-4 top-full z-10 mt-2 max-w-[240px] rounded-lg bg-default/40 px-3 py-2 text-xs leading-snug text-surface-light">
-            {/* The corner pointer, under the Add Team half of the button group: a triangle above the box, so the translucent fills don't overlap. */}
-            <span aria-hidden className="absolute -top-2 right-[64px] h-2 w-4 bg-default/40 [clip-path:polygon(50%_0,100%_100%,0_100%)]" />
+          // The pointer sits under the Add Team half of the button group.
+          <TutorialTip floating step={1} className="right-4 w-[240px]" arrowClassName="right-[64px]">
             {addTeamHint}
-          </div>
+          </TutorialTip>
         )}
       </div>
 

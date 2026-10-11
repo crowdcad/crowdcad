@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Button, Input } from '@heroui/react';
 import { ZONE_COLOR_PALETTE } from '@/lib/zoneColors';
 import DispatchZoneCheckbox from './DispatchZoneCheckbox';
@@ -26,6 +26,17 @@ export default function PendingZoneDialog({
   onConfirm,
   onCancel,
 }: PendingZoneDialogProps) {
+  // An area needs a name: Confirm without one flags the field instead of adding (or dropping) the area.
+  const [nameMissing, setNameMissing] = useState(false);
+  const confirm = () => {
+    if (!zoneNameInput.trim()) {
+      setNameMissing(true);
+      zoneNameInputRef.current?.focus();
+      return;
+    }
+    onConfirm();
+  };
+
   return (
     <div
       className="fixed z-30 w-60 rounded-lg border border-status-blue bg-surface-deepest p-3 shadow-xl"
@@ -38,23 +49,33 @@ export default function PendingZoneDialog({
       <Input
         ref={zoneNameInputRef}
         value={zoneNameInput}
-        onValueChange={setZoneNameInput}
+        onValueChange={(value) => {
+          setZoneNameInput(value);
+          if (value.trim()) setNameMissing(false);
+        }}
         onKeyDown={(e) => {
           if (e.key === 'Enter') {
             e.preventDefault();
-            onConfirm();
+            confirm();
           } else if (e.key === 'Escape') {
             e.preventDefault();
             onCancel();
           }
         }}
-        placeholder="Area name"
+        label="Area name"
+        labelPlacement="outside"
+        placeholder="Lower concourse"
+        isRequired
+        isInvalid={nameMissing}
+        errorMessage="This field is required."
         size="sm"
         variant="flat"
         color="default"
+        className="mb-2"
         classNames={{
+          label: 'text-[11px] font-medium text-surface-light/70',
           input: 'text-surface-light text-sm outline-none focus:outline-none data-[focus=true]:outline-none',
-          inputWrapper: 'px-4 hover:bg-surface-deep mb-2',
+          inputWrapper: 'px-4 hover:bg-surface-deep',
         }}
       />
       <p className="mb-1 text-[11px] font-medium text-surface-light/70">Color:</p>
@@ -78,7 +99,7 @@ export default function PendingZoneDialog({
         <Button
           size="sm"
           radius="full"
-          onPress={onConfirm}
+          onPress={confirm}
           className="flex-1 bg-accent hover:bg-accent/90 text-surface-light"
         >
           Confirm

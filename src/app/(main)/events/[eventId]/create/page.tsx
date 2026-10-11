@@ -18,7 +18,7 @@ import SupervisorStaffingSection from '@/components/event-create/SupervisorStaff
 import PostingScheduleSection from '@/components/event-create/PostingScheduleSection';
 import { EquipmentSelectionSection, PostsSelectionSection } from '@/components/event-create/PostsEquipmentSection';
 import { WizardShell, StepProgress, ReviewColumns, type WizardStep, type ReviewColumn } from '@/components/wizard';
-import { countLabel, eventConfigReviewFields, staffReviewFields, postScheduleReviewValue, getStepNavigation } from '@/components/wizard/eventReview';
+import { countLabel, eventConfigReviewFields, staffReviewFields, postScheduleReviewValue, getStepNavigation, primaryStepLabel } from '@/components/wizard/eventReview';
 import { randomId, stripUndefined } from '@/lib/utils';
 import AddTeamModal, { TeamDraft } from '@/components/modals/event/addteammodal';
 import AddSupervisorModal from '@/components/modals/event/addsupervisormodal';
@@ -595,6 +595,15 @@ export default function EventCreation() {
 
   const { isFirstStep, isLastStep, goNext, goBack } = getStepNavigation(STEP_ORDER, currentStepId, setCurrentStepId);
 
+  // Whether the user has entered anything in each step yet (Skip until then).
+  const stepHasInput: Record<StepId, boolean> = {
+    basics: true,
+    teams: (eventData.staff ?? []).length > 0 || (eventData.supervisor ?? []).length > 0,
+    equipment: eventData.eventEquipment.length > 0,
+    postschedule: postsEnabled || (eventData.eventPosts ?? []).length > 0,
+    review: true,
+  };
+
   const backButton = !isFirstStep && (
     <Button variant="flat" size="md" onPress={goBack} className="px-6">
       Back
@@ -610,7 +619,7 @@ export default function EventCreation() {
       isLoading={isLastStep && isSubmitting}
       className="px-6 bg-accent hover:bg-accent/90 text-surface-light"
     >
-      {isLastStep ? 'Create Event' : 'Continue'}
+      {primaryStepLabel(isLastStep, stepHasInput[currentStepId as StepId])}
     </Button>
   );
 

@@ -12,6 +12,7 @@ import BasemapPicker from './BasemapPicker';
 import BasemapView, { type BasemapViewRequest } from './BasemapView';
 import HelpTip from './HelpTip';
 import PlaceSearch from './PlaceSearch';
+import TutorialTip from '@/components/ui/TutorialTip';
 
 /**
  * Draws a venue layer's area of interest on the live map (P8, D64): the
@@ -23,12 +24,15 @@ export default function AreaEditor({
   area,
   onChange,
   heightClassName = 'h-[55vh] min-h-[320px]',
+  tutorial = false,
   className,
 }: {
   area: MapArea | undefined;
   onChange: (area: MapArea | null) => void;
   /** The map's height; e.g. "min-h-0 flex-1" with a `className` of "h-full" to fill the parent. */
   heightClassName?: string;
+  /** Lite's tutorial tips, one at a time: map format, then place, then the area. */
+  tutorial?: boolean;
   className?: string;
 }) {
   const [points, setPoints] = useState<{ lat: number; lng: number }[]>(area?.polygon ?? []);
@@ -38,6 +42,13 @@ export default function AreaEditor({
     area && area.polygon.length >= 3 ? { key: 1, bounds: areaBounds(area) } : undefined,
   );
   const centerRef = useRef<LatLon | undefined>(undefined);
+  // Tutorial progress: a picked format or place moves past its tip (so does
+  // placing points, for anyone who skips ahead). A tip hides while its
+  // control has focus, so it doesn't cover the open menu or search results.
+  const [formatPicked, setFormatPicked] = useState(false);
+  const [placePicked, setPlacePicked] = useState(false);
+  const [focused, setFocused] = useState<'format' | 'search' | null>(null);
+  const tutorialStep = !tutorial || closed ? 0 : points.length > 0 || placePicked ? 3 : formatPicked ? 2 : 1;
 
   // Report every change (not the initial area).
   const changeRef = useRef(onChange);
@@ -61,17 +72,38 @@ export default function AreaEditor({
   return (
     <div className={`flex flex-col gap-3 text-surface-light ${className ?? ''}`}>
       <div className="flex flex-wrap items-center gap-2">
-        <BasemapPicker value={validChoice(basemapId, DEFAULT_BASEMAP_ID)} onChange={setBasemapId} omit={['none']} />
-        <PlaceSearch
-          className="flex-1"
-          near={() => centerRef.current}
-          onPick={(r) =>
-            setView((v) => ({ key: (v?.key ?? 0) + 1, ...(r.bbox ? { bounds: r.bbox } : { center: { lat: r.lat, lon: r.lon }, zoom: 17 }) }))
-          }
-        />
+        <div className="relative" onFocusCapture={() => setFocused('format')} onBlurCapture={() => setFocused(null)}>
+          <BasemapPicker
+            value={validChoice(basemapId, DEFAULT_BASEMAP_ID)}
+            onChange={(id) => {
+              setBasemapId(id);
+              setFormatPicked(true);
+            }}
+            omit={['none']}
+          />
+          {tutorialStep === 1 && focused !== 'format' && (
+            <TutorialTip floating step={1} className="left-0 w-[240px]">
+              Select your preferred map format.
+            </TutorialTip>
+          )}
+        </div>
+        <div className="relative flex-1" onFocusCapture={() => setFocused('search')} onBlurCapture={() => setFocused(null)}>
+          <PlaceSearch
+            near={() => centerRef.current}
+            onPick={(r) => {
+              setPlacePicked(true);
+              setView((v) => ({ key: (v?.key ?? 0) + 1, ...(r.bbox ? { bounds: r.bbox } : { center: { lat: r.lat, lon: r.lon }, zoom: 17 }) }));
+            }}
+          />
+          {tutorialStep === 2 && focused !== 'search' && (
+            <TutorialTip floating step={2} className="left-0 w-[260px]">
+              Enter the location you will be working from.
+            </TutorialTip>
+          )}
+        </div>
       </div>
       {/* Status at the left and the undo/clear buttons at the right, on one line under the search box. */}
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="relative flex flex-wrap items-center justify-between gap-2">
         <p className="inline-flex flex-wrap items-center gap-1 text-sm font-medium" role="status">
           {closed ? (
             `Area complete with ${points.length} points.`
@@ -98,6 +130,11 @@ export default function AreaEditor({
             Clear
           </Button>
         </div>
+        {tutorialStep === 3 && (
+          <TutorialTip floating step={3} className="left-0 w-[280px]">
+            Click around the area you will be working in to outline it, then click the first point to finish.
+          </TutorialTip>
+        )}
       </div>
       <BasemapView
         className={`rounded-lg border border-surface-liner ${heightClassName}`}

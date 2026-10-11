@@ -3,6 +3,7 @@ import { Button, Checkbox, Chip, Input, ScrollShadow, Select, SelectItem, Toolti
 import { CircleHelp, Plus, Trash2 } from 'lucide-react';
 import type { Event, Post, Venue, EventEquipment } from '@/app/types';
 import { randomId } from '@/lib/utils';
+import TutorialTip from '@/components/ui/TutorialTip';
 
 type FlattenedPost = {
   post: Post;
@@ -25,6 +26,8 @@ type Props = {
     input: string;
     inputWrapper: string;
   };
+  /** A tutorial callout under the post picker (Lite mode). */
+  postsHint?: string;
 };
 
 export function PostsSelectionSection({
@@ -39,6 +42,7 @@ export function PostsSelectionSection({
   lastSelectedPostIndex,
   setLastSelectedPostIndex,
   selectClassNames,
+  postsHint,
 }: Props) {
   if (!hasVenue) return null;
 
@@ -140,6 +144,8 @@ export function PostsSelectionSection({
               Enable All
             </Button>
           </div>
+
+          {postsHint && postsEnabled && allPosts.length > 0 && <TutorialTip step={1}>{postsHint}</TutorialTip>}
 
           {(eventData.eventPosts || []).length > 0 && (
             <div className="flex flex-wrap gap-2">

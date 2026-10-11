@@ -29,12 +29,12 @@ When('I draw a triangular area on the venue map', async ({ page }) => {
 });
 
 When('I name the area {string}', async ({ page }, name: string) => {
-  await page.getByPlaceholder('Area name').fill(name);
+  await page.getByPlaceholder('Lower concourse').fill(name);
   await page.getByRole('button', { name: 'Confirm' }).click();
 });
 
 When('I name the area {string} and mark it a dispatch zone', async ({ page }, name: string) => {
-  await page.getByPlaceholder('Area name').fill(name);
+  await page.getByPlaceholder('Lower concourse').fill(name);
   // The label text sits under HeroUI's invisible native <input>, which
   // covers the whole control and intercepts a click aimed at the text
   // itself — target the checkbox by role instead.
