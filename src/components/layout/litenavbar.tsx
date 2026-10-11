@@ -247,7 +247,7 @@ export default function LiteNavbar() {
                   <DropdownTrigger>
                     <button
                         aria-label="Open profile menu"
-                        className="relative rounded-full p-0.5 bg-gradient-to-br from-accent/70 to-[rgba(240,28,28,0.4)] cursor-pointer"
+                        className="relative rounded-full cursor-pointer"
                       >
                         <span className="flex h-7 w-7 items-center justify-center rounded-full border border-surface-liner bg-surface-base">
                           <UserRound className="size-4 text-surface-light" />

@@ -81,7 +81,7 @@ export default function TeamCardCondensed(props: TeamCardProps) {
               </div>
             )}
             <div className="flex-shrink-0 pt-2">
-              <div className="text-base font-semibold text-surface-light tabular-nums">
+              <div className="ui-timer text-base font-semibold text-surface-light">
                 {timer}
               </div>
             </div>

@@ -12,6 +12,7 @@ html[data-ui='classic'] {
   --ui-pad-scale: 1;                      /* multiplies every p-* utility */
   --ui-font: ui-sans-serif;               /* font-sans (body text) */
   --ui-font-data: ui-monospace;           /* font-mono (times, IDs) */
+  --ui-font-timer: inherit;               /* .ui-timer (live mm:ss) */
   --ui-heading-case: none;
   --ui-heading-tracking: normal;
   --ui-label-case: none;
@@ -19,7 +20,7 @@ html[data-ui='classic'] {
 }
 
 /* Tactical (UI lab option C): sharp corners, tighter padding, Rajdhani with
-   JetBrains Mono for data, uppercase tracked headings and labels. */
+   JetBrains Mono for data, uppercase tracked labels (titles stay as written). */
 html[data-ui='tactical'] {
   --radius: 0px;
   --ui-radius: 0px;
@@ -28,8 +29,9 @@ html[data-ui='tactical'] {
   --ui-pad-scale: 0.75;
   --ui-font: var(--font-rajdhani);
   --ui-font-data: var(--font-jetbrains-mono);
-  --ui-heading-case: uppercase;
-  --ui-heading-tracking: 0.04em;
+  --ui-font-timer: var(--font-jetbrains-mono);
+  --ui-heading-case: none;
+  --ui-heading-tracking: normal;
   --ui-label-case: uppercase;
   --ui-label-tracking: 0.08em;
 }
@@ -45,7 +47,18 @@ html[data-ui='tactical'] {
   letter-spacing: var(--ui-label-tracking);
 }
 
-/* HeroUI spinners draw a ring with rounded-full; keep them round when pills are squared. */
-:where(.animate-spinner-ease-spin, .animate-spinner-linear-spin) {
+/* HeroUI spinners draw their ring with rounded-full; keep them round when
+   pills are squared (html raises this above the rounded-full class). */
+html :is(.animate-spinner-ease-spin, .animate-spinner-linear-spin) {
   border-radius: 9999px;
+}
+
+/* Live mm:ss timers: fixed-width digits and a little room on each side, so a
+   ticking timer never shifts what sits beside it. Rajdhani has no tabular
+   figures, so tactical timers use the data font. */
+.ui-timer {
+  font-family: var(--ui-font-timer);
+  font-variant-numeric: tabular-nums;
+  padding-inline: 0.25rem;
+  white-space: nowrap;
 }
