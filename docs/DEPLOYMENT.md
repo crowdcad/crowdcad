@@ -9,6 +9,8 @@ Beginner-friendly versions of both guides, with separate Mac and Windows steps, 
 
 TAK live tracking is an optional add-on, in development and off by default. It is compiled in only when `NEXT_PUBLIC_TAK` is exactly `on`; missing or any other value compiles it out. See [`tak-integration/plan.md`](tak-integration/plan.md).
 
+On Firebase, TAK also needs one Firestore index, deployed once per project: `firebase deploy --only firestore:indexes --project YOUR_PROJECT_ID`. It's defined in `firestore.indexes.json` (a collection-group index on `takConfig.bridgeUid`). The TAK bridge uses it to find the events linked to it; without it the bridge connects but never sees an event. The emulators don't need it. The full bridge setup is in the [tak-bridge setup guide](https://github.com/crowdcad/tak-bridge/blob/integration/tak/docs/setup-infra-tak.md).
+
 With TAK on, `NEXT_PUBLIC_TAK_BASEMAPS` and `NEXT_PUBLIC_TAK_GEOCODER_URL` choose the basemaps and place search used for aligning maps and viewing history. Both default to open OpenStreetMap-based services and accept `off`, which stops requests to outside map services. See `.env.example` and decision D55.
 
 ## Choosing a backend
