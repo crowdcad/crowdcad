@@ -52,6 +52,12 @@ export interface BackendEnv {
   vars: Record<string, string>;
   /** Problems with this backend for the chosen placement, in plain words. */
   warnings: string[];
+  /**
+   * Set on a real (non-emulator) Firebase project: the project that needs the
+   * takConfig.bridgeUid collection-group index (firestore.indexes.json) before
+   * the bridge can see its events. The emulators don't enforce indexes.
+   */
+  firestoreIndexProject?: string;
 }
 
 /** Backend settings for the bridge's .env, from the app's own configuration. */
@@ -76,15 +82,14 @@ export async function backendEnv(placement: Placement): Promise<BackendEnv> {
     FIREBASE_AUTH_DOMAIN: o.authDomain ?? '',
   };
   const emu = getAuth(getApp()).emulatorConfig;
-  if (emu) {
-    // Same emulators as this browser (see src/app/firebase.ts).
-    vars.FIREBASE_AUTH_EMULATOR_HOST = `${emu.host}${emu.port ? `:${emu.port}` : ''}`;
-    if (process.env.NEXT_PUBLIC_USE_FIRESTORE_EMULATOR === 'true') vars.FIRESTORE_EMULATOR_HOST = '127.0.0.1:8080';
-    if (placement === 'tak-host') {
-      warnings.push(
-        'This CrowdCAD uses the Firebase emulators on this computer, which a bridge on the TAK host cannot reach. Choose "This computer" to test.',
-      );
-    }
+  if (!emu) return { vars, warnings, firestoreIndexProject: o.projectId };
+  // Same emulators as this browser (see src/app/firebase.ts).
+  vars.FIREBASE_AUTH_EMULATOR_HOST = `${emu.host}${emu.port ? `:${emu.port}` : ''}`;
+  if (process.env.NEXT_PUBLIC_USE_FIRESTORE_EMULATOR === 'true') vars.FIRESTORE_EMULATOR_HOST = '127.0.0.1:8080';
+  if (placement === 'tak-host') {
+    warnings.push(
+      'This CrowdCAD uses the Firebase emulators on this computer, which a bridge on the TAK host cannot reach. Choose "This computer" to test.',
+    );
   }
   return { vars, warnings };
 }

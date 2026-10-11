@@ -277,7 +277,7 @@ function AddTakServerWizard({
   const [tak, setTak] = useState<TakSignIn>({ host: '', username: '', password: '' });
   const [showPassword, setShowPassword] = useState(false);
   const [creds, setCreds] = useState<BridgeCredentials | null>(null);
-  const [env, setEnv] = useState<{ block: string; warnings: string[] } | null>(null);
+  const [env, setEnv] = useState<{ block: string; warnings: string[]; firestoreIndexProject?: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<TakBridgeStatus | null>(null);
@@ -324,6 +324,7 @@ function AddTakServerWizard({
       setEnv({
         block: envBlock(backend.vars, c, { ...tak, host: tak.host.trim(), username: tak.username.trim() }),
         warnings: backend.warnings,
+        firestoreIndexProject: backend.firestoreIndexProject,
       });
       setStep(3);
     } catch (err) {
@@ -433,8 +434,8 @@ function AddTakServerWizard({
                   </p>
                   <CopyBlock text={setupCommands('tak-host', env.block)} />
                   <p className="text-surface-faint">
-                    The last command shows the bridge&apos;s log. Look for &quot;enrolled with TAK Server&quot; and &quot;connected to TAK
-                    Server&quot;. Press Ctrl+C to stop watching; the bridge keeps running.
+                    The last command shows the bridge&apos;s log. Look for &quot;enrolled with TAK Server&quot;, &quot;linked events&quot;
+                    and &quot;connected to TAK Server&quot;. Press Ctrl+C to stop watching; the bridge keeps running.
                   </p>
                 </>
               ) : (
@@ -458,6 +459,22 @@ function AddTakServerWizard({
                     <code>node --env-file=.env dist/index.js</code> in the <code>tak-bridge</code> folder.
                   </p>
                 </>
+              )}
+              {env.firestoreIndexProject && (
+                <div className="space-y-2 rounded-lg border border-surface-liner p-3">
+                  <p>
+                    <strong>Firebase, once per project:</strong> the bridge finds its events with a query that needs the{' '}
+                    <code>takConfig</code> index. If this project doesn&apos;t have it yet, run this from a CrowdCAD checkout (its{' '}
+                    <code>firestore.indexes.json</code> defines it):
+                  </p>
+                  <CopyBlock text={`firebase deploy --only firestore:indexes --project ${env.firestoreIndexProject}`} />
+                  <p className="text-surface-faint">
+                    Or in the Firebase console: Firestore Database &gt; Indexes &gt; Single field &gt; Add exemption, with collection ID{' '}
+                    <code>takConfig</code>, field path <code>bridgeUid</code>, and Collection group scope Ascending. It takes a few minutes
+                    to build; then restart the bridge. Without it the bridge connects but never sees an event, and its log shows
+                    &quot;watching linked events failed&quot;.
+                  </p>
+                </div>
               )}
               <details>
                 <summary className="cursor-pointer">Just the .env contents</summary>
