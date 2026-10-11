@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
-import { Hospital, MapPin } from 'lucide-react';
+import { HousePlus, MapPin } from 'lucide-react';
 import type { Layer } from '@/app/types';
 import { imageCorners } from '@/lib/geo/basemapFrame';
 import { DEFAULT_BASEMAP_ID, validChoice } from '@/lib/geo/basemaps';
@@ -15,7 +15,7 @@ import BasemapView, { type BasemapViewRequest, type GeoPin, type GeoShape } from
 const DEFAULT_GEO_IMAGE_OPACITY = 0.7;
 
 /** The basemap choice and, for an aligned layer, the image's opacity: for a toolbar above the map. */
-export function GeoLayerMapControls({ layer }: { layer: Layer }) {
+export function GeoLayerMapControls({ layer, variant = 'pill' }: { layer: Layer; variant?: 'pill' | 'map' }) {
   const [basemapId, setBasemapId] = usePref<string>(PREF.alignBasemap, DEFAULT_BASEMAP_ID);
   const [opacity, setOpacity] = usePref<number>(PREF.imageOpacity, DEFAULT_GEO_IMAGE_OPACITY);
   const aligned = !!layerAlignment(layer) && !!layer.mapUrl;
@@ -26,6 +26,7 @@ export function GeoLayerMapControls({ layer }: { layer: Layer }) {
       omit={['none']}
       opacity={aligned ? opacity : undefined}
       onOpacityChange={setOpacity}
+      variant={variant}
     />
   );
 }
@@ -98,7 +99,7 @@ export default function GeoLayerMap({
     if (area) out.push({ id: 'area', coords: area.polygon, color: '#3eb1fd', closed: true, fillOpacity: 0.04, dashed: true });
     for (const zone of layer.zones ?? []) {
       const coords = zoneLatLngs(zone, layer);
-      if (coords) out.push({ id: zone.id, coords, color: zone.color, closed: true, fillOpacity: 0.2 });
+      if (coords) out.push({ id: zone.id, coords, color: zone.color, closed: true, fillOpacity: 0.2, striped: !!zone.isDispatchZone });
     }
     if (draftZone) out.push(...areaDraftShapes('draft', draftZone.coords, draftZone.color, !!draftZone.closed));
     return out;
@@ -112,7 +113,7 @@ export default function GeoLayerMap({
     const at = postLatLng(post, layer);
     if (!at) return [];
     const selected = selectedPostName === post.name;
-    const Icon = post.isClinic ? Hospital : MapPin;
+    const Icon = post.isClinic ? HousePlus : MapPin;
     return [
       {
         key: `post:${idx}:${post.name}`,
@@ -160,8 +161,8 @@ export default function GeoLayerMap({
       view={focusView && (!view || focusView.key > view.req.key) ? focusView : view?.req}
     >
       {showControls && (
-        <div className="absolute left-2 top-2 z-10">
-          <GeoLayerMapControls layer={layer} />
+        <div className="absolute left-[10px] top-[10px] z-10">
+          <GeoLayerMapControls layer={layer} variant="map" />
         </div>
       )}
       {children}

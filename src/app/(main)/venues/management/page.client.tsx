@@ -1441,7 +1441,9 @@ export default function VenueManagementPageClient() {
                 ? geoDrawing.coords!.length >= MIN_AREA_POINTS
                   ? `${geoDrawing.coords!.length} points placed. Click the open circle at the first point to complete the area.`
                   : `${geoDrawing.coords!.length} point${geoDrawing.coords!.length === 1 ? '' : 's'} placed. Add at least ${MIN_AREA_POINTS - geoDrawing.coords!.length} more, then click the open circle to complete the area.`
-                : 'Click on the map to place the area\'s first point.'
+                : pendingZone
+                  ? ''
+                  : 'Click on the map to place the area\'s first point.'
               : 'Drag a location to move it.'}
         </span>
       </div>

@@ -42,7 +42,7 @@ A short guide to CrowdCAD's main workflows for dispatchers, supervisors and even
 Click **Create Venue** on Venue Selection. The venue wizard has five steps:
 
 1. **Venue Configuration:** name and basic details.
-2. **Map:** upload a map image per floor, or import a GIS map (see below). Draw areas with **Add Area**: click the area's points in order, then click the first point's open circle to complete it, and check "Mark as Dispatch Zone" to give an area its own call tab. A drawn map area works the same way.
+2. **Map:** upload a map image per floor, or import a GIS map (see below). Draw areas with **Add Area**: click the area's points in order, then click the first point's open circle to complete it, and check "Mark as Dispatch Zone" to give an area its own call tab (dispatch zones are drawn with diagonal stripes). A drawn map area works the same way.
 3. **Locations:** place post markers and mark clinics.
 4. **Equipment:** add equipment and set each item's default location.
 5. **Review:** confirm and save.

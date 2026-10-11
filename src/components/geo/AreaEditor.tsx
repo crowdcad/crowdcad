@@ -23,10 +23,13 @@ export default function AreaEditor({
   area,
   onChange,
   heightClassName = 'h-[55vh] min-h-[320px]',
+  className,
 }: {
   area: MapArea | undefined;
   onChange: (area: MapArea | null) => void;
+  /** The map's height; e.g. "min-h-0 flex-1" with a `className` of "h-full" to fill the parent. */
   heightClassName?: string;
+  className?: string;
 }) {
   const [points, setPoints] = useState<{ lat: number; lng: number }[]>(area?.polygon ?? []);
   const [closed, setClosed] = useState(() => (area?.polygon.length ?? 0) >= MIN_AREA_POINTS);
@@ -56,7 +59,7 @@ export default function AreaEditor({
   };
   const remaining = Math.max(0, MIN_AREA_POINTS - points.length);
   return (
-    <div className="flex flex-col gap-3 text-surface-light">
+    <div className={`flex flex-col gap-3 text-surface-light ${className ?? ''}`}>
       <div className="flex flex-wrap items-center gap-2">
         <BasemapPicker value={validChoice(basemapId, DEFAULT_BASEMAP_ID)} onChange={setBasemapId} omit={['none']} />
         <PlaceSearch
@@ -67,24 +70,33 @@ export default function AreaEditor({
           }
         />
       </div>
-      <p className="inline-flex flex-wrap items-center gap-1 text-sm font-medium" role="status">
-        {closed ? (
-          `Area complete with ${points.length} points.`
-        ) : points.length === 0 ? (
-          'Click on the map to place the first point of the area you are working in.'
-        ) : remaining > 0 ? (
-          `Keep clicking around the area. ${remaining} more point${remaining === 1 ? '' : 's'} needed.`
-        ) : (
-          <>
-            Click the open circle
-            <span className="inline-flex px-0.5" aria-hidden>
-              <AreaVertex color="#3eb1fd" first />
-            </span>
-            to complete the area.
-          </>
-        )}
-        <HelpTip text="Find the place with the search box, then click points around the area your event covers, in order, and click the first point's open circle to complete it. The event's map is centered on this area, and you can place posts and draw zones anywhere on it." />
-      </p>
+      {/* Status and the undo/clear buttons on one line, at the right under the search box. */}
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <p className="inline-flex flex-wrap items-center gap-1 text-sm font-medium" role="status">
+          {closed ? (
+            `Area complete with ${points.length} points.`
+          ) : points.length === 0 ? (
+            'Click on the map to place the first point of the area you are working in.'
+          ) : remaining > 0 ? (
+            `Keep clicking around the area. ${remaining} more point${remaining === 1 ? '' : 's'} needed.`
+          ) : (
+            <>
+              Click the open circle
+              <span className="inline-flex px-0.5" aria-hidden>
+                <AreaVertex color="#3eb1fd" first />
+              </span>
+              to complete the area.
+            </>
+          )}
+          <HelpTip text="Find the place with the search box, then click points around the area your event covers, in order, and click the first point's open circle to complete it. The event's map is centered on this area, and you can place posts and draw zones anywhere on it." />
+        </p>
+        <Button size="sm" variant="flat" startContent={<Undo2 className="h-4 w-4" />} isDisabled={!points.length} onPress={undo}>
+          {closed ? 'Reopen area' : 'Undo last point'}
+        </Button>
+        <Button size="sm" variant="light" startContent={<Trash2 className="h-4 w-4" />} isDisabled={!points.length} onPress={clear}>
+          Clear
+        </Button>
+      </div>
       <BasemapView
         className={`rounded-lg border border-surface-liner ${heightClassName}`}
         basemapId={validChoice(basemapId, DEFAULT_BASEMAP_ID)}
@@ -95,14 +107,6 @@ export default function AreaEditor({
         view={view}
         onCenterChange={(c) => (centerRef.current = c)}
       />
-      <div className="flex gap-2">
-        <Button size="sm" variant="flat" startContent={<Undo2 className="h-4 w-4" />} isDisabled={!points.length} onPress={undo}>
-          {closed ? 'Reopen area' : 'Undo last point'}
-        </Button>
-        <Button size="sm" variant="light" startContent={<Trash2 className="h-4 w-4" />} isDisabled={!points.length} onPress={clear}>
-          Clear
-        </Button>
-      </div>
     </div>
   );
 }

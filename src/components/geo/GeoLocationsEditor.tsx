@@ -141,7 +141,7 @@ export default function GeoLocationsEditor({
         ? !pendingZone
           ? "Click on the map to place the area's first point."
           : !pendingZone.isDrawing
-            ? 'Name the area to save it.'
+            ? ''
             : count >= MIN_AREA_POINTS
               ? `${count} points placed. Click the open circle at the first point to complete the area.`
               : `${count} point${count === 1 ? '' : 's'} placed. Add at least ${MIN_AREA_POINTS - count} more, then click the open circle to complete the area.`

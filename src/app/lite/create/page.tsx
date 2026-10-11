@@ -3,10 +3,10 @@
 import React, { Suspense, useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Button, Card, Input, ScrollShadow, Tooltip } from '@heroui/react';
+import { Button, Card, Input, ScrollShadow, Select, SelectItem, Tooltip } from '@heroui/react';
 import { parseDate, getLocalTimeZone, today, Time } from '@internationalized/date';
-import { CircleHelp, Pencil, Trash2, WifiOff } from 'lucide-react';
-import type { Event, EventEquipment, Post, Staff, Supervisor, Venue, Zone } from '@/app/types';
+import { CircleHelp, Pencil, Trash2 } from 'lucide-react';
+import type { Equipment, Event, EventEquipment, Post, Staff, Supervisor, Venue, Zone } from '@/app/types';
 import LoadingScreen from '@/components/ui/loading-screen';
 import { useScheduleGeneration } from '@/hooks/useScheduleGeneration';
 import { scheduleTimesToWindow, formatTimeValue, parseTimeValue } from '@/lib/scheduleUtils';
@@ -19,7 +19,7 @@ import MetadataSection from '@/components/event-create/MetadataSection';
 import TeamStaffingSection from '@/components/event-create/TeamStaffingSection';
 import SupervisorStaffingSection from '@/components/event-create/SupervisorStaffingSection';
 import PostingScheduleSection from '@/components/event-create/PostingScheduleSection';
-import { EquipmentSelectionSection, PostsSelectionSection } from '@/components/event-create/PostsEquipmentSection';
+import { PostsSelectionSection } from '@/components/event-create/PostsEquipmentSection';
 import { WizardShell, StepProgress, ReviewColumns, type WizardStep, type ReviewColumn } from '@/components/wizard';
 import { countLabel, eventConfigReviewFields, staffReviewFields, postScheduleReviewValue, getStepNavigation } from '@/components/wizard/eventReview';
 import AddTeamModal, { TeamDraft, TeamMemberDraft } from '@/components/modals/event/addteammodal';
@@ -38,6 +38,7 @@ import { newTeamId } from '@/lib/teamId';
 // venue setup's: the same AreaEditor and map controls, without image layers or TAK.
 const AreaEditor = dynamic(() => import('@/components/geo/AreaEditor'), { ssr: false });
 const GeoLocationsEditor = dynamic(() => import('@/components/geo/GeoLocationsEditor'), { ssr: false });
+const GeoLayerMap = dynamic(() => import('@/components/geo/GeoLayerMap'), { ssr: false });
 
 const LICENSES = ['CPR', 'EMT-B', 'EMT-A', 'EMT-P', 'RN', 'MD/DO'];
 
@@ -49,6 +50,14 @@ const makeId = () => {
 };
 
 const getPostName = (post: Post): string => (typeof post === 'string' ? post : post.name);
+
+// Lite equipment exists only for its event: every item is event equipment,
+// keeping its default location (and any other event fields) by id.
+const withEventEquipment = (equipment: Equipment[], eventEquipment: EventEquipment[]): EventEquipment[] =>
+  equipment.map((item) => {
+    const prev = eventEquipment.find((e) => e.id === item.id);
+    return { ...prev, ...item, defaultLocation: prev?.defaultLocation };
+  });
 
 const setPostName = (post: Post, name: string): Post =>
   typeof post === 'string' ? { name, x: null, y: null } : { ...post, name };
@@ -354,12 +363,11 @@ function LiteCreateContent() {
       const duplicate = current.venue.equipment.some((equipment) => equipment.name.toLowerCase() === name.toLowerCase());
       if (duplicate) return current;
 
+      const equipment: Equipment[] = [...current.venue.equipment, { id: makeId(), name, status: 'Available' }];
       return {
         ...current,
-        venue: {
-          ...current.venue,
-          equipment: [...current.venue.equipment, { id: makeId(), name, status: 'Available' }],
-        },
+        venue: { ...current.venue, equipment },
+        eventEquipment: withEventEquipment(equipment, current.eventEquipment),
       };
     });
 
@@ -424,6 +432,15 @@ function LiteCreateContent() {
   const cancelEquipmentEdit = () => {
     setEditingEquipmentIndex(null);
     setEquipmentEditInput('');
+  };
+
+  const setEquipmentDefaultLocation = (id: string, location: string | undefined) => {
+    updateDraft((current) => ({
+      ...current,
+      eventEquipment: withEventEquipment(current.venue.equipment, current.eventEquipment).map((e) =>
+        e.id === id ? { ...e, defaultLocation: location } : e
+      ),
+    }));
   };
 
   // Locations and areas placed on the Lite map (GeoLocationsEditor). Same
@@ -555,6 +572,7 @@ function LiteCreateContent() {
 
     const finalized: LiteEventDraft = {
       ...eventDraft,
+      eventEquipment: withEventEquipment(eventDraft.venue.equipment, eventDraft.eventEquipment),
       status: 'active',
       updatedAt: new Date().toISOString(),
       clinics: syncClinicsFromVenue(eventDraft.venue, eventDraft.clinics),
@@ -575,16 +593,14 @@ function LiteCreateContent() {
   }
 
   const sectionData = toSectionData(eventDraft);
-  const hasVenueEquipment = eventDraft.venue.equipment.length > 0;
   const allPosts = eventDraft.venue.posts;
   const flattenedPosts = allPosts.map((post) => ({ post, layerName: '' }));
   const mapLayer = liteVenueLayers(eventDraft.venue)[0];
   const mapZones = eventDraft.venue.zones ?? [];
 
   type StepId = 'basics' | 'map' | 'locations' | 'teams' | 'equipment' | 'postschedule' | 'review';
-  const STEP_ORDER: StepId[] = hasVenueEquipment
-    ? ['basics', 'map', 'locations', 'teams', 'equipment', 'postschedule', 'review']
-    : ['basics', 'map', 'locations', 'teams', 'postschedule', 'review'];
+  const STEP_ORDER: StepId[] = ['basics', 'map', 'locations', 'equipment', 'teams', 'postschedule', 'review'];
+  const eventEquipment = withEventEquipment(eventDraft.venue.equipment, eventDraft.eventEquipment);
 
   const hasRequiredBasics = !!eventDraft.name.trim() && !!eventDraft.date;
 
@@ -608,22 +624,17 @@ function LiteCreateContent() {
   );
 
   const mapStep = (
-    <div className="px-6 pt-4 h-full overflow-y-auto minimal-scrollbar flex flex-col gap-3">
-      <h3 className="text-surface-light font-semibold text-xl inline-flex items-center gap-1.5">
+    <div className="px-6 pt-4 h-full min-h-0 flex flex-col gap-3">
+      <h3 className="flex-shrink-0 text-surface-light font-semibold text-xl inline-flex items-center gap-1.5">
         Map
-        <Tooltip content="Optional. Mark where the event is on the real map by finding the place (or typing coordinates) and clicking around the area. You can then place locations and draw areas on it. Map images and live tracking aren't available in Lite mode." placement="top">
+        <Tooltip content="Optional. Find the place or type coordinates, then click around the event's area to place locations and areas on it. Requires Wifi." placement="top">
           <CircleHelp className="w-3.5 h-3.5 text-surface-faint" />
         </Tooltip>
       </h3>
-      <div className="flex items-start gap-2 rounded-lg border border-status-orange/50 bg-status-orange/10 px-3 py-2 text-sm leading-snug text-surface-light">
-        <WifiOff className="mt-0.5 h-4 w-4 flex-shrink-0 text-status-orange" />
-        <span>
-          The map needs an internet connection. Without one it won&apos;t load, but everything else in Lite mode still works offline. Skip this step to run without a map.
-        </span>
-      </div>
       <AreaEditor
+        className="min-h-0 flex-1"
+        heightClassName="min-h-[240px] flex-1"
         area={eventDraft.venue.area}
-        heightClassName="h-[50vh] min-h-[300px]"
         onChange={(area) =>
           updateDraft((current) => {
             const venue = { ...current.venue };
@@ -644,7 +655,8 @@ function LiteCreateContent() {
     onCancel: () => void,
     onStartEdit: () => void,
     onRemove: () => void,
-    key: string
+    key: string,
+    extra?: React.ReactNode
   ) => (
     <Card key={key} radius="sm" className="bg-default/40">
       <div className="flex items-center justify-between px-3 py-2 gap-2">
@@ -675,6 +687,7 @@ function LiteCreateContent() {
           <>
             <span className="text-surface-light font-medium truncate leading-normal">{label}</span>
             <div className="flex items-center gap-2 flex-shrink-0">
+              {extra}
               <button type="button" onClick={onStartEdit} className="p-1 rounded bg-transparent" aria-label="Edit">
                 <Pencil className="h-4 w-4 text-surface-light" />
               </button>
@@ -792,21 +805,31 @@ function LiteCreateContent() {
             cancelEquipmentEdit,
             () => startEquipmentEdit(index),
             () => removeEquipment(index),
-            item.id
+            item.id,
+            <Select
+              aria-label={`Default location for ${item.name}`}
+              placeholder="Default location"
+              size="sm"
+              variant="flat"
+              selectedKeys={eventEquipment[index]?.defaultLocation ? [eventEquipment[index]!.defaultLocation!] : []}
+              onSelectionChange={(keys) => setEquipmentDefaultLocation(item.id, (Array.from(keys)[0] as string | undefined) || undefined)}
+              classNames={{ ...selectClassNames, base: 'w-44' }}
+            >
+              {allPosts.map((post) => (
+                <SelectItem key={getPostName(post)}>{getPostName(post)}</SelectItem>
+              ))}
+            </Select>
           )
         )}
       </ScrollShadow>
     </div>
   );
 
-  // With a map, the lists sit beside it and locations can be placed on it
-  // (GeoLocationsEditor, as in venue setup); without one, by name only.
+  // With a map, the list sits beside it (locations can be placed on it, as in
+  // venue setup's GeoLocationsEditor); without one, the list fills the step.
   const locationsStep = mapLayer ? (
     <div className="flex h-full gap-4 px-6 pt-4">
-      <div className="flex w-[320px] flex-shrink-0 flex-col gap-4 min-h-0">
-        {locationsColumn}
-        {equipmentColumn}
-      </div>
+      <div className="flex w-[320px] flex-shrink-0 flex-col min-h-0">{locationsColumn}</div>
       <GeoLocationsEditor
         className="flex-1 min-w-0 h-full"
         layer={mapLayer}
@@ -816,11 +839,19 @@ function LiteCreateContent() {
       />
     </div>
   ) : (
-    <div className="flex h-full px-6 pt-4">
-      {locationsColumn}
-      <div className="w-px bg-surface-liner mx-2 flex-shrink-0" />
-      {equipmentColumn}
+    <div className="flex h-full px-6 pt-4">{locationsColumn}</div>
+  );
+
+  // Same layout as Locations, with the map shown for reference.
+  const equipmentStep = mapLayer ? (
+    <div className="flex h-full gap-4 px-6 pt-4">
+      <div className="flex w-[420px] flex-shrink-0 flex-col min-h-0">{equipmentColumn}</div>
+      <div className="relative flex-1 min-w-0 overflow-hidden rounded-sm">
+        <GeoLayerMap className="absolute inset-0" layer={mapLayer} />
+      </div>
     </div>
+  ) : (
+    <div className="flex h-full px-6 pt-4">{equipmentColumn}</div>
   );
 
   const teamsSupervisorsStep = (
@@ -853,27 +884,6 @@ function LiteCreateContent() {
           onAddSupervisor={() => setIsSupervisorModalOpen(true)}
         />
       </div>
-    </div>
-  );
-
-  const equipmentStep = (
-    <div className="flex flex-col h-full overflow-hidden px-3 pt-4">
-      <div className="flex-shrink-0 pb-3 pl-3 flex items-center justify-between">
-        <h3 className="text-surface-light font-semibold text-xl inline-flex items-center gap-1.5">
-          Equipment
-          <Tooltip content="Select venue equipment for this event, or add equipment that only exists for this event and won't be saved to the venue." placement="top">
-            <CircleHelp className="w-3.5 h-3.5 text-surface-faint" />
-          </Tooltip>
-        </h3>
-      </div>
-      <EquipmentSelectionSection
-        hasVenue
-        eventData={sectionData}
-        setEventData={updateSectionData}
-        selectClassNames={selectClassNames}
-        allPosts={allPosts}
-        getPostName={getPostName}
-      />
     </div>
   );
 
@@ -944,17 +954,11 @@ function LiteCreateContent() {
         ...staffReviewFields(eventDraft.staff.length, eventDraft.supervisor.length),
       ],
     },
-    ...(hasVenueEquipment
-      ? [
-          {
-            id: 'equipment',
-            label: 'Equipment',
-            fields: [
-              { label: 'Equipment', value: countLabel(eventDraft.eventEquipment.length, 'item') },
-            ],
-          },
-        ]
-      : []),
+    {
+      id: 'equipment',
+      label: 'Equipment',
+      fields: [{ label: 'Equipment', value: countLabel(eventDraft.venue.equipment.length, 'item') }],
+    },
     {
       id: 'postschedule',
       label: 'Post schedule',
@@ -978,10 +982,8 @@ function LiteCreateContent() {
     { id: 'basics', label: 'Event Configuration', component: basicsStep, isComplete: hasRequiredBasics },
     { id: 'map', label: 'Map', component: mapStep, isComplete: hasRequiredBasics },
     { id: 'locations', label: 'Locations', component: locationsStep, isComplete: hasRequiredBasics },
+    { id: 'equipment', label: 'Equipment', component: equipmentStep, isComplete: hasRequiredBasics },
     { id: 'teams', label: 'Staff Assignments', component: teamsSupervisorsStep, isComplete: hasRequiredBasics },
-    ...(hasVenueEquipment
-      ? [{ id: 'equipment', label: 'Equipment', component: equipmentStep, isComplete: hasRequiredBasics }]
-      : []),
     { id: 'postschedule', label: 'Post schedule', component: postScheduleStep, isComplete: hasRequiredBasics },
     { id: 'review', label: 'Review', component: reviewStep, isComplete: hasRequiredBasics },
   ];
