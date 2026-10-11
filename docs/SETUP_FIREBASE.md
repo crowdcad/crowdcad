@@ -61,16 +61,16 @@ DISABLE_TELEMETRY=true
 - `NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID` is optional.
 - `DISABLE_TELEMETRY=true` is recommended for any deployment that may handle PHI.
 
-## 4. Deploy the security rules
+## 4. Deploy the security rules and indexes
 
 A production-mode database denies all reads and writes until rules are deployed.
 
 ```bash
 firebase login
-firebase deploy --only firestore:rules --project YOUR_PROJECT_ID
+firebase deploy --only firestore:rules,firestore:indexes --project YOUR_PROJECT_ID
 ```
 
-This deploys `firestore.rules` from the repository root. Redeploy it after any release that changes the file.
+This deploys `firestore.rules` and `firestore.indexes.json` from the repository root. Redeploy after any release that changes either file. The index is only used by TAK live tracking (the bridge's query for its linked events); deploying it does nothing otherwise, and with TAK on the bridge never sees an event without it. Index builds take a few minutes.
 
 If you created a Storage bucket, set its rules under **Storage > Rules** in the console. Uploads are written to `venue_maps/`. A minimal rule set:
 
@@ -137,7 +137,7 @@ git fetch upstream
 git merge upstream/main
 git push origin main
 npm install
-firebase deploy --only firestore:rules --project YOUR_PROJECT_ID
+firebase deploy --only firestore:rules,firestore:indexes --project YOUR_PROJECT_ID
 npm run build
 npm start
 ```
@@ -161,7 +161,7 @@ Firebase Hosting serves Next.js through its web frameworks integration, which re
 ```bash
 firebase experiments:enable webframeworks
 npm run build
-firebase deploy --only hosting,firestore:rules --project YOUR_PROJECT_ID
+firebase deploy --only hosting,firestore:rules,firestore:indexes --project YOUR_PROJECT_ID
 ```
 
 Any other Node host that runs `npm run build` and `npm start` (or the `Dockerfile`) also works. Add the deployed domain to Authorized domains.

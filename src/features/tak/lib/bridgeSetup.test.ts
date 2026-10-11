@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/lib/services', () => ({ isPocketbaseBackend: false, dbService: {} }));
 
-const { envBlock, isLoopback, parseEnrollLink, setupChecklist, setupCommands } = await import('./bridgeSetup');
+const { envBlock, envValue, isLoopback, parseEnrollLink, setupChecklist, setupCommands } = await import('./bridgeSetup');
 
 const creds = { bridgeUid: 'u1', email: 'abc@bridge.crowdcad.org', password: 'p@ss-123' };
 const tak = { host: 'takserver.example.org', username: 'crowdcad-bridge', password: 'tak-secret' };
@@ -36,6 +36,23 @@ describe('isLoopback', () => {
   it('spots local-only addresses', () => {
     for (const a of ['http://localhost:3000/admin', 'http://127.0.0.1:8090', 'localhost', 'http://[::1]:8090']) expect(isLoopback(a)).toBe(true);
     for (const a of ['https://pb.example.org', 'http://192.168.1.5:8090', 'https://localhost.example.org']) expect(isLoopback(a)).toBe(false);
+  });
+});
+
+describe('envValue', () => {
+  it('leaves plain values alone', () => {
+    expect(envValue('tak-secret')).toBe('tak-secret');
+    expect(envValue('a.b@c:1/2+3=')).toBe('a.b@c:1/2+3=');
+  });
+
+  it("single-quotes values Docker Compose would expand or cut short", () => {
+    expect(envValue('abc$12')).toBe("'abc$12'");
+    expect(envValue('pass #1')).toBe("'pass #1'");
+    expect(envValue('a"b')).toBe(`'a"b'`);
+  });
+
+  it("can't quote a value containing a single quote, so leaves it as typed", () => {
+    expect(envValue("it's")).toBe("it's");
   });
 });
 
