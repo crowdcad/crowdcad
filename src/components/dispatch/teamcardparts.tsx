@@ -20,6 +20,7 @@ import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
 import { getEventClinics } from '@/lib/clinics';
 import { getEquipmentIconType, type EquipmentIconType } from '@/lib/equipmentIcon';
 import { textToLog } from '@/lib/logText';
+import { STATIC_SELECTOR_BUTTON_CLASS, staticSelectorButtonProps } from '@/lib/autocompleteSelector';
 
 export type TeamCardProps = {
   staff: Staff;
@@ -249,7 +250,9 @@ export function TeamLocationInput({
         // run underneath it exactly like the "clear" button does everywhere
         // else in this app.
         clearButton: 'absolute end-6 top-1/2 -translate-y-1/2',
+        selectorButton: STATIC_SELECTOR_BUTTON_CLASS,
       }}
+      selectorButtonProps={staticSelectorButtonProps}
       inputProps={{
         classNames: {
           inputWrapper: 'bg-surface-deep text-surface-light border border-surface-liner rounded-full pl-3 group-data-[focus-visible=true]:ring-0 group-data-[focus-visible=true]:ring-offset-0 data-[focus-visible=true]:ring-0 data-[focus-visible=true]:ring-offset-0 focus-within:ring-0 focus:ring-0',

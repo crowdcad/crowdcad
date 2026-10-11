@@ -242,6 +242,7 @@ export default function SummaryPage() {
 
   // Data collection analytics
   const totalSessions = interactionSessions.length;
+  const surgeLog = event.surgeLog || [];
   const totalMouseClicks = interactionSessions.reduce((sum, session) => sum + session.mouseClicks.length, 0);
   const totalKeyStrokes = interactionSessions.reduce((sum, session) => sum + session.keyStrokes.length, 0);
   const avgSessionDuration = totalSessions > 0
@@ -391,7 +392,7 @@ export default function SummaryPage() {
           </div>
         )}
         {/* Data collection charts are rendered in the client-only SummaryCharts component above. */}
-        <div className={`grid grid-cols-1 lg:grid-cols-2 items-start ${GRID_WRAPPER}`}>
+        <div className={`grid grid-cols-1 lg:grid-cols-3 items-start ${GRID_WRAPPER}`}>
           {/* Staff Logs */}
           <div className={GRID_CELL}>
             <div className="flex items-center justify-between px-4 py-3">
@@ -460,41 +461,43 @@ export default function SummaryPage() {
             )}
           </div>
 
-          {/* Surge Log */}
-          {(event.surgeLog || []).length > 0 && (
-            <div className={GRID_CELL}>
-              <div className="flex items-center justify-between px-4 py-3">
-                <div>
-                  <span className="font-semibold">Surge Log</span>
-                  <div className="text-sm text-surface-faint">{event.surgeLog!.length} activation{event.surgeLog!.length === 1 ? '' : 's'}</div>
-                </div>
+          {/* Surge Log — always shown so the three logs stay one row of columns. */}
+          <div className={GRID_CELL}>
+            <div className="flex items-center justify-between px-4 py-3">
+              <div>
+                <span className="font-semibold">Surge Log</span>
+                <div className="text-sm text-surface-faint">{surgeLog.length} activation{surgeLog.length === 1 ? '' : 's'}</div>
+              </div>
+              {surgeLog.length > 0 && (
                 <div>
                   <Button size="sm" radius="full" variant="flat" onPress={() => setOpenSurge(v => !v)}>
                     {openSurge ? 'Hide' : 'Show'}
                   </Button>
                 </div>
-              </div>
-              {openSurge && (
-                <div className="px-4 pb-4 space-y-2">
-                  {event.surgeLog!.map((period, idx) => {
-                    const stillActive = !period.endedAt;
-                    const durationMin = Math.round(((period.endedAt ?? Date.now()) - period.startedAt) / 60000);
-                    return (
-                      <div key={idx} className="bg-surface-deepest p-3 text-sm">
-                        <span className="font-semibold">{formatTimestamp(period.startedAt)}</span>
-                        {' — '}
-                        {stillActive ? 'still active' : formatTimestamp(period.endedAt!)}
-                        <span className="text-surface-faint"> ({durationMin} min{stillActive ? ' so far' : ''})</span>
-                      </div>
-                    );
-                  })}
-                </div>
               )}
             </div>
-          )}
+            {openSurge && surgeLog.length > 0 && (
+              <div className="px-4 pb-4 space-y-2">
+                {surgeLog.map((period, idx) => {
+                  const stillActive = !period.endedAt;
+                  const durationMin = Math.round(((period.endedAt ?? Date.now()) - period.startedAt) / 60000);
+                  return (
+                    <div key={idx} className="bg-surface-deepest p-3 text-sm">
+                      <span className="font-semibold">{formatTimestamp(period.startedAt)}</span>
+                      {' — '}
+                      {stillActive ? 'still active' : formatTimestamp(period.endedAt!)}
+                      <span className="text-surface-faint"> ({durationMin} min{stillActive ? ' so far' : ''})</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
 
-          {/* Data Collection Details */}
-          {totalSessions > 0 && (
+        {/* Data Collection Details */}
+        {totalSessions > 0 && (
+          <div className={`grid grid-cols-1 ${GRID_WRAPPER}`}>
             <div className={GRID_CELL}>
               <button
                 onClick={() => setOpenDataCollection(v => !v)}
@@ -522,8 +525,8 @@ export default function SummaryPage() {
                 </div>
               )}
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
       </div>
       <ExportLogModal isOpen={showExportLogModal} onClose={() => setShowExportLogModal(false)} event={event} />

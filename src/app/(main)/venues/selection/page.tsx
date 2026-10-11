@@ -9,7 +9,7 @@ import { isEventEnded } from '@/lib/eventStatus';
 import { useAuth } from '@/hooks/useauth';
 import { useAdmin } from '@/hooks/useAdmin';
 import LoadingScreen from '@/components/ui/loading-screen';
-import { stripUndefined } from '@/lib/utils';
+import { newEventCreatePath } from '@/lib/newEvent';
 import ShareModal from '@/components/modals/sharemodal';
 import { Share2, Building2 } from "lucide-react";
 import { 
@@ -118,37 +118,15 @@ export default function VenueSelection() {
     }
   };
 
-  const handleStartNewEvent = async (venueId: string) => {
-    const selectedVenue = venues.find((v) => v.id === venueId);
-    if (!selectedVenue) {
+  // Opens the event builder without writing anything: the event is created
+  // only when setup finishes, so backing out leaves no empty event behind.
+  const handleStartNewEvent = (venueId: string) => {
+    if (!venues.some((v) => v.id === venueId)) {
       alert('Venue not found.');
       return;
     }
-
-    try {
-      setIsStartingEvent(true);
-      const newEvent = {
-        name: '',
-        date: new Date(),
-        venue: selectedVenue,
-        postingTimes: [],
-        staff: [],
-        supervisor: [],
-        userId: selectedVenue.userId,
-        calls: [],
-        eventPosts: [],
-        eventEquipment: [],
-        status: 'draft',
-        createdAt: new Date().toISOString(),
-      };
-
-      const newEventId = await dbService.addDocument('events', stripUndefined(newEvent));
-      router.push(`/events/${newEventId}/create`);
-    } catch (error) {
-      console.error('Error creating event:', error);
-      alert('Failed to create event.');
-      setIsStartingEvent(false);
-    }
+    setIsStartingEvent(true);
+    router.push(newEventCreatePath(venueId));
   };
 
   const handleToggleOrgEvent = async (event: Event) => {
