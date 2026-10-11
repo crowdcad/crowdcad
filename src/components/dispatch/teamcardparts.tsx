@@ -21,7 +21,7 @@ import { getEventClinics } from '@/lib/clinics';
 import { getEquipmentIconType, type EquipmentIconType } from '@/lib/equipmentIcon';
 import { textToLog } from '@/lib/logText';
 import { parseTimeToMinutes } from '@/lib/postingTimes';
-import { STATIC_SELECTOR_BUTTON_CLASS, staticSelectorButtonProps } from '@/lib/autocompleteSelector';
+import { staticSelectorButtonProps } from '@/lib/heroStatic';
 
 export type TeamCardProps = {
   staff: Staff;
@@ -286,7 +286,6 @@ function EditableTeamLocation({
         // run underneath it exactly like the "clear" button does everywhere
         // else in this app.
         clearButton: 'absolute end-6 top-1/2 -translate-y-1/2',
-        selectorButton: STATIC_SELECTOR_BUTTON_CLASS,
       }}
       selectorButtonProps={staticSelectorButtonProps}
       inputProps={{

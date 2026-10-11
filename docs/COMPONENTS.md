@@ -96,6 +96,23 @@ const inputClassNames = {
 - TAK fields use `TAK_INPUT_CLASSNAMES` from `src/features/tak/lib/ui.ts`.
 - Keep focus visible: this removes only the duplicate inner ring, not the wrapper's focus styling.
 
+## Dropdown chevrons and modal close buttons: no press animation
+
+HeroUI's press feedback (ripple, press scale, hover and press background) is off for two buttons everywhere in the app. A dropdown's chevron only flips when it opens, and a modal's X closes it with no animation. Both settings live in `src/lib/heroStatic.ts`, and lint (`no-restricted-syntax` in `eslint.config.mjs`) fails a component that leaves them out:
+
+```tsx
+import { STATIC_CLOSE_BUTTON_CLASS, staticSelectorButtonProps } from '@/lib/heroStatic';
+
+<Autocomplete selectorButtonProps={staticSelectorButtonProps} />
+
+// A modal either has no X (the app's usual choice; close with its footer buttons)...
+<Modal hideCloseButton />
+// ...or keeps a static one.
+<Modal classNames={{ closeButton: STATIC_CLOSE_BUTTON_CLASS }} />
+```
+
+HeroUI gives neither button a stable `data-slot`, so a global CSS rule can't target them reliably (unlike the focus-ring rule above). A modal without an X needs a Cancel or Close button in its footer on every step.
+
 ## Third-party UI libraries
 
 - HeroUI for higher-level components
