@@ -37,6 +37,7 @@ import AreaVertex, { MIN_AREA_POINTS } from '@/components/geo/AreaVertex';
 import MapZoomControls from '@/components/ui/map-zoom-controls';
 import MapPanSurface from '@/components/ui/map-pan-surface';
 import { VenueMapWithPosts } from '@/components/modals/event/venuemapmodal';
+import { geoEquipmentPins } from '@/components/dispatch/geoPins';
 import { WizardShell, StepProgress, ReviewColumns, type WizardStep, type ReviewColumn } from '@/components/wizard';
 import {
   Button,
@@ -67,6 +68,9 @@ const AreaEditor = dynamic(() => import('@/components/geo/AreaEditor'), { ssr: f
 const GeoLayerMap = dynamic(() => import('@/components/geo/GeoLayerMap'), { ssr: false });
 
 // Props: none required for this page
+
+/** The name of a layer drawn on the live map (no image), which needs none of its own. */
+const CUSTOM_AREA_LAYER_NAME = 'Custom Map Area';
 
 interface EquipmentWithLocation extends Equipment {
   locationId?: string;
@@ -1013,6 +1017,9 @@ export default function VenueManagementPageClient() {
   // panel exactly. The Map step renders its own dedicated interactive map
   // below, outside this left/right split entirely.
 
+  // A layer drawn as an area on the real map instead of an image (P8, D64).
+  const currentArea = !venueData.layers[currentLayer]?.mapUrl && !mapFile ? venueData.layers[currentLayer]?.area : undefined;
+
   // The map/floor-controls header for the Map step: floor name top-left,
   // Add Markers top-right.
   const mapStepHeader = (
@@ -1021,7 +1028,8 @@ export default function VenueManagementPageClient() {
         <label className="text-sm font-medium text-surface-light">
           Venue Map
         </label>
-        <Input
+        {/* A map drawn on the live map needs no layer name (CUSTOM_AREA_LAYER_NAME). */}
+        {!currentArea && <Input
           value={venueData.layers[currentLayer].name}
           onValueChange={updateLayerName}
           variant="flat"
@@ -1031,7 +1039,7 @@ export default function VenueManagementPageClient() {
             inputWrapper: 'rounded-large px-4 pr-6 hover:bg-surface-deep',
           }}
           placeholder="Layer name"
-        />
+        />}
       </div>
       {previewUrl && (
         <div className="flex gap-2">
@@ -1492,7 +1500,7 @@ export default function VenueManagementPageClient() {
   const geoReadOnlyPanel = currentDisplayLayer ? (
     <div className="flex flex-col h-full">
       <div className="relative min-h-0 flex-1 overflow-hidden rounded-t-sm">
-        <GeoLayerMap className="absolute inset-0" layer={currentDisplayLayer} />
+        <GeoLayerMap className="absolute inset-0" layer={currentDisplayLayer} extraPins={geoEquipmentPins(currentDisplayLayer, venueData.equipment)} />
       </div>
       {simpleLayerBar}
     </div>
@@ -1529,7 +1537,6 @@ export default function VenueManagementPageClient() {
   );
 
   // A layer drawn as an area on the real map instead of an image (P8, D64).
-  const currentArea = !venueData.layers[currentLayer]?.mapUrl && !mapFile ? venueData.layers[currentLayer]?.area : undefined;
   const setCurrentArea = (area: Layer['area'] | null) =>
     setVenueData((prev) => ({
       ...prev,
@@ -1537,12 +1544,19 @@ export default function VenueManagementPageClient() {
         if (i !== currentLayer) return l;
         const rest = { ...l };
         delete rest.area;
-        return area ? { ...rest, area } : rest;
+        if (area) return { ...rest, name: CUSTOM_AREA_LAYER_NAME, area };
+        // Back to an image: the floor name it would have had.
+        return rest.name === CUSTOM_AREA_LAYER_NAME ? { ...rest, name: `Floor ${i + 1}` } : rest;
       }),
     }));
   const areaEditor = (
-    <div className="minimal-scrollbar flex h-full flex-col gap-2 overflow-y-auto">
-      <AreaEditor area={currentArea?.polygon.length ? currentArea : undefined} onChange={(area) => setCurrentArea(area ?? { polygon: [] })} />
+    <div className="flex h-full min-h-0 flex-col gap-2">
+      <AreaEditor
+        className="min-h-0 flex-1"
+        heightClassName="min-h-[240px] flex-1"
+        area={currentArea?.polygon.length ? currentArea : undefined}
+        onChange={(area) => setCurrentArea(area ?? { polygon: [] })}
+      />
       <button
         type="button"
         onClick={() => setCurrentArea(null)}

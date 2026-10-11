@@ -14,6 +14,7 @@ import { syncClinicsFromVenue } from '@/lib/clinics';
 import { hasDuplicateZoneName, syncDispatchZonesFromVenue } from '@/lib/zones';
 import { liteVenueLayers } from '@/lib/liteEventAdapters';
 import { postAt, type LatLng } from '@/lib/geo/positions';
+import { geoEquipmentPins } from '@/components/dispatch/geoPins';
 import { stripUndefined } from '@/lib/utils';
 import MetadataSection from '@/components/event-create/MetadataSection';
 import TeamStaffingSection from '@/components/event-create/TeamStaffingSection';
@@ -847,7 +848,11 @@ function LiteCreateContent() {
     <div className="flex h-full gap-4 px-6 pt-4">
       <div className="flex w-[420px] flex-shrink-0 flex-col min-h-0">{equipmentColumn}</div>
       <div className="relative flex-1 min-w-0 overflow-hidden rounded-sm">
-        <GeoLayerMap className="absolute inset-0" layer={mapLayer} />
+        <GeoLayerMap
+          className="absolute inset-0"
+          layer={mapLayer}
+          extraPins={geoEquipmentPins(mapLayer, eventEquipment.map((e) => ({ ...e, location: e.defaultLocation })))}
+        />
       </div>
     </div>
   ) : (

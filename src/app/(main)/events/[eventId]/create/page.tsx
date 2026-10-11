@@ -30,6 +30,7 @@ import { isGeoLayer } from '@/lib/geo/layers';
 
 // The live map for venues with an aligned image or a drawn area (P8, D64), loaded only when needed.
 const GeoLayerMap = dynamic(() => import('@/components/geo/GeoLayerMap'), { ssr: false });
+import { geoEquipmentPins } from '@/components/dispatch/geoPins';
 import { MAP_CHECKER_BG } from '@/lib/mapStyles';
 import LoadingScreen from '@/components/ui/loading-screen';
 import { newTeamId } from '@/lib/teamId';
@@ -720,7 +721,11 @@ export default function EventCreation() {
         <div className="w-full flex flex-col flex-1 min-h-0">
           {currentIsGeo && currentVenueLayer ? (
           <div className="relative w-full flex-1 min-h-0 overflow-hidden rounded-t-sm">
-            <GeoLayerMap className="absolute inset-0" layer={currentVenueLayer} />
+            <GeoLayerMap
+              className="absolute inset-0"
+              layer={currentVenueLayer}
+              extraPins={geoEquipmentPins(currentVenueLayer, (eventData.eventEquipment || []).map((e) => ({ ...e, location: e.defaultLocation })))}
+            />
           </div>
           ) : (
           <div className="relative w-full flex-1 min-h-0 overflow-hidden rounded-t-sm" style={MAP_CHECKER_BG}>

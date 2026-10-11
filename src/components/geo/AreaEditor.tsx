@@ -70,8 +70,8 @@ export default function AreaEditor({
           }
         />
       </div>
-      {/* Status and the undo/clear buttons on one line, at the right under the search box. */}
-      <div className="flex flex-wrap items-center justify-end gap-2">
+      {/* Status at the left and the undo/clear buttons at the right, on one line under the search box. */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="inline-flex flex-wrap items-center gap-1 text-sm font-medium" role="status">
           {closed ? (
             `Area complete with ${points.length} points.`
@@ -90,12 +90,14 @@ export default function AreaEditor({
           )}
           <HelpTip text="Find the place with the search box, then click points around the area your event covers, in order, and click the first point's open circle to complete it. The event's map is centered on this area, and you can place posts and draw zones anywhere on it." />
         </p>
-        <Button size="sm" variant="flat" startContent={<Undo2 className="h-4 w-4" />} isDisabled={!points.length} onPress={undo}>
-          {closed ? 'Reopen area' : 'Undo last point'}
-        </Button>
-        <Button size="sm" variant="light" startContent={<Trash2 className="h-4 w-4" />} isDisabled={!points.length} onPress={clear}>
-          Clear
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="flat" startContent={<Undo2 className="h-4 w-4" />} isDisabled={!points.length} onPress={undo}>
+            {closed ? 'Reopen area' : 'Undo last point'}
+          </Button>
+          <Button size="sm" variant="light" startContent={<Trash2 className="h-4 w-4" />} isDisabled={!points.length} onPress={clear}>
+            Clear
+          </Button>
+        </div>
       </div>
       <BasemapView
         className={`rounded-lg border border-surface-liner ${heightClassName}`}
