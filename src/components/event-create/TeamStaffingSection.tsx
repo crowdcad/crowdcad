@@ -11,6 +11,8 @@ type Props = {
   onEditTeam: (idx: number) => void;
   onAddTeam: () => void;
   onUploadCSV: () => void;
+  /** A tutorial callout pointing at Add Team (Lite mode), shown until the first team exists. */
+  addTeamHint?: string;
 };
 
 export default function TeamStaffingSection({
@@ -21,10 +23,11 @@ export default function TeamStaffingSection({
   onEditTeam,
   onAddTeam,
   onUploadCSV,
+  addTeamHint,
 }: Props) {
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <div className="flex-shrink-0 px-4 py-3 flex items-center justify-between">
+      <div className="relative flex-shrink-0 px-4 py-3 flex items-center justify-between">
         <h3 className="text-surface-light font-semibold text-lg">Teams</h3>
         <ButtonGroup radius="full">
           <Button
@@ -56,6 +59,13 @@ export default function TeamStaffingSection({
             </DropdownMenu>
           </Dropdown>
         </ButtonGroup>
+        {addTeamHint && staff.length === 0 && (
+          <div role="note" className="absolute right-4 top-full z-10 mt-1 max-w-[240px] rounded-lg bg-neutral-200 px-3 py-2 text-xs leading-snug text-neutral-800 shadow-md">
+            {/* The corner pointer, under the Add Team half of the button group. */}
+            <span aria-hidden className="absolute -top-1.5 right-[72px] h-3 w-3 rotate-45 bg-neutral-200" />
+            {addTeamHint}
+          </div>
+        )}
       </div>
 
       <div className="px-4 py-3 flex-1 min-h-0 flex flex-col">

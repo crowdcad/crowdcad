@@ -4,7 +4,7 @@ import React, { Suspense, useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button, Card, Input, ScrollShadow, Select, SelectItem, Tooltip } from '@heroui/react';
-import { parseDate, getLocalTimeZone, today, Time } from '@internationalized/date';
+import { Time } from '@internationalized/date';
 import { CircleHelp, Pencil, Trash2 } from 'lucide-react';
 import type { Equipment, Event, EventEquipment, Post, Staff, Supervisor, Venue, Zone } from '@/app/types';
 import LoadingScreen from '@/components/ui/loading-screen';
@@ -23,7 +23,7 @@ import PostingScheduleSection from '@/components/event-create/PostingScheduleSec
 import { PostsSelectionSection } from '@/components/event-create/PostsEquipmentSection';
 import { WizardShell, StepProgress, ReviewColumns, type WizardStep, type ReviewColumn } from '@/components/wizard';
 import { countLabel, eventConfigReviewFields, staffReviewFields, postScheduleReviewValue, getStepNavigation } from '@/components/wizard/eventReview';
-import AddTeamModal, { TeamDraft, TeamMemberDraft } from '@/components/modals/event/addteammodal';
+import AddTeamModal, { TeamDraft } from '@/components/modals/event/addteammodal';
 import AddSupervisorModal from '@/components/modals/event/addsupervisormodal';
 import BulkImportModal from '@/components/modals/event/bulkimportmodal';
 import {
@@ -33,7 +33,9 @@ import {
   type LiteEventDraft,
   saveLiteEvent,
 } from '@/lib/liteEventStore';
-import { newTeamId } from '@/lib/teamId';
+import { newSupervisor, newTeam, teamDraftFromStaff, teamMemberStrings } from '@/lib/teamDraft';
+import { randomId } from '@/lib/utils';
+import { EVENT_INPUT_CLASSNAMES, EVENT_SELECT_CLASSNAMES } from '@/components/event-create/fieldClassNames';
 
 // The live map (Map step and map-based Locations step), loaded on demand like
 // venue setup's: the same AreaEditor and map controls, without image layers or TAK.
@@ -42,13 +44,6 @@ const GeoLocationsEditor = dynamic(() => import('@/components/geo/GeoLocationsEd
 const GeoLayerMap = dynamic(() => import('@/components/geo/GeoLayerMap'), { ssr: false });
 
 const LICENSES = ['CPR', 'EMT-B', 'EMT-A', 'EMT-P', 'RN', 'MD/DO'];
-
-const makeId = () => {
-  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
-    return crypto.randomUUID();
-  }
-  return `${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
-};
 
 const getPostName = (post: Post): string => (typeof post === 'string' ? post : post.name);
 
@@ -62,15 +57,6 @@ const withEventEquipment = (equipment: Equipment[], eventEquipment: EventEquipme
 
 const setPostName = (post: Post, name: string): Post =>
   typeof post === 'string' ? { name, x: null, y: null } : { ...post, name };
-
-const parseMemberStrings = (members: string[]): TeamMemberDraft[] =>
-  members.map((member) => {
-    const match = member.match(/^(.+?)\s*\[([^\]]+)\]\s*(\(Lead\))?$/);
-    if (match) {
-      return { name: match[1], cert: match[2], lead: Boolean(match[3]) };
-    }
-    return { name: member, cert: '', lead: false };
-  });
 
 // The shape the shared event-create step components (also used by cloud
 // event creation) expect. Lite events don't have a pre-existing Venue
@@ -148,17 +134,8 @@ function LiteCreateContent() {
 
   const initializedScheduleRef = useRef<string | null>(null);
 
-  const inputClassNames = {
-    label: 'text-surface-light font-medium',
-    inputWrapper: 'rounded-large px-4',
-    input: 'text-surface-light outline-none focus:outline-none data-[focus=true]:outline-none focus:ring-0 focus-visible:ring-0',
-  };
-
-  const selectClassNames = {
-    label: 'text-surface-light font-medium',
-    input: 'text-surface-light text-sm outline-none focus:outline-none data-[focus=true]:outline-none',
-    inputWrapper: 'rounded-large px-4 pr-6 shadow-none group-data-[focus-visible=true]:ring-0 group-data-[focus-visible=true]:ring-offset-0',
-  };
+  const inputClassNames = EVENT_INPUT_CLASSNAMES;
+  const selectClassNames = EVENT_SELECT_CLASSNAMES;
 
   useEffect(() => {
     let cancelled = false;
@@ -215,7 +192,7 @@ function LiteCreateContent() {
     setScheduleBy(eventDraft.scheduleConfig.by || '75');
 
     if (eventDraft.postingTimes.length > 0) {
-      setScheduleChips(eventDraft.postingTimes.map((time) => ({ id: makeId(), time, editable: false })));
+      setScheduleChips(eventDraft.postingTimes.map((time) => ({ id: randomId(), time, editable: false })));
     } else {
       setScheduleChips([]);
     }
@@ -250,7 +227,7 @@ function LiteCreateContent() {
   useEffect(() => {
     if (!eventDraftId) return;
 
-    setScheduleChips(postingTimes.map((time) => ({ id: makeId(), time, editable: false })));
+    setScheduleChips(postingTimes.map((time) => ({ id: randomId(), time, editable: false })));
 
     updateDraft((current) => ({
       ...current,
@@ -364,7 +341,7 @@ function LiteCreateContent() {
       const duplicate = current.venue.equipment.some((equipment) => equipment.name.toLowerCase() === name.toLowerCase());
       if (duplicate) return current;
 
-      const equipment: Equipment[] = [...current.venue.equipment, { id: makeId(), name, status: 'Available' }];
+      const equipment: Equipment[] = [...current.venue.equipment, { id: randomId(), name, status: 'Available' }];
       return {
         ...current,
         venue: { ...current.venue, equipment },
@@ -485,31 +462,13 @@ function LiteCreateContent() {
 
   const handleSaveTeam = (team: TeamDraft) => {
     updateDraft((current) => {
-      if (editingTeamIndex !== null) {
-        const existing = current.staff[editingTeamIndex];
-        if (!existing) return current;
-
-        const nextStaff: Staff = {
-          ...existing,
-          team: team.name,
-          members: team.members.map((m) => `${m.name} [${m.cert}]${m.lead ? ' (Lead)' : ''}`),
-        };
-
-        const nextStaffArray = [...current.staff];
-        nextStaffArray[editingTeamIndex] = nextStaff;
-        return { ...current, staff: nextStaffArray };
-      }
-
-      const members = team.members.map((m) => `${m.name} [${m.cert}]${m.lead ? ' (Lead)' : ''}`);
-      const nextStaff: Staff = { id: newTeamId(), team: team.name, location: 'No Post', status: 'On Break', members };
-      return { ...current, staff: [...current.staff, nextStaff] };
+      if (editingTeamIndex === null) return { ...current, staff: [...current.staff, newTeam(team)] };
+      if (!current.staff[editingTeamIndex]) return current;
+      const staff = [...current.staff];
+      staff[editingTeamIndex] = { ...staff[editingTeamIndex]!, team: team.name, members: teamMemberStrings(team) };
+      return { ...current, staff };
     });
   };
-
-  const parseTeamForEdit = (team: Staff): TeamDraft => ({
-    name: team.team,
-    members: parseMemberStrings(team.members),
-  });
 
   const handleDeleteTeam = (idx: number) => {
     updateDraft((current) => ({ ...current, staff: current.staff.filter((_, i) => i !== idx) }));
@@ -521,19 +480,7 @@ function LiteCreateContent() {
 
   const handleAddSamUnit = () => {
     if (!samName.trim() || !samCert) return;
-    updateDraft((current) => ({
-      ...current,
-      supervisor: [
-        ...current.supervisor,
-        {
-          id: newTeamId(),
-          team: samName.trim(),
-          location: 'Roaming',
-          status: 'On Break',
-          member: samMemberName.trim() ? `${samMemberName.trim()} [${samCert}]` : `${samName.trim()} [${samCert}]`,
-        },
-      ],
-    }));
+    updateDraft((current) => ({ ...current, supervisor: [...current.supervisor, newSupervisor(samName, samMemberName, samCert)] }));
     setSamName('');
     setSamMemberName('');
     setSamCert('');
@@ -551,17 +498,6 @@ function LiteCreateContent() {
       supervisor: supervisors.length > 0 ? [...current.supervisor, ...supervisors] : current.supervisor,
     }));
     setBulkImportMode(null);
-  };
-
-  const getCalendarDate = () => {
-    if (eventDraft?.date) {
-      try {
-        return parseDate(eventDraft.date);
-      } catch {
-        return today(getLocalTimeZone());
-      }
-    }
-    return today(getLocalTimeZone());
   };
 
   const handleCreateLiteEvent = async () => {
@@ -614,7 +550,6 @@ function LiteCreateContent() {
             React.SetStateAction<Partial<Event> & { eventEquipment: EventEquipment[] }>
           >
         }
-        getCalendarDate={getCalendarDate}
         scheduleFrom={scheduleFrom}
         setScheduleFrom={setScheduleFrom}
         scheduleTo={scheduleTo}
@@ -876,6 +811,7 @@ function LiteCreateContent() {
             setIsTeamModalOpen(true);
           }}
           onUploadCSV={() => setBulkImportMode('team')}
+          addTeamHint="Click Add Team to create your first team."
         />
       </div>
       <div className="w-px bg-surface-liner mx-2 flex-shrink-0" />
@@ -1047,7 +983,7 @@ function LiteCreateContent() {
         titleOverride={editingTeamIndex !== null ? 'Edit Team' : 'Add New Team'}
         submitLabelOverride={editingTeamIndex !== null ? 'Save Changes' : undefined}
         existingTeamNames={eventDraft.staff.map((s) => s.team).filter((_, i) => i !== editingTeamIndex)}
-        initialTeam={editingTeamIndex !== null ? parseTeamForEdit(eventDraft.staff[editingTeamIndex]) : undefined}
+        initialTeam={editingTeamIndex !== null ? teamDraftFromStaff(eventDraft.staff[editingTeamIndex]) : undefined}
         onSave={(team) => handleSaveTeam(team)}
         roles={LICENSES.map((name) => ({ name, fullName: name }))}
       />

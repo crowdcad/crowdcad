@@ -15,7 +15,6 @@ import { hasDuplicateZoneName } from '@/lib/zones';
 import { getNextZoneColor } from '@/lib/zoneColors';
 import { randomId, stripUndefined } from '@/lib/utils';
 import { newEventCreatePath } from '@/lib/newEvent';
-import { uploadWithRetry } from '@/lib/uploadUtils';
 import { useZoomPan } from '@/hooks/useZoomPan';
 import { MAP_CHECKER_BG } from '@/lib/mapStyles';
 import { isGeoLayer, layerArea } from '@/lib/geo/layers';
@@ -183,28 +182,7 @@ export default function VenueManagementPageClient() {
   // switching steps never carries marker-placement mode or drag state into
   // a plain reference view.
   const readOnlyImgRef = useRef<HTMLImageElement | null>(null);
-  const [readOnlyScale, setReadOnlyScale] = useState(1);
-  const [readOnlyPosition, setReadOnlyPosition] = useState({ x: 0, y: 0 });
-  const [readOnlyIsPanning, setReadOnlyIsPanning] = useState(false);
-  const [readOnlyPanStart, setReadOnlyPanStart] = useState({ x: 0, y: 0 });
-  const handleReadOnlyZoomIn = () => setReadOnlyScale((prev) => Math.min(prev + 0.25, 3));
-  const handleReadOnlyZoomOut = () => setReadOnlyScale((prev) => Math.max(prev - 0.25, 0.5));
-  const handleReadOnlyResetZoom = () => {
-    setReadOnlyScale(1);
-    setReadOnlyPosition({ x: 0, y: 0 });
-  };
-  const handleReadOnlyWheel = (e: React.WheelEvent<HTMLDivElement>) => {
-    e.preventDefault();
-  };
-  const handleReadOnlyMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
-    setReadOnlyIsPanning(true);
-    setReadOnlyPanStart({ x: e.clientX - readOnlyPosition.x, y: e.clientY - readOnlyPosition.y });
-  };
-  const handleReadOnlyMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!readOnlyIsPanning) return;
-    setReadOnlyPosition({ x: e.clientX - readOnlyPanStart.x, y: e.clientY - readOnlyPanStart.y });
-  };
-  const handleReadOnlyMouseUp = () => setReadOnlyIsPanning(false);
+  const readOnlyView = useZoomPan({ minScale: 0.5, maxScale: 3 });
 
   // Drag/hover
   const [pendingLayer, setPendingLayer] = useState<number | null>(null);
@@ -1355,20 +1333,20 @@ export default function VenueManagementPageClient() {
           staff={[]}
           equipment={venueData.equipment}
           teamTimers={{}}
-          scale={readOnlyScale}
-          position={readOnlyPosition}
-          isPanning={readOnlyIsPanning}
-          onMouseDown={handleReadOnlyMouseDown}
-          onMouseMove={handleReadOnlyMouseMove}
-          onMouseUp={handleReadOnlyMouseUp}
-          onWheel={handleReadOnlyWheel}
+          scale={readOnlyView.scale}
+          position={readOnlyView.position}
+          isPanning={readOnlyView.isPanning}
+          onMouseDown={readOnlyView.handleMouseDown}
+          onMouseMove={readOnlyView.handleMouseMove}
+          onMouseUp={readOnlyView.handleMouseUp}
+          onWheel={readOnlyView.handleWheel}
           imgRef={readOnlyImgRef}
           imageRadiusClassName="rounded-none"
         />
         <MapZoomControls
-          onZoomIn={handleReadOnlyZoomIn}
-          onZoomOut={handleReadOnlyZoomOut}
-          onReset={handleReadOnlyResetZoom}
+          onZoomIn={() => readOnlyView.zoomIn(0.25)}
+          onZoomOut={() => readOnlyView.zoomOut(0.25)}
+          onReset={readOnlyView.resetZoom}
           buttonClassName="bg-surface-deepest/90 backdrop-blur"
           resetButtonClassName="bg-surface-deepest/90 backdrop-blur"
         />

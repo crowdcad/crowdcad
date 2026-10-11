@@ -253,6 +253,21 @@ interface EquipmentMarkerProps {
   scale: number;
   /** True when this equipment item was just navigated to (e.g. via its card's "view on map" button) — draws the same attention arrow/enlarge a selected post gets. */
   isSelected?: boolean;
+  /** Position among the equipment at this post (equipmentStaggerIndices); each one after the first steps a little to the right. */
+  staggerIndex?: number;
+}
+
+/** Each equipment item's place among the items at the same location, so markers sharing a post can be staggered. */
+export function equipmentStaggerIndices(equipment: Equipment[]): Map<string, number> {
+  const seen: Record<string, number> = {};
+  const out = new Map<string, number>();
+  for (const equip of equipment) {
+    if (!equip.location) continue;
+    const i = seen[equip.location] ?? 0;
+    seen[equip.location] = i + 1;
+    out.set(equip.id, i);
+  }
+  return out;
 }
 
 export function EquipmentMarker({
@@ -261,6 +276,7 @@ export function EquipmentMarker({
   rect,
   scale,
   isSelected,
+  staggerIndex = 0,
 }: EquipmentMarkerProps) {
   const [hovered, setHovered] = useState(false);
   const markerRef = useRef<HTMLDivElement>(null);
@@ -277,7 +293,9 @@ export function EquipmentMarker({
   // more you zoom in (a flat pixel offset would, since it wasn't
   // compensating for the ambient scale at all).
   const equipmentOffset = 12 / scale;
-  const left = rect.x + (post.x / 100) * rect.width - equipmentOffset;
+  // More equipment at the same post steps right one at a time, counter-scaled like TeamMarker's stagger.
+  const staggerStep = (14 * staggerIndex) / scale;
+  const left = rect.x + (post.x / 100) * rect.width - equipmentOffset + staggerStep;
   const top = rect.y + (post.y / 100) * rect.height + equipmentOffset;
 
   const iconType = getEquipmentIcon(equipment);
@@ -746,6 +764,7 @@ export function VenueMapWithPosts({
 
   const mapUrl = layers[currentLayer]?.mapUrl || '';
   const posts = layers[currentLayer]?.posts || [];
+  const equipmentStagger = equipmentStaggerIndices(equipment);
 
   // Update container size when component mounts and on resize
   useEffect(() => {
@@ -961,6 +980,7 @@ export function VenueMapWithPosts({
                   rect={rect}
                   scale={scale}
                   isSelected={!!selectedEquipmentName && equip.name === selectedEquipmentName}
+                  staggerIndex={equipmentStagger.get(equip.id)}
                 />
               );
             })}

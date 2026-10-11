@@ -4,7 +4,7 @@ import React from 'react';
 import type { Equipment, Layer, Post } from '@/app/types';
 import { postLatLng } from '@/lib/geo/positions';
 import type { GeoPin } from '@/components/geo/BasemapView';
-import { EquipmentMarker, type ImageRect } from '@/components/modals/event/venuemapmodal';
+import { EquipmentMarker, equipmentStaggerIndices, type ImageRect } from '@/components/modals/event/venuemapmodal';
 
 /**
  * Image-map markers as pins on a geo layer (GeoVenueMap, event setup's map).
@@ -35,6 +35,7 @@ export const atPin = (post: PostObject): PostObject => ({ ...post, x: 0, y: 0 })
  * e.g. its default location while setting up an event), as on the image map.
  */
 export function geoEquipmentPins(layer: Layer, equipment: Equipment[], selectedEquipmentName?: string | null, placed = placedPosts(layer)): GeoPin[] {
+  const stagger = equipmentStaggerIndices(equipment);
   return equipment.flatMap((equip) => {
     const p = equip.location ? placed.get(equip.location) : undefined;
     if (!p) return [];
@@ -43,7 +44,7 @@ export function geoEquipmentPins(layer: Layer, equipment: Equipment[], selectedE
         key: `equipment:${equip.id}`,
         lat: p.at.lat,
         lng: p.at.lng,
-        node: <EquipmentMarker equipment={equip} post={atPin(p.post)} rect={AT_PIN} scale={1} isSelected={selectedEquipmentName === equip.name} />,
+        node: <EquipmentMarker equipment={equip} post={atPin(p.post)} rect={AT_PIN} scale={1} isSelected={selectedEquipmentName === equip.name} staggerIndex={stagger.get(equip.id)} />,
       },
     ];
   });

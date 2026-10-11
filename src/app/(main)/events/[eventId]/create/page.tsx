@@ -2,10 +2,9 @@
 
 import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import React, { lazy, Suspense, useEffect, useRef, useState } from 'react';
-import { Event, Venue, Staff, Supervisor, Post, Equipment, EventEquipment } from '@/app/types';
+import { Event, Venue, Staff, Supervisor, Post, EventEquipment } from '@/app/types';
 import { authService, dbService } from '@/lib/services';
 import { Button, Card, ScrollShadow } from '@heroui/react';
-import { parseDate, getLocalTimeZone, today } from '@internationalized/date';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { syncClinicsFromVenue } from '@/lib/clinics';
 import { syncDispatchZonesFromVenue } from '@/lib/zones';
@@ -32,8 +31,10 @@ import { isGeoLayer } from '@/lib/geo/layers';
 const GeoLayerMap = dynamic(() => import('@/components/geo/GeoLayerMap'), { ssr: false });
 import { geoEquipmentPins } from '@/components/dispatch/geoPins';
 import { MAP_CHECKER_BG } from '@/lib/mapStyles';
+import { useZoomPan } from '@/hooks/useZoomPan';
+import { newSupervisor, newTeam, teamDraftFromStaff, teamMemberStrings } from '@/lib/teamDraft';
+import { EVENT_INPUT_CLASSNAMES, EVENT_SELECT_CLASSNAMES } from '@/components/event-create/fieldClassNames';
 import LoadingScreen from '@/components/ui/loading-screen';
-import { newTeamId } from '@/lib/teamId';
 import { NEW_EVENT_ID } from '@/lib/newEvent';
 
 // TAK live tracking (optional, in development): the map-mode choice is
@@ -111,31 +112,11 @@ export default function EventCreation() {
   // saves them itself for an existing event).
   const [pendingTakConfig, setPendingTakConfig] = useState<TakEventConfig | null>(null);
 
-  // Pan/zoom state, mirroring the dispatch page's own venue map modal
-  // (VenueMapModal) exactly, since VenueMapWithPosts is shared with it.
-  const [scale, setScale] = useState(1);
-  const [position, setPosition] = useState({ x: 0, y: 0 });
-  const [isPanning, setIsPanning] = useState(false);
-  const [panStart, setPanStart] = useState({ x: 0, y: 0 });
-
-  const handleZoomIn = () => setScale((prev) => Math.min(prev + 0.25, 3));
-  const handleZoomOut = () => setScale((prev) => Math.max(prev - 0.25, 0.5));
-  const handleResetZoom = () => {
-    setScale(1);
-    setPosition({ x: 0, y: 0 });
-  };
-  const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
-    e.preventDefault();
-  };
-  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
-    setIsPanning(true);
-    setPanStart({ x: e.clientX - position.x, y: e.clientY - position.y });
-  };
-  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!isPanning) return;
-    setPosition({ x: e.clientX - panStart.x, y: e.clientY - panStart.y });
-  };
-  const handleMouseUp = () => setIsPanning(false);
+  // Pan/zoom for the map panel (VenueMapWithPosts), with the dispatch map modal's limits.
+  const { scale, position, isPanning, handleWheel, handleMouseDown, handleMouseMove, handleMouseUp, zoomIn, zoomOut, resetZoom } = useZoomPan({
+    minScale: 0.5,
+    maxScale: 3,
+  });
 
   const [postsEnabled, setPostsEnabled] = useState(false);
 
@@ -211,8 +192,6 @@ export default function EventCreation() {
     const timeout = setTimeout(async () => {
       try {
         await dbService.updateDocument('events', eventId, stripUndefined({ postingTimes: times }) as Record<string, unknown>);
-        // eslint-disable-next-line no-console
-        console.log('Autosaved postingTimes to draft:', { eventId, postingTimes: times });
       } catch (err) {
         console.error('Failed to autosave postingTimes:', err);
       }
@@ -291,50 +270,19 @@ export default function EventCreation() {
   }, [eventId, isNew, newEventVenueId]);
 
   const handleSaveTeam = (team: TeamDraft, editIdx: number | null) => {
-    const members = team.members.map(
-      m => `${m.name} [${m.cert}]${m.lead ? " (Lead)" : ""}`
-    );
     setEventData(prev => {
-      if (editIdx !== null) {
-        const staff = [...(prev.staff || [])];
-        staff[editIdx] = { ...staff[editIdx], team: team.name, members };
-        return { ...prev, staff };
-      }
-      const newStaff: Staff = {
-        id: newTeamId(),
-        team: team.name,
-        location: "No Post",
-        status: "On Break",
-        members,
-      };
-      return { ...prev, staff: [...(prev.staff || []), newStaff] };
+      if (editIdx === null) return { ...prev, staff: [...(prev.staff || []), newTeam(team)] };
+      const staff = [...(prev.staff || [])];
+      staff[editIdx] = { ...staff[editIdx]!, team: team.name, members: teamMemberStrings(team) };
+      return { ...prev, staff };
     });
   };
 
-  // Reverses the "Name [CERT] (Lead)" string format handleSaveTeam writes,
-  // so an existing Staff record can prefill AddTeamModal for editing.
-  const parseTeamForEdit = (team: Staff): TeamDraft => ({
-    name: team.team,
-    members: team.members.map((m) => {
-      const match = m.match(/^(.*) \[(.*)\](?: \(Lead\))?$/);
-      const lead = / \(Lead\)$/.test(m);
-      if (!match) return { name: m, cert: '', lead };
-      return { name: match[1], cert: match[2], lead };
-    }),
-  });
-
   const handleAddSamUnit = () => {
     if (!samName.trim() || !samCert) return;
-    const newSupervisor: Supervisor = {
-      id: newTeamId(),
-      team: samName.trim(),
-      location: 'Roaming',
-      status: 'On Break',
-      member: samMemberName.trim() ? `${samMemberName.trim()} [${samCert}]` : `${samName.trim()} [${samCert}]`,
-    };
     setEventData(prev => ({
       ...prev,
-      supervisor: [...(prev.supervisor || []), newSupervisor]
+      supervisor: [...(prev.supervisor || []), newSupervisor(samName, samMemberName, samCert)]
     }));
     setSamName('');
     setSamMemberName('');
@@ -439,17 +387,8 @@ export default function EventCreation() {
 
   
 
-  const inputClassNames = {
-    label: 'text-surface-light font-medium',
-    inputWrapper: 'rounded-large px-4',
-    input: 'text-surface-light outline-none focus:outline-none data-[focus=true]:outline-none focus:ring-0 focus-visible:ring-0',
-  };
-
-  const selectClassNames = {
-    label: 'text-surface-light font-medium',
-    input: 'text-surface-light text-sm outline-none focus:outline-none data-[focus=true]:outline-none',
-    inputWrapper: 'rounded-large px-4 pr-6 shadow-none group-data-[focus-visible=true]:ring-0 group-data-[focus-visible=true]:ring-offset-0',
-  };
+  const inputClassNames = EVENT_INPUT_CLASSNAMES;
+  const selectClassNames = EVENT_SELECT_CLASSNAMES;
 
   const handleDeleteTeam = (idx: number) => {
     setEventData(prev => ({
@@ -465,24 +404,11 @@ export default function EventCreation() {
     }));
   };
 
-  // Convert date string to CalendarDate
-  const getCalendarDate = () => {
-    if (eventData.date) {
-      try {
-        return parseDate(eventData.date);
-      } catch {
-        return today(getLocalTimeZone());
-      }
-    }
-    return today(getLocalTimeZone());
-  };
-
   const basicsStep = (
     <div className="px-6 pt-4 h-full overflow-y-auto minimal-scrollbar">
       <MetadataSection
         eventData={eventData}
         setEventData={setEventData}
-        getCalendarDate={getCalendarDate}
         scheduleFrom={scheduleFrom}
         setScheduleFrom={setScheduleFrom}
         scheduleTo={scheduleTo}
@@ -749,9 +675,9 @@ export default function EventCreation() {
             />
 
             <MapZoomControls
-              onZoomIn={handleZoomIn}
-              onZoomOut={handleZoomOut}
-              onReset={handleResetZoom}
+              onZoomIn={() => zoomIn(0.25)}
+              onZoomOut={() => zoomOut(0.25)}
+              onReset={resetZoom}
               buttonClassName="bg-surface-deepest/90 backdrop-blur"
               resetButtonClassName="bg-surface-deepest/90 backdrop-blur"
             />
@@ -846,7 +772,7 @@ export default function EventCreation() {
         existingTeamNames={(eventData.staff || [])
           .map(s => s.team)
           .filter((_, i) => i !== editingTeamIndex)}
-        initialTeam={editingTeamIndex !== null ? parseTeamForEdit((eventData.staff || [])[editingTeamIndex]) : undefined}
+        initialTeam={editingTeamIndex !== null ? teamDraftFromStaff((eventData.staff || [])[editingTeamIndex]) : undefined}
         onSave={(team) => handleSaveTeam(team, editingTeamIndex)}
         roles={certifications.map(name => ({ name, fullName: name }))}
       />
