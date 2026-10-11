@@ -6,7 +6,7 @@ import { ChevronDown, ChevronUp, Link2Off, Radio } from 'lucide-react';
 import type { Event, Layer } from '@/app/types';
 import { refreshAlignments, useTakEvent } from '../data/hub';
 import { PREF, usePref } from '@/lib/geo/prefs';
-import { alignmentFor, alignmentMatches, copyVenueAlignmentsToEvent } from '../data/alignmentStore';
+import { alignmentFor, alignmentMatches, copyVenueAlignmentsToEvent, takMapStatus } from '../data/alignmentStore';
 import {
   clearLive,
   linkDevice,
@@ -221,16 +221,14 @@ export default function TakEventPanel({ eventId, event, uid, isOwner, layers }: 
               <div className="space-y-1">
                 <p className="inline-flex items-center gap-1 text-xs text-surface-faint">
                   Maps
-                  <HelpTip text="Maps are aligned in venue setup (Venues, edit the venue, TAK alignment). Events use the venue's current alignment." />
+                  <HelpTip text="Map images are aligned in venue setup (Venues, edit the venue, Map alignment step); maps drawn on the real map need no alignment. Events use the venue's current alignment." />
                 </p>
-                {layers.filter((l) => l.mapUrl).map((l) => {
-                  const a = alignmentFor(l, tak.alignments, tak.venueAlignments);
+                {layers.map((l) => {
+                  const status = takMapStatus(l, tak.alignments, tak.venueAlignments);
+                  if (!status) return null;
                   return (
                     <p key={l.id} className="truncate">
-                      {l.name}:{' '}
-                      <span className="text-surface-faint">
-                        {a ? (a.residualM === null ? 'aligned' : `aligned, about ${a.residualM.toFixed(1)} m`) : l.alignment || l.takAlignment ? 'image changed since alignment' : 'not aligned'}
-                      </span>
+                      {l.name}: <span className={status.ready ? 'text-surface-faint' : 'text-status-orange'}>{status.text}</span>
                     </p>
                   );
                 })}

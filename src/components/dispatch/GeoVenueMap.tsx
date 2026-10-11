@@ -29,6 +29,8 @@ export interface GeoVenueMapProps {
   selectedEquipmentName?: string | null;
   onAddCallAtPost?: (postName: string) => void;
   onAddCallForTeam?: (teamName: string) => void;
+  /** Show posts in team and supervisor cards. Off when the event has no posting schedule. */
+  showPosts?: boolean;
   focus?: { key: number; lat: number; lng: number } | null;
   overlay?: MapOverlay;
   className?: string;
@@ -54,6 +56,7 @@ export default function GeoVenueMap({
   selectedEquipmentName,
   onAddCallAtPost,
   onAddCallForTeam,
+  showPosts = true,
   focus,
   overlay,
   className,
@@ -99,6 +102,7 @@ export default function GeoVenueMap({
         lng: p.lon,
         node: (
           <TeamMarker
+            showPosts={showPosts}
             team={team}
             post={{ name: team.team, x: 0, y: 0 }}
             rect={AT_PIN}
@@ -123,6 +127,7 @@ export default function GeoVenueMap({
         lng: p.lon,
         node: (
           <SupervisorMarker
+            showPosts={showPosts}
             supervisor={sup}
             post={{ name: sup.team, x: 0, y: 0 }}
             rect={AT_PIN}
@@ -148,6 +153,7 @@ export default function GeoVenueMap({
       lng: p.at.lng,
       node: (
         <TeamMarker
+          showPosts={showPosts}
           team={team}
           post={atPin(p.post)}
           rect={AT_PIN}
@@ -169,7 +175,7 @@ export default function GeoVenueMap({
       key: `supervisor:${sup.team}`,
       lat: p.at.lat,
       lng: p.at.lng,
-      node: <SupervisorMarker supervisor={sup} post={atPin(p.post)} rect={AT_PIN} scale={1} isSelected={selectedSupervisorName === sup.team} />,
+      node: <SupervisorMarker showPosts={showPosts} supervisor={sup} post={atPin(p.post)} rect={AT_PIN} scale={1} isSelected={selectedSupervisorName === sup.team} />,
     });
   }
 

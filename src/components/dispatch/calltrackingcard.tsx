@@ -23,6 +23,7 @@ import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
 import { getEventClinics, getTransportClinicId, isCallResolved, getVenueLocationOptions } from '@/lib/clinics';
 import { getEquipmentIconType } from '@/lib/equipmentIcon';
 import { getStatusColor } from '@/lib/statusColors';
+import { staticSelectorButtonProps } from '@/lib/heroStatic';
 import CallIndicatorIcons from './callindicatoricons';
 import { dropdownMotionProps, useCallTimer, useSyncedLocationInput, CallAgeSexComplaintRow, CallNotesAndLog, cardFieldClassNames, blurOnEnter } from './trackingcardparts';
 
@@ -241,6 +242,7 @@ export default function CallTrackingCard({
             allowsCustomValue
             variant="flat"
             inputProps={{ classNames: cardFieldClassNames }}
+            selectorButtonProps={staticSelectorButtonProps}
             className="flex-1"
           >
             {locationOptions.map((loc) => (

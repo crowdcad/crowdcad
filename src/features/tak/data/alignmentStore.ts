@@ -1,6 +1,7 @@
 import { dbService, isPocketbaseBackend } from '@/lib/services';
+import type { Layer } from '@/app/types';
 import type { TakMapAlignment } from '../types';
-import { alignmentMatches, layerAlignment } from '@/lib/geo/layers';
+import { alignmentMatches, layerAlignment, layerArea } from '@/lib/geo/layers';
 
 /**
  * Map alignments, one per event map layer. Firebase stores them at
@@ -87,6 +88,24 @@ export function alignmentFor(
   if (!layer) return undefined;
   if (alignmentMatches(venue[layer.id], layer.mapUrl)) return venue[layer.id];
   return layerAlignment(layer) ?? (alignmentMatches(legacy[layer.id], layer.mapUrl) ? legacy[layer.id] : undefined);
+}
+
+/**
+ * How a venue layer stands for live positions, in plain words, or null for a
+ * layer with neither an image nor a drawn area. A drawn area is on the real
+ * map already and needs no alignment; an image needs one made in venue setup.
+ */
+export function takMapStatus(
+  layer: Layer,
+  legacy: Record<string, TakMapAlignment> = {},
+  venue: Record<string, TakMapAlignment> = {},
+): { ready: boolean; text: string } | null {
+  if (layerArea(layer)) return { ready: true, text: 'drawn on the real map, ready' };
+  if (!layer.mapUrl) return null;
+  const a = alignmentFor(layer, legacy, venue);
+  if (a) return { ready: true, text: a.residualM === null ? 'aligned' : `aligned, about ${a.residualM.toFixed(1)} m` };
+  if (layer.alignment || layer.takAlignment) return { ready: false, text: 'the image changed since it was aligned; align it again in venue setup' };
+  return { ready: false, text: 'not aligned yet; align it in venue setup (Map alignment step)' };
 }
 
 type VenueRecord = { id?: string; layers?: { id: string; mapUrl?: string; alignment?: TakMapAlignment; takAlignment?: TakMapAlignment }[] };

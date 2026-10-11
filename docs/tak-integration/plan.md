@@ -206,7 +206,7 @@ These are every existing core file the TAK work changes. **Anything not on this 
 | # | Touchpoint | Files | Change |
 |---|---|---|---|
 | a | Map overlay slot | `src/components/modals/event/venuemapmodal.tsx`, `src/components/dispatch/venuemaptab.tsx`, `src/app/(main)/events/[eventId]/dispatch/page.tsx` | `VenueMapWithPosts` gains an optional `overlay` render prop, drawn inside the transformed map container with `{ layer, rect, scale }`. `VenueMapTab` passes it through. The dispatch page supplies it only when `mapMode === 'tak'`, from the lazily loaded module. Without the prop, nothing renders differently |
-| b | Map-mode choice in event creation and editing | `src/app/(main)/events/[eventId]/create/page.tsx`, `src/app/types.ts` | One lazily loaded `TakMapModeChoice` in the Event Configuration step: "Map: Standard (default) / TAK live tracking". Stored as optional `Event.mapMode?: 'standard' \| 'tak'`, which is unset for standard events. The create page already handles editing, so the same control changes it later |
+| b | Map-mode choice in event creation and editing | `src/app/(main)/events/[eventId]/create/page.tsx`, `src/app/types.ts` | One lazily loaded `TakMapModeChoice` in the Event Configuration step: "Map: Standard (default) / TAK live tracking". Stored as optional `Event.mapMode?: 'standard' \| 'tak'`, which is unset for standard events. The create page already handles editing, so the same control changes it later. A new event has no document until **Create Event**, so its TAK config is held by the page and saved right after the event is written |
 | c | Settings entry | `src/components/profile/admin-section.tsx` | One lazily loaded `TakAdminSection` in the existing Admin area of `/profile` (see [Settings](#settings)) |
 | d | End-event flow | `src/app/(main)/events/[eventId]/dispatch/page.tsx` (the `ended: true` update, line ~2892) | When `mapMode === 'tak'`, after the event ends, call the module's `onEventEnded(eventId)`, which sets `closed: true` on `takConfig` |
 | e | Team ids | `src/app/types.ts`, plus the 9 creation sites below and a new `src/lib/teamId.ts` | Optional `id` on `Staff` and `Supervisor`, generated at creation from now on. Core code outside TAK never reads it |
@@ -318,8 +318,9 @@ TAK devices --TLS CoT--> TAK Server (8089) --TLS CoT--> tak-bridge (Docker, on t
    - **Firebase:** a secondary Firebase app with in-memory auth persistence calls `createUserWithEmailAndPassword` for `<id>@bridge.crowdcad.org`, with a password CrowdCAD generates. The secondary app is then signed out and deleted, and the admin writes `bridgeAccounts/{bridgeUid}`.
    - **PocketBase:** an admin creates a user record with `role = 'bridge'`, which doesn't change the admin's session.
    - CrowdCAD shows the `.env` block once and never stores the password.
-3. **On the TAK host (or this computer, for a test):** paste the script CrowdCAD shows. It writes `.env` and starts the bridge, which enrolls on 8446 and connects on 8089.
-4. **Checklist:** CrowdCAD shows signed in, connected to TAK, and receiving positions as the status arrives.
+3. **Firebase only, once per project:** run `firebase deploy --only firestore:indexes --project YOUR_PROJECT_ID`. The bridge finds its events with a collection-group query on `takConfig.bridgeUid`, which needs the index in `firestore.indexes.json`. Without it the bridge logs "watching linked events failed ... requires a COLLECTION_GROUP_ASC index" and never sees an event. The emulator doesn't enforce indexes, so local tests pass without it.
+4. **On the TAK host (or this computer, for a test):** paste the script CrowdCAD shows. It writes `.env` and starts the bridge, which enrolls on 8446 and connects on 8089.
+5. **Checklist:** CrowdCAD shows signed in, connected to TAK, and receiving positions as the status arrives.
 
 - **Rotation:** add a new bridge, switch the events to it, then revoke the old one.
 - **Revocation:** delete the bridge record. The rules check it on every write.

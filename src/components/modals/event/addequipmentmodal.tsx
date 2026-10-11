@@ -8,6 +8,7 @@ import {
 } from "@heroui/react";
 import { CircleHelp } from "lucide-react";
 import { useDispatchTerms } from "@/lib/dispatchVocabulary/context";
+import { staticSelectorButtonProps } from "@/lib/heroStatic";
 
 type Props = {
   isOpen: boolean;
@@ -111,6 +112,7 @@ export default function AddEquipmentModal({ isOpen, onClose, onSubmit, locations
                 size="lg"
                 radius="lg"
                 inputProps={{ classNames: inputClassNames }}
+                selectorButtonProps={staticSelectorButtonProps}
                 inputValue={location}
                 onInputChange={setLocation}
                 onSelectionChange={(key) => { if (key) setLocation(key as string); }}

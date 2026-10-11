@@ -14,6 +14,7 @@ import { hasDuplicateClinicName, isClinicPost } from '@/lib/clinics';
 import { hasDuplicateZoneName } from '@/lib/zones';
 import { getNextZoneColor } from '@/lib/zoneColors';
 import { randomId, stripUndefined } from '@/lib/utils';
+import { newEventCreatePath } from '@/lib/newEvent';
 import { uploadWithRetry } from '@/lib/uploadUtils';
 import { useZoomPan } from '@/hooks/useZoomPan';
 import { MAP_CHECKER_BG } from '@/lib/mapStyles';
@@ -831,7 +832,9 @@ export default function VenueManagementPageClient() {
       const updatedLayers = venueData.layers.map((layer, idx) => {
         let layerData = idx === (pendingLayer ?? currentLayer) && newMapUrl ? { ...layer, mapUrl: newMapUrl } : layer;
         // An alignment made against the new image's local preview follows it to its uploaded URL.
-        if (layerData !== layer && layer.alignment && layer.alignment.mapUrl === previewUrl) {
+        // Compared with the file's own URL, not previewUrl, which is the layer on screen and
+        // left the alignment on a dead blob: URL whenever another layer was showing at save.
+        if (layerData !== layer && layer.alignment && layer.alignment.mapUrl === mapFileUrl) {
           layerData = { ...layerData, alignment: { ...layer.alignment, mapUrl: newMapUrl! } };
         }
         // On an aligned layer, posts and zones placed on the image also get coordinates (D64).
@@ -870,23 +873,8 @@ export default function VenueManagementPageClient() {
       }
 
       if (options?.createEvent) {
-        const savedVenue = { id: savedVenueId, ...sanitizedDataToSave } as Venue;
-        const newEvent = {
-          name: '',
-          date: new Date(),
-          venue: savedVenue,
-          postingTimes: [],
-          staff: [],
-          supervisor: [],
-          userId,
-          calls: [],
-          eventPosts: [],
-          eventEquipment: [],
-          status: 'draft',
-          createdAt: new Date().toISOString(),
-        };
-        const newEventId = await dbService.addDocument('events', stripUndefined(newEvent));
-        router.push(`/events/${newEventId}/create`);
+        // The event itself is only written when the builder's setup finishes.
+        router.push(newEventCreatePath(savedVenueId));
       } else {
         router.push('/venues/selection');
       }

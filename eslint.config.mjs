@@ -67,6 +67,25 @@ const eslintConfig = [
       ],
     },
   },
+  {
+    // No HeroUI press feedback (ripple, press scale, hover/press background)
+    // on dropdown chevrons or modal close buttons: see src/lib/heroStatic.ts
+    // and "Dropdown chevrons and modal close buttons" in docs/COMPONENTS.md.
+    files: ["src/**/*.tsx"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "JSXOpeningElement[name.name='Autocomplete']:not(:has(JSXAttribute[name.name='selectorButtonProps'] Identifier[name='staticSelectorButtonProps']))",
+          message: "Give every Autocomplete selectorButtonProps={staticSelectorButtonProps} from '@/lib/heroStatic' (no press animation on the chevron).",
+        },
+        {
+          selector: "JSXOpeningElement[name.name='Modal']:not(:has(JSXAttribute[name.name='hideCloseButton'])):not(:has(Identifier[name='STATIC_CLOSE_BUTTON_CLASS']))",
+          message: "Give every Modal hideCloseButton, or classNames={{ closeButton: STATIC_CLOSE_BUTTON_CLASS }} from '@/lib/heroStatic' (no press animation on the X).",
+        },
+      ],
+    },
+  },
 ];
 
 export default eslintConfig;

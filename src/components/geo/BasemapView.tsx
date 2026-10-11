@@ -113,6 +113,13 @@ const r6 = (n: number) => Number(n.toFixed(6));
 /** The live map, for content that adds its own pins (GeoPins) as a child of BasemapView. */
 export const GeoMapContext = createContext<{ map: MlMap; ml: Maplibre } | null>(null);
 
+let raisedPin: HTMLDivElement | null = null;
+function raisePin(el: HTMLDivElement) {
+  if (raisedPin && raisedPin !== el) raisedPin.style.zIndex = '2';
+  el.style.zIndex = '3';
+  raisedPin = el;
+}
+
 /**
  * Pins on the enclosing BasemapView: one MapLibre marker per key, holding a
  * React portal, so content updates without recreating markers. Usable by any
@@ -126,6 +133,9 @@ export function GeoPins({ pins }: { pins: GeoPin[] }) {
       const el = document.createElement('div');
       // Above the image overlay and shapes (later siblings of the map), like MapLibre's own controls.
       el.style.zIndex = '2';
+      // The pin last pointed at or tapped stacks above the others, so the card it opens isn't covered.
+      el.addEventListener('pointerenter', () => raisePin(el));
+      el.addEventListener('pointerdown', () => raisePin(el));
       pinEls.current.set(pin.key, { el, marker: null });
     }
   }

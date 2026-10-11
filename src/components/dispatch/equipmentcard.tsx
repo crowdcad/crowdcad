@@ -14,6 +14,7 @@ import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
 import { getStatusColor } from '@/lib/statusColors';
 import EquipmentTypeIcon from '@/components/dispatch/equipmenttypeicon';
 import { getEquipmentIconType } from '@/lib/equipmentIcon';
+import { staticSelectorButtonProps } from '@/lib/heroStatic';
 
 type EquipmentCardProps = {
   equipment: EquipmentItem;
@@ -226,6 +227,7 @@ export default function EquipmentCard({
                 classNames={{
                   base: 'min-w-0 data-[focus-visible=true]:outline-none data-[focus=true]:outline-none',
                 }}
+                selectorButtonProps={staticSelectorButtonProps}
                 inputProps={{
                   classNames: {
                     inputWrapper: 'bg-surface-deep text-surface-light border border-surface-liner rounded-full pl-3 group-data-[focus-visible=true]:ring-0 group-data-[focus-visible=true]:ring-offset-0 data-[focus-visible=true]:ring-0 data-[focus-visible=true]:ring-offset-0 focus-within:ring-0 focus:ring-0',

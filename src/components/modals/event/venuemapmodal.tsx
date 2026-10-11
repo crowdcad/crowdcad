@@ -1,6 +1,5 @@
 'use client';
 import React, { useState, useRef, useEffect } from 'react';
-import { createPortal } from 'react-dom';
 import Image from 'next/image';
 import { MapPin, ShieldPlus, ShieldUser, Briefcase, HousePlus, ArrowBigDown } from 'lucide-react';
 import { Post, Staff, Supervisor, Equipment, Layer, Call, Clinic } from '@/app/types';
@@ -61,24 +60,52 @@ interface PostMarkerProps {
   onAddCall?: (postName: string) => void;
 }
 
+/** How much a marker grows on hover or selection. */
+const MARKER_ENLARGE = 1.15;
+
+/**
+ * Closes something a marker has open (its info card or Add Call popup) on any
+ * pointer-down outside it: a click or tap elsewhere, or starting to pan the
+ * map. Pointer events, so a touch pan closes it too.
+ */
+function useCloseOnOutsidePointer(ref: React.RefObject<HTMLElement | null>, open: boolean, setOpen: (open: boolean) => void) {
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    return () => document.removeEventListener('pointerdown', onPointerDown);
+  }, [ref, open, setOpen]);
+}
+
+/**
+ * A marker's info card, shown while it's hovered (or tapped, on touch). It
+ * renders inside the marker, so it moves with the point as the map pans and
+ * zooms, and closes like the Add Call popup (useCloseOnOutsidePointer).
+ */
+function MarkerCard({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      className="pointer-events-none absolute whitespace-nowrap rounded-md bg-surface-deepest/95 px-2 py-1 text-xs text-surface-light shadow-lg"
+      // Beside the marker; undoes the marker's hover enlarge so the card stays its normal size.
+      style={{ left: '100%', top: 0, marginLeft: 10, transform: `scale(${1 / MARKER_ENLARGE})`, transformOrigin: 'left top' }}
+    >
+      {children}
+    </div>
+  );
+}
+
+function MarkerCardTitle({ children }: { children: React.ReactNode }) {
+  return <div style={{ fontWeight: 'bold', fontSize: '15px', marginBottom: 4 }}>{children}</div>;
+}
+
 export function PostMarker({ post, rect, scale, isSelected, onAddCall }: PostMarkerProps) {
   const [hovered, setHovered] = useState(false);
   const [expanded, setExpanded] = useState(false);
-  const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
   const markerRef = useRef<HTMLDivElement>(null);
-
-  // Clicking anywhere outside the marker (including panning the map)
-  // dismisses its Add Call popup instead of leaving it stuck open.
-  useEffect(() => {
-    if (!expanded) return;
-    const handleClickAway = (e: MouseEvent) => {
-      if (markerRef.current && !markerRef.current.contains(e.target as Node)) {
-        setExpanded(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickAway);
-    return () => document.removeEventListener('mousedown', handleClickAway);
-  }, [expanded]);
+  useCloseOnOutsidePointer(markerRef, expanded, setExpanded);
+  useCloseOnOutsidePointer(markerRef, hovered, setHovered);
 
   if (!isPostObject(post)) return null;
 
@@ -90,16 +117,7 @@ export function PostMarker({ post, rect, scale, isSelected, onAddCall }: PostMar
   const isClinic = isClinicPost(post);
   const Icon = isClinic ? HousePlus : MapPin;
   const iconSize = isClinic ? 26 : 22;
-  const emphasis = (hovered ? 1.15 : 1) / scale;
-
-  const handleMouseEnter = () => {
-    setHovered(true);
-    if (markerRef.current) {
-      const rect = markerRef.current.getBoundingClientRect();
-      const yPos = Math.max(10, rect.top);
-      setTooltipPos({ x: rect.right + 10, y: yPos });
-    }
-  };
+  const emphasis = (hovered ? MARKER_ENLARGE : 1) / scale;
 
   return (
     <div
@@ -117,11 +135,11 @@ export function PostMarker({ post, rect, scale, isSelected, onAddCall }: PostMar
         // A selected/expanded post needs to clear every other marker on the
         // map regardless of DOM order, not just sit above its own
         // immediate neighbors.
-        zIndex: isSelected || expanded ? 999 : 12,
+        zIndex: isSelected || expanded || hovered ? 999 : 12,
         cursor: "pointer",
         transition: 'transform 0.15s ease-out',
       }}
-      onMouseEnter={handleMouseEnter}
+      onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       onClick={(e) => {
         e.stopPropagation();
@@ -175,22 +193,10 @@ export function PostMarker({ post, rect, scale, isSelected, onAddCall }: PostMar
         </div>
       )}
 
-      {/* Hover tooltip with fixed positioning using portal */}
-      {hovered && typeof window !== 'undefined' && createPortal(
-        <div
-          style={{
-            position: 'fixed',
-            left: `${tooltipPos.x}px`,
-            top: `${tooltipPos.y}px`,
-            zIndex: 10000,
-            pointerEvents: 'none',
-          }}
-        >
-          <div className="rounded-md bg-surface-deepest/95 px-2 py-1 text-xs text-surface-light shadow-lg whitespace-nowrap">
-            {post.name}
-          </div>
-        </div>,
-        document.body
+            {hovered && (
+        <MarkerCard>
+          {post.name}
+        </MarkerCard>
       )}
     </div>
   );
@@ -257,8 +263,8 @@ export function EquipmentMarker({
   isSelected,
 }: EquipmentMarkerProps) {
   const [hovered, setHovered] = useState(false);
-  const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
   const markerRef = useRef<HTMLDivElement>(null);
+  useCloseOnOutsidePointer(markerRef, hovered, setHovered);
 
   const postIsValid = isPostObject(post);
   if (!postIsValid) return null;
@@ -277,16 +283,8 @@ export function EquipmentMarker({
   const iconType = getEquipmentIcon(equipment);
   const badgeColor = getEquipmentMarkerColor(equipment);
   // Same hover/selected enlarge as every other marker (see PostMarker).
-  const emphasis = (hovered || isSelected ? 1.15 : 1) / scale;
+  const emphasis = (hovered || isSelected ? MARKER_ENLARGE : 1) / scale;
 
-  const handleMouseEnter = () => {
-    setHovered(true);
-    if (markerRef.current) {
-      const rect = markerRef.current.getBoundingClientRect();
-      const yPos = Math.max(10, rect.top);
-      setTooltipPos({ x: rect.right + 10, y: yPos });
-    }
-  };
 
   return (
     <div
@@ -299,11 +297,11 @@ export function EquipmentMarker({
         // constant on-screen size, same treatment as PostMarker/TeamMarker.
         transform: `translate(-50%, -50%) scale(${emphasis})`,
         transformOrigin: 'center center',
-        zIndex: isSelected ? 999 : 15,
+        zIndex: isSelected || hovered ? 999 : 15,
         cursor: 'pointer',
         transition: 'transform 0.15s ease-out',
       }}
-      onMouseEnter={handleMouseEnter}
+      onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
       {isSelected && (
@@ -333,27 +331,13 @@ export function EquipmentMarker({
       >
         <EquipmentIcon type={iconType} />
       </div>
-      {/* Hover tooltip with fixed positioning using portal */}
-      {hovered && typeof window !== 'undefined' && createPortal(
-        <div 
-          style={{ 
-            position: 'fixed',
-            left: `${tooltipPos.x}px`,
-            top: `${tooltipPos.y}px`,
-            zIndex: 10000,
-            pointerEvents: 'none',
-          }}
-        >
-          <div className="rounded-md bg-surface-deepest/95 px-2 py-1 text-xs text-surface-light shadow-lg whitespace-nowrap">
-            <div style={{ fontWeight: 'bold', fontSize: '15px', marginBottom: 4 }}>
-              {equipment.name}
-            </div>
-            <div><strong>Status:</strong> {equipment.status}</div>
-            <div><strong>Assigned Team:</strong> {equipment.assignedTeam || 'None'}</div>
-            <div><strong>Location:</strong> {equipment.location || 'Unknown'}</div>
-          </div>
-        </div>,
-        document.body
+            {hovered && (
+        <MarkerCard>
+          <MarkerCardTitle>{equipment.name}</MarkerCardTitle>
+          <div><strong>Status:</strong> {equipment.status}</div>
+          <div><strong>Assigned Team:</strong> {equipment.assignedTeam || 'None'}</div>
+          <div><strong>Location:</strong> {equipment.location || 'Unknown'}</div>
+        </MarkerCard>
       )}
     </div>
   );
@@ -422,6 +406,8 @@ interface TeamMarkerProps {
   exact?: boolean;
   /** Drawn faded (a live position that hasn't been updated for a while). */
   faded?: boolean;
+  /** Show the team's post in its card. Off when the event has no posting schedule. */
+  showPosts?: boolean;
 }
 
 export function TeamMarker({
@@ -436,24 +422,13 @@ export function TeamMarker({
   staggerIndex = 0,
   exact = false,
   faded = false,
+  showPosts = true,
 }: TeamMarkerProps) {
   const [hovered, setHovered] = useState(false);
   const [expanded, setExpanded] = useState(false);
-  const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
   const markerRef = useRef<HTMLDivElement>(null);
-
-  // Clicking anywhere outside the marker (including panning the map)
-  // dismisses its Add Call popup instead of leaving it stuck open.
-  useEffect(() => {
-    if (!expanded) return;
-    const handleClickAway = (e: MouseEvent) => {
-      if (markerRef.current && !markerRef.current.contains(e.target as Node)) {
-        setExpanded(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickAway);
-    return () => document.removeEventListener('mousedown', handleClickAway);
-  }, [expanded]);
+  useCloseOnOutsidePointer(markerRef, expanded, setExpanded);
+  useCloseOnOutsidePointer(markerRef, hovered, setHovered);
 
   const postIsValid = isPostObject(post);
   if (!postIsValid) return null;
@@ -481,17 +456,8 @@ export function TeamMarker({
   const statusLabel = team.status || 'Unknown';
 
   // Same hover/selected enlarge as every other marker (see PostMarker).
-  const emphasis = (hovered || isSelected ? 1.15 : 1) / scale;
+  const emphasis = (hovered || isSelected ? MARKER_ENLARGE : 1) / scale;
 
-  const handleMouseEnter = () => {
-    setHovered(true);
-    if (markerRef.current) {
-      const rect = markerRef.current.getBoundingClientRect();
-      // Add 10px buffer from top of screen to prevent clipping
-      const yPos = Math.max(10, rect.top);
-      setTooltipPos({ x: rect.right + 10, y: yPos });
-    }
-  };
 
   return (
     <div
@@ -504,12 +470,12 @@ export function TeamMarker({
         // constant on-screen size, same treatment as PostMarker/EquipmentMarker.
         transform: `translate(-50%, -50%) scale(${emphasis})`,
         transformOrigin: 'center center',
-        zIndex: isSelected || expanded ? 999 : 25,
+        zIndex: isSelected || expanded || hovered ? 999 : 25,
         opacity: faded ? 0.45 : 1,
         cursor: 'pointer',
         transition: 'transform 0.15s ease-out',
       }}
-      onMouseEnter={handleMouseEnter}
+      onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       onClick={(e) => {
         e.stopPropagation();
@@ -559,31 +525,16 @@ export function TeamMarker({
           </button>
         </div>
       )}
-      {/* Hover card with fixed positioning using portal */}
-      {hovered && typeof window !== 'undefined' && createPortal(
-        <div 
-          style={{ 
-            position: 'fixed',
-            left: `${tooltipPos.x}px`,
-            top: `${tooltipPos.y}px`,
-            zIndex: 10000,
-            pointerEvents: 'none',
-          }}
-        >
-          <div className="rounded-md bg-surface-deepest/95 px-2 py-1 text-xs text-surface-light shadow-lg whitespace-nowrap">
-            <div style={{ fontWeight: 'bold', fontSize: '15px', marginBottom: 4 }}>
-              {team.team}
-            </div>
-            <div><strong>Status:</strong> {statusLabel}</div>
-            <div><strong>Post:</strong> {team.location || 'Unassigned'}</div>
-            <div><strong>Status Timer:</strong> {
-              typeof teamTimers[team.team] === 'number'
-                ? <StatusTimer since={teamTimers[team.team]} />
-                : <span>00:00</span>
-            }</div>
+            {hovered && (
+        <MarkerCard>
+          <MarkerCardTitle>{team.team}</MarkerCardTitle>
+          <div><strong>Status:</strong> {statusLabel}</div>
+          {showPosts && <div><strong>Post:</strong> {team.location || 'Unassigned'}</div>}
+          <div>
+            <strong>Status Timer:</strong>{' '}
+            {typeof teamTimers[team.team] === 'number' ? <StatusTimer since={teamTimers[team.team]} /> : <span>00:00</span>}
           </div>
-        </div>,
-        document.body
+        </MarkerCard>
       )}
     </div>
   );
@@ -599,12 +550,14 @@ interface SupervisorMarkerProps {
   /** Drawn exactly at `post`'s position (a live position, D66) rather than offset beside a post pin. */
   exact?: boolean;
   faded?: boolean;
+  /** Show the supervisor's post in their card. Off when the event has no posting schedule. */
+  showPosts?: boolean;
 }
 
-export function SupervisorMarker({ supervisor, post, rect, scale, isSelected, exact = false, faded = false }: SupervisorMarkerProps) {
+export function SupervisorMarker({ supervisor, post, rect, scale, isSelected, exact = false, faded = false, showPosts = true }: SupervisorMarkerProps) {
   const [hovered, setHovered] = useState(false);
-  const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
   const markerRef = useRef<HTMLDivElement>(null);
+  useCloseOnOutsidePointer(markerRef, hovered, setHovered);
 
   const postIsValid = isPostObject(post);
   if (!postIsValid) return null;
@@ -620,16 +573,8 @@ export function SupervisorMarker({ supervisor, post, rect, scale, isSelected, ex
 
   const { color } = getTeamMarkerColors(supervisor);
   // Same hover/selected enlarge as every other marker (see PostMarker).
-  const emphasis = (hovered || isSelected ? 1.15 : 1) / scale;
+  const emphasis = (hovered || isSelected ? MARKER_ENLARGE : 1) / scale;
 
-  const handleMouseEnter = () => {
-    setHovered(true);
-    if (markerRef.current) {
-      const rect = markerRef.current.getBoundingClientRect();
-      const yPos = Math.max(10, rect.top);
-      setTooltipPos({ x: rect.right + 10, y: yPos });
-    }
-  };
 
   return (
     <div
@@ -642,12 +587,12 @@ export function SupervisorMarker({ supervisor, post, rect, scale, isSelected, ex
         // constant on-screen size, same treatment as every other marker.
         transform: `translate(-50%, -50%) scale(${emphasis})`,
         transformOrigin: 'center center',
-        zIndex: isSelected ? 999 : 25,
+        zIndex: isSelected || hovered ? 999 : 25,
         opacity: faded ? 0.45 : 1,
         cursor: 'default',
         transition: 'transform 0.15s ease-out',
       }}
-      onMouseEnter={handleMouseEnter}
+      onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
       {isSelected && (
@@ -669,26 +614,12 @@ export function SupervisorMarker({ supervisor, post, rect, scale, isSelected, ex
         fill={color}
         style={{ filter: 'drop-shadow(0 1px 3px rgb(0 0 0 / 0.6))' }}
       />
-      {/* Hover card with fixed positioning using portal */}
-      {hovered && typeof window !== 'undefined' && createPortal(
-        <div
-          style={{
-            position: 'fixed',
-            left: `${tooltipPos.x}px`,
-            top: `${tooltipPos.y}px`,
-            zIndex: 10000,
-            pointerEvents: 'none',
-          }}
-        >
-          <div className="rounded-md bg-surface-deepest/95 px-2 py-1 text-xs text-surface-light shadow-lg whitespace-nowrap">
-            <div style={{ fontWeight: 'bold', fontSize: '15px', marginBottom: 4 }}>
-              {supervisor.team}
-            </div>
-            <div><strong>Status:</strong> {supervisor.status || 'Unknown'}</div>
-            <div><strong>Post:</strong> {supervisor.location || 'Unassigned'}</div>
-          </div>
-        </div>,
-        document.body
+            {hovered && (
+        <MarkerCard>
+          <MarkerCardTitle>{supervisor.team}</MarkerCardTitle>
+          <div><strong>Status:</strong> {supervisor.status || 'Unknown'}</div>
+          {showPosts && <div><strong>Post:</strong> {supervisor.location || 'Unassigned'}</div>}
+        </MarkerCard>
       )}
     </div>
   );
@@ -767,6 +698,8 @@ export interface VenueMapWithPostsProps {
   onAddCallAtPost?: (postName: string) => void;
   /** Same, but from clicking a team marker — prefills the assigned team instead of the location. */
   onAddCallForTeam?: (teamName: string) => void;
+  /** Show posts in team and supervisor cards. Off when the event has no posting schedule. */
+  showPosts?: boolean;
   /** Optional add-on layer (see MapOverlay). */
   overlay?: MapOverlay;
 }
@@ -800,6 +733,7 @@ export function VenueMapWithPosts({
   selectedEquipmentName,
   onAddCallAtPost,
   onAddCallForTeam,
+  showPosts = true,
   overlay,
 }: VenueMapWithPostsProps) {
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
@@ -1048,6 +982,7 @@ export function VenueMapWithPosts({
                     const pos = at(team.team);
                     return pos && (
                       <TeamMarker
+                        showPosts={showPosts}
                         key={team.team}
                         team={team}
                         post={pos.post}
@@ -1067,6 +1002,7 @@ export function VenueMapWithPosts({
                     const pos = at(sup.team);
                     return pos && (
                       <SupervisorMarker
+                        showPosts={showPosts}
                         key={sup.team}
                         supervisor={sup}
                         post={pos.post}
@@ -1095,6 +1031,7 @@ export function VenueMapWithPosts({
 
                 return (
                   <TeamMarker
+                    showPosts={showPosts}
                     key={team.team}
                     team={team}
                     post={postObj}
@@ -1116,6 +1053,7 @@ export function VenueMapWithPosts({
 
               return (
                 <SupervisorMarker
+                  showPosts={showPosts}
                   key={sup.team}
                   supervisor={sup}
                   post={postObj}

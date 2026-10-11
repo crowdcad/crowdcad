@@ -6,6 +6,7 @@ import { ChevronLeft, ChevronRight, Search } from 'lucide-react';
 import type { Layer, Staff, Supervisor, Equipment, Call, Clinic } from '@/app/types';
 import { useZoomPan } from '@/hooks/useZoomPan';
 import { MAP_CHECKER_BG } from '@/lib/mapStyles';
+import { staticSelectorButtonProps } from '@/lib/heroStatic';
 import MapZoomControls from '@/components/ui/map-zoom-controls';
 import { VenueMapWithPosts, type MapOverlay } from '@/components/modals/event/venuemapmodal';
 import dynamic from 'next/dynamic';
@@ -52,6 +53,8 @@ interface VenueMapTabProps {
   onAddCallAtPost?: (postName: string) => void;
   /** Clicking a team marker shows a small "Add Call" button under it prefilled with that team assigned. */
   onAddCallForTeam?: (teamName: string) => void;
+  /** Show posts in team and supervisor cards. Off when the event has no posting schedule. */
+  showPosts?: boolean;
   focusTeamRequest?: TeamFocusRequest | null;
   focusSupervisorRequest?: SupervisorFocusRequest | null;
   focusEquipmentRequest?: EquipmentFocusRequest | null;
@@ -90,6 +93,7 @@ export default function VenueMapTab({
   clinics,
   onAddCallAtPost,
   onAddCallForTeam,
+  showPosts = true,
   focusTeamRequest,
   focusSupervisorRequest,
   focusEquipmentRequest,
@@ -330,6 +334,7 @@ export default function VenueMapTab({
               // space for text.
               clearButton: 'absolute end-6 top-1/2 -translate-y-1/2',
             }}
+            selectorButtonProps={staticSelectorButtonProps}
             inputProps={{
               classNames: {
                 inputWrapper:
@@ -363,6 +368,7 @@ export default function VenueMapTab({
             selectedEquipmentName={selectedEquipmentName}
             onAddCallAtPost={onAddCallAtPost}
             onAddCallForTeam={onAddCallForTeam}
+            showPosts={showPosts}
             focus={geoFocus}
             overlay={overlay}
           />
@@ -396,6 +402,7 @@ export default function VenueMapTab({
           selectedEquipmentName={selectedEquipmentName}
           onAddCallAtPost={onAddCallAtPost}
           onAddCallForTeam={onAddCallForTeam}
+            showPosts={showPosts}
           overlay={overlay}
         />
         <MapZoomControls onZoomIn={() => zoomIn(0.25)} onZoomOut={() => zoomOut(0.25)} onReset={resetZoom} />

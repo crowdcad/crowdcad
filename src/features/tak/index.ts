@@ -18,5 +18,6 @@ export { default as TakEventSummary, type TakEventSummaryProps } from './compone
 export { default as TakMapModeChoice, type TakMapModeChoiceProps } from './components/TakMapModeChoice'; // (b) event creation
 export { default as TakAdminSection, type TakAdminSectionProps } from './components/TakAdminSection'; // (c) Admin settings
 export { onEventEnded } from './lifecycle'; // (d) end-event flow
+export { saveEventConfig, type TakEventConfig } from './data/takStore'; // (b) a new event's TAK config, saved once the event exists
 
 export { alignmentFor, alignmentMatches, deleteAlignment, loadAlignments, saveAlignment } from './data/alignmentStore';

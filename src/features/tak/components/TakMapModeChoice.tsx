@@ -4,8 +4,8 @@ import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Radio, RadioGroup, Select, SelectItem } from '@heroui/react';
 import type { Layer } from '@/app/types';
-import { alignmentFor, loadAlignments, loadVenueAlignments } from '../data/alignmentStore';
-import { deleteEventConfig, getEventConfig, listAllowedBridges, saveEventConfig, type TakBridge } from '../data/takStore';
+import { loadAlignments, loadVenueAlignments, takMapStatus } from '../data/alignmentStore';
+import { deleteEventConfig, getEventConfig, listAllowedBridges, saveEventConfig, type TakBridge, type TakEventConfig } from '../data/takStore';
 import { TAK_MODULE_MARKER } from '../marker';
 import type { HistoryMode, TakMapAlignment } from '../types';
 import HelpTip from '@/components/geo/HelpTip';
@@ -15,10 +15,13 @@ import HelpTip from '@/components/geo/HelpTip';
  * tracking". Standard events write nothing. Choosing TAK writes the event's
  * TAK config (bridge, history mode) as the owner changes it, and sets the
  * event's mapMode through onMapModeChange, which the event builder saves with
- * the rest of the event.
+ * the rest of the event. A new event has no id until the builder finishes, so
+ * with eventId null nothing is written: the config goes to
+ * onPendingConfigChange instead, for the builder to save once the event exists.
  */
 export interface TakMapModeChoiceProps {
-  eventId: string;
+  eventId: string | null;
+  onPendingConfigChange?: (config: TakEventConfig | null) => void;
   uid: string;
   mapMode: 'standard' | 'tak' | undefined;
   onMapModeChange: (mode: 'standard' | 'tak') => void;
@@ -27,6 +30,8 @@ export interface TakMapModeChoiceProps {
 
 // HeroUI's primary is near-black in the dark theme; show the selection in the accent colour, as elsewhere in core.
 const RADIO_CLASSES = { control: 'bg-accent', wrapper: 'group-data-[selected=true]:border-accent' };
+// Same height, radius and padding as the event builder's other fields (MetadataSection).
+const SELECT_CLASSES = { label: 'text-surface-light font-medium', trigger: 'rounded-large px-4' };
 
 const HISTORY_LABELS: Record<HistoryMode, string> = {
   off: 'Off: live positions only, nothing kept',
@@ -34,7 +39,7 @@ const HISTORY_LABELS: Record<HistoryMode, string> = {
   detailed: 'Detailed: summary, plus positions while teams are on calls',
 };
 
-export default function TakMapModeChoice({ eventId, uid, mapMode, onMapModeChange, layers }: TakMapModeChoiceProps) {
+export default function TakMapModeChoice({ eventId, onPendingConfigChange, uid, mapMode, onMapModeChange, layers }: TakMapModeChoiceProps) {
   const [bridges, setBridges] = useState<TakBridge[] | null>(null);
   const [bridgeUid, setBridgeUid] = useState<string | null>(null);
   const [historyMode, setHistoryMode] = useState<HistoryMode>('summary');
@@ -49,7 +54,7 @@ export default function TakMapModeChoice({ eventId, uid, mapMode, onMapModeChang
 
   // Existing TAK settings (editing an event).
   useEffect(() => {
-    if (!tak) return;
+    if (!tak || !eventId) return;
     void getEventConfig(eventId)
       .then((c) => {
         if (c) {
@@ -64,8 +69,13 @@ export default function TakMapModeChoice({ eventId, uid, mapMode, onMapModeChang
 
   const persist = async (nextBridge: string | null, nextMode: HistoryMode) => {
     setError(null);
+    const config: TakEventConfig = { bridgeUid: nextBridge, enabled: true, closed: false, historyMode: nextMode };
+    if (!eventId) {
+      onPendingConfigChange?.(config);
+      return;
+    }
     try {
-      await saveEventConfig(eventId, { bridgeUid: nextBridge, enabled: true, closed: false, historyMode: nextMode });
+      await saveEventConfig(eventId, config);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save TAK settings.');
     }
@@ -74,7 +84,8 @@ export default function TakMapModeChoice({ eventId, uid, mapMode, onMapModeChang
   const chooseMode = async (mode: 'standard' | 'tak') => {
     onMapModeChange(mode);
     if (mode === 'standard') {
-      await deleteEventConfig(eventId).catch(() => {});
+      if (!eventId) onPendingConfigChange?.(null);
+      else await deleteEventConfig(eventId).catch(() => {});
       return;
     }
     // Preselect when exactly one bridge is available.
@@ -87,7 +98,10 @@ export default function TakMapModeChoice({ eventId, uid, mapMode, onMapModeChang
   };
 
   const noBridges = bridges !== null && bridges.length === 0;
-  const mapLayers = layers.filter((l) => l.mapUrl);
+  const mapStatuses = layers.flatMap((l) => {
+    const status = takMapStatus(l, alignments, venueAlignments);
+    return status ? [{ layer: l, status }] : [];
+  });
 
   return (
     <div className="space-y-2" data-tak-module={TAK_MODULE_MARKER}>
@@ -117,7 +131,8 @@ export default function TakMapModeChoice({ eventId, uid, mapMode, onMapModeChang
       {tak && (
         <div className="space-y-2 rounded-lg border border-surface-liner p-3">
           <Select
-            size="sm"
+            size="lg"
+            classNames={SELECT_CLASSES}
             label="TAK server"
             selectedKeys={bridgeUid ? [bridgeUid] : []}
             onSelectionChange={(keys) => {
@@ -131,7 +146,8 @@ export default function TakMapModeChoice({ eventId, uid, mapMode, onMapModeChang
             ))}
           </Select>
           <Select
-            size="sm"
+            size="lg"
+            classNames={SELECT_CLASSES}
             label="Location history"
             selectedKeys={[historyMode]}
             onSelectionChange={(keys) => {
@@ -148,15 +164,12 @@ export default function TakMapModeChoice({ eventId, uid, mapMode, onMapModeChang
           <div className="space-y-1">
             <p className="inline-flex items-center gap-1 text-xs text-surface-faint">
               Maps
-              <HelpTip text="Live positions appear on a map once it is aligned. Maps are aligned in venue setup, in the venue's TAK alignment step." />
+              <HelpTip text="Live positions appear on a map drawn on the real map, or on a map image once it is aligned. Images are aligned in venue setup (Venues, edit the venue, Map alignment step)." />
             </p>
-            {mapLayers.length === 0 && <p className="text-xs text-surface-faint">This venue has no map images yet.</p>}
-            {mapLayers.map((l) => (
-              <p key={l.id} className="truncate text-sm">
-                {l.name}:{' '}
-                <span className="text-surface-faint">
-                  {alignmentFor(l, alignments, venueAlignments) ? 'aligned' : l.alignment || l.takAlignment ? 'image changed since alignment, align it again in venue setup' : 'not aligned yet'}
-                </span>
+            {mapStatuses.length === 0 && <p className="text-xs text-surface-faint">This venue has no maps yet.</p>}
+            {mapStatuses.map(({ layer, status }) => (
+              <p key={layer.id} className="truncate text-sm">
+                {layer.name}: <span className={status.ready ? 'text-surface-faint' : 'text-status-orange'}>{status.text}</span>
               </p>
             ))}
           </div>

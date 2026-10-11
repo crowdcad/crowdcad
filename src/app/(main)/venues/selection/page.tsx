@@ -9,7 +9,7 @@ import { isEventEnded } from '@/lib/eventStatus';
 import { useAuth } from '@/hooks/useauth';
 import { useAdmin } from '@/hooks/useAdmin';
 import LoadingScreen from '@/components/ui/loading-screen';
-import { stripUndefined } from '@/lib/utils';
+import { newEventCreatePath } from '@/lib/newEvent';
 import ShareModal from '@/components/modals/sharemodal';
 import { Share2, Building2 } from "lucide-react";
 import { 
@@ -21,8 +21,7 @@ import {
   DropdownMenu, 
   DropdownItem,
   Input,
-  Chip,
-  ScrollShadow
+  Chip
 } from "@heroui/react";
 import { 
   Plus, 
@@ -118,37 +117,15 @@ export default function VenueSelection() {
     }
   };
 
-  const handleStartNewEvent = async (venueId: string) => {
-    const selectedVenue = venues.find((v) => v.id === venueId);
-    if (!selectedVenue) {
+  // Opens the event builder without writing anything: the event is created
+  // only when setup finishes, so backing out leaves no empty event behind.
+  const handleStartNewEvent = (venueId: string) => {
+    if (!venues.some((v) => v.id === venueId)) {
       alert('Venue not found.');
       return;
     }
-
-    try {
-      setIsStartingEvent(true);
-      const newEvent = {
-        name: '',
-        date: new Date(),
-        venue: selectedVenue,
-        postingTimes: [],
-        staff: [],
-        supervisor: [],
-        userId: selectedVenue.userId,
-        calls: [],
-        eventPosts: [],
-        eventEquipment: [],
-        status: 'draft',
-        createdAt: new Date().toISOString(),
-      };
-
-      const newEventId = await dbService.addDocument('events', stripUndefined(newEvent));
-      router.push(`/events/${newEventId}/create`);
-    } catch (error) {
-      console.error('Error creating event:', error);
-      alert('Failed to create event.');
-      setIsStartingEvent(false);
-    }
+    setIsStartingEvent(true);
+    router.push(newEventCreatePath(venueId));
   };
 
   const handleToggleOrgEvent = async (event: Event) => {
@@ -415,7 +392,7 @@ export default function VenueSelection() {
                 }}
               />
 
-              <ScrollShadow className="minimal-scrollbar space-y-3 max-h-[32rem] pr-2">
+              <div className="minimal-scrollbar space-y-3 max-h-[32rem] overflow-y-auto pr-2">
                 {filteredVenues.map((venue) => {
                   const stats = venueStats.byVenue[venue.id] ?? { count: 0, lastUsed: null };
                   return (
@@ -423,9 +400,8 @@ export default function VenueSelection() {
                       key={venue.id}
                       isPressable
                       onPress={() => setSelectedVenueId(venue.id)}
-                      classNames={{
-                        base: "rounded-sm bg-surface-deep/50 hover:bg-surface-deep backdrop-blur-sm w-full"
-                      }}
+                      shadow="none"
+                      classNames={{ base: "rounded-sm bg-surface-deep hover:bg-surface-deeper w-full" }}
                     >
                       <CardBody className="p-4">
                         <div className="flex justify-between items-start w-full">
@@ -501,7 +477,7 @@ export default function VenueSelection() {
                     </Card>
                   );
                 })}
-              </ScrollShadow>
+              </div>
 
               <Button
                 size="lg"
@@ -732,7 +708,7 @@ export default function VenueSelection() {
                 }}
               />
 
-              <ScrollShadow className="minimal-scrollbar flex-1 space-y-2 pr-2">
+              <div className="minimal-scrollbar flex-1 space-y-2 overflow-y-auto pr-2">
                 {filteredVenues.map((venue) => {
                   const stats = venueStats.byVenue[venue.id] ?? { count: 0, lastUsed: null };
                   const isSelected = selectedVenueId === venue.id;
@@ -740,11 +716,9 @@ export default function VenueSelection() {
                   return (
                     <Card
                       key={venue.id}
+                      shadow="none"
                       classNames={{
-                        base: `rounded-sm ${isSelected
-                          ? 'bg-status-blue/20'
-                          : 'bg-surface-deep/50 hover:bg-surface-deep'
-                        } backdrop-blur-sm transition-all w-full`
+                        base: `rounded-sm w-full transition-colors ${isSelected ? 'bg-status-blue/20' : 'bg-surface-deep hover:bg-surface-deeper'}`,
                       }}
                     >
                       <div 
@@ -824,7 +798,7 @@ export default function VenueSelection() {
                     </Card>
                   );
                 })}
-              </ScrollShadow>
+              </div>
             </div>
 
             {/* RIGHT PANEL - Event Table/Details */}

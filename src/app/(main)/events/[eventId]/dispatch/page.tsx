@@ -55,7 +55,8 @@ import { isEventEnded } from '@/lib/eventStatus';
 import { buildLogSummaryCsv } from '@/lib/csvFormat';
 import { downloadTextFile } from '@/lib/downloadFile';
 import { formatAgeSex, parseAgeSex } from '@/lib/ageSex';
-import { getActivePostingTime } from '@/lib/postingTimes';
+import { getActivePostingTime, hasPostingSchedule } from '@/lib/postingTimes';
+import FillToTabBar from '@/components/dispatch/filltotabbar';
 import { keepTrackedLocations } from '@/lib/teamLocationGuard';
 import type { UnitTracking } from '@/lib/unitTracking';
 import { stampStatusSince, deriveStatusSinceFromLogs } from '@/lib/teamStatusSince';
@@ -4105,6 +4106,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
                           teamTimers={teamTimers}
                           calls={event.calls || []}
                           clinics={clinics}
+                          showPosts={hasPostingSchedule(event)}
                           onAddCallAtPost={(location) => openAddCallModal({ location })}
                           onAddCallForTeam={(assignedTeam) => openAddCallModal({ assignedTeam })}
                           focusTeamRequest={mapTeamFocusRequest}
@@ -4276,7 +4278,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
 
               {hasVenueMapImage && (
                 <Tab key="map" title={<MapIcon className="h-6 w-6" />} aria-label={t('Map')}>
-                  <div className="h-[70vh] pt-3 pb-20">
+                  <FillToTabBar tabBarLabel="Dispatch sections" className="pt-3">
                     <VenueMapTab
                       layers={venueLayers}
                       staff={event.staff || []}
@@ -4285,6 +4287,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
                       teamTimers={teamTimers}
                       calls={event.calls || []}
                       clinics={clinics}
+                      showPosts={hasPostingSchedule(event)}
                       onAddCallAtPost={(location) => openAddCallModal({ location })}
                       onAddCallForTeam={(assignedTeam) => openAddCallModal({ assignedTeam })}
                       focusTeamRequest={mapTeamFocusRequest}
@@ -4295,7 +4298,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
                       onEquipmentFocusHandled={() => setMapEquipmentFocusRequest(null)}
                       overlay={takOverlay}
                     />
-                  </div>
+                  </FillToTabBar>
                 </Tab>
               )}
             </Tabs>

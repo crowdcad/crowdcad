@@ -13,6 +13,7 @@ import {
   Chip
 } from "@heroui/react";
 import { Users, Plus } from "lucide-react";
+import { STATIC_CLOSE_BUTTON_CLASS } from "@/lib/heroStatic";
 
 interface ShareModalProps {
   isOpen: boolean;
@@ -75,7 +76,7 @@ export default function ShareModal({
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose}>
+    <Modal isOpen={isOpen} onClose={onClose} classNames={{ closeButton: STATIC_CLOSE_BUTTON_CLASS }}>
       <ModalContent>
         <ModalHeader className="flex flex-col gap-1">
           Share &quot;{resourceName}&quot;

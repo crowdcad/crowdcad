@@ -9,6 +9,7 @@ import { useAuth } from "@/hooks/useauth";
 import { useAdmin } from "@/hooks/useAdmin";
 import { useDispatchVocabulary } from "@/hooks/useDispatchVocabulary";
 import { isEventEnded } from "@/lib/eventStatus";
+import { hasPostingSchedule } from "@/lib/postingTimes";
 import type { Event } from "@/app/types";
 
 import {
@@ -79,7 +80,7 @@ export default function AppNavbar() {
 
         const data = docSnap.exists ? docSnap.data : null;
 
-        setPostingScheduleEnabled((data?.postingTimes?.length ?? 0) > 0);
+        setPostingScheduleEnabled(hasPostingSchedule(data));
         setEventEnded(data ? isEventEnded(data) : false);
         setEventOwnerId(data?.userId ?? null);
       } catch {
