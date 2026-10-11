@@ -1,16 +1,19 @@
 'use client';
 
 import React, { Suspense, useEffect, useRef, useState } from 'react';
+import dynamic from 'next/dynamic';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button, Card, Input, ScrollShadow, Tooltip } from '@heroui/react';
 import { parseDate, getLocalTimeZone, today, Time } from '@internationalized/date';
-import { CircleHelp, Pencil, Trash2 } from 'lucide-react';
-import type { Event, EventEquipment, Post, Staff, Supervisor, Venue } from '@/app/types';
+import { CircleHelp, Pencil, Trash2, WifiOff } from 'lucide-react';
+import type { Event, EventEquipment, Post, Staff, Supervisor, Venue, Zone } from '@/app/types';
 import LoadingScreen from '@/components/ui/loading-screen';
 import { useScheduleGeneration } from '@/hooks/useScheduleGeneration';
 import { scheduleTimesToWindow, formatTimeValue, parseTimeValue } from '@/lib/scheduleUtils';
 import { syncClinicsFromVenue } from '@/lib/clinics';
-import { syncDispatchZonesFromVenue } from '@/lib/zones';
+import { hasDuplicateZoneName, syncDispatchZonesFromVenue } from '@/lib/zones';
+import { liteVenueLayers } from '@/lib/liteEventAdapters';
+import { postAt, type LatLng } from '@/lib/geo/positions';
 import { stripUndefined } from '@/lib/utils';
 import MetadataSection from '@/components/event-create/MetadataSection';
 import TeamStaffingSection from '@/components/event-create/TeamStaffingSection';
@@ -30,6 +33,11 @@ import {
   saveLiteEvent,
 } from '@/lib/liteEventStore';
 import { newTeamId } from '@/lib/teamId';
+
+// The live map (Map step and map-based Locations step), loaded on demand like
+// venue setup's: the same AreaEditor and map controls, without image layers or TAK.
+const AreaEditor = dynamic(() => import('@/components/geo/AreaEditor'), { ssr: false });
+const GeoLocationsEditor = dynamic(() => import('@/components/geo/GeoLocationsEditor'), { ssr: false });
 
 const LICENSES = ['CPR', 'EMT-B', 'EMT-A', 'EMT-P', 'RN', 'MD/DO'];
 
@@ -56,7 +64,7 @@ const parseMemberStrings = (members: string[]): TeamMemberDraft[] =>
 
 // The shape the shared event-create step components (also used by cloud
 // event creation) expect. Lite events don't have a pre-existing Venue
-// (no id/userId, no map, no layers) — this adapter fabricates the minimal
+// (no id/userId, no map image, no layers) — this adapter fabricates the minimal
 // Venue wrapper those components need around the same posts/equipment
 // arrays a LiteEventDraft already carries, so they can be reused unmodified.
 type SectionEventData = Partial<Event> & { venue: Venue; eventEquipment: EventEquipment[] };
@@ -82,6 +90,7 @@ const fromSectionData = (current: LiteEventDraft, next: SectionEventData): LiteE
   eventEquipment: next.eventEquipment,
   eventPosts: next.eventPosts ?? current.eventPosts,
   venue: {
+    ...current.venue,
     name: next.venue.name,
     posts: next.venue.posts ?? [],
     equipment: next.venue.equipment,
@@ -417,6 +426,45 @@ function LiteCreateContent() {
     setEquipmentEditInput('');
   };
 
+  // Locations and areas placed on the Lite map (GeoLocationsEditor). Same
+  // unique-name rule as locations added by name.
+  const addMapPost = (post: Exclude<Post, string>): string | null => {
+    if (eventDraft?.venue.posts.some((p) => getPostName(p).toLowerCase() === post.name.toLowerCase())) {
+      return 'Another location already uses this name.';
+    }
+    updateDraft((current) => ({ ...current, venue: { ...current.venue, posts: [...current.venue.posts, post] } }));
+    return null;
+  };
+
+  const moveMapPost = (postIdx: number, p: LatLng) => {
+    updateDraft((current) => {
+      const layer = liteVenueLayers(current.venue)[0];
+      const post = current.venue.posts[postIdx];
+      if (!layer || !post || typeof post === 'string') return current;
+      const moved = postAt(post, p, layer);
+      const posts = [...current.venue.posts];
+      posts[postIdx] = moved;
+      return {
+        ...current,
+        venue: { ...current.venue, posts },
+        eventPosts: current.eventPosts.map((ep) => (getPostName(ep) === post.name && typeof ep !== 'string' ? { ...ep, lat: moved.lat, lng: moved.lng } : ep)),
+      };
+    });
+  };
+
+  const addMapZone = (zone: Zone): string | null => {
+    const zones = eventDraft?.venue.zones ?? [];
+    if (zone.isDispatchZone && hasDuplicateZoneName(zone.name, zones.map((z, zoneIdx) => ({ zone: z, layerIdx: 0, zoneIdx })))) {
+      return 'Another dispatch zone already uses this name. Give each dispatch zone a unique name.';
+    }
+    updateDraft((current) => ({ ...current, venue: { ...current.venue, zones: [...(current.venue.zones ?? []), zone] } }));
+    return null;
+  };
+
+  const removeMapZone = (zoneId: string) => {
+    updateDraft((current) => ({ ...current, venue: { ...current.venue, zones: (current.venue.zones ?? []).filter((z) => z.id !== zoneId) } }));
+  };
+
   const handleSaveTeam = (team: TeamDraft) => {
     updateDraft((current) => {
       if (editingTeamIndex !== null) {
@@ -510,7 +558,7 @@ function LiteCreateContent() {
       status: 'active',
       updatedAt: new Date().toISOString(),
       clinics: syncClinicsFromVenue(eventDraft.venue, eventDraft.clinics),
-      dispatchZones: syncDispatchZonesFromVenue(eventDraft.venue, eventDraft.dispatchZones),
+      dispatchZones: syncDispatchZonesFromVenue({ layers: liteVenueLayers(eventDraft.venue) }, eventDraft.dispatchZones),
     };
 
     await saveLiteEvent(stripUndefined(finalized));
@@ -530,11 +578,13 @@ function LiteCreateContent() {
   const hasVenueEquipment = eventDraft.venue.equipment.length > 0;
   const allPosts = eventDraft.venue.posts;
   const flattenedPosts = allPosts.map((post) => ({ post, layerName: '' }));
+  const mapLayer = liteVenueLayers(eventDraft.venue)[0];
+  const mapZones = eventDraft.venue.zones ?? [];
 
-  type StepId = 'basics' | 'locations' | 'teams' | 'equipment' | 'postschedule' | 'review';
+  type StepId = 'basics' | 'map' | 'locations' | 'teams' | 'equipment' | 'postschedule' | 'review';
   const STEP_ORDER: StepId[] = hasVenueEquipment
-    ? ['basics', 'locations', 'teams', 'equipment', 'postschedule', 'review']
-    : ['basics', 'locations', 'teams', 'postschedule', 'review'];
+    ? ['basics', 'map', 'locations', 'teams', 'equipment', 'postschedule', 'review']
+    : ['basics', 'map', 'locations', 'teams', 'postschedule', 'review'];
 
   const hasRequiredBasics = !!eventDraft.name.trim() && !!eventDraft.date;
 
@@ -553,6 +603,34 @@ function LiteCreateContent() {
         scheduleTo={scheduleTo}
         setScheduleTo={setScheduleTo}
         inputClassNames={inputClassNames}
+      />
+    </div>
+  );
+
+  const mapStep = (
+    <div className="px-6 pt-4 h-full overflow-y-auto minimal-scrollbar flex flex-col gap-3">
+      <h3 className="text-surface-light font-semibold text-xl inline-flex items-center gap-1.5">
+        Map
+        <Tooltip content="Optional. Mark where the event is on the real map by finding the place (or typing coordinates) and clicking around the area. You can then place locations and draw areas on it. Map images and live tracking aren't available in Lite mode." placement="top">
+          <CircleHelp className="w-3.5 h-3.5 text-surface-faint" />
+        </Tooltip>
+      </h3>
+      <div className="flex items-start gap-2 rounded-lg border border-status-orange/50 bg-status-orange/10 px-3 py-2 text-sm leading-snug text-surface-light">
+        <WifiOff className="mt-0.5 h-4 w-4 flex-shrink-0 text-status-orange" />
+        <span>
+          The map needs an internet connection. Without one it won&apos;t load, but everything else in Lite mode still works offline. Skip this step to run without a map.
+        </span>
+      </div>
+      <AreaEditor
+        area={eventDraft.venue.area}
+        heightClassName="h-[50vh] min-h-[300px]"
+        onChange={(area) =>
+          updateDraft((current) => {
+            const venue = { ...current.venue };
+            delete venue.area;
+            return { ...current, venue: area ? { ...venue, area } : venue };
+          })
+        }
       />
     </div>
   );
@@ -610,97 +688,138 @@ function LiteCreateContent() {
     </Card>
   );
 
-  const locationsStep = (
+  const locationsColumn = (
+    <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
+      <div className="flex-shrink-0 pb-3 flex items-center justify-between">
+        <h3 className="text-surface-light font-semibold text-lg inline-flex items-center gap-1.5">
+          Locations
+          <Tooltip content="Posts or areas teams can be assigned to and dispatched between during the event (e.g., Main Entrance, First Aid Tent)." placement="top">
+            <CircleHelp className="w-3.5 h-3.5 text-surface-faint" />
+          </Tooltip>
+        </h3>
+      </div>
+      <div className="flex-shrink-0 flex gap-2 pb-3">
+        <Input
+          placeholder="e.g., Main Entrance"
+          value={locationInput}
+          onValueChange={setLocationInput}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              addLocation();
+            }
+          }}
+          variant="flat"
+          classNames={inputClassNames}
+        />
+        <Button onPress={addLocation} className="flex-shrink-0 h-10 px-4 text-sm text-surface-light bg-default/40 hover:bg-default/60">
+          Add
+        </Button>
+      </div>
+      <ScrollShadow className="space-y-2 pr-2 scrollbar-hide flex-1 min-h-0" hideScrollBar style={{ overflow: 'auto' }}>
+        {allPosts.map((post, index) =>
+          locationListItem(
+            getPostName(post),
+            editingLocationIndex === index,
+            locationEditInput,
+            setLocationEditInput,
+            saveLocationEdit,
+            cancelLocationEdit,
+            () => startLocationEdit(index),
+            () => removeLocation(index),
+            `${getPostName(post)}_${index}`
+          )
+        )}
+      </ScrollShadow>
+      {mapZones.length > 0 && (
+        <div className="flex-shrink-0 pt-3 pb-2 space-y-2">
+          <p className="text-surface-light font-semibold text-sm">Areas</p>
+          {mapZones.map((zone) => (
+            <Card key={zone.id} radius="sm" className="bg-default/40">
+              <div className="flex items-center justify-between px-3 py-2 gap-2">
+                <span className="inline-flex min-w-0 items-center gap-2 text-surface-light font-medium leading-normal">
+                  <span className="h-3 w-3 flex-shrink-0 rounded-full" style={{ backgroundColor: zone.color }} />
+                  <span className="truncate">{zone.name}</span>
+                  {zone.isDispatchZone && <span className="flex-shrink-0 text-xs text-surface-faint">Dispatch zone</span>}
+                </span>
+                <button type="button" onClick={() => removeMapZone(zone.id)} className="p-1 rounded bg-transparent flex-shrink-0" aria-label="Delete">
+                  <Trash2 className="h-4 w-4 text-status-red" />
+                </button>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
+  const equipmentColumn = (
+    <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
+      <div className="flex-shrink-0 pb-3 flex items-center justify-between">
+        <h3 className="text-surface-light font-semibold text-lg inline-flex items-center gap-1.5">
+          Equipment
+          <Tooltip content="Trackable gear (e.g., a gurney or AED) that can be assigned a default location and its status followed during dispatch." placement="top">
+            <CircleHelp className="w-3.5 h-3.5 text-surface-faint" />
+          </Tooltip>
+        </h3>
+      </div>
+      <div className="flex-shrink-0 flex gap-2 pb-3">
+        <Input
+          placeholder="e.g., Gurney 1"
+          value={equipmentInput}
+          onValueChange={setEquipmentInput}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              addEquipment();
+            }
+          }}
+          variant="flat"
+          classNames={inputClassNames}
+        />
+        <Button onPress={addEquipment} className="flex-shrink-0 h-10 px-4 text-sm text-surface-light bg-default/40 hover:bg-default/60">
+          Add
+        </Button>
+      </div>
+      <ScrollShadow className="space-y-2 pr-2 scrollbar-hide flex-1 min-h-0" hideScrollBar style={{ overflow: 'auto' }}>
+        {eventDraft.venue.equipment.map((item, index) =>
+          locationListItem(
+            item.name,
+            editingEquipmentIndex === index,
+            equipmentEditInput,
+            setEquipmentEditInput,
+            saveEquipmentEdit,
+            cancelEquipmentEdit,
+            () => startEquipmentEdit(index),
+            () => removeEquipment(index),
+            item.id
+          )
+        )}
+      </ScrollShadow>
+    </div>
+  );
+
+  // With a map, the lists sit beside it and locations can be placed on it
+  // (GeoLocationsEditor, as in venue setup); without one, by name only.
+  const locationsStep = mapLayer ? (
+    <div className="flex h-full gap-4 px-6 pt-4">
+      <div className="flex w-[320px] flex-shrink-0 flex-col gap-4 min-h-0">
+        {locationsColumn}
+        {equipmentColumn}
+      </div>
+      <GeoLocationsEditor
+        className="flex-1 min-w-0 h-full"
+        layer={mapLayer}
+        onAddPost={addMapPost}
+        onMovePost={moveMapPost}
+        onAddZone={addMapZone}
+      />
+    </div>
+  ) : (
     <div className="flex h-full px-6 pt-4">
-      <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
-        <div className="flex-shrink-0 pb-3 flex items-center justify-between">
-          <h3 className="text-surface-light font-semibold text-lg inline-flex items-center gap-1.5">
-            Locations
-            <Tooltip content="Posts or areas teams can be assigned to and dispatched between during the event (e.g., Main Entrance, First Aid Tent)." placement="top">
-              <CircleHelp className="w-3.5 h-3.5 text-surface-faint" />
-            </Tooltip>
-          </h3>
-        </div>
-        <div className="flex-shrink-0 flex gap-2 pb-3">
-          <Input
-            placeholder="e.g., Main Entrance"
-            value={locationInput}
-            onValueChange={setLocationInput}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                addLocation();
-              }
-            }}
-            variant="flat"
-            classNames={inputClassNames}
-          />
-          <Button onPress={addLocation} className="flex-shrink-0 h-10 px-4 text-sm text-surface-light bg-default/40 hover:bg-default/60">
-            Add
-          </Button>
-        </div>
-        <ScrollShadow className="space-y-2 pr-2 scrollbar-hide flex-1 min-h-0" hideScrollBar style={{ overflow: 'auto' }}>
-          {allPosts.map((post, index) =>
-            locationListItem(
-              getPostName(post),
-              editingLocationIndex === index,
-              locationEditInput,
-              setLocationEditInput,
-              saveLocationEdit,
-              cancelLocationEdit,
-              () => startLocationEdit(index),
-              () => removeLocation(index),
-              `${getPostName(post)}_${index}`
-            )
-          )}
-        </ScrollShadow>
-      </div>
-
+      {locationsColumn}
       <div className="w-px bg-surface-liner mx-2 flex-shrink-0" />
-
-      <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
-        <div className="flex-shrink-0 pb-3 flex items-center justify-between">
-          <h3 className="text-surface-light font-semibold text-lg inline-flex items-center gap-1.5">
-            Equipment
-            <Tooltip content="Trackable gear (e.g., a gurney or AED) that can be assigned a default location and its status followed during dispatch." placement="top">
-              <CircleHelp className="w-3.5 h-3.5 text-surface-faint" />
-            </Tooltip>
-          </h3>
-        </div>
-        <div className="flex-shrink-0 flex gap-2 pb-3">
-          <Input
-            placeholder="e.g., Gurney 1"
-            value={equipmentInput}
-            onValueChange={setEquipmentInput}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                addEquipment();
-              }
-            }}
-            variant="flat"
-            classNames={inputClassNames}
-          />
-          <Button onPress={addEquipment} className="flex-shrink-0 h-10 px-4 text-sm text-surface-light bg-default/40 hover:bg-default/60">
-            Add
-          </Button>
-        </div>
-        <ScrollShadow className="space-y-2 pr-2 scrollbar-hide flex-1 min-h-0" hideScrollBar style={{ overflow: 'auto' }}>
-          {eventDraft.venue.equipment.map((item, index) =>
-            locationListItem(
-              item.name,
-              editingEquipmentIndex === index,
-              equipmentEditInput,
-              setEquipmentEditInput,
-              saveEquipmentEdit,
-              cancelEquipmentEdit,
-              () => startEquipmentEdit(index),
-              () => removeEquipment(index),
-              item.id
-            )
-          )}
-        </ScrollShadow>
-      </div>
+      {equipmentColumn}
     </div>
   );
 
@@ -812,7 +931,11 @@ function LiteCreateContent() {
     {
       id: 'locations',
       label: 'Locations',
-      fields: [{ label: 'Locations', value: countLabel(allPosts.length, 'location') }],
+      fields: [
+        { label: 'Map', value: mapLayer ? 'Area marked' : 'None' },
+        { label: 'Locations', value: countLabel(allPosts.length, 'location') },
+        ...(mapZones.length ? [{ label: 'Areas', value: countLabel(mapZones.length, 'area') }] : []),
+      ],
     },
     {
       id: 'teams',
@@ -853,6 +976,7 @@ function LiteCreateContent() {
 
   const steps: WizardStep[] = [
     { id: 'basics', label: 'Event Configuration', component: basicsStep, isComplete: hasRequiredBasics },
+    { id: 'map', label: 'Map', component: mapStep, isComplete: hasRequiredBasics },
     { id: 'locations', label: 'Locations', component: locationsStep, isComplete: hasRequiredBasics },
     { id: 'teams', label: 'Staff Assignments', component: teamsSupervisorsStep, isComplete: hasRequiredBasics },
     ...(hasVenueEquipment

@@ -1,7 +1,22 @@
-import { Event } from '@/app/types';
-import { LiteEventDraft } from '@/lib/liteEventStore';
+import { Event, Layer } from '@/app/types';
+import { LiteEventDraft, LiteVenueSetup } from '@/lib/liteEventStore';
 
 const LITE_LOCAL_USER_ID = 'lite-local';
+const LITE_MAP_LAYER_ID = 'lite-map';
+
+/** A lite venue's map as the one geo layer the shared map components expect, or none without a drawn area. */
+export function liteVenueLayers(venue: LiteVenueSetup): Layer[] {
+  if (!venue.area || venue.area.polygon.length < 3) return [];
+  return [
+    {
+      id: LITE_MAP_LAYER_ID,
+      name: venue.name || 'Map',
+      posts: venue.posts || [],
+      zones: venue.zones || [],
+      area: venue.area,
+    },
+  ];
+}
 
 export function removeUndefinedDeep<T>(obj: T): T {
   if (obj === null || typeof obj !== 'object') return obj;
@@ -33,7 +48,7 @@ export function normalizeLiteDraftToEvent(draft: LiteEventDraft): Event {
       name: draft.venue.name || 'Lite Venue',
       equipment: draft.venue.equipment || [],
       posts: draft.venue.posts || [],
-      layers: [],
+      layers: liteVenueLayers(draft.venue),
       userId: LITE_LOCAL_USER_ID,
       mapUrl: undefined,
     },
@@ -52,6 +67,7 @@ export function normalizeLiteDraftToEvent(draft: LiteEventDraft): Event {
     pendingTransportSurgeThreshold: draft.pendingTransportSurgeThreshold,
     unassignedCallSurgeSeconds: draft.unassignedCallSurgeSeconds,
     clinics: draft.clinics || [],
+    dispatchZones: draft.dispatchZones || [],
   };
 }
 
@@ -66,6 +82,8 @@ export function toLiteDraftFromEvent(nextEvent: Event, previousDraft: LiteEventD
       name: nextEvent.venue?.name ?? previousDraft.venue.name,
       posts: nextEvent.eventPosts ?? nextEvent.venue?.posts ?? previousDraft.venue.posts,
       equipment: nextEvent.venue?.equipment ?? previousDraft.venue.equipment,
+      area: previousDraft.venue.area,
+      zones: previousDraft.venue.zones,
     },
     postingTimes: nextEvent.postingTimes || [],
     staff: nextEvent.staff || [],
@@ -80,6 +98,7 @@ export function toLiteDraftFromEvent(nextEvent: Event, previousDraft: LiteEventD
     pendingTransportSurgeThreshold: nextEvent.pendingTransportSurgeThreshold ?? previousDraft.pendingTransportSurgeThreshold,
     unassignedCallSurgeSeconds: nextEvent.unassignedCallSurgeSeconds ?? previousDraft.unassignedCallSurgeSeconds,
     clinics: nextEvent.clinics ?? previousDraft.clinics,
+    dispatchZones: nextEvent.dispatchZones ?? previousDraft.dispatchZones,
     createdAt:
       typeof nextEvent.createdAt === 'string' ? nextEvent.createdAt : previousDraft.createdAt,
     updatedAt: new Date().toISOString(),
