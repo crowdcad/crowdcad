@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { Button, Input, Modal, ModalBody, ModalContent, ModalFooter, ModalHeader, Select, SelectItem, Snippet } from '@heroui/react';
-import { AlertTriangle, CheckCircle2, Loader2, Plus, RefreshCw, Trash2, X } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Eye, EyeOff, Loader2, Plus, RefreshCw, Trash2, X } from 'lucide-react';
 import {
   findUserIdByEmail,
   forgetMapping,
@@ -275,6 +275,7 @@ function AddTakServerWizard({
   );
   const [link, setLink] = useState('');
   const [tak, setTak] = useState<TakSignIn>({ host: '', username: '', password: '' });
+  const [showPassword, setShowPassword] = useState(false);
   const [creds, setCreds] = useState<BridgeCredentials | null>(null);
   const [env, setEnv] = useState<{ block: string; warnings: string[] } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -300,8 +301,11 @@ function AddTakServerWizard({
   const linkParsed = link.trim() ? parseEnrollLink(link) : null;
   const onLink = (text: string) => {
     setLink(text);
+    // Only the address and username: the link's token works once at most, and
+    // the bridge signs in again at every certificate renewal, so the password
+    // is always typed in.
     const parsed = parseEnrollLink(text);
-    if (parsed) setTak(parsed);
+    if (parsed) setTak((t) => ({ ...t, host: parsed.host, username: parsed.username }));
   };
   const takReady = !!(tak.host.trim() && tak.username.trim() && tak.password);
 
@@ -364,7 +368,7 @@ function AddTakServerWizard({
                 </li>
                 <li>
                   Open the user&apos;s <strong>Enroll QR</strong>. If TAK Portal shows the link next to the code, copy it. Otherwise scan the
-                  code with a phone camera and copy the text it shows. Paste it below to fill in the fields, or type them in yourself.
+                  code with a phone camera and copy the text it shows. Paste it below to fill in the address and username, or type them in yourself.
                 </li>
               </ol>
               <Input classNames={TAK_INPUT_CLASSNAMES}
@@ -382,17 +386,29 @@ function AddTakServerWizard({
                 description="The TAK Server itself, not the TAK Portal web address. Phones connect to it on port 8089."
               />
               <div className="flex gap-2">
-                <Input classNames={TAK_INPUT_CLASSNAMES} label="TAK username" value={tak.username} onValueChange={(username) => setTak((t) => ({ ...t, username }))} />
+                <Input classNames={TAK_INPUT_CLASSNAMES} label="TAK username" autoComplete="off" value={tak.username} onValueChange={(username) => setTak((t) => ({ ...t, username }))} />
                 <Input classNames={TAK_INPUT_CLASSNAMES}
                   label={
                     <span className="inline-flex items-center gap-1">
-                      TAK password or token
-                      <HelpTip text="These only go into the bridge's settings on the next screen; CrowdCAD does not save them. The user's real password works better than an Enroll QR token: a token may only work once, and the bridge signs in again each time it renews its certificate." />
+                      TAK user&apos;s password
+                      <HelpTip text="The password you gave this TAK user in TAK Portal. It only goes into the bridge's settings on the next screen; CrowdCAD does not save it. Not the Enroll QR token: a token works once at most, and the bridge signs in again each time it renews its certificate." />
                     </span>
                   }
-                  type="password"
+                  type={showPassword ? 'text' : 'password'}
+                  // Not this site's own login: keeps the browser's password manager from filling it in unseen.
+                  autoComplete="new-password"
                   value={tak.password}
                   onValueChange={(password) => setTak((t) => ({ ...t, password }))}
+                  endContent={
+                    <button
+                      type="button"
+                      aria-label={showPassword ? 'Hide password' : 'Show password'}
+                      onClick={() => setShowPassword((v) => !v)}
+                      className="text-surface-faint hover:text-surface-light"
+                    >
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  }
                 />
               </div>
             </>

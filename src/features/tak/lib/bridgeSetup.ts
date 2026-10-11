@@ -89,6 +89,17 @@ export async function backendEnv(placement: Placement): Promise<BackendEnv> {
   return { vars, warnings };
 }
 
+/**
+ * A .env value as both Docker Compose and Node's --env-file read it back
+ * unchanged. Unquoted, Compose expands `$` and drops anything after ` #`, so a
+ * typed password like `abc$12` arrived as `abc`. Single quotes keep it literal
+ * in both; a value that itself contains `'` is left as typed.
+ */
+export function envValue(value: string): string {
+  if (/^[A-Za-z0-9._@:/+=-]*$/.test(value) || value.includes("'")) return value;
+  return `'${value}'`;
+}
+
 /** The bridge's complete .env. The bridge password (and TAK password, if given) appear only here. */
 export function envBlock(backend: Record<string, string>, creds: BridgeCredentials, tak: TakSignIn): string {
   const lines = [
@@ -97,8 +108,8 @@ export function envBlock(backend: Record<string, string>, creds: BridgeCredentia
     '# then streams positions on 8089. The certificate is saved and renewed automatically.',
     `TAK_HOST=${tak.host}`,
     'TAK_STREAM_PORT=8089',
-    `TAK_USERNAME=${tak.username}`,
-    `TAK_PASSWORD=${tak.password}`,
+    `TAK_USERNAME=${envValue(tak.username)}`,
+    `TAK_PASSWORD=${envValue(tak.password)}`,
     '',
     '# --- CrowdCAD (shown once) ---',
     ...Object.entries(backend).map(([k, v]) => `${k}=${v}`),

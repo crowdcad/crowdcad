@@ -318,8 +318,9 @@ TAK devices --TLS CoT--> TAK Server (8089) --TLS CoT--> tak-bridge (Docker, on t
    - **Firebase:** a secondary Firebase app with in-memory auth persistence calls `createUserWithEmailAndPassword` for `<id>@bridge.crowdcad.org`, with a password CrowdCAD generates. The secondary app is then signed out and deleted, and the admin writes `bridgeAccounts/{bridgeUid}`.
    - **PocketBase:** an admin creates a user record with `role = 'bridge'`, which doesn't change the admin's session.
    - CrowdCAD shows the `.env` block once and never stores the password.
-3. **On the TAK host (or this computer, for a test):** paste the script CrowdCAD shows. It writes `.env` and starts the bridge, which enrolls on 8446 and connects on 8089.
-4. **Checklist:** CrowdCAD shows signed in, connected to TAK, and receiving positions as the status arrives.
+3. **Firebase only, once per project:** run `firebase deploy --only firestore:indexes --project YOUR_PROJECT_ID`. The bridge finds its events with a collection-group query on `takConfig.bridgeUid`, which needs the index in `firestore.indexes.json`. Without it the bridge logs "watching linked events failed ... requires a COLLECTION_GROUP_ASC index" and never sees an event. The emulator doesn't enforce indexes, so local tests pass without it.
+4. **On the TAK host (or this computer, for a test):** paste the script CrowdCAD shows. It writes `.env` and starts the bridge, which enrolls on 8446 and connects on 8089.
+5. **Checklist:** CrowdCAD shows signed in, connected to TAK, and receiving positions as the status arrives.
 
 - **Rotation:** add a new bridge, switch the events to it, then revoke the old one.
 - **Revocation:** delete the bridge record. The rules check it on every write.
