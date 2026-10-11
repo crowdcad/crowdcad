@@ -33,6 +33,7 @@ import PendingZoneDialog from '@/components/venue-management/PendingZoneDialog';
 import VenueMapZones from '@/components/venue-management/VenueMapZones';
 import MarkerPlacementInstruction from '@/components/venue-management/MarkerPlacementInstruction';
 import VenueMapMarker from '@/components/venue-management/VenueMapMarker';
+import AreaVertex, { MIN_AREA_POINTS } from '@/components/geo/AreaVertex';
 import MapZoomControls from '@/components/ui/map-zoom-controls';
 import MapPanSurface from '@/components/ui/map-pan-surface';
 import { VenueMapWithPosts } from '@/components/modals/event/venuemapmodal';
@@ -271,6 +272,7 @@ export default function VenueManagementPageClient() {
   // awaiting a name) the same way it already cancels the naming dialog's
   // own input via PendingZoneDialog's onKeyDown — this covers Escape
   // pressed anywhere while drawing, not just while the input is focused.
+  // Only clicking the first point's open circle completes an area (AreaVertex).
   useEffect(() => {
     if (!pendingZone) return;
     const onKeyDown = (e: KeyboardEvent) => {
@@ -279,8 +281,6 @@ export default function VenueManagementPageClient() {
         setZoneNameInput('');
         setZoneColorInput('');
         setZoneIsDispatchZoneInput(false);
-      } else if (e.key === 'Enter' && pendingZone.isDrawing && (pendingZone.coords ?? pendingZone.points).length >= 3) {
-        setPendingZone((prev) => (prev ? { ...prev, isDrawing: false } : prev));
       }
     };
     window.addEventListener('keydown', onKeyDown);
@@ -444,12 +444,6 @@ export default function VenueManagementPageClient() {
     setLocationInput('');
   };
 
-  // Distance (in percent units) below which a click while drawing an area is
-  // treated as "close the loop" rather than "place another vertex" — chosen
-  // to be forgiving at typical zoom levels without triggering on a vertex
-  // placed deliberately near, but not on, the start point.
-  const ZONE_CLOSE_THRESHOLD_PERCENT = 2.5;
-
   // Handle map click for area (zone) drawing — routes here instead of
   // handleImageClick's marker-placement branch whenever area mode is active.
   const handleAreaImageClick = (evt: React.MouseEvent<HTMLDivElement>) => {
@@ -471,25 +465,15 @@ export default function VenueManagementPageClient() {
 
     if (!pendingZone.isDrawing) return;
 
-    if (pendingZone.points.length >= 3) {
-      const first = pendingZone.points[0];
-      const distance = Math.hypot(x - first.x, y - first.y);
-      if (distance <= ZONE_CLOSE_THRESHOLD_PERCENT) {
-        setPendingZone({ ...pendingZone, isDrawing: false });
-        return;
-      }
-    }
-
     setPendingZone({ ...pendingZone, points: [...pendingZone.points, { x, y }] });
   };
 
-  // Double-clicking while drawing closes the loop immediately, same
-  // "click near the start point" outcome as handleAreaImageClick's own
-  // distance check, for anyone who'd rather not click back on the start.
-  const handleAreaImageDoubleClick = () => {
-    if (!pendingZone || !pendingZone.isDrawing || pendingZone.points.length < 3) return;
-    setPendingZone({ ...pendingZone, isDrawing: false });
-  };
+  // Clicking the first point's open circle (AreaVertex) completes the area
+  // and opens the naming dialog; the only way to complete one.
+  const completePendingZone = () =>
+    setPendingZone((prev) =>
+      prev && prev.isDrawing && (prev.coords ?? prev.points).length >= MIN_AREA_POINTS ? { ...prev, isDrawing: false } : prev,
+    );
 
   // Confirm the pending zone's name/color/dispatch-zone flag
   const confirmZoneName = () => {
@@ -1178,7 +1162,6 @@ export default function VenueManagementPageClient() {
           <div
             className="relative inline-block"
             onClick={handleImageClick}
-            onDoubleClick={handleAreaImageDoubleClick}
             style={{
               transform: `scale(${scale}) translate(${position.x / scale}px, ${position.y / scale}px)`,
               transformOrigin: 'left top',
@@ -1249,43 +1232,20 @@ export default function VenueManagementPageClient() {
                     />
                   )}
                 </svg>
-                {/* Point dots: plain HTML circles positioned by percent (like
-                    VenueMapMarker's pins), sized in real pixels so they stay
-                    round no matter how the underlying image is stretched. */}
+                {/* Point dots (AreaVertex): plain HTML circles positioned by
+                    percent (like VenueMapMarker's pins), sized in real pixels so
+                    they stay round no matter how the image is stretched. */}
                 <div className="absolute inset-0" style={{ pointerEvents: 'none' }}>
-                  {pendingZone.points.map((p, i) => {
-                    const isFirst = i === 0;
-                    const canClose = isFirst && pendingZone.isDrawing && pendingZone.points.length >= 3;
-                    return (
-                      <div key={i} style={{ position: 'absolute', left: `${p.x}%`, top: `${p.y}%`, transform: 'translate(-50%, -50%)' }}>
-                        {canClose && (
-                          <div
-                            style={{
-                              position: 'absolute',
-                              left: '50%',
-                              top: '50%',
-                              transform: 'translate(-50%, -50%)',
-                              width: 28,
-                              height: 28,
-                              borderRadius: '9999px',
-                              border: `2px solid ${zoneColorInput || '#3b82f6'}`,
-                              opacity: 0.7,
-                            }}
-                          />
-                        )}
-                        <div
-                          style={{
-                            width: isFirst ? 16 : 12,
-                            height: isFirst ? 16 : 12,
-                            borderRadius: '9999px',
-                            backgroundColor: zoneColorInput || '#3b82f6',
-                            border: '2px solid white',
-                            boxShadow: '0 1px 3px rgb(0 0 0 / 0.6)',
-                          }}
+                  {pendingZone.isDrawing &&
+                    pendingZone.points.map((p, i) => (
+                      <div key={i} style={{ position: 'absolute', left: `${p.x}%`, top: `${p.y}%`, transform: 'translate(-50%, -50%)', zIndex: i === 0 ? 1 : undefined }}>
+                        <AreaVertex
+                          color={zoneColorInput || '#3b82f6'}
+                          first={i === 0}
+                          onClose={i === 0 && pendingZone.points.length >= MIN_AREA_POINTS ? completePendingZone : undefined}
                         />
                       </div>
-                    );
-                  })}
+                    ))}
                 </div>
               </>
             )}
@@ -1335,13 +1295,13 @@ export default function VenueManagementPageClient() {
         {/* Instructions overlay - Top Left */}
         {isAddMarkerMode && !pendingMarker && <MarkerPlacementInstruction />}
         {isAddAreaMode && !pendingZone && (
-          <MarkerPlacementInstruction message="Click on the map to start placing points. The area only registers once you connect the dots back to the first point." />
+          <MarkerPlacementInstruction message="Click on the map to place the area's first point." />
         )}
         {isAddAreaMode && pendingZone?.isDrawing && pendingZone.points.length < 3 && (
-          <MarkerPlacementInstruction message={`${pendingZone.points.length} point${pendingZone.points.length === 1 ? '' : 's'} placed. Add at least ${3 - pendingZone.points.length} more, then connect back to the first point to finish.`} />
+          <MarkerPlacementInstruction message={`${pendingZone.points.length} point${pendingZone.points.length === 1 ? '' : 's'} placed. Add at least ${MIN_AREA_POINTS - pendingZone.points.length} more, then click the open circle to complete the area.`} />
         )}
-        {isAddAreaMode && pendingZone?.isDrawing && pendingZone.points.length >= 3 && (
-          <MarkerPlacementInstruction message={`${pendingZone.points.length} points placed. Click the highlighted first point (or double-click) to connect the dots and complete the area.`} />
+        {isAddAreaMode && pendingZone?.isDrawing && pendingZone.points.length >= MIN_AREA_POINTS && (
+          <MarkerPlacementInstruction message={`${pendingZone.points.length} points placed. Click the open circle at the first point to complete the area.`} />
         )}
       </div>
   );
@@ -1473,18 +1433,15 @@ export default function VenueManagementPageClient() {
             setIsAddAreaMode(!isAddAreaMode);
           }}
         />
-        {geoDrawing && (geoDrawing.coords?.length ?? 0) >= 3 && (
-          <Button size="sm" className="bg-accent text-surface-light" onPress={() => setPendingZone({ ...geoDrawing, isDrawing: false })}>
-            Finish area
-          </Button>
-        )}
         <span className="text-xs text-surface-faint">
           {isAddMarkerMode
             ? 'Click anywhere on the map to place a location. Drag a location to move it.'
             : isAddAreaMode
               ? geoDrawing
-                ? `${geoDrawing.coords?.length ?? 0} points placed. Add at least 3, then press Finish area or Enter.`
-                : 'Click on the map to start placing the area\'s points.'
+                ? geoDrawing.coords!.length >= MIN_AREA_POINTS
+                  ? `${geoDrawing.coords!.length} points placed. Click the open circle at the first point to complete the area.`
+                  : `${geoDrawing.coords!.length} point${geoDrawing.coords!.length === 1 ? '' : 's'} placed. Add at least ${MIN_AREA_POINTS - geoDrawing.coords!.length} more, then click the open circle to complete the area.`
+                : 'Click on the map to place the area\'s first point.'
               : 'Drag a location to move it.'}
         </span>
       </div>
@@ -1495,7 +1452,11 @@ export default function VenueManagementPageClient() {
           onMapClick={isAddMarkerMode || isAddAreaMode ? handleGeoMapClick : undefined}
           cursor={isAddMarkerMode || isAddAreaMode ? 'crosshair' : 'grab'}
           onPostMove={moveGeoPost}
-          draftZone={geoDrawing ? { coords: geoDrawing.coords ?? [], color: zoneColorInput || '#3eb1fd' } : null}
+          draftZone={
+            pendingZone?.coords && pendingZone.layerIdx === currentLayer
+              ? { coords: pendingZone.coords, color: zoneColorInput || '#3eb1fd', closed: !pendingZone.isDrawing, onClose: completePendingZone }
+              : null
+          }
         />
         {pendingMarker && (
           <PendingMarkerDialog

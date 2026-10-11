@@ -9,6 +9,7 @@ import { areaBounds, layerAlignment, layerArea } from '@/lib/geo/layers';
 import { boundsOf, postLatLng, zoneLatLngs, type LatLng } from '@/lib/geo/positions';
 import { PREF, usePref } from '@/lib/geo/prefs';
 import BasemapToolbar from './BasemapToolbar';
+import { areaDraftShapes, areaVertexPins } from './AreaVertex';
 import BasemapView, { type BasemapViewRequest, type GeoPin, type GeoShape } from './BasemapView';
 
 const DEFAULT_GEO_IMAGE_OPACITY = 0.7;
@@ -44,8 +45,8 @@ export interface GeoLayerMapProps {
   /** Makes posts draggable. */
   onPostMove?: (postIdx: number, p: LatLng) => void;
   onPostClick?: (postIdx: number) => void;
-  /** A zone being drawn. */
-  draftZone?: { coords: LatLng[]; color: string } | null;
+  /** A zone being drawn (AreaVertex points; `onClose` completes it), or completed and awaiting a name. */
+  draftZone?: { coords: LatLng[]; color: string; closed?: boolean; onClose?: () => void } | null;
   /** More pins (team and equipment markers on the dispatch map). */
   extraPins?: GeoPin[];
   /** Name of a post to call out. */
@@ -99,7 +100,7 @@ export default function GeoLayerMap({
       const coords = zoneLatLngs(zone, layer);
       if (coords) out.push({ id: zone.id, coords, color: zone.color, closed: true, fillOpacity: 0.2 });
     }
-    if (draftZone?.coords.length) out.push({ id: 'draft', coords: draftZone.coords, color: draftZone.color, closed: false });
+    if (draftZone) out.push(...areaDraftShapes('draft', draftZone.coords, draftZone.color, !!draftZone.closed));
     return out;
   }, [area, layer, draftZone]);
 
@@ -151,7 +152,11 @@ export default function GeoLayerMap({
       cursor={cursor}
       image={alignment && layer.mapUrl ? { url: layer.mapUrl, corners: imageCorners(alignment), opacity } : null}
       shapes={shapes}
-      pins={[...postPins, ...(extraPins ?? [])]}
+      pins={[
+        ...postPins,
+        ...(extraPins ?? []),
+        ...(draftZone && !draftZone.closed ? areaVertexPins(draftZone.coords, draftZone.color, draftZone.onClose) : []),
+      ]}
       view={focusView && (!view || focusView.key > view.req.key) ? focusView : view?.req}
     >
       {showControls && (

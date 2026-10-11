@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
-import { Input } from '@heroui/react';
+import { Input, Spinner } from '@heroui/react';
 import { searchPlaces, type PlaceResult } from '@/lib/geo/geocode';
 import type { LatLon } from '@/lib/geo/types';
 
@@ -71,13 +71,21 @@ export default function PlaceSearch({
       >
         <Input
           size="sm"
-          label="Find a place or coordinates (press Enter)"
-          placeholder="Venue name, address, or 37.7694, -122.4862"
+          aria-label="Find a place or coordinates (press Enter)"
+          placeholder="Find a place, address, or coordinates (37.7694, -122.4862)"
           value={query}
           onValueChange={setQuery}
           isInvalid={Boolean(error)}
           errorMessage={error ?? undefined}
-          description={searching ? 'Searching…' : undefined}
+          classNames={{
+            input: 'outline-none focus:outline-none data-[focus=true]:outline-none focus:ring-0 focus-visible:ring-0',
+            inputWrapper: 'group-data-[focus-visible=true]:ring-0 group-data-[focus-visible=true]:ring-offset-0',
+          }}
+          endContent={
+            searching ? (
+              <Spinner size="sm" aria-label="Searching" classNames={{ circle1: 'border-b-accent', circle2: 'border-b-accent' }} />
+            ) : undefined
+          }
         />
       </form>
       {results && results.length > 1 && (

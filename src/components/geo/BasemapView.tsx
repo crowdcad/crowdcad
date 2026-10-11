@@ -52,6 +52,8 @@ export interface GeoShape {
   closed: boolean;
   fillOpacity?: number;
   dashed?: boolean;
+  /** An open line's vertex dots (off where the caller pins its own, e.g. AreaVertex). */
+  vertices?: boolean;
 }
 
 /** Any React content pinned to a position: posts, team markers. */
@@ -324,7 +326,7 @@ export default function BasemapView({
         ctx.globalAlpha = 1;
       }
       ctx.stroke();
-      if (!shape.closed) {
+      if (!shape.closed && shape.vertices !== false) {
         ctx.fillStyle = shape.color;
         for (const p of pts) {
           ctx.beginPath();
