@@ -1,11 +1,11 @@
 'use client';
 
 import React from 'react';
-import type { Call, Clinic, Equipment, Layer, Post, Staff, Supervisor } from '@/app/types';
-import { postLatLng } from '@/lib/geo/positions';
+import type { Call, Clinic, Equipment, Layer, Staff, Supervisor } from '@/app/types';
 import GeoLayerMap from '@/components/geo/GeoLayerMap';
 import type { GeoPin } from '@/components/geo/BasemapView';
-import { EquipmentMarker, PostMarker, SupervisorMarker, TeamMarker, type ImageRect, type MapOverlay } from '@/components/modals/event/venuemapmodal';
+import { PostMarker, SupervisorMarker, TeamMarker, type MapOverlay } from '@/components/modals/event/venuemapmodal';
+import { AT_PIN, atPin, geoEquipmentPins, placedPosts } from './geoPins';
 
 /**
  * The dispatch Map tab on a geo layer (P8, D64): the live map with the venue
@@ -36,11 +36,6 @@ export interface GeoVenueMapProps {
   className?: string;
 }
 
-// Markers position themselves at rect.x + x% of rect.width; an empty rect at the pin puts them on it.
-const AT_PIN: ImageRect = { x: 0, y: 0, width: 0, height: 0 };
-
-type PostObject = Exclude<Post, string>;
-
 export default function GeoVenueMap({
   layer,
   layerIndex,
@@ -61,13 +56,7 @@ export default function GeoVenueMap({
   overlay,
   className,
 }: GeoVenueMapProps) {
-  const posts = (layer.posts || []).filter((p): p is PostObject => typeof p !== 'string');
-  const placed = new Map<string, { post: PostObject; at: { lat: number; lng: number } }>();
-  for (const post of posts) {
-    const at = postLatLng(post, layer);
-    if (at && post.name) placed.set(post.name, { post, at });
-  }
-  const atPin = (post: PostObject): PostObject => ({ ...post, x: 0, y: 0 });
+  const placed = placedPosts(layer);
 
   const pins: GeoPin[] = [];
   for (const [name, { post, at }] of placed) {
@@ -80,16 +69,7 @@ export default function GeoVenueMap({
       ),
     });
   }
-  for (const equip of equipment) {
-    const p = equip.location ? placed.get(equip.location) : undefined;
-    if (!p) continue;
-    pins.push({
-      key: `equipment:${equip.id}`,
-      lat: p.at.lat,
-      lng: p.at.lng,
-      node: <EquipmentMarker equipment={equip} post={atPin(p.post)} rect={AT_PIN} scale={1} isSelected={selectedEquipmentName === equip.name} />,
-    });
-  }
+  pins.push(...geoEquipmentPins(layer, equipment, selectedEquipmentName, placed));
   const tracking = overlay?.unitTracking;
   // Live tracking: each unit at its own position, or not at all (D66).
   if (tracking) {

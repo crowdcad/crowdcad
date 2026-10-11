@@ -12,12 +12,9 @@ export function isZoneDispatchZone(zone: Zone): boolean {
 }
 
 /**
- * Minimal shape accepted by getVenueZones — matches both Venue and
- * LiteVenueSetup. `posts` is declared (but unused here) purely so this type
- * shares a property name with LiteVenueSetup (which has no `layers` at all,
- * lite mode having no map to draw zones on) — without it, TS's weak-type
- * check rejects LiteVenueSetup outright since every other property here is
- * optional and none would otherwise overlap.
+ * Minimal shape accepted by getVenueZones — a Venue, or a lite venue's
+ * layers (liteVenueLayers). `posts` is declared (but unused here) so a
+ * LiteVenueSetup, which has no `layers`, still type-checks (and has no zones).
  */
 type ZonesSource = { posts?: Post[]; layers?: { zones?: Zone[] }[] };
 

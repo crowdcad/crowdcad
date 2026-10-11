@@ -245,12 +245,12 @@ export default function AlignMap({
 
   return (
     <div className="flex flex-col gap-3 text-surface-light">
-      <div className="flex flex-wrap items-end gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <BasemapPicker value={basemapChoice} onChange={setBasemapId} omit={['none']} />
         <PlaceSearch className="flex-1" near={() => centerRef.current} onPick={goTo} />
         {fitOk && (
-          <div className="flex items-end gap-3 text-sm">
-            <label className="flex h-12 items-center gap-2 whitespace-nowrap">
+          <div className="flex items-center gap-3 text-sm">
+            <label className="flex h-8 items-center gap-2 whitespace-nowrap">
               <input type="checkbox" className="accent-accent" checked={showOverlay} onChange={(e) => setShowOverlay(e.target.checked)} />
               Show my map
             </label>

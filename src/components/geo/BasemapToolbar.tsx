@@ -13,6 +13,9 @@ import { basemapChoices } from '@/lib/geo/basemaps';
 
 // Same look as the dispatch map's location search (venuemaptab.tsx).
 const PILL = 'bg-surface-deep text-surface-light border border-surface-liner rounded-full data-[focus-visible=true]:ring-0 data-[focus-visible=true]:ring-offset-0';
+// On the map itself: the same square corners, colors and edge as MapLibre's zoom buttons (basemap.module.css).
+const MAP_CONTROL =
+  'h-[29px] min-h-0 rounded-[4px] bg-white/[0.92] text-[#1f2328] shadow-[0_0_0_2px_rgb(0_0_0/0.1)] data-[hover=true]:bg-[#f2f2f2] dark:bg-[rgb(24_26_31/0.92)] dark:text-[#e6e8eb] dark:shadow-[0_0_0_1px_rgb(255_255_255/0.12)] dark:data-[hover=true]:bg-[rgb(40_42_47/0.92)] data-[focus-visible=true]:ring-0 data-[focus-visible=true]:ring-offset-0';
 
 export default function BasemapToolbar({
   value,
@@ -21,6 +24,7 @@ export default function BasemapToolbar({
   opacity,
   onOpacityChange,
   minOpacity = 0,
+  variant = 'pill',
 }: {
   value: string;
   onChange: (id: string) => void;
@@ -31,7 +35,11 @@ export default function BasemapToolbar({
   onOpacityChange?: (opacity: number) => void;
   /** Lowest allowed opacity, 0 to 1. */
   minOpacity?: number;
+  /** "map" when drawn over the map, beside its zoom buttons. */
+  variant?: 'pill' | 'map';
 }) {
+  const trigger = variant === 'map' ? MAP_CONTROL : PILL;
+  const text = variant === 'map' ? 'text-inherit' : 'text-surface-light';
   const choices = basemapChoices().filter((c) => !omit.includes(c.id));
   const min = Math.round(minOpacity * 100);
   const percent = opacity === undefined ? undefined : Math.round(opacity * 100);
@@ -60,12 +68,12 @@ export default function BasemapToolbar({
         className="w-36"
         selectedKeys={[value]}
         disallowEmptySelection
-        startContent={<MapIcon className="h-4 w-4 shrink-0 text-surface-faint" />}
+        startContent={<MapIcon className={`h-4 w-4 shrink-0 ${variant === 'map' ? 'opacity-70' : 'text-surface-faint'}`} />}
         onSelectionChange={(keys) => {
           const id = Array.from(keys)[0];
           if (typeof id === 'string') onChange(id);
         }}
-        classNames={{ trigger: PILL, value: 'text-surface-light' }}
+        classNames={{ trigger: trigger, value: text, selectorIcon: variant === 'map' ? 'text-inherit' : undefined }}
       >
         {choices.map((o) => (
           <SelectItem key={o.id}>{o.label}</SelectItem>
@@ -93,8 +101,8 @@ export default function BasemapToolbar({
           }}
           endContent={<span className="text-xs text-surface-faint">%</span>}
           classNames={{
-            inputWrapper: PILL,
-            input: 'bg-surface-deep text-surface-light outline-none focus:outline-none data-[focus=true]:outline-none',
+            inputWrapper: trigger,
+            input: `bg-transparent ${text} outline-none focus:outline-none data-[focus=true]:outline-none`,
           }}
         />
       )}

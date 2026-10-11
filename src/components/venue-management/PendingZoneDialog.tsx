@@ -1,6 +1,7 @@
 import React from 'react';
-import { Button, Checkbox, Input } from '@heroui/react';
+import { Button, Input } from '@heroui/react';
 import { ZONE_COLOR_PALETTE } from '@/lib/zoneColors';
+import DispatchZoneCheckbox from './DispatchZoneCheckbox';
 
 interface PendingZoneDialogProps {
   zoneNameInput: string;
@@ -34,7 +35,6 @@ export default function PendingZoneDialog({
         transform: 'translate(-50%, -50%)',
       }}
     >
-      <p className="mb-2 text-xs font-medium text-surface-light">Name this area:</p>
       <Input
         ref={zoneNameInputRef}
         value={zoneNameInput}
@@ -70,14 +70,7 @@ export default function PendingZoneDialog({
           />
         ))}
       </div>
-      <Checkbox
-        isSelected={zoneIsDispatchZoneInput}
-        onValueChange={setZoneIsDispatchZoneInput}
-        size="sm"
-        classNames={{ label: 'text-surface-light text-xs' }}
-      >
-        Mark as Dispatch Zone
-      </Checkbox>
+      <DispatchZoneCheckbox isSelected={zoneIsDispatchZoneInput} onValueChange={setZoneIsDispatchZoneInput} />
       <div className="flex gap-2 mt-2">
         <Button size="sm" radius="full" variant="flat" onPress={onCancel} className="flex-1">
           Cancel

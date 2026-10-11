@@ -338,14 +338,15 @@ export default function SummaryPage() {
         </div>
 
         {zoneCallSummaries.length > 0 && (
-          <div className={GRID_CELL}>
+          // A standalone box: the wrapper adds the top/left borders a grid cell leaves to its neighbours.
+          <div className={`${GRID_WRAPPER} ${GRID_CELL}`}>
             <div className="px-4 py-3">
               <span className="font-semibold">Zone Breakdown</span>
               <div className="text-sm text-surface-faint">{zoneCallSummaries.length} dispatch zone{zoneCallSummaries.length === 1 ? '' : 's'}</div>
             </div>
             <div className="px-4 pb-4 space-y-2">
               {zoneCallSummaries.map((zone) => (
-                <div key={zone.zoneId} className="bg-surface-deepest p-3 flex items-center justify-between">
+                <div key={zone.zoneId} className="bg-surface-deepest border border-surface-liner/70 p-3 flex items-center justify-between">
                   <span className="font-semibold">{zone.zoneName}</span>
                   <div className="flex gap-6 text-sm">
                     <div>

@@ -10,7 +10,9 @@ import type {
   Post,
   Staff,
   Supervisor,
+  Zone,
 } from '@/app/types';
+import type { MapArea } from '@/lib/geo/types';
 
 const DB_NAME = 'crowdcad-lite';
 const DB_VERSION = 1;
@@ -27,6 +29,10 @@ export interface LiteVenueSetup {
   name: string;
   posts: Post[];
   equipment: Equipment[];
+  /** The event's area on the live map (coordinates, no image); posts placed on it carry lat/lng. Needs internet to show. */
+  area?: MapArea;
+  /** Areas drawn on that map (some flagged as dispatch zones). */
+  zones?: Zone[];
 }
 
 export interface LiteEventDraft {

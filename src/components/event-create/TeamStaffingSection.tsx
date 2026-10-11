@@ -11,6 +11,8 @@ type Props = {
   onEditTeam: (idx: number) => void;
   onAddTeam: () => void;
   onUploadCSV: () => void;
+  /** A tutorial callout pointing at Add Team (Lite mode), shown until the first team exists. */
+  addTeamHint?: string;
 };
 
 export default function TeamStaffingSection({
@@ -21,10 +23,11 @@ export default function TeamStaffingSection({
   onEditTeam,
   onAddTeam,
   onUploadCSV,
+  addTeamHint,
 }: Props) {
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <div className="flex-shrink-0 px-4 py-3 flex items-center justify-between">
+      <div className="relative flex-shrink-0 px-4 py-3 flex items-center justify-between">
         <h3 className="text-surface-light font-semibold text-lg">Teams</h3>
         <ButtonGroup radius="full">
           <Button
@@ -56,6 +59,14 @@ export default function TeamStaffingSection({
             </DropdownMenu>
           </Dropdown>
         </ButtonGroup>
+        {addTeamHint && staff.length === 0 && (
+          // Same colors as the Add Team button, so it follows light and dark mode with it.
+          <div role="note" className="absolute right-4 top-full z-10 mt-2 max-w-[240px] rounded-lg bg-default/40 px-3 py-2 text-xs leading-snug text-surface-light">
+            {/* The corner pointer, under the Add Team half of the button group: a triangle above the box, so the translucent fills don't overlap. */}
+            <span aria-hidden className="absolute -top-2 right-[64px] h-2 w-4 bg-default/40 [clip-path:polygon(50%_0,100%_100%,0_100%)]" />
+            {addTeamHint}
+          </div>
+        )}
       </div>
 
       <div className="px-4 py-3 flex-1 min-h-0 flex flex-col">

@@ -6,6 +6,8 @@ import { createPortal } from 'react-dom';
 import type { Map as MlMap, Marker as MlMarker } from 'maplibre-gl';
 import { BASEMAPS, DEFAULT_BASEMAP_ID, resolveBasemap } from '@/lib/geo/basemaps';
 import { useIsDark } from '@/lib/geo/ui';
+import { HEAT_OPACITY, heatColor } from '@/lib/geo/heat';
+import { ZONE_STRIPE } from '@/lib/zoneColors';
 import styles from './basemap.module.css';
 import type { LatLon } from '@/lib/geo/types';
 
@@ -51,6 +53,10 @@ export interface GeoShape {
   closed: boolean;
   fillOpacity?: number;
   dashed?: boolean;
+  /** An open line's vertex dots (off where the caller pins its own, e.g. AreaVertex). */
+  vertices?: boolean;
+  /** Fill with 45° stripes alternating between fillOpacity and a little less (dispatch zones, ZONE_STRIPE). */
+  striped?: boolean;
 }
 
 /** Any React content pinned to a position: posts, team markers. */
@@ -293,13 +299,15 @@ export default function BasemapView({
     const a = map.project([cells[0]!.lon, lat0]);
     const b = map.project([cells[0]!.lon + live.current.heatCellM / (111_195 * Math.cos((lat0 * Math.PI) / 180)), lat0]);
     const size = Math.max(2, Math.hypot(b.x - a.x, b.y - a.y));
-    ctx.fillStyle = 'rgb(220, 38, 38)';
+    // One opacity for every cell; the color shows time spent, cool (purple) to hot (red).
+    ctx.globalAlpha = HEAT_OPACITY;
     for (const c of cells) {
       const p = map.project([c.lon, c.lat]);
       if (p.x < -size || p.y < -size || p.x > w + size || p.y > h + size) continue;
-      ctx.globalAlpha = 0.15 + 0.7 * Math.sqrt(c.secs / max);
+      ctx.fillStyle = heatColor(Math.sqrt(c.secs / max));
       ctx.fillRect(p.x - size / 2, p.y - size / 2, size, size);
     }
+    ctx.globalAlpha = 1;
   };
 
   /** Zones, drawn areas and the shape being drawn. */
@@ -316,12 +324,41 @@ export default function BasemapView({
       if (shape.closed && pts.length > 2) {
         ctx.closePath();
         ctx.fillStyle = shape.color;
-        ctx.globalAlpha = shape.fillOpacity ?? 0.2;
-        ctx.fill();
+        const opacity = shape.fillOpacity ?? 0.2;
+        if (shape.striped) {
+          // The lighter band fills the area; the full-opacity band is drawn over it as thick 45° lines.
+          ctx.globalAlpha = opacity * ZONE_STRIPE.lightRatio;
+          ctx.fill();
+          ctx.save();
+          ctx.clip();
+          const xs = pts.map((p) => p.x);
+          const ys = pts.map((p) => p.y);
+          const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
+          // Lines x + y = c, each one band wide, one band apart (measured across the stripes).
+          const step = ZONE_STRIPE.widthPx * 2 * Math.SQRT2;
+          ctx.globalAlpha = opacity;
+          ctx.strokeStyle = shape.color;
+          ctx.lineWidth = ZONE_STRIPE.widthPx;
+          ctx.beginPath();
+          for (let c = x0 + y0; c <= x1 + y1 + step; c += step) {
+            ctx.moveTo(c - y0 + ZONE_STRIPE.widthPx, y0 - ZONE_STRIPE.widthPx);
+            ctx.lineTo(c - y1 - ZONE_STRIPE.widthPx, y1 + ZONE_STRIPE.widthPx);
+          }
+          ctx.stroke();
+          ctx.restore();
+          ctx.strokeStyle = shape.color;
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          pts.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
+          ctx.closePath();
+        } else {
+          ctx.globalAlpha = opacity;
+          ctx.fill();
+        }
         ctx.globalAlpha = 1;
       }
       ctx.stroke();
-      if (!shape.closed) {
+      if (!shape.closed && shape.vertices !== false) {
         ctx.fillStyle = shape.color;
         for (const p of pts) {
           ctx.beginPath();
@@ -364,7 +401,10 @@ export default function BasemapView({
       // 'move' fires inside the map's render frame, before it paints, so DOM
       // written here appears in the same frame as the map.
       map.on('move', () => syncRef.current());
-      map.on('resize', () => syncRef.current());
+      map.on('resize', () => {
+        syncRef.current();
+        if (pendingView.current) applyViewRef.current(map, pendingView.current);
+      });
       map.on('moveend', () => {
         const c = map.getCenter();
         centerRef.current?.({ lat: c.lat, lon: c.lng });
@@ -416,9 +456,16 @@ export default function BasemapView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [markerKey, ready]);
 
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !view) return;
+  // A view asked for while the map has no size (e.g. a wizard step mounted
+  // hidden) waits for the first resize that gives it one.
+  const pendingView = useRef<BasemapViewRequest | null>(null);
+  const applyView = (map: MlMap, view: BasemapViewRequest) => {
+    const el = map.getContainer();
+    if (!el.clientWidth || !el.clientHeight) {
+      pendingView.current = view;
+      return;
+    }
+    pendingView.current = null;
     if (view.bounds) {
       const [w, s, e, n] = view.bounds;
       map.fitBounds(
@@ -431,6 +478,13 @@ export default function BasemapView({
     } else if (view.center) {
       map.flyTo({ center: [view.center.lon, view.center.lat], zoom: view.zoom ?? 17, duration: 600 });
     }
+  };
+  const applyViewRef = useRef(applyView);
+  applyViewRef.current = applyView;
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !view) return;
+    applyView(map, view);
     // Re-applied only when the request key changes, or once the map exists.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view?.key, ready]);

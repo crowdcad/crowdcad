@@ -18,7 +18,8 @@ import { takTeams } from '../lib/teamIds';
 import { TAK_MODULE_MARKER } from '../marker';
 import { ACCENT_SLIDER_CLASSNAMES } from '@/lib/geo/ui';
 import type { TakMapAlignment } from '../types';
-import BasemapPicker from '@/components/geo/BasemapPicker';
+import BasemapToolbar from '@/components/geo/BasemapToolbar';
+import { HEAT_GRADIENT_CSS } from '@/lib/geo/heat';
 import HelpTip from '@/components/geo/HelpTip';
 import BasemapView, { type BasemapViewRequest } from '@/components/geo/BasemapView';
 
@@ -125,7 +126,7 @@ export default function TakEventSummary({ eventId, event, className }: TakEventS
       <div className="px-4 py-3">
         <span className="inline-flex items-center gap-1 font-semibold">
           Location history (TAK)
-          <HelpTip text="Only you, the event owner, can see this. The heat map shows time spent in each 5 m square, darker for longer. Tracked time counts each position report for up to 60 seconds." />
+          <HelpTip text="Only you, the event owner, can see this. The heat map shows time spent in each 5 m square, from purple (least) to red (most). Tracked time counts each position report for up to 60 seconds." />
         </span>
       </div>
       <div className="space-y-4 px-4 pb-4">
@@ -139,7 +140,8 @@ export default function TakEventSummary({ eventId, event, className }: TakEventS
         )}
         {history && history.length > 0 && (
           <>
-            <div className="flex flex-wrap gap-2">
+            {/* Exports on the left, the basemap choice on the right, all the same height. */}
+            <div className="flex flex-wrap items-center gap-2">
               <Button
                 size="sm"
                 variant="flat"
@@ -166,10 +168,12 @@ export default function TakEventSummary({ eventId, event, className }: TakEventS
               >
                 Export heat map (GeoJSON)
               </Button>
+              <div className="ml-auto">
+                <BasemapToolbar value={validChoice(basemapId, DEFAULT_BASEMAP_ID)} onChange={setBasemapId} omit={['none']} />
+              </div>
             </div>
-            <div className="flex flex-wrap items-end gap-3">
-              <BasemapPicker value={validChoice(basemapId, DEFAULT_BASEMAP_ID)} onChange={setBasemapId} omit={['none']} />
-              {aligned.length > 0 && (
+            {aligned.length > 0 && (
+              <div className="flex flex-wrap items-end gap-3">
                 <Select
                   size="sm"
                   label="Event map"
@@ -183,22 +187,22 @@ export default function TakEventSummary({ eventId, event, className }: TakEventS
                 >
                   {[...aligned.map((l) => <SelectItem key={l.id}>{l.name}</SelectItem>), <SelectItem key={NO_IMAGE}>None</SelectItem>]}
                 </Select>
-              )}
-              {imageLayer && (
-                <Slider
-                  size="sm"
-                  label="Map opacity"
-                  className="max-w-xs"
-                  minValue={0.1}
-                  maxValue={1}
-                  step={0.05}
-                  value={opacity}
-                  onChange={(v) => setOpacity(Array.isArray(v) ? v[0]! : v)}
-                  getValue={(v) => `${Math.round((Array.isArray(v) ? v[0]! : v) * 100)}%`}
-                  classNames={ACCENT_SLIDER_CLASSNAMES}
-                />
-              )}
-            </div>
+                {imageLayer && (
+                  <Slider
+                    size="sm"
+                    label="Map opacity"
+                    className="max-w-xs"
+                    minValue={0.1}
+                    maxValue={1}
+                    step={0.05}
+                    value={opacity}
+                    onChange={(v) => setOpacity(Array.isArray(v) ? v[0]! : v)}
+                    getValue={(v) => `${Math.round((Array.isArray(v) ? v[0]! : v) * 100)}%`}
+                    classNames={ACCENT_SLIDER_CLASSNAMES}
+                  />
+                )}
+              </div>
+            )}
             <BasemapView
               className="h-[60vh] min-h-[320px] rounded border border-surface-liner"
               basemapId={validChoice(basemapId, DEFAULT_BASEMAP_ID)}
@@ -208,6 +212,13 @@ export default function TakEventSummary({ eventId, event, className }: TakEventS
               cursor="grab"
               cooperativeGestures
             />
+            {heat.length > 0 && (
+              <div className="flex items-center gap-2 text-xs text-surface-faint" aria-label="Heat map scale">
+                <span>Less time</span>
+                <span className="h-2 w-40 rounded" style={{ background: HEAT_GRADIENT_CSS }} />
+                <span>More time</span>
+              </div>
+            )}
             {posts.length === 0 && <p className="text-xs text-surface-faint">Align an event map that has posts to see time on post.</p>}
             <div className="grid gap-2 md:grid-cols-2">
               {stats.map((s) => {
