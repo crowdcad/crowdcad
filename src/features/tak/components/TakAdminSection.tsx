@@ -194,7 +194,7 @@ function BridgeRow({
 
       {error && <p className="text-sm text-status-red">{error}</p>}
 
-      <Modal isOpen={confirmRevoke} onClose={() => setConfirmRevoke(false)}>
+      <Modal isOpen={confirmRevoke} onClose={() => setConfirmRevoke(false)} hideCloseButton>
         <ModalContent>
           <ModalHeader>Revoke {bridge.label}?</ModalHeader>
           <ModalBody className="minimal-scrollbar">
@@ -330,7 +330,7 @@ function AddTakServerWizard({
   };
 
   return (
-    <Modal isOpen onClose={onClose} size="2xl" scrollBehavior="inside" isDismissable={step !== 3}>
+    <Modal isOpen onClose={onClose} size="2xl" scrollBehavior="inside" isDismissable={step !== 3} hideCloseButton>
       <ModalContent>
         <ModalHeader>
           {rotating ? `Rotate ${rotating.label}` : 'Add TAK server'} ({step} of 4)
@@ -473,6 +473,11 @@ function AddTakServerWizard({
           {error && <p className="text-status-red">{error}</p>}
         </ModalBody>
         <ModalFooter>
+          {step === 1 && (
+            <Button variant="flat" onPress={onClose}>
+              Cancel
+            </Button>
+          )}
           {step === 2 && (
             <Button variant="flat" onPress={() => setStep(1)}>
               Back

@@ -832,7 +832,9 @@ export default function VenueManagementPageClient() {
       const updatedLayers = venueData.layers.map((layer, idx) => {
         let layerData = idx === (pendingLayer ?? currentLayer) && newMapUrl ? { ...layer, mapUrl: newMapUrl } : layer;
         // An alignment made against the new image's local preview follows it to its uploaded URL.
-        if (layerData !== layer && layer.alignment && layer.alignment.mapUrl === previewUrl) {
+        // Compared with the file's own URL, not previewUrl, which is the layer on screen and
+        // left the alignment on a dead blob: URL whenever another layer was showing at save.
+        if (layerData !== layer && layer.alignment && layer.alignment.mapUrl === mapFileUrl) {
           layerData = { ...layerData, alignment: { ...layer.alignment, mapUrl: newMapUrl! } };
         }
         // On an aligned layer, posts and zones placed on the image also get coordinates (D64).

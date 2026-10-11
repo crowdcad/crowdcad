@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { Layer } from '@/app/types';
 import type { TakMapAlignment } from '../types';
 
 const mocks = vi.hoisted(() => ({
@@ -20,7 +21,7 @@ vi.mock('@/lib/services', () => ({
   },
 }));
 
-const { alignmentMatches, deleteAlignment, loadAlignments, saveAlignment } = await import('./alignmentStore');
+const { alignmentMatches, deleteAlignment, loadAlignments, saveAlignment, takMapStatus } = await import('./alignmentStore');
 
 const alignment: TakMapAlignment = {
   mapUrl: 'https://example.org/map.png',
@@ -94,5 +95,31 @@ describe('alignmentMatches', () => {
     expect(alignmentMatches(alignment, alignment.mapUrl)).toBe(true);
     expect(alignmentMatches(alignment, 'https://example.org/new-map.png')).toBe(false);
     expect(alignmentMatches(undefined, alignment.mapUrl)).toBe(false);
+  });
+});
+
+describe('takMapStatus', () => {
+  const layer = (extra: Partial<Layer>): Layer => ({ id: 'L1', name: 'Main', posts: [], ...extra }) as Layer;
+
+  it('counts a drawn area as ready without alignment', () => {
+    const area = { polygon: [{ lat: 0, lng: 0 }, { lat: 0, lng: 1 }, { lat: 1, lng: 1 }] };
+    expect(takMapStatus(layer({ area }))).toEqual({ ready: true, text: 'drawn on the real map, ready' });
+  });
+
+  it('skips a layer with neither image nor area', () => {
+    expect(takMapStatus(layer({}))).toBeNull();
+  });
+
+  it('reports an aligned image with its accuracy', () => {
+    expect(takMapStatus(layer({ mapUrl: alignment.mapUrl, alignment }))).toEqual({ ready: true, text: 'aligned, about 2.5 m' });
+  });
+
+  it('flags an image changed since it was aligned', () => {
+    expect(takMapStatus(layer({ mapUrl: 'https://example.org/new.png', alignment }))?.ready).toBe(false);
+    expect(takMapStatus(layer({ mapUrl: 'https://example.org/new.png', alignment }))?.text).toMatch(/changed/);
+  });
+
+  it('says where to align an unaligned image', () => {
+    expect(takMapStatus(layer({ mapUrl: alignment.mapUrl }))?.text).toMatch(/Map alignment step/);
   });
 });
