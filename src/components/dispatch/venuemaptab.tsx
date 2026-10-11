@@ -53,6 +53,8 @@ interface VenueMapTabProps {
   onAddCallAtPost?: (postName: string) => void;
   /** Clicking a team marker shows a small "Add Call" button under it prefilled with that team assigned. */
   onAddCallForTeam?: (teamName: string) => void;
+  /** Show posts in team and supervisor cards. Off when the event has no posting schedule. */
+  showPosts?: boolean;
   focusTeamRequest?: TeamFocusRequest | null;
   focusSupervisorRequest?: SupervisorFocusRequest | null;
   focusEquipmentRequest?: EquipmentFocusRequest | null;
@@ -91,6 +93,7 @@ export default function VenueMapTab({
   clinics,
   onAddCallAtPost,
   onAddCallForTeam,
+  showPosts = true,
   focusTeamRequest,
   focusSupervisorRequest,
   focusEquipmentRequest,
@@ -365,6 +368,7 @@ export default function VenueMapTab({
             selectedEquipmentName={selectedEquipmentName}
             onAddCallAtPost={onAddCallAtPost}
             onAddCallForTeam={onAddCallForTeam}
+            showPosts={showPosts}
             focus={geoFocus}
             overlay={overlay}
           />
@@ -398,6 +402,7 @@ export default function VenueMapTab({
           selectedEquipmentName={selectedEquipmentName}
           onAddCallAtPost={onAddCallAtPost}
           onAddCallForTeam={onAddCallForTeam}
+            showPosts={showPosts}
           overlay={overlay}
         />
         <MapZoomControls onZoomIn={() => zoomIn(0.25)} onZoomOut={() => zoomOut(0.25)} onReset={resetZoom} />

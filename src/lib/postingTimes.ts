@@ -1,6 +1,15 @@
 // Posting-schedule time helpers. Posting times are stored as "HHmm" (or
 // occasionally "HH:mm") strings on event.postingTimes.
 
+/**
+ * Whether the event uses posts: event creation's "Enable Posts" generates a
+ * posting schedule, and that schedule is the only record of the choice. Lite
+ * events also store it as postingScheduleEnabled.
+ */
+export function hasPostingSchedule(event: { postingTimes?: string[]; postingScheduleEnabled?: boolean } | null | undefined): boolean {
+  return event?.postingScheduleEnabled ?? (event?.postingTimes?.length ?? 0) > 0;
+}
+
 /** Minutes since midnight for "HH:mm" or "HHmm" (3-digit values are zero-padded), or null if invalid. */
 export function parseTimeToMinutes(timeStr: string): number | null {
   if (timeStr.includes(':')) {

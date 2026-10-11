@@ -20,6 +20,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 
 ### Fixed
 
+- **Dispatch map info cards follow their marker.** Hovering or tapping a team, supervisor, equipment or post marker opens its card next to the marker, so it moves with the map and closes when you tap or click elsewhere or start panning. It used to stay open at a fixed spot on the screen, especially on phones. The Add Call popup now also closes when a pan starts on touch.
+- **The mobile Map tab reaches the bottom tab bar** instead of stopping short with empty space below.
+- **Team and supervisor map cards hide "Post" when the event doesn't use posts** (no posting schedule).
 - **Backing out of event setup no longer leaves an empty event.** "Start New Event" (and "Save & Start Event" in the venue builder) used to write a draft event as soon as the builder opened. The builder now opens at `/events/new/create?venueId=…` and the event is written only when "Create Event" is pressed.
 - **Docker builds work from a fresh clone.** `Dockerfile` copied `next-env.d.ts`, which is gitignored, so `docker compose up --build` failed in the builder stage for anyone who had not run Next locally first.
 - **PocketBase runs natively on Apple Silicon.** `Dockerfile.pocketbase` now downloads the release matching the host CPU (`amd64` or `arm64`) using BuildKit's `TARGETARCH`. Before this it always pulled `amd64` and ran under emulation on ARM Macs.
@@ -27,6 +30,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 
 ### Changed
 
+- **Venue selection cards are a single solid color.** The translucent, blurred cards and the list's scroll fade made each card darker at the top and bottom.
+- **No press animation on dropdown chevrons or modal close buttons anywhere.** `src/lib/heroStatic.ts` holds the settings, and lint fails an `Autocomplete` or `Modal` without them (see `docs/COMPONENTS.md`).
 - **Event Summary shows Staff Logs, Call Logs and Surge Log side by side** in three columns. Surge Log is always shown (with 0 activations when there were none); Data Collection Sessions moved to its own row.
 - **Dispatch location dropdowns no longer animate on click.** The chevron on the team, equipment and call location fields, the map's location search and the Add Call location field only flips; the button press, ripple and hover background are gone.
 - **Documentation overhaul.** Setup guides now include the `npm install` step the PocketBase scripts need, the Firebase console steps (Email/Password, Firestore, optional Storage on Blaze), deploying `firestore.rules`, LAN access, updating a fork from `upstream` and redeploying. The user guide and architecture docs match the current wizards and dispatch board. All markdown follows a new plain style (see "Docs style" in `CONTRIBUTING.md`).

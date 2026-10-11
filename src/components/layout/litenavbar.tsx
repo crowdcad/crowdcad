@@ -8,6 +8,7 @@ import { authService } from '@/lib/services';
 import { useAuth } from '@/hooks/useauth';
 import { useDispatchVocabulary } from '@/hooks/useDispatchVocabulary';
 import { getLiteEvent } from '@/lib/liteEventStore';
+import { hasPostingSchedule } from '@/lib/postingTimes';
 import {
   Button,
   Dropdown,
@@ -67,9 +68,7 @@ export default function LiteNavbar() {
       const event = await getLiteEvent(decodeURIComponent(liteDispatchEventId));
       if (cancelled) return;
 
-      setPostingScheduleEnabled(
-        event?.postingScheduleEnabled ?? (event?.postingTimes?.length ?? 0) > 0
-      );
+      setPostingScheduleEnabled(hasPostingSchedule(event));
     };
 
     void loadPostingScheduleConfig();
