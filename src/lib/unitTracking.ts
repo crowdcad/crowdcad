@@ -27,6 +27,11 @@ export interface UnitTracking {
    * pickup and return suggestions (equipmentArrivals.ts).
    */
   atPost?: Record<string, string>;
+  /**
+   * By equipment name: positions of equipment with a tracker of its own.
+   * A tracked item is drawn at its tracker, not with its holder.
+   */
+  equipmentPositions?: Record<string, UnitPosition>;
 }
 
 /** True while a unit has a fresh position: its Location is then tracked, not edited. */

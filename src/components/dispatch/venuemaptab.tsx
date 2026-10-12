@@ -187,9 +187,12 @@ export default function VenueMapTab({
   useEffect(() => {
     if (!focusEquipmentRequest) return;
     const equip = equipment.find((e) => e.name === focusEquipmentRequest.equipmentName);
-    // With a unit: wherever that unit is. Otherwise the post it is at.
+    // Its own tracker, else wherever the unit holding it is, else the post it is at.
+    const tag = equip && overlay?.unitTracking?.equipmentPositions?.[equip.name];
     const holder = equip && equipmentHolderUnit(equip, [...staff, ...supervisor]);
-    if (holder) {
+    if (tag) {
+      focusPosition(tag);
+    } else if (holder) {
       focusUnit(holder.team, holder.location);
     } else if (equip?.location) {
       focusLocation(equip.location);

@@ -2,8 +2,9 @@ import type { Equipment } from '@/app/types';
 import type { UnitTracking } from '@/lib/unitTracking';
 
 /**
- * Where to draw a piece of equipment on the map. It has no tracker of its
- * own, so it is drawn with its holder (src/lib/equipmentCustody.ts):
+ * Where to draw a piece of equipment on the map. With a tracker of its own
+ * (UnitTracking.equipmentPositions) it is drawn there. Otherwise it is drawn
+ * with its holder (src/lib/equipmentCustody.ts):
  * - at a post or clinic: that post's pin;
  * - with a unit: beside the unit's marker, which is its live position on a
  *   tracking event (faded while stale, hidden with no position), or the post
@@ -28,6 +29,8 @@ export function equipmentHolderUnit(equip: Equipment, units: UnitLike[]): UnitLi
 }
 
 export function equipmentAnchor(equip: Equipment, units: UnitLike[], tracking?: UnitTracking | null): EquipmentAnchor | null {
+  const tag = tracking?.equipmentPositions?.[equip.name];
+  if (tag) return { kind: 'point', lat: tag.lat, lon: tag.lon, faded: tag.stale };
   const unit = equipmentHolderUnit(equip, units);
   if (!unit) return equip.location ? { kind: 'post', post: equip.location } : null;
   if (tracking) {

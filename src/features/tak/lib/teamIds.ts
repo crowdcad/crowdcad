@@ -1,4 +1,4 @@
-import type { Event, Staff, Supervisor } from '@/app/types';
+import type { Event, EventEquipment, Staff, Supervisor } from '@/app/types';
 import { dbService } from '@/lib/services';
 import { newTeamId } from '@/lib/teamId';
 import type { TakTeam } from './linking';
@@ -23,6 +23,21 @@ export function takTeams(staff: Staff[] = [], supervisor: Supervisor[] = []): Ta
   return [
     ...staff.filter((s) => s.id).map((s) => ({ id: s.id!, name: s.team, kind: 'team' as const })),
     ...supervisor.filter((s) => s.id).map((s) => ({ id: s.id!, name: s.team, kind: 'supervisor' as const })),
+  ];
+}
+
+/**
+ * A device link's `teamId` for a tracker on a piece of equipment (D69). Team
+ * ids are opaque to the bridge, so this needs no rules or bridge change; the
+ * prefix keeps it apart from Staff and Supervisor ids.
+ */
+export const equipmentLinkId = (equipmentId: string) => `equipment:${equipmentId}`;
+
+/** Everything a device can be linked to: teams and supervisors, then equipment. */
+export function takTargets(staff: Staff[] = [], supervisor: Supervisor[] = [], equipment: EventEquipment[] = []): TakTeam[] {
+  return [
+    ...takTeams(staff, supervisor),
+    ...equipment.map((eq) => ({ id: equipmentLinkId(eq.id), name: eq.name, kind: 'equipment' as const })),
   ];
 }
 

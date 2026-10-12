@@ -35,6 +35,13 @@ describe('proposeAutoLinks', () => {
     ]);
   });
 
+  it('links a tracker named after a piece of equipment to it', () => {
+    const withEquipment: TakTeam[] = [...teams, { id: 'equipment:eq1', name: 'Wheelchair 1', kind: 'equipment' }];
+    expect(proposeAutoLinks([pos('W', 'WHEELCHAIR 1', 1)], [], withEquipment, [])).toEqual([
+      { deviceUid: 'W', teamId: 'equipment:eq1', method: 'auto', reason: 'callsign' },
+    ]);
+  });
+
   it('leaves ambiguous names for a dispatcher', () => {
     expect(proposeAutoLinks([pos('E', 'BIKE', 1)], [], teams, [])).toEqual([]);
   });

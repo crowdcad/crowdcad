@@ -3397,6 +3397,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     onDelete: handleEquipmentDelete,
     onViewOnMap: viewEquipmentOnMap,
     unitTracked: (unitName: string) => event.mapMode === 'tak' && !!unitTracking?.positions[unitName],
+    equipmentTracked: (equipmentName: string) => event.mapMode === 'tak' && !!unitTracking?.equipmentPositions?.[equipmentName],
     arrivals,
     onConfirmArrival: confirmArrival,
     onDismissArrival: dismissArrival,

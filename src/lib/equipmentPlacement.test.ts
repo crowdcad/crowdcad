@@ -20,4 +20,9 @@ describe('equipmentAnchor', () => {
     // No position yet: not drawn, like the unit itself.
     expect(equipmentAnchor(eq('Team 1'), units, { positions: {}, alignments: {} })).toBeNull();
   });
+
+  it('uses the equipment tracker over its holder', () => {
+    const tracking = { positions: {}, alignments: {}, equipmentPositions: { 'Wheelchair 1': { lat: 3, lon: 4, stale: false } } };
+    expect(equipmentAnchor(eq('Team 1'), units, tracking)).toEqual({ kind: 'point', lat: 3, lon: 4, faded: false });
+  });
 });

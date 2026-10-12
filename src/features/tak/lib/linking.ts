@@ -6,7 +6,8 @@ import type { TakDeviceLink, TakDeviceMapping, TakLivePosition } from '../data/t
 export interface TakTeam {
   id: string;
   name: string;
-  kind: 'team' | 'supervisor';
+  /** 'equipment': a tracker carried on a piece of equipment (id from equipmentLinkId). */
+  kind: 'team' | 'supervisor' | 'equipment';
 }
 
 /** Callsign/team-name matching ignores case and whitespace ("Medic 1" = "medic1"). */

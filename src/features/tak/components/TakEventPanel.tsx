@@ -20,7 +20,7 @@ import {
 import { BASEMAPS, DEFAULT_UNDERLAY_ID, resolveBasemap } from '@/lib/geo/basemaps';
 import { ACCENT_SWITCH_CLASSNAMES, useIsDark } from '@/lib/geo/ui';
 import { isStale, unassignedDevices } from '../lib/linking';
-import { takTeams } from '../lib/teamIds';
+import { takTargets } from '../lib/teamIds';
 import { TAK_MODULE_MARKER } from '../marker';
 import type { HistoryMode } from '../types';
 import HelpTip from '@/components/geo/HelpTip';
@@ -62,7 +62,11 @@ export default function TakEventPanel({ eventId, event, uid, isOwner, layers }: 
     return () => clearInterval(t);
   }, []);
 
-  const teams = useMemo(() => takTeams(event.staff, event.supervisor), [event.staff, event.supervisor]);
+  // Link targets: teams, supervisors and equipment (a tracker on the item itself, D69).
+  const teams = useMemo(
+    () => takTargets(event.staff, event.supervisor, event.eventEquipment),
+    [event.staff, event.supervisor, event.eventEquipment]
+  );
   const config = tak.config;
   const bridgeUid = config?.bridgeUid ?? null;
 
@@ -264,7 +268,7 @@ export default function TakEventPanel({ eventId, event, uid, isOwner, layers }: 
                     }}
                   >
                     {teams.map((t) => (
-                      <SelectItem key={t.id}>{t.name}</SelectItem>
+                      <SelectItem key={t.id}>{t.kind === 'equipment' ? `${t.name} (equipment)` : t.name}</SelectItem>
                     ))}
                   </Select>
                 </div>
