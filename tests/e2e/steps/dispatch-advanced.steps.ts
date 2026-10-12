@@ -66,9 +66,13 @@ Then('the equipment {string} should show status {string}', async ({ page }, equi
 
 When('I send team {string} with equipment {string} on the latest call', async ({ page }, teamName: string, equipName: string) => {
   await page.getByRole('button', { name: 'Add', exact: true }).last().click();
-  await page.getByRole('menuitem', { name: 'Add Equipment' }).click();
-  await page.getByTestId(`add-equipment-${equipName}`).click();
-  await page.getByRole('menuitem', { name: teamName }).click();
+  // Nested Radix submenus are driven by keyboard: a pointer click jumps
+  // straight from one submenu trigger to the next menu's item, and Radix closes
+  // the submenu as the pointer leaves its trigger. ArrowRight opens a submenu,
+  // Enter picks an item.
+  await page.getByRole('menuitem', { name: 'Add Equipment' }).press('ArrowRight');
+  await page.getByTestId(`add-equipment-${equipName}`).press('ArrowRight');
+  await page.getByRole('menuitem', { name: teamName, exact: true }).press('Enter');
 });
 
 Then('the equipment {string} should show custody {string}', async ({ page }, equipName: string, custody: string) => {
@@ -80,7 +84,8 @@ Then('the equipment {string} should show no custody line', async ({ page }, equi
 });
 
 When('I set team {string} card status to {string}', async ({ page }, teamName: string, status: string) => {
-  const trigger = page.getByTestId(`team-card-${teamName}`).locator('[aria-label="Status"]');
+  // The card renders in both the desktop sidebar and the mobile tabs; .first() picks either.
+  const trigger = page.getByTestId(`team-card-${teamName}`).locator('[aria-label="Status"]').first();
   const option = page.locator('[role="listbox"]').getByText(status, { exact: true });
   // Same Select open-and-pick retry as the equipment status step above.
   await expect(async () => {
