@@ -74,7 +74,9 @@ export default function AddEquipmentSubmenu({
           const where =
             custody.phase === 'returning' ? `${t(RETURNING_EQ)}: ${custody.holder.name}` : t(custody.holder.name || 'Unknown');
           return (
-            <DropdownMenuSub key={eq.id}>
+            // Keyed by name: items materialized from the venue catalog get a fresh
+            // random id on every render, which would remount the open submenu.
+            <DropdownMenuSub key={eq.name}>
               <DropdownMenuSubTrigger
                 className={`${itemClass} ${custody.phase === 'in_clinic' ? 'bg-status-card-blue' : ''}`}
                 data-testid={`add-equipment-${eq.name}`}
