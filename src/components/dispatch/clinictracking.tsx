@@ -54,7 +54,7 @@ const DETAILS_CLOSE_ANIMATION_MS = 320;
 
 const TableColGroup = () => (
   <colgroup>
-    <col className="w-16" />
+    <col className="w-[5.25rem]" />
     <col className="w-40" />
     <col className="w-16" />
     <col className="w-48" />

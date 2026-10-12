@@ -53,13 +53,15 @@ type Props = { event: Event };
 
 // The count sits on a chip tinted like a team card's status pill
 // (bg-status-card-* / border-status-card-ring-*), so the colors read the same.
+// The chip's sides lean 10deg right; the number is skewed back upright and
+// raised 1px (Rajdhani digits sit below the line box's center).
 function CountPill({ colorClass, count, label }: { colorClass: string; count: number; label: string }) {
   return (
     <span
-      className={`min-w-7 h-6 px-1.5 inline-flex items-center justify-center rounded-md border text-sm font-semibold text-surface-light tabular-nums ${colorClass}`}
+      className={`min-w-7 h-6 px-1.5 inline-flex items-center justify-center rounded-md border -skew-x-[10deg] text-sm font-semibold leading-none text-surface-light tabular-nums ${colorClass}`}
       aria-label={`${count} ${label}`}
     >
-      {count}
+      <span className="inline-block skew-x-[10deg] -translate-y-px">{count}</span>
     </span>
   );
 }

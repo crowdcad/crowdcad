@@ -247,7 +247,7 @@ export default function AppNavbar() {
                 isIconOnly
                 variant="flat"
                 aria-label={isDarkTheme ? "Switch to light mode" : "Switch to dark mode"}
-                className="h-8 w-8 min-w-8 rounded-full bg-surface-deeper/70 text-surface-light hover:bg-surface-deeper"
+                className="h-9 w-9 min-w-9 !rounded-circle bg-surface-deeper/70 text-surface-light hover:bg-surface-deeper"
                 onPress={toggleTheme}
               >
                 {isDarkTheme ? <Sun className="size-4" /> : <Moon className="size-4" />}
@@ -264,7 +264,7 @@ export default function AppNavbar() {
                 <Button
                   variant="bordered"
                   aria-label="Log in"
-                  className="h-8 min-w-8 rounded-full border-surface-liner px-3 text-surface-light hover:bg-surface-deeper"
+                  className="h-9 min-w-9 !rounded-circle border-surface-liner px-3 text-surface-light hover:bg-surface-deeper"
                   onPress={() => {
                     setIsMenuOpen(false);
                     setLoginMode("login");
@@ -281,9 +281,9 @@ export default function AppNavbar() {
                   <DropdownTrigger>
                     <button
                         aria-label="Open profile menu"
-                        className="relative rounded-full cursor-pointer"
+                        className="relative rounded-circle cursor-pointer"
                       >
-                        <span className="flex h-7 w-7 items-center justify-center rounded-full border border-surface-liner bg-surface-base text-surface-light">
+                        <span className="flex h-9 w-9 items-center justify-center rounded-circle border border-surface-liner bg-surface-base text-surface-light">
                           <UserRound className="size-4" />
                         </span>
                       </button>
