@@ -1,13 +1,43 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { Card, CardBody, Switch } from '@heroui/react';
+import { useAdmin } from '@/hooks/useAdmin';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { useSurgeFlashing } from '@/hooks/useSurgeFlashing';
+import { getUiStyle, setUiStyle } from '@/lib/uiStyle';
 import LanguageSection from './language-section';
+
+// Admin-only: switches this browser between the condensed and classic UI
+// styles (src/lib/uiStyle.ts). Everyone else gets the build default.
+function UiStyleRow() {
+  const [condensed, setCondensed] = useState(true);
+  useEffect(() => setCondensed(getUiStyle() === 'condensed'), []);
+  return (
+    <div className="flex items-center justify-between gap-4 mt-6 pt-6 border-t border-default-200">
+      <div>
+        <p className="font-medium">Condensed UI</p>
+        <p className="text-sm text-surface-light/70">
+          Sharp corners, tighter spacing and the condensed font. Turn off for the classic rounded look. Applies to this browser.
+        </p>
+      </div>
+      <Switch
+        isSelected={condensed}
+        onValueChange={(on) => {
+          setUiStyle(on ? 'condensed' : 'classic');
+          setCondensed(on);
+        }}
+        aria-label="Condensed UI"
+        classNames={{ wrapper: 'group-data-[selected=true]:bg-accent' }}
+      />
+    </div>
+  );
+}
 
 export default function PreferencesSection() {
   const { enabled, setEnabled } = useReducedMotion();
   const { flashingDisabled, setFlashingDisabled } = useSurgeFlashing();
+  const { isAdmin } = useAdmin();
 
   return (
     <div className="space-y-6 w-full">
@@ -46,6 +76,7 @@ export default function PreferencesSection() {
               classNames={{ wrapper: 'group-data-[selected=true]:bg-accent' }}
             />
           </div>
+          {isAdmin && <UiStyleRow />}
         </CardBody>
       </Card>
 

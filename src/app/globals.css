@@ -342,7 +342,7 @@ grammarly-card,
   position: absolute;
   z-index: -1;
   inset: -5px;
-  border-radius: var(--ui-radius-pill); /* follows the button: round in classic, square in tactical */
+  border-radius: var(--ui-radius-pill); /* follows the button: round in classic, square in condensed */
   background-image: linear-gradient(115deg, rgba(62, 177, 253, 0.28), rgba(128, 199, 247, 0.24), rgba(215, 122, 122, 0.22), rgba(210, 96, 96, 0.2));
   background-size: 220% 220%;
   animation: hero-cta-shift 7s ease-in-out infinite;

@@ -1,7 +1,7 @@
 // Shared design-system scales for BOTH Tailwind configs (core's and the
 // hosted site's, which require() this file like colorTokens.js). Every value
 // here reads a CSS variable set in src/styles/ui-style.css, so the UI style
-// (data-ui="tactical" | "classic" on <html>, see src/lib/uiStyle.ts) changes
+// (data-ui="condensed" | "classic" on <html>, see src/lib/uiStyle.ts) changes
 // corners, padding density and fonts everywhere without touching components.
 
 // Tailwind's default stacks, kept as the fallback after each --ui-* font.
@@ -10,7 +10,7 @@ const MONO_FALLBACK = ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Con
 
 // Every rounded-* tier (and HeroUI's small/medium/large) resolves to one
 // --ui-radius, so all corners match; `full` (pills, HeroUI radius="full") is
-// its own token so the tactical style can square pills too. `rounded-circle`
+// its own token so the condensed style can square pills too. `rounded-circle`
 // is for shapes that must stay round in every style (map pins, vertices).
 const BORDER_RADIUS = {
   DEFAULT: 'var(--ui-radius-default)',

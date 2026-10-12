@@ -1,7 +1,7 @@
 import { JetBrains_Mono } from 'next/font/google';
 import localFont from 'next/font/local';
 
-// The tactical style's fonts (src/styles/ui-style.css), exposed as CSS
+// The condensed style's fonts (src/styles/ui-style.css), exposed as CSS
 // variables on <html>; the classic style ignores them.
 
 // Rajdhani is bundled (src/fonts/rajdhani, OFL) rather than loaded from Google
