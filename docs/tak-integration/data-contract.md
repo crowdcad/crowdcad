@@ -1,6 +1,6 @@
 # TAK integration: data contract
 
-**Contract version: 0.6.0 (draft).** TAK support is in development and is an optional add-on. Nothing here is released, and the contract may change until 1.0.0.
+**Contract version: 0.7.0 (draft).** TAK support is in development and is an optional add-on. Nothing here is released, and the contract may change until 1.0.0.
 
 This document defines every record the TAK integration adds, who writes each one, and what the access rules enforce. It covers both backends: Firebase (the default) and PocketBase (opt-in with `NEXT_PUBLIC_BACKEND=pocketbase`). The bridge reaches both through one adapter interface, so behavior is the same on either.
 
@@ -29,7 +29,7 @@ Related: [plan.md](plan.md), [decisions.md](decisions.md).
 | `eventId` | Existing event id |
 | `layerId` | Existing `Layer.id` of a map layer in the event's venue snapshot |
 | `deviceUid` | TAK device UID (CoT `event@uid`). Used as a document id in URL-encoded form (`encodeURIComponent`), since Firestore ids can't contain `/`; readers decode it |
-| `teamId` | `Staff.id` / `Supervisor.id` (see [Team ids](#team-ids)) |
+| `teamId` | `Staff.id` / `Supervisor.id` (see [Team ids](#team-ids)), or `equipment:<EventEquipment.id>` for a tracker on a piece of equipment (D69) |
 | `segmentId` | `${deviceUid}~${teamId}~${startedAtMs}`. One history segment per continuous (device, team) pairing |
 
 ## History modes
@@ -172,6 +172,7 @@ PocketBase collections are flat, so each one carries `event` and/or `bridge` as 
 - **Generation.** At every team creation site from now on (see the audit in [plan.md](plan.md#team-id-audit-2026-10-06)).
 - **Backfill.** Only for events with `mapMode === 'tak'`: the TAK module assigns ids to teams lacking one, in one event write.
 - **Readers.** Core code outside the TAK module never reads `id`.
+- **Equipment trackers (D69).** A device link's `teamId` may also be `equipment:<EventEquipment.id>`. It is opaque like any team id: the bridge records history for it the same way, and readers resolve it to the item's name.
 - **What references it.** Device links and history reference `teamId`. Remembered `deviceMappings` store `teamName`, because they carry over between events; the browser resolves them to the new event's `teamId` when pre-linking.
 
 ## Who writes what
@@ -194,6 +195,8 @@ PocketBase collections are flat, so each one carries `event` and/or `bridge` as 
 - **Optional:** operators can enable a Firestore TTL policy on `takLive.receivedAt` as a backstop. PocketBase has no TTL; it relies on the bridge.
 
 ## Changelog
+
+- 0.7.0 (2026-10-12): additive, no shape or rules change. A device link's `teamId` may be `equipment:<EventEquipment.id>`, linking a tracker to a piece of equipment (D69). Equipment custody (D67) is core data on `eventEquipment`, described in `docs/ICD.md`; the bridge never reads it.
 
 - 0.6.0 (2026-10-08): map alignment becomes a core field (P8, D64). TAK reads `Layer.alignment` (and still `takAlignment`); `Venue.takEnabled` is dropped (the venue TAK switch is gone). Live positions on a geo layer are drawn by their own coordinates. Core's geo fields (`Layer.area`, `Post.lat`/`lng` as positions, `Zone.coords`) are described in `docs/ICD.md`. No new collections or rules.
 - 0.5.0 (2026-10-07): additive. Map alignment moves to venue setup (D61): `Layer.takAlignment` on venue layers, copied into events through their venue snapshot, and `Venue.takEnabled`. No new collections or rules. The event `takMapAlignment` collection and PocketBase `tak_map_alignment` are read only, as a fallback for older events.

@@ -390,3 +390,20 @@ The same end-to-end scenario runs against the Firebase emulator and a local Pock
 - **Markers.** Team and supervisor markers are drawn only at their TAK positions (faded when stale), never beside the post their Location names; post pins are unchanged. "View on map" goes to the live position. The TAK module reports positions to the dispatch page (`TakEventAgent.onTracking`, a core `UnitTracking`); its own dot markers are gone.
 - **Supersedes** D65's "available teams only" and "write only when the label changes" rules: connected units are kept at their label.
 
+### D67. Equipment custody: equipment follows the unit holding it
+- **Requested** 2026-10-12 by the maintainer: track equipment location when it is assigned to a team, interplaying with call and team statuses.
+- **Why no tracker.** Equipment rarely carries a TAK device, so its position is its holder's: a post, a unit or a clinic (`src/lib/equipmentCustody.ts`). On a TAK event that makes it move with the carrying unit's live position.
+- **The run.** A unit sent with equipment goes to fetch it first (`Retrieving Eq`) unless it already holds it. `En Route Eq` or `Assisting` means picked up. `Delivered Eq` leaves it with the care team (the first unit on the call not running equipment), or at the call with none. A call delivered to a clinic leaves it in that clinic. Any other resolution, a detach or a removal hands it back to whoever holds it, who goes to `Returning Eq` until Available marks it returned. Equipment never picked up stays where it was.
+- **Core, not TAK.** Custody works on every event and is stored on `eventEquipment` (`phase`, `holder`, `custodyLog`), with the legacy `status`/`assignedTeam`/`location` written alongside so older clients and the lite store keep working. Equipment saved before this derives its custody from those fields.
+- **Manual override.** The dispatcher can always move an item to a post, a unit or a clinic, mark it picked up or returned; a unit left in `Returning Eq` with nothing to return goes back to Available.
+- **Map.** Equipment with a unit is drawn beside that unit's marker (its live position on a TAK event, else the post its Location names).
+
+### D68. Arrival suggestions, never automatic changes
+- **Requested** 2026-10-12 by the maintainer (default accepted: suggest, don't apply).
+- **What.** The TAK agent reports the post each connected unit is steadily at (`UnitTracking.atPost`, the D65 label's "at" band: within 25 m, held for 20 s). A unit fetching equipment at the post it waits at is offered "Picked up?"; a unit returning equipment at its staging location is offered "Returned?".
+- **Why not automatic.** A unit walking past staging would otherwise silently move equipment. The dispatcher confirms on the equipment card (also announced once as a toast); the custody log records the change as confirmed from tracking.
+
+### D69. Trackers on equipment link like teams
+- **Requested** 2026-10-12 by the maintainer (phase 5 of the equipment plan).
+- **How.** A device link's `teamId` may be `equipment:<EventEquipment.id>`. Team ids are opaque to the bridge and the rules only require a string, so no rules, bridge or contract shape changes; the prefix keeps it apart from `Staff`/`Supervisor` ids. Links are made in the TAK panel (equipment appears as "Name (equipment)") or automatically by a unique callsign match, like teams.
+- **Effect.** A tracked item is drawn at its tracker (faded when stale), not with its holder, and its "view on map" goes there. Its custody still follows statuses. The bridge keeps history for it like a team, shown by the item's name on the summary.
