@@ -11,6 +11,7 @@ import { getScheduleWindow, teamStatusBreakdown, teamAvailabilitySeries, getSurg
 import { getZoneCallSummaries } from '@/lib/zones';
 import { formatLogTimestampForCsv } from '@/lib/csvFormat';
 import { GRID_WRAPPER, GRID_CELL } from './summaryGrid';
+import EquipmentTimeline from './EquipmentTimeline';
 import LoadingScreen from '@/components/ui/loading-screen';
 import ExportLogModal from '@/components/modals/event/exportlogmodal';
 
@@ -367,6 +368,8 @@ export default function SummaryPage() {
             </div>
           </div>
         )}
+
+        <EquipmentTimeline event={event} />
 
         {process.env.NEXT_PUBLIC_TAK === 'on' && TakEventSummary && event.mapMode === 'tak' && eventId && (
           <Suspense fallback={null}>

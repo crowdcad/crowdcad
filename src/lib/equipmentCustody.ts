@@ -427,3 +427,29 @@ export function describeCustody(custody: Custody, fetchingUnit?: string | null):
   if (phase === 'with_care_team') return `${PHASE_LABELS.with_care_team} (${holder.name})`;
   return `${PHASE_LABELS[phase]} ${holder.name}`;
 }
+
+export interface CustodyRunStats {
+  /** Times it left its post (or clinic) for a run. */
+  runs: number;
+  /** Milliseconds spent away from a post across those runs; an unfinished run counts up to `until`. */
+  awayMs: number;
+}
+
+/** Runs and time away from a custody log, for the event summary. */
+export function custodyRunStats(log: EquipmentCustodyEntry[] | undefined, until: number): CustodyRunStats {
+  let runs = 0;
+  let awayMs = 0;
+  let leftAt: number | null = null;
+  for (const entry of log || []) {
+    const away = entry.phase !== 'staged' && entry.phase !== 'in_clinic' && entry.phase !== 'retrieving';
+    if (away && leftAt === null) {
+      runs += 1;
+      leftAt = entry.t;
+    } else if (!away && entry.phase !== 'retrieving' && leftAt !== null) {
+      awayMs += entry.t - leftAt;
+      leftAt = null;
+    }
+  }
+  if (leftAt !== null) awayMs += Math.max(0, until - leftAt);
+  return { runs, awayMs };
+}

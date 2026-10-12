@@ -3,6 +3,7 @@ import type { Call, Event, EventEquipment, Staff } from '@/app/types';
 import {
   assignEquipment,
   custodyOf,
+  custodyRunStats,
   fleetOf,
   handOffEquipment,
   isDispatchable,
@@ -154,5 +155,21 @@ describe('manual override', () => {
     const e = returning();
     const fleet = settleReturningUnits(fleetOf(e), e, T);
     expect(fleet.staff[0].status).toBe(RETURNING_EQ);
+  });
+});
+
+describe('custodyRunStats', () => {
+  it('counts runs from pickup to return, ignoring the wait while it is fetched', () => {
+    const post = { kind: 'post' as const, name: 'Staging' };
+    const unit = { kind: 'team' as const, name: 'Team 1' };
+    const log = [
+      { t: 0, phase: 'retrieving' as const, holder: post, team: 'Team 1', by: 'status' as const },
+      { t: 60_000, phase: 'carried' as const, holder: unit, by: 'status' as const },
+      { t: 600_000, phase: 'returning' as const, holder: unit, by: 'status' as const },
+      { t: 900_000, phase: 'staged' as const, holder: post, by: 'status' as const },
+      { t: 1_000_000, phase: 'carried' as const, holder: unit, by: 'dispatcher' as const },
+    ];
+    expect(custodyRunStats(log, 1_100_000)).toEqual({ runs: 2, awayMs: 840_000 + 100_000 });
+    expect(custodyRunStats(undefined, 0)).toEqual({ runs: 0, awayMs: 0 });
   });
 });
