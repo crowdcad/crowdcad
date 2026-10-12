@@ -82,7 +82,7 @@ export default function AreaEditor({
             omit={['none']}
           />
           {tutorialStep === 1 && focused !== 'format' && (
-            <TutorialTip floating step={1} className="left-0 w-[240px]">
+            <TutorialTip className="top-full mt-2 left-0 w-[240px]">
               Select your preferred map format.
             </TutorialTip>
           )}
@@ -96,7 +96,7 @@ export default function AreaEditor({
             }}
           />
           {tutorialStep === 2 && focused !== 'search' && (
-            <TutorialTip floating step={2} className="left-0 w-[260px]">
+            <TutorialTip className="top-full mt-2 left-0 w-[260px]">
               Enter the location you will be working from.
             </TutorialTip>
           )}
@@ -131,7 +131,7 @@ export default function AreaEditor({
           </Button>
         </div>
         {tutorialStep === 3 && (
-          <TutorialTip floating step={3} className="left-0 w-[280px]">
+          <TutorialTip className="top-full mt-2 left-0 w-[280px]">
             Click around the area you will be working in to outline it, then click the first point to finish.
           </TutorialTip>
         )}

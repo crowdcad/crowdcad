@@ -26,7 +26,7 @@ function StatusTimer({ since }: { since: number }) {
   const minutes = Math.floor(elapsed / 60);
   const seconds = elapsed % 60;
   return (
-    <span>
+    <span className="ui-timer">
       {minutes.toString().padStart(2, '0')}:{seconds.toString().padStart(2, '0')}
     </span>
   );
@@ -550,7 +550,7 @@ export function TeamMarker({
           {showPosts && <div><strong>Post:</strong> {team.location || 'Unassigned'}</div>}
           <div>
             <strong>Status Timer:</strong>{' '}
-            {typeof teamTimers[team.team] === 'number' ? <StatusTimer since={teamTimers[team.team]} /> : <span>00:00</span>}
+            {typeof teamTimers[team.team] === 'number' ? <StatusTimer since={teamTimers[team.team]} /> : <span className="ui-timer">00:00</span>}
           </div>
         </MarkerCard>
       )}

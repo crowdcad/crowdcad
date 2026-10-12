@@ -45,12 +45,12 @@ export default function TeamCard(props: TeamCardProps) {
           </div>
         </div>
 
-        <div className="absolute top-3 right-3 flex items-center gap-2">
+        <div className="absolute top-0 right-0 pt-3 pr-3 flex items-center gap-2">
           <div className="text-surface-light/70">
             {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
           </div>
           {hasVenueMap && <TeamMapButton {...props} />}
-          <div className="text-[15px] sm:text-base font-semibold text-surface-light tabular-nums">
+          <div className="ui-timer text-sm sm:text-[15px] font-semibold text-surface-light">
             {timer}
           </div>
           <TeamActionsMenu {...props} />

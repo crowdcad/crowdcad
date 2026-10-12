@@ -28,7 +28,7 @@ export default function TrackingTableBase({
           <TableColGroup />
           <thead className="sticky top-0 z-10 bg-surface-deep">
             <tr className="border-b border-surface-liner">
-              <th className="px-3 py-2.5 text-left text-surface-faint w-16">{t('Call #')}</th>
+              <th className="px-3 py-2.5 text-left text-surface-faint w-[5.25rem] whitespace-nowrap">{t('Call #')}</th>
               <th className="px-3 py-2.5 text-left text-surface-faint w-40">{t('Chief Complaint')}</th>
               <th className="px-3 py-2.5 text-left text-surface-faint w-16">{t('A/S')}</th>
               <th className="px-3 py-2.5 text-left text-surface-faint w-48">{t('Location')}</th>

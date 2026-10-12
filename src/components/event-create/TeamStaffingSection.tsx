@@ -62,7 +62,7 @@ export default function TeamStaffingSection({
         </ButtonGroup>
         {addTeamHint && staff.length === 0 && (
           // The pointer sits under the Add Team half of the button group.
-          <TutorialTip floating step={1} className="right-4 w-[240px]" arrowClassName="right-[64px]">
+          <TutorialTip className="top-full mt-2 right-4 w-[240px]" arrowClassName="right-[64px]">
             {addTeamHint}
           </TutorialTip>
         )}

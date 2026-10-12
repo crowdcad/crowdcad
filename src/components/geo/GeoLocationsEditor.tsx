@@ -160,16 +160,16 @@ export default function GeoLocationsEditor({
   const tutorialTip = !tutorial
     ? null
     : layer.posts.length === 0
-      ? <TutorialTip step={1} className="mt-3 max-w-none" arrowClassName="left-[calc(25%-10px)]">Add a location marker to the map.</TutorialTip>
+      ? <TutorialTip className="top-full mt-2 inset-x-0 max-w-none" arrowClassName="left-[calc(25%-10px)]">Add a location marker to the map.</TutorialTip>
       : (layer.zones ?? []).length === 0
-        ? <TutorialTip step={2} className="mt-3 max-w-none" arrowClassName="right-[calc(25%-10px)]">Optionally, label different areas of your map.</TutorialTip>
+        ? <TutorialTip className="top-full mt-2 inset-x-0 max-w-none" arrowClassName="right-[calc(25%-10px)]">Optionally, label different areas of your map.</TutorialTip>
         : null;
 
   return (
     <div className={`flex gap-4 ${className ?? ''}`}>
       <div className="flex w-[320px] flex-shrink-0 flex-col min-h-0">
         {heading}
-        <div className="grid flex-shrink-0 grid-cols-2 gap-2">
+        <div className="relative grid flex-shrink-0 grid-cols-2 gap-2">
           <MarkerModeToggleButton
             className="w-full"
             isAddMarkerMode={mode === 'marker'}
@@ -187,8 +187,8 @@ export default function GeoLocationsEditor({
               setMode(mode === 'area' ? 'none' : 'area');
             }}
           />
+          {tutorialTip}
         </div>
-        {tutorialTip}
         {hint && <p className="flex-shrink-0 pt-2 pb-3 text-xs leading-snug text-surface-faint">{hint}</p>}
         {children}
       </div>

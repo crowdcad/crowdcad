@@ -1,0 +1,68 @@
+/*
+ * UI style tokens: the one place the look is tuned. <html data-ui="..."> picks
+ * the style (src/lib/uiStyle.ts); Tailwind's rounded-*, p-*, font-sans and
+ * font-mono read these variables (src/lib/designTokens.js), so components
+ * never name a style. Imported by core's and the hosted site's root layouts.
+ */
+:root,
+html[data-ui='classic'] {
+  --ui-radius: calc(var(--radius) - 2px); /* every rounded-sm..3xl + HeroUI radius */
+  --ui-radius-default: 0.25rem;           /* plain `rounded` */
+  --ui-radius-pill: 9999px;               /* rounded-full, HeroUI radius="full" */
+  --ui-pad-scale: 1;                      /* multiplies every p-* utility */
+  --ui-font: ui-sans-serif;               /* font-sans (body text) */
+  --ui-font-data: ui-monospace;           /* font-mono (times, IDs) */
+  --ui-font-timer: inherit;               /* .ui-timer (live mm:ss) */
+  --ui-heading-case: none;
+  --ui-heading-tracking: normal;
+  --ui-label-case: none;
+  --ui-label-tracking: normal;
+}
+
+/* Condensed (UI lab option C): sharp corners, tighter padding, Rajdhani with
+   JetBrains Mono for data, uppercase tracked labels (titles stay as written). */
+html[data-ui='condensed'] {
+  --radius: 0px;
+  --ui-radius: 0px;
+  --ui-radius-default: 0px;
+  --ui-radius-pill: 0px;
+  --ui-pad-scale: 0.75;
+  --ui-font: var(--font-rajdhani);
+  --ui-font-data: var(--font-jetbrains-mono);
+  --ui-font-timer: var(--font-jetbrains-mono);
+  --ui-heading-case: none;
+  --ui-heading-tracking: normal;
+  --ui-label-case: uppercase;
+  --ui-label-tracking: 0.08em;
+}
+
+/* :where() keeps these at zero specificity, so any Tailwind class on the
+   element (normal-case, tracking-*, ...) still wins. */
+:where(h1, h2, h3, h4, h5, h6) {
+  text-transform: var(--ui-heading-case);
+  letter-spacing: var(--ui-heading-tracking);
+}
+:where(label, th, [data-slot='label'], [role='tab']) {
+  text-transform: var(--ui-label-case);
+  letter-spacing: var(--ui-label-tracking);
+}
+
+/* HeroUI spinners draw their ring with rounded-full; keep them round when
+   pills are squared (html raises this above the rounded-full class). */
+html :is(.animate-spinner-ease-spin, .animate-spinner-linear-spin) {
+  border-radius: 9999px;
+}
+
+/* Live mm:ss timers: fixed-width digits and a little room on each side, so a
+   ticking timer never shifts what sits beside it. Rajdhani has no tabular
+   figures, so condensed timers use the data font, at regular weight (the
+   attribute selector outranks the element's font-* class). */
+html[data-ui='condensed'] .ui-timer {
+  font-weight: 400;
+}
+.ui-timer {
+  font-family: var(--ui-font-timer);
+  font-variant-numeric: tabular-nums;
+  padding-inline: 0.25rem;
+  white-space: nowrap;
+}
