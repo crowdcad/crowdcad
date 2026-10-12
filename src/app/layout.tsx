@@ -108,7 +108,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         )}
         <DevServiceWorkerCleanup />
         <ProgressBarProvider />
-        <HeroUIProvider>
+        <HeroUIProvider disableRipple>
           <AppShell>{children}</AppShell>
         </HeroUIProvider>
       </body>

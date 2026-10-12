@@ -216,7 +216,7 @@ export default function LiteNavbar() {
                 isIconOnly
                 variant="flat"
                 aria-label={isDarkTheme ? 'Switch to light mode' : 'Switch to dark mode'}
-                className="h-9 w-9 min-w-9 !rounded-circle bg-surface-deeper/70 text-surface-light hover:bg-surface-deeper"
+                className="h-8 w-8 min-w-8 !rounded-circle bg-surface-deeper/70 text-surface-light hover:bg-surface-deeper"
                 onPress={toggleTheme}
               >
                 {isDarkTheme ? <Sun className="size-4" /> : <Moon className="size-4" />}
@@ -232,7 +232,7 @@ export default function LiteNavbar() {
                 <Button
                   size="sm"
                   variant="bordered"
-                  className="h-9 !rounded-circle border-surface-liner bg-transparent px-3 text-surface-light font-semibold"
+                  className="h-8 !rounded-circle border-surface-liner bg-transparent px-3 text-surface-light font-semibold"
                   onClick={() => {
                     setIsMenuOpen(false);
                     setLoginOpen(true);
@@ -249,7 +249,7 @@ export default function LiteNavbar() {
                         aria-label="Open profile menu"
                         className="relative rounded-circle cursor-pointer"
                       >
-                        <span className="flex h-9 w-9 items-center justify-center rounded-circle border border-surface-liner bg-surface-base">
+                        <span className="flex h-7 w-7 items-center justify-center rounded-circle border border-surface-liner bg-surface-base">
                           <UserRound className="size-4 text-surface-light" />
                         </span>
                       </button>
