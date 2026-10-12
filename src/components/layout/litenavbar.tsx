@@ -249,7 +249,7 @@ export default function LiteNavbar() {
                         aria-label="Open profile menu"
                         className="relative rounded-circle cursor-pointer"
                       >
-                        <span className="flex h-7 w-7 items-center justify-center rounded-circle border border-surface-liner bg-surface-base">
+                        <span className="flex h-8 w-8 items-center justify-center rounded-circle border border-surface-liner bg-surface-base">
                           <UserRound className="size-4 text-surface-light" />
                         </span>
                       </button>

@@ -283,7 +283,7 @@ export default function AppNavbar() {
                         aria-label="Open profile menu"
                         className="relative rounded-circle cursor-pointer"
                       >
-                        <span className="flex h-7 w-7 items-center justify-center rounded-circle border border-surface-liner bg-surface-base text-surface-light">
+                        <span className="flex h-8 w-8 items-center justify-center rounded-circle border border-surface-liner bg-surface-base text-surface-light">
                           <UserRound className="size-4" />
                         </span>
                       </button>
