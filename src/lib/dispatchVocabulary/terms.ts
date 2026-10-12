@@ -88,9 +88,11 @@ export const DISPATCH_TERMS: DispatchTerm[] = [
     'Detached',
     'On Break',
     'In Clinic',
+    'Retrieving Eq',
     'Delivered Eq',
     'En Route Eq',
     'Assisting',
+    'Returning Eq',
   ]),
 
   // Equipment.

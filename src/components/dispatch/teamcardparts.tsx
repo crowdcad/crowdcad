@@ -15,7 +15,8 @@ import type { Clinic, Event, Staff } from '@/app/types';
 import TrackingTextEntry from '@/components/dispatch/trackingtextentry';
 import { deriveTeamVisualStatus, getStatusColor } from '@/lib/statusColors';
 import StatusLabel from './statuslabel';
-import EquipmentTypeIcon, { getEquipmentStatusWord } from './equipmenttypeicon';
+import EquipmentTypeIcon, { getEquipmentStatusMenuLabel, getEquipmentStatusWord, isEquipmentIconStatus } from './equipmenttypeicon';
+import { EQUIPMENT_RUN_STATUSES, RETURNING_EQ, equipmentOfUnit, fleetOf } from '@/lib/equipmentCustody';
 import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
 import { getEventClinics } from '@/lib/clinics';
 import { getEquipmentIconType, type EquipmentIconType } from '@/lib/equipmentIcon';
@@ -48,8 +49,6 @@ export type TeamCardProps = {
 
 const stopPropagation = (e: React.SyntheticEvent) => e.stopPropagation();
 
-const isEquipmentStatus = (status: string) => status === 'Delivered Eq' || status === 'En Route Eq';
-
 export type TeamStatusModel = {
   statusOptions: string[];
   teamEquipmentNames: string;
@@ -66,18 +65,22 @@ export function useTeamStatusModel(staff: Staff, event: Event): TeamStatusModel 
 
   const isOnEq = !!event.calls?.some(c =>
     c.equipmentTeams?.includes(staff.team) && !['Resolved', 'Delivered Eq', 'Refusal', 'NMM', 'Treat and Release'].includes(c.status)
-  ) || ['En Route Eq', 'Assisting'].includes(staff.status);
+  ) || ['Retrieving Eq', 'En Route Eq', 'Assisting'].includes(staff.status);
+  // Bringing equipment back after a call: Available marks it returned.
+  const isReturning = !isOnAnyActiveCall && staff.status === RETURNING_EQ;
 
   const statusOptions = isOnEq
-    ? ['En Route Eq', 'Assisting', 'Delivered Eq']
+    ? EQUIPMENT_RUN_STATUSES
     : isOnAnyActiveCall
       ? ['En Route', 'On Scene', 'Transporting', 'Pending Transport']
-      : ['Available', 'On Break', 'In Clinic'];
+      : isReturning
+        ? [RETURNING_EQ, 'Available', 'On Break', 'In Clinic']
+        : ['Available', 'On Break', 'In Clinic'];
 
   // Equipment this team/supervisor is actually running — same icon
   // convention as the call tracker's team chip (see equipmenttypeicon.tsx).
-  const teamEquipment = isOnEq
-    ? (event.eventEquipment || []).filter(eq => eq.assignedTeam === staff.team)
+  const teamEquipment = isOnEq || isReturning
+    ? equipmentOfUnit(fleetOf(event), event, staff.team)
     : [];
 
   return {
@@ -92,7 +95,7 @@ export function useTeamStatusModel(staff: Staff, event: Event): TeamStatusModel 
 /** Status word for the card, with the equipment icon for equipment runs. */
 export function TeamStatusText({ status, iconType }: { status: string; iconType: EquipmentIconType | null }) {
   const { t } = useDispatchTerms();
-  if (isEquipmentStatus(status) && iconType) {
+  if (isEquipmentIconStatus(status) && iconType) {
     return (
       <span className="inline-flex items-center gap-1 min-w-0">
         <span className="truncate">{getEquipmentStatusWord(status)}</span>
@@ -188,8 +191,8 @@ export function TeamStatusSelect({
     >
       {statusOptions.map((s) => (
         <SelectItem key={s}>
-          {isEquipmentStatus(s) && teamEquipmentNames
-            ? `${s === 'En Route Eq' ? 'En Route -' : 'Delivered'} ${teamEquipmentNames}`
+          {isEquipmentIconStatus(s) && teamEquipmentNames
+            ? getEquipmentStatusMenuLabel(s, teamEquipmentNames)
             : t(s)}
         </SelectItem>
       ))}

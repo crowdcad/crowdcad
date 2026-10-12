@@ -70,6 +70,16 @@ export function fleetOf(event: Pick<Event, 'eventEquipment' | 'staff' | 'supervi
   return { eventEquipment: event.eventEquipment || [], staff: event.staff || [], supervisor: event.supervisor || [] };
 }
 
+/** Only the parts of `after` that differ from `before`, for a smaller event write. */
+export function changedFleet(before: Fleet, after: Fleet): Partial<Fleet> {
+  const differs = <T,>(a: T[], b: T[]) => a.length !== b.length || a.some((x, i) => x !== b[i]);
+  return {
+    ...(differs(before.eventEquipment, after.eventEquipment) ? { eventEquipment: after.eventEquipment } : {}),
+    ...(differs(before.staff, after.staff) ? { staff: after.staff } : {}),
+    ...(differs(before.supervisor, after.supervisor) ? { supervisor: after.supervisor } : {}),
+  };
+}
+
 export function unitNames(event: Pick<Event, 'staff' | 'supervisor'>): Set<string> {
   return new Set([...(event.staff || []).map((s) => s.team), ...(event.supervisor || []).map((s) => s.team)]);
 }

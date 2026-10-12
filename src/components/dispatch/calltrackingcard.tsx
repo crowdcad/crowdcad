@@ -18,13 +18,15 @@ import {
 } from "@/components/ui/dropdown-menu"
 import type { Event, Call, DetachedTeam } from '@/app/types';
 import StatusLabel, { getMenuLabel } from '@/components/dispatch/statuslabel';
-import EquipmentTypeIcon, { getEquipmentStatusWord } from '@/components/dispatch/equipmenttypeicon';
+import EquipmentTypeIcon, { getEquipmentStatusMenuLabel, getEquipmentStatusWord, isEquipmentIconStatus } from '@/components/dispatch/equipmenttypeicon';
 import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
 import { getEventClinics, getTransportClinicId, isCallResolved, getVenueLocationOptions } from '@/lib/clinics';
 import { getEquipmentIconType } from '@/lib/equipmentIcon';
 import { getStatusColor } from '@/lib/statusColors';
 import { staticSelectorButtonProps } from '@/lib/heroStatic';
 import CallIndicatorIcons from './callindicatoricons';
+import AddEquipmentSubmenu from './addequipmentmenu';
+import { EQUIPMENT_RUN_STATUSES, equipmentOfUnit, fleetOf } from '@/lib/equipmentCustody';
 import { dropdownMotionProps, useCallTimer, useSyncedLocationInput, CallAgeSexComplaintRow, CallNotesAndLog, cardFieldClassNames, blurOnEnter } from './trackingcardparts';
 
 type CallTrackingCardProps = {
@@ -113,34 +115,6 @@ export default function CallTrackingCard({
       !call.assignedTeam?.includes(s.team)
     );
   }, [event.supervisor, call.assignedTeam]);
-
-  const availableEquipment = useMemo(() => {
-    const equipmentItems = event.venue?.equipment || [];
-    return equipmentItems
-      .map(eq => typeof eq === 'string' ? eq : eq.name)
-      .filter(equipName => !call.equipment?.includes(equipName));
-  }, [event.venue?.equipment, call.equipment]);
-
-  // Where each piece of equipment currently is — shown inline in the Add
-  // Equipment menu so the dispatcher can pick the closest one. Live event
-  // equipment wins over the venue's configured home location.
-  const equipmentLocations = useMemo(() => {
-    const locations = new Map<string, string>();
-    (event.venue?.equipment || []).forEach(eq => {
-      if (typeof eq !== 'string' && eq.location) locations.set(eq.name, eq.location);
-    });
-    (event.eventEquipment || []).forEach(eq => {
-      if (eq.location) locations.set(eq.name, eq.location);
-    });
-    return locations;
-  }, [event.venue?.equipment, event.eventEquipment]);
-
-  // Get teams available for equipment delivery
-  const teamsForEquipment = useMemo(() => {
-    return (event.staff || []).filter(s => 
-      ['Available', 'In Clinic', 'On Break'].includes(s.status)
-    );
-  }, [event.staff]);
 
   return (
     <Card
@@ -265,7 +239,7 @@ export default function CallTrackingCard({
           {(Array.isArray(call.assignedTeam) ? call.assignedTeam : []).map((team: string) => {
             const isEquipmentOnlyTeam = call.equipmentTeams?.includes(team);
             const statusOptions = isEquipmentOnlyTeam
-              ? ['En Route Eq', 'Assisting', 'Delivered Eq']
+              ? EQUIPMENT_RUN_STATUSES
               : ['En Route', 'On Scene', 'Unable to Locate', 'Transporting', 'Pending Transport', 'Rolled from Scene', 'Delivered', 'Refusal', 'NMM', 'Treat and Release', 'Detached'];
             
             // Same resolution desktop's CallTrackingTable uses: a per-call
@@ -279,11 +253,11 @@ export default function CallTrackingCard({
             // pill's "Eq" suffix for the matching map icon, and to name the
             // specific item in the dropdown options and the activity log.
             const teamEquipment = isEquipmentOnlyTeam
-              ? (event.eventEquipment || []).filter(eq => eq.assignedTeam === team)
+              ? equipmentOfUnit(fleetOf(event), event, team)
               : [];
             const teamEquipmentNames = teamEquipment.map(eq => eq.name).join(', ');
             const teamEquipmentIconType = teamEquipment[0] ? getEquipmentIconType(teamEquipment[0].name) : null;
-            const isEqStatus = currentStatus === 'Delivered Eq' || currentStatus === 'En Route Eq';
+            const isEqStatus = isEquipmentIconStatus(currentStatus);
             // Reuses the chip's own translucent status fill on the status
             // button — stacked on top of the chip's already-tinted
             // background, the same semi-transparent token reads visibly
@@ -375,8 +349,8 @@ export default function CallTrackingCard({
                       >
                         {statusOptions.map(status => (
                           <DropdownItem key={status}>
-                            {(status === 'Delivered Eq' || status === 'En Route Eq') && teamEquipmentNames
-                              ? `${status === 'En Route Eq' ? 'En Route -' : 'Delivered'} ${teamEquipmentNames}`
+                            {isEquipmentIconStatus(status) && teamEquipmentNames
+                              ? getEquipmentStatusMenuLabel(status, teamEquipmentNames)
                               : getMenuLabel(status, t)}
                           </DropdownItem>
                         ))}
@@ -489,111 +463,7 @@ export default function CallTrackingCard({
                 </DropdownMenuSubContent>
               </DropdownMenuSub>
 
-              {/* Add Equipment Submenu - with team selection */}
-              <DropdownMenuSub>
-                <DropdownMenuSubTrigger className="hover:bg-surface-liner focus:bg-surface-liner cursor-pointer">
-                  {t('Add Equipment')}
-                </DropdownMenuSubTrigger>
-                <DropdownMenuSubContent className="bg-surface-deep border-surface-liner">
-                  {availableEquipment.length > 0 ? (
-                    availableEquipment.map(equipName => (
-                      <DropdownMenuSub key={equipName}>
-                        <DropdownMenuSubTrigger className="hover:bg-surface-liner focus:bg-surface-liner cursor-pointer text-surface-light">
-                          {equipName} ({t(equipmentLocations.get(equipName) || 'Unknown')})
-                        </DropdownMenuSubTrigger>
-                        <DropdownMenuSubContent className="bg-surface-deep border-surface-liner">
-                          {teamsForEquipment.length > 0 ? (
-                            teamsForEquipment.map(t => {
-                              const isBreakOrClinic = ['On Break', 'In Clinic'].includes(t.status);
-                              return (
-                                <DropdownMenuItem
-                                  key={t.team}
-                                  onClick={async () => {
-                                    const now = new Date();
-                                    const hhmm = now.getHours().toString().padStart(2, '0') + now.getMinutes().toString().padStart(2, '0');
-
-                                    // Find the equipment object in venue or event equipment
-                                    const venueEquipment = event.venue?.equipment || [];
-                                    const equipmentObj = venueEquipment.find(eq => 
-                                      (typeof eq === 'string' ? eq : eq.name) === equipName
-                                    );
-                                    const equipmentId = typeof equipmentObj === 'object' ? equipmentObj.id : equipName;
-
-                                    const updatedEquipment = event.eventEquipment?.map((eq) =>
-                                      eq.id === equipmentId || eq.name === equipName
-                                        ? {
-                                            ...eq,
-                                            status: 'In Use' as const,
-                                            assignedTeam: t.team,
-                                            location: call.location
-                                          }
-                                        : eq
-                                    );
-
-                                    const callLogEntry = {
-                                      timestamp: now.getTime(),
-                                      message: `${hhmm} - ${equipName} assigned to ${t.team} for this call.`
-                                    };
-
-                                    const teamLogEntry = {
-                                      timestamp: now.getTime(),
-                                      message: `${hhmm} - responding to call #${callDisplayNumber} with ${equipName}`
-                                    };
-
-                                    const updatedCall = {
-                                      ...call,
-                                      assignedTeam: [...(call.assignedTeam || []), t.team],
-                                      equipment: [...(call.equipment || []), equipName],
-                                      equipmentTeams: [...(call.equipmentTeams || []), t.team],
-                                      status: 'Assigned',
-                                      log: [...(call.log || []), callLogEntry]
-                                    };
-
-                                    const updatedStaff = event.staff.map((staff) =>
-                                      staff.team === t.team
-                                        ? {
-                                            ...staff,
-                                            status: 'En Route Eq',
-                                            location: call.location,
-                                            originalPost: staff.location || 'Unknown',
-                                            log: [...(staff.log || []), teamLogEntry]
-                                          }
-                                        : staff
-                                    );
-
-                                    const updatedCalls = event.calls.map((c) =>
-                                      c.id === call.id ? updatedCall : c
-                                    );
-
-                                    await updateEvent({
-                                      calls: updatedCalls,
-                                      staff: updatedStaff,
-                                      eventEquipment: updatedEquipment
-                                    });
-                                  }}
-                                  className={`hover:bg-surface-liner focus:bg-surface-liner cursor-pointer ${
-                                    isBreakOrClinic ? 'bg-status-card-blue text-surface-light' : 'text-surface-light'
-                                  }`}
-                                >
-                                  {t.team} {isBreakOrClinic && `(${t.status})`}
-                                </DropdownMenuItem>
-                              );
-                            })
-                          ) : (
-                            <DropdownMenuItem disabled className="text-surface-faint">
-                              No teams available
-                            </DropdownMenuItem>
-                          )}
-                        </DropdownMenuSubContent>
-                      </DropdownMenuSub>
-                    ))
-                  ) : (
-                    <DropdownMenuItem disabled className="text-surface-faint">
-                      {t('No available equipment')}
-                    </DropdownMenuItem>
-                  )}
-                </DropdownMenuSubContent>
-              </DropdownMenuSub>
+              <AddEquipmentSubmenu call={call} event={event} callNumber={callDisplayNumber} updateEvent={updateEvent} />
             </DropdownMenuContent>
           </Dropdownmenu>
         </div>

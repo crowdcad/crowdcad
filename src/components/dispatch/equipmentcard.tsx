@@ -15,13 +15,17 @@ import { getStatusColor } from '@/lib/statusColors';
 import EquipmentTypeIcon from '@/components/dispatch/equipmenttypeicon';
 import { getEquipmentIconType } from '@/lib/equipmentIcon';
 import { staticSelectorButtonProps } from '@/lib/heroStatic';
+import { describeCustody } from '@/lib/equipmentCustody';
 
 type EquipmentCardProps = {
   equipment: EquipmentItem;
   event: Event;
   onStatusChange: (equipmentName: string, newStatus: string) => void;
   onLocationChange: (equipmentName: string, newLocation: string) => void;
+  /** Back at its staging location (the dispatcher's manual return). */
   onMarkReady?: (equipmentName: string) => void;
+  /** The unit sent to fetch it has it. */
+  onPickedUp?: (equipmentName: string) => void;
   onDelete?: (equipmentName: string) => void;
   updateEvent: (updates: Partial<Event>) => Promise<void>;
   /** Whether the venue has a map uploaded — gates the "view on map" button. */
@@ -49,6 +53,7 @@ export default function EquipmentCard({
   onStatusChange,
   onLocationChange,
   onMarkReady,
+  onPickedUp,
   onDelete,
   updateEvent,
   hasVenueMap,
@@ -93,6 +98,13 @@ export default function EquipmentCard({
 
   const statusTone = equipmentStatusTone(equipment.status);
 
+  // Where it is in its run, e.g. "Being retrieved by Team 3 from Gate A".
+  const custodyLine = equipment.phase && equipment.holder
+    ? describeCustody({ phase: equipment.phase, holder: equipment.holder }, equipment.assignedTeam)
+    : null;
+  const isHome = equipment.phase === 'staged' && equipment.holder?.name === equipment.stagingLocation;
+  const canReturn = !isHome && (equipment.phase ? true : !!equipment.needsRefresh);
+
   return (
     <Card
       className={`dispatch-shell-card ${expanded ? 'dispatch-shell-card--open' : ''} w-full border-0 transition-colors duration-200 ${expanded ? 'rounded-2xl bg-surface-deep shadow-sm' : 'rounded-none bg-transparent shadow-none hover:bg-surface-deep'}`}
@@ -107,6 +119,11 @@ export default function EquipmentCard({
             <EquipmentTypeIcon type={getEquipmentIconType(equipment.name)} className="w-4 h-4 shrink-0" />
             <span className="truncate">{equipment.name}</span>
           </div>
+          {custodyLine && !isHome && (
+            <div className="text-xs text-surface-faint truncate" data-testid={`equipment-custody-${equipment.name}`}>
+              {custodyLine}
+            </div>
+          )}
         </div>
 
         <div className="absolute top-0 right-0 pt-3 pr-3 flex items-center gap-2">
@@ -149,12 +166,18 @@ export default function EquipmentCard({
                 aria-label="Equipment actions"
                 itemClasses={{ base: 'px-3 py-2 text-sm text-surface-light rounded-xl' }}
                 onAction={(key) => {
-                  if (key === 'ready' && equipment.needsRefresh) onMarkReady?.(equipment.name);
+                  if (key === 'ready') onMarkReady?.(equipment.name);
+                  if (key === 'picked-up') onPickedUp?.(equipment.name);
                   if (key === 'delete') onDelete?.(equipment.name);
                 }}
               >
-                {equipment.needsRefresh ? (
-                  <DropdownItem key="ready">{t('Mark Ready')}</DropdownItem>
+                {equipment.phase === 'retrieving' ? (
+                  <DropdownItem key="picked-up">{t('Mark Picked Up')}</DropdownItem>
+                ) : null}
+                {canReturn ? (
+                  <DropdownItem key="ready">
+                    {equipment.needsRefresh ? t('Mark Ready') : `${t('Mark Returned')} (${t(equipment.stagingLocation || 'Staging')})`}
+                  </DropdownItem>
                 ) : null}
                 <DropdownItem key="delete" className="text-status-red">{t('Delete')}</DropdownItem>
               </DropdownMenu>
@@ -237,7 +260,7 @@ export default function EquipmentCard({
               >
                 {(() => {
                   const posts = (event.venue?.posts || []).map(p => (typeof p === 'string' ? p : p.name));
-                  const teams = (event.staff || []).map(s => s.team);
+                  const teams = [...(event.staff || []), ...(event.supervisor || [])].map(s => s.team);
                   const opts = Array.from(new Set(['Clinic', ...posts, ...teams, equipment.stagingLocation].filter(Boolean)));
                   return opts.map(p => <AutocompleteItem key={p}>{t(p)}</AutocompleteItem>);
                 })()}

@@ -124,6 +124,7 @@ export type EquipmentListProps = {
   onStatusChange: (equipmentName: string, newStatus: string) => void;
   onLocationChange: (equipmentName: string, newLocation: string) => void;
   onMarkReady: (equipmentName: string) => void;
+  onPickedUp: (equipmentName: string) => void;
   onDelete: (equipmentName: string) => void;
   onViewOnMap: (equipmentName: string) => void;
 };
