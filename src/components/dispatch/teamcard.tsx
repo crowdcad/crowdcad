@@ -50,7 +50,7 @@ export default function TeamCard(props: TeamCardProps) {
             {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
           </div>
           {hasVenueMap && <TeamMapButton {...props} />}
-          <div className="ui-timer text-[15px] sm:text-base font-semibold text-surface-light">
+          <div className="ui-timer text-sm sm:text-[15px] font-semibold text-surface-light">
             {timer}
           </div>
           <TeamActionsMenu {...props} />

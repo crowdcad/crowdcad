@@ -3921,7 +3921,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
               <ResizablePanel defaultSize={75} minSize={50}>
                 <div className="h-full flex flex-col overflow-hidden pt-2 pb-2">
                   <div className="w-full flex flex-col flex-1 min-h-0">
-                    <div className="relative z-30 mx-1.5 pb-0 flex items-start justify-between gap-1 h-10 shrink-0">
+                    <div className="relative z-0 mx-1.5 pb-0 flex items-start justify-between gap-1 h-10 shrink-0">
                       <div className="flex items-end gap-1 min-w-0">
                         <PanelTab active={selectedRightTab === 'calls'} onSelect={() => setSelectedRightTab('calls')}>
                           {dispatchZones.length > 0 ? callZoneFilterLabel : t('Calls')} ({getActiveCallsForZoneSelection(callZoneFilter).length})

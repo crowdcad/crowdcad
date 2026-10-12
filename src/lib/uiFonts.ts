@@ -8,6 +8,9 @@ import localFont from 'next/font/local';
 // so its vertical metrics can be overridden: its own put text about 0.07em
 // above center in buttons and inputs. The overrides move the baseline down
 // that much while keeping the same total line height (93% + 34.6%).
+// size-adjust draws it 15% larger than the font size asks for: Rajdhani's
+// small x-height read a size or two smaller than the classic font at the same
+// px. It scales the metric overrides too, so the centering above holds.
 const rajdhani = localFont({
   src: [
     { path: '../fonts/rajdhani/rajdhani-500.woff2', weight: '500', style: 'normal' },
@@ -19,6 +22,7 @@ const rajdhani = localFont({
   declarations: [
     { prop: 'ascent-override', value: '100%' },
     { prop: 'descent-override', value: '27.6%' },
+    { prop: 'size-adjust', value: '115%' },
   ],
 });
 const jetbrainsMono = JetBrains_Mono({ subsets: ['latin'], variable: '--font-jetbrains-mono', display: 'swap' });

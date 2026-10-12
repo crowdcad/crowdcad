@@ -55,7 +55,11 @@ html :is(.animate-spinner-ease-spin, .animate-spinner-linear-spin) {
 
 /* Live mm:ss timers: fixed-width digits and a little room on each side, so a
    ticking timer never shifts what sits beside it. Rajdhani has no tabular
-   figures, so tactical timers use the data font. */
+   figures, so tactical timers use the data font, at regular weight (the
+   attribute selector outranks the element's font-* class). */
+html[data-ui='tactical'] .ui-timer {
+  font-weight: 400;
+}
 .ui-timer {
   font-family: var(--ui-font-timer);
   font-variant-numeric: tabular-nums;

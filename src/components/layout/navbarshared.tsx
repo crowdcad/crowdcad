@@ -19,7 +19,7 @@ export function LiveClock() {
     return () => clearInterval(id);
   }, []);
   return (
-    <span suppressHydrationWarning={true} className="tabular-nums text-surface-light text-sm font-semibold font-arial">
+    <span suppressHydrationWarning={true} className="ui-timer text-surface-light text-base font-semibold">
       {now.toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
     </span>
   );

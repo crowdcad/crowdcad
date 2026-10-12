@@ -88,7 +88,7 @@ const DETAILS_CLOSE_ANIMATION_MS = 320;
 // menu + priority/pin indicator icons).
 const DefaultTableColGroup = () => (
   <colgroup>
-    <col style={{ width: '4rem' }} />
+    <col style={{ width: '5rem' }} />
     <col style={{ width: '11rem' }} />
     <col style={{ width: '4rem' }} />
     <col style={{ width: '11rem' }} />
