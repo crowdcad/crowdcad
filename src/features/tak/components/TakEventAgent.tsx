@@ -122,10 +122,14 @@ export default function TakEventAgent({ eventId, event, uid, onTracking }: TakEv
   useEffect(() => {
     if (!onTracking) return;
     const now = Date.now();
-    const tracking: UnitTracking = { positions: {}, alignments };
+    const tracking: UnitTracking = { positions: {}, alignments, atPost: {} };
     if (config?.enabled && !config.closed) {
       for (const { team, position } of positions) {
-        tracking.positions[team.name] = { lat: position.lat, lon: position.lon, stale: isStale(position, now) };
+        const stale = isStale(position, now);
+        tracking.positions[team.name] = { lat: position.lat, lon: position.lon, stale };
+        // At a post: the steadied label's band (25 m, held past the dwell), for equipment arrival suggestions.
+        const placed = tracks.current.get(team.id)?.current;
+        if (!stale && placed?.band === 'at') tracking.atPost![team.name] = placed.post;
       }
     }
     const key = JSON.stringify(tracking);

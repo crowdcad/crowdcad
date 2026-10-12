@@ -5,6 +5,7 @@
 // previously each carried their own copy of the sort + map + empty-state code.
 
 import React, { useMemo } from 'react';
+import type { EquipmentArrival } from '@/lib/equipmentArrivals';
 import type { Event, Staff, Supervisor, EquipmentItem } from '@/app/types';
 import TeamWidget from '@/components/dispatch/teamwidget';
 import EquipmentCard from '@/components/dispatch/equipmentcard';
@@ -129,10 +130,14 @@ export type EquipmentListProps = {
   onViewOnMap: (equipmentName: string) => void;
   /** Whether a unit has a live position (TAK), so equipment it carries can be found on the map. */
   unitTracked?: (unitName: string) => boolean;
+  /** Pickup/return suggestions from live tracking, shown on the matching cards. */
+  arrivals?: EquipmentArrival[];
+  onConfirmArrival?: (arrival: EquipmentArrival) => void;
+  onDismissArrival?: (arrival: EquipmentArrival) => void;
 };
 
 export function EquipmentList({
-  event, items, knownMapLocations, unitTracked, emptyText, ...cardProps
+  event, items, knownMapLocations, unitTracked, arrivals, emptyText, ...cardProps
 }: EquipmentListProps & { emptyText: React.ReactNode }) {
   const hasEquipment = !!(event.venue?.equipment?.length || event.eventEquipment?.length);
   // Available first, anything out on a call at the bottom (stable otherwise).
@@ -154,6 +159,7 @@ export function EquipmentList({
             equipment={item}
             event={event}
             canLocateOnMap={!!unit && !!unitTracked?.(unit.team) || (!!mapLocation && knownMapLocations.has(mapLocation))}
+            arrival={arrivals?.find(a => a.equipmentName === item.name)}
             {...cardProps}
           />
         );

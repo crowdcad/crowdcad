@@ -58,6 +58,7 @@ import { formatAgeSex, parseAgeSex } from '@/lib/ageSex';
 import { getActivePostingTime, hasPostingSchedule } from '@/lib/postingTimes';
 import FillToTabBar from '@/components/dispatch/filltotabbar';
 import { keepTrackedLocations } from '@/lib/teamLocationGuard';
+import { arrivalKey, arrivalQuestion, equipmentArrivals, type EquipmentArrival } from '@/lib/equipmentArrivals';
 import {
   custodyOf,
   EQUIPMENT_RUN_STATUSES,
@@ -77,6 +78,7 @@ import {
   unPickUpEquipment,
   withCustody,
   type Fleet,
+  type CustodyActor,
   changedFleet,
 } from '@/lib/equipmentCustody';
 import type { UnitTracking } from '@/lib/unitTracking';
@@ -1268,7 +1270,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
   // on it releases back to post, not just the team that reported it.
   const RESOLVING_STATUSES = ['Delivered', 'Refusal', 'NMM', 'Treat and Release', 'Unable to Locate', 'Rolled from Scene'];
 
-  const handleTeamStatusChange = (callId: string, team: string, newStatus: string, clinicId?: string, transportUnitValue?: string) => {
+  const handleTeamStatusChange = (callId: string, team: string, newStatus: string, clinicId?: string, transportUnitValue?: string, custodyBy: CustodyActor = 'status') => {
     console.log("FUNCTION CALLED", { callId, team, newStatus });
     setTeamStatusMap(prev => {
       const updatedStatusMap = { ...prev };
@@ -1585,7 +1587,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
         supervisor: updatedSupervisor || event.supervisor || [],
       };
       if (newStatus === 'En Route Eq' || newStatus === 'Assisting') {
-        fleet = pickUpEquipment(fleet, event, team, t);
+        fleet = pickUpEquipment(fleet, event, team, t, custodyBy);
       } else if (newStatus === RETRIEVING_EQ) {
         fleet = unPickUpEquipment(fleet, event, team, t);
       } else if (newStatus === 'Delivered Eq') {
@@ -1613,18 +1615,41 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
   };
 
   // The unit sent to fetch it has it: on a call that is its 'En Route Eq', otherwise just the equipment changes hands.
-  const handleEquipmentPickedUp = (equipmentName: string) => {
+  const handleEquipmentPickedUp = (equipmentName: string, by: CustodyActor = 'dispatcher') => {
     const eq = event?.eventEquipment?.find(e => e.name === equipmentName);
     const unit = eq?.assignedTeam;
     if (!event || !eq || !unit) return;
     const unitStatus = [...(event.staff || []), ...(event.supervisor || [])].find(u => u.team === unit)?.status;
     const call = event.calls.find(c => c.equipmentTeams?.includes(unit) && !RESOLVED_CALL_STATUSES.includes(c.status));
     if (call && unitStatus === RETRIEVING_EQ) {
-      handleTeamStatusChange(call.id, unit, 'En Route Eq');
+      handleTeamStatusChange(call.id, unit, 'En Route Eq', undefined, undefined, by);
       return;
     }
-    void saveEquipmentChange((fleet, current, t) => pickUpEquipment(fleet, current, unit, t, 'dispatcher', equipmentName));
+    void saveEquipmentChange((fleet, current, t) => pickUpEquipment(fleet, current, unit, t, by, equipmentName));
   };
+
+  // Pickup and return suggestions from live tracking (equipmentArrivals.ts):
+  // offered on the equipment card and announced once; nothing changes until confirmed.
+  const [dismissedArrivals, setDismissedArrivals] = useState<Set<string>>(() => new Set());
+  const unitsAtPost = unitTracking?.atPost;
+  const arrivals = useMemo(
+    () => (event?.mapMode === 'tak' ? equipmentArrivals(event, unitsAtPost).filter(a => !dismissedArrivals.has(arrivalKey(a))) : []),
+    [event, unitsAtPost, dismissedArrivals]
+  );
+  const announcedArrivals = useRef(new Set<string>());
+  useEffect(() => {
+    for (const a of arrivals) {
+      const key = arrivalKey(a);
+      if (announcedArrivals.current.has(key)) continue;
+      announcedArrivals.current.add(key);
+      toast.info(arrivalQuestion(a));
+    }
+  }, [arrivals]);
+  const confirmArrival = (a: EquipmentArrival) => {
+    if (a.kind === 'picked_up') handleEquipmentPickedUp(a.equipmentName, 'tracking');
+    else void saveEquipmentChange((fleet, current, t) => returnEquipment(fleet, current, a.equipmentName, t, 'tracking', a.post));
+  };
+  const dismissArrival = (a: EquipmentArrival) => setDismissedArrivals(prev => new Set(prev).add(arrivalKey(a)));
 
   // Lets the team card's status handler (a stable useCallback) hand equipment-run statuses to the call flow above.
   const handleTeamStatusChangeRef = useRef(handleTeamStatusChange);
@@ -3372,6 +3397,9 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     onDelete: handleEquipmentDelete,
     onViewOnMap: viewEquipmentOnMap,
     unitTracked: (unitName: string) => event.mapMode === 'tak' && !!unitTracking?.positions[unitName],
+    arrivals,
+    onConfirmArrival: confirmArrival,
+    onDismissArrival: dismissArrival,
   };
 
   // Plain render function (not a component) so the toolbar keeps its

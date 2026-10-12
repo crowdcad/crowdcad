@@ -7,7 +7,7 @@ import {
   Card, Dropdown, DropdownTrigger, DropdownMenu, DropdownItem,
   Select, SelectItem, Autocomplete, AutocompleteItem
 } from '@heroui/react';
-import { ChevronDown, ChevronUp, MapPin, MoreVertical, Map as MapIcon } from 'lucide-react';
+import { ChevronDown, ChevronUp, MapPin, MoreVertical, Map as MapIcon, X } from 'lucide-react';
 import type { Event, EquipmentItem } from '@/app/types';
 import TrackingTextEntry from '@/components/dispatch/trackingtextentry';
 import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
@@ -16,6 +16,7 @@ import EquipmentTypeIcon from '@/components/dispatch/equipmenttypeicon';
 import { getEquipmentIconType } from '@/lib/equipmentIcon';
 import { staticSelectorButtonProps } from '@/lib/heroStatic';
 import { describeCustody } from '@/lib/equipmentCustody';
+import { arrivalQuestion, type EquipmentArrival } from '@/lib/equipmentArrivals';
 
 type EquipmentCardProps = {
   equipment: EquipmentItem;
@@ -33,6 +34,10 @@ type EquipmentCardProps = {
   onViewOnMap?: (equipmentName: string) => void;
   /** Whether this item's current location is an actual pin on the map — the button still shows, but disabled, when it's a free-text/non-post value or unset. */
   canLocateOnMap?: boolean;
+  /** Live tracking puts the unit running it where it was heading: offer to confirm the pickup or return. */
+  arrival?: EquipmentArrival;
+  onConfirmArrival?: (arrival: EquipmentArrival) => void;
+  onDismissArrival?: (arrival: EquipmentArrival) => void;
 };
 
 // Shares statusColors.ts's team/supervisor status→color convention
@@ -59,6 +64,9 @@ export default function EquipmentCard({
   hasVenueMap,
   onViewOnMap,
   canLocateOnMap,
+  arrival,
+  onConfirmArrival,
+  onDismissArrival,
 }: EquipmentCardProps) {
   const { t } = useDispatchTerms();
   const [expanded, setExpanded] = useState(false);
@@ -185,6 +193,22 @@ export default function EquipmentCard({
           </div>
         </div>
       </div>
+
+      {arrival && (
+        <div
+          className="mx-4 mb-2 flex items-center gap-2 rounded-lg border border-status-card-ring-yellow bg-status-card-yellow px-3 py-1.5 text-xs text-surface-light"
+          data-testid={`equipment-arrival-${equipment.name}`}
+          onClick={e => e.stopPropagation()}
+        >
+          <span className="min-w-0 flex-1">{arrivalQuestion(arrival)}</span>
+          <button type="button" className="font-semibold hover:text-status-blue" onClick={() => onConfirmArrival?.(arrival)}>
+            {t('Confirm')}
+          </button>
+          <button type="button" aria-label={t('Dismiss')} className="text-surface-faint hover:text-surface-light" onClick={() => onDismissArrival?.(arrival)}>
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
 
       {/* BODY*/}
       <div className="px-4 pb-3 pt-0">
