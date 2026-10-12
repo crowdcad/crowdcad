@@ -223,12 +223,42 @@ export interface CallLogEntry {
 
 export type EquipmentStatus = string;
 
+/**
+ * Where a piece of equipment is in its run (src/lib/equipmentCustody.ts):
+ * waiting at a post, being fetched, carried by a team, left with the care
+ * team on scene, on its way back, or in a clinic.
+ */
+export type EquipmentPhase = 'staged' | 'retrieving' | 'carried' | 'with_care_team' | 'returning' | 'in_clinic';
+
+/** Who or what has the equipment right now. Its map position follows this. */
+export interface EquipmentHolder {
+  kind: 'post' | 'team' | 'clinic';
+  /** Post or location name, unit name (Staff.team / Supervisor.team), or clinic name. */
+  name: string;
+}
+
+export interface EquipmentCustodyEntry {
+  /** Epoch ms. */
+  t: number;
+  phase: EquipmentPhase;
+  holder: EquipmentHolder;
+  /** The unit sent to fetch it, while `phase` is 'retrieving'. */
+  team?: string;
+  /** What caused the change: a unit's status, a dispatcher's manual edit, or a live-tracking suggestion they confirmed. */
+  by: 'status' | 'dispatcher' | 'tracking';
+}
+
 export interface Equipment {
   id: string;
   name: string;
   status: EquipmentStatus;
   assignedTeam?: string | null;
   location?: string;
+  /** Absent on equipment from before custody tracking; custodyOf() derives it from status, assignedTeam and location. */
+  phase?: EquipmentPhase;
+  holder?: EquipmentHolder;
+  /** Most recent custody changes, oldest first (capped). */
+  custodyLog?: EquipmentCustodyEntry[];
 }
 
 export type EventEquipment = Equipment & { locationId?: string; defaultLocation?: string; notes?: string };
@@ -276,6 +306,10 @@ export type EquipmentItem = {
   deliveryTeam?: string; // Team delivering the equipment
   needsRefresh?: boolean; // Whether equipment needs to be marked ready after clinic delivery
   notes?: string; // Additional details/notes about the equipment
+  phase?: EquipmentPhase;
+  holder?: EquipmentHolder;
+  /** Unit sent to fetch it (phase 'retrieving') or holding it. */
+  assignedTeam?: string | null;
 };
 
 export type Role = {
