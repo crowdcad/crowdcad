@@ -11,6 +11,8 @@ import VenueMapZones from '@/components/venue-management/VenueMapZones';
 import type { UnitTracking } from '@/lib/unitTracking';
 import { latLonToPercent } from '@/lib/geo/affine';
 import { layerAlignment } from '@/lib/geo/layers';
+import { equipmentAnchor } from '@/lib/equipmentPlacement';
+import { describeCustody } from '@/lib/equipmentCustody';
 
 function StatusTimer({ since }: { since: number }) {
   const [elapsed, setElapsed] = React.useState(0);
@@ -255,6 +257,8 @@ interface EquipmentMarkerProps {
   isSelected?: boolean;
   /** Position among the equipment at this post (equipmentStaggerIndices); each one after the first steps a little to the right. */
   staggerIndex?: number;
+  /** Drawn faded: the unit carrying it has a stale live position. */
+  faded?: boolean;
 }
 
 /** Each equipment item's place among the items at the same location, so markers sharing a post can be staggered. */
@@ -277,6 +281,7 @@ export function EquipmentMarker({
   scale,
   isSelected,
   staggerIndex = 0,
+  faded = false,
 }: EquipmentMarkerProps) {
   const [hovered, setHovered] = useState(false);
   const markerRef = useRef<HTMLDivElement>(null);
@@ -318,6 +323,7 @@ export function EquipmentMarker({
         zIndex: isSelected || hovered ? 999 : 15,
         cursor: 'pointer',
         transition: 'transform 0.15s ease-out',
+        opacity: faded ? 0.45 : 1,
       }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
@@ -353,8 +359,14 @@ export function EquipmentMarker({
         <MarkerCard>
           <MarkerCardTitle>{equipment.name}</MarkerCardTitle>
           <div><strong>Status:</strong> {equipment.status}</div>
-          <div><strong>Assigned Team:</strong> {equipment.assignedTeam || 'None'}</div>
-          <div><strong>Location:</strong> {equipment.location || 'Unknown'}</div>
+          {equipment.phase && equipment.holder ? (
+            <div>{describeCustody({ phase: equipment.phase, holder: equipment.holder }, equipment.assignedTeam)}</div>
+          ) : (
+            <>
+              <div><strong>Assigned Team:</strong> {equipment.assignedTeam || 'None'}</div>
+              <div><strong>Location:</strong> {equipment.location || 'Unknown'}</div>
+            </>
+          )}
         </MarkerCard>
       )}
     </div>
@@ -967,8 +979,20 @@ export function VenueMapWithPosts({
               />
             ))}
             {equipment.map((equip) => {
-              const postObj = posts.find(p => (typeof p === "string" ? p : p.name) === equip.location);
-              if (!postObj || typeof postObj === "string") {
+              // Drawn with its holder: a post, or beside the unit carrying it.
+              const anchor = equipmentAnchor(equip, [...staff, ...supervisor], overlay?.unitTracking);
+              let post: Post | undefined;
+              let faded = false;
+              if (anchor?.kind === 'post') {
+                post = posts.find(p => (typeof p === "string" ? p : p.name) === anchor.post);
+              } else if (anchor?.kind === 'point') {
+                const layer = layers[currentLayer];
+                const alignment = layer ? overlay?.unitTracking?.alignments[layer.id] ?? layerAlignment(layer) : undefined;
+                const at = alignment && latLonToPercent(alignment, { lat: anchor.lat, lon: anchor.lon });
+                if (at && at.x >= 0 && at.x <= 100 && at.y >= 0 && at.y <= 100) post = { name: equip.name, x: at.x, y: at.y };
+                faded = anchor.faded;
+              }
+              if (!post || typeof post === "string") {
                 return null;
               }
 
@@ -976,11 +1000,12 @@ export function VenueMapWithPosts({
                 <EquipmentMarker
                   key={equip.id}
                   equipment={equip}
-                  post={postObj}
+                  post={post}
                   rect={rect}
                   scale={scale}
                   isSelected={!!selectedEquipmentName && equip.name === selectedEquipmentName}
                   staggerIndex={equipmentStagger.get(equip.id)}
+                  faded={faded}
                 />
               );
             })}

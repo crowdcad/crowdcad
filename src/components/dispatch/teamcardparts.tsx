@@ -16,7 +16,7 @@ import TrackingTextEntry from '@/components/dispatch/trackingtextentry';
 import { deriveTeamVisualStatus, getStatusColor } from '@/lib/statusColors';
 import StatusLabel from './statuslabel';
 import EquipmentTypeIcon, { getEquipmentStatusMenuLabel, getEquipmentStatusWord, isEquipmentIconStatus } from './equipmenttypeicon';
-import { EQUIPMENT_RUN_STATUSES, RETURNING_EQ, equipmentOfUnit, fleetOf } from '@/lib/equipmentCustody';
+import { EQUIPMENT_RUN_STATUSES, RETURNING_EQ, equipmentOfUnit, fleetOf, heldBy } from '@/lib/equipmentCustody';
 import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
 import { getEventClinics } from '@/lib/clinics';
 import { getEquipmentIconType, type EquipmentIconType } from '@/lib/equipmentIcon';
@@ -90,6 +90,28 @@ export function useTeamStatusModel(staff: Staff, event: Event): TeamStatusModel 
     statusTone: getStatusColor(deriveTeamVisualStatus(staff.status, event, staff.team)),
     clinics: getEventClinics(event.clinics),
   };
+}
+
+/**
+ * Equipment the unit has in hand (it is the holder), e.g. a care team left
+ * with a wheelchair, or a unit still carrying something on another call.
+ * `compact` shows only the icons, with the names as a tooltip.
+ */
+export function TeamCarrying({ staff, event, compact = false }: { staff: Staff; event: Event; compact?: boolean }) {
+  const { t } = useDispatchTerms();
+  const items = heldBy(fleetOf(event), event, staff.team);
+  if (!items.length) return null;
+  const names = items.map(eq => eq.name).join(', ');
+  return (
+    <span
+      className="inline-flex items-center gap-1 min-w-0 text-xs text-surface-faint"
+      title={`${t('Carrying')} ${names}`}
+      data-testid={`team-carrying-${staff.team}`}
+    >
+      {items.map(eq => <EquipmentTypeIcon key={eq.id} type={getEquipmentIconType(eq.name)} className="w-3.5 h-3.5 shrink-0" />)}
+      {!compact && <span className="truncate">{t('Carrying')} {names}</span>}
+    </span>
+  );
 }
 
 /** Status word for the card, with the equipment icon for equipment runs. */

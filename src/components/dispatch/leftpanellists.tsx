@@ -127,10 +127,12 @@ export type EquipmentListProps = {
   onPickedUp: (equipmentName: string) => void;
   onDelete: (equipmentName: string) => void;
   onViewOnMap: (equipmentName: string) => void;
+  /** Whether a unit has a live position (TAK), so equipment it carries can be found on the map. */
+  unitTracked?: (unitName: string) => boolean;
 };
 
 export function EquipmentList({
-  event, items, knownMapLocations, emptyText, ...cardProps
+  event, items, knownMapLocations, unitTracked, emptyText, ...cardProps
 }: EquipmentListProps & { emptyText: React.ReactNode }) {
   const hasEquipment = !!(event.venue?.equipment?.length || event.eventEquipment?.length);
   // Available first, anything out on a call at the bottom (stable otherwise).
@@ -143,12 +145,15 @@ export function EquipmentList({
     <div className="dispatch-shell-list">
       {sorted.map(item => {
         const location = item.currentLocation || item.stagingLocation;
+        // With a unit, it is on the map wherever that unit is.
+        const unit = [...(event.staff || []), ...(event.supervisor || [])].find(u => u.team === location);
+        const mapLocation = unit ? unit.location : location;
         return (
           <EquipmentCard
             key={item.name}
             equipment={item}
             event={event}
-            canLocateOnMap={!!location && knownMapLocations.has(location)}
+            canLocateOnMap={!!unit && !!unitTracked?.(unit.team) || (!!mapLocation && knownMapLocations.has(mapLocation))}
             {...cardProps}
           />
         );

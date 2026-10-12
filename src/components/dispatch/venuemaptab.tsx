@@ -15,6 +15,7 @@ import { isPlacedPost, postLatLng } from '@/lib/geo/positions';
 import { layerAlignment } from '@/lib/geo/layers';
 import { latLonToPercent } from '@/lib/geo/affine';
 import type { UnitPosition } from '@/lib/unitTracking';
+import { equipmentHolderUnit } from '@/lib/equipmentPlacement';
 
 // The live map for geo layers (P8, D64), loaded only when a venue has one.
 const GeoVenueMap = dynamic(() => import('./GeoVenueMap'), { ssr: false });
@@ -186,9 +187,12 @@ export default function VenueMapTab({
   useEffect(() => {
     if (!focusEquipmentRequest) return;
     const equip = equipment.find((e) => e.name === focusEquipmentRequest.equipmentName);
-    const location = equip?.location;
-    if (location) {
-      focusLocation(location);
+    // With a unit: wherever that unit is. Otherwise the post it is at.
+    const holder = equip && equipmentHolderUnit(equip, [...staff, ...supervisor]);
+    if (holder) {
+      focusUnit(holder.team, holder.location);
+    } else if (equip?.location) {
+      focusLocation(equip.location);
     }
     setSelectedEquipmentName(focusEquipmentRequest.equipmentName);
     resetZoom();

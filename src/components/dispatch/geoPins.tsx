@@ -5,6 +5,8 @@ import type { Equipment, Layer, Post } from '@/app/types';
 import { postLatLng } from '@/lib/geo/positions';
 import type { GeoPin } from '@/components/geo/BasemapView';
 import { EquipmentMarker, equipmentStaggerIndices, type ImageRect } from '@/components/modals/event/venuemapmodal';
+import { equipmentAnchor } from '@/lib/equipmentPlacement';
+import type { UnitTracking } from '@/lib/unitTracking';
 
 /**
  * Image-map markers as pins on a geo layer (GeoVenueMap, event setup's map).
@@ -31,20 +33,42 @@ export function placedPosts(layer: Layer) {
 export const atPin = (post: PostObject): PostObject => ({ ...post, x: 0, y: 0 });
 
 /**
- * Equipment markers at their posts on a geo layer (each item's `location`,
- * e.g. its default location while setting up an event), as on the image map.
+ * Equipment markers on a geo layer, as on the image map: at a post (e.g. its
+ * default location while setting up an event), or beside the unit carrying
+ * it (equipmentAnchor).
  */
-export function geoEquipmentPins(layer: Layer, equipment: Equipment[], selectedEquipmentName?: string | null, placed = placedPosts(layer)): GeoPin[] {
+export function geoEquipmentPins(
+  layer: Layer,
+  equipment: Equipment[],
+  selectedEquipmentName?: string | null,
+  placed = placedPosts(layer),
+  units: { team: string; location?: string }[] = [],
+  tracking?: UnitTracking | null
+): GeoPin[] {
   const stagger = equipmentStaggerIndices(equipment);
   return equipment.flatMap((equip) => {
-    const p = equip.location ? placed.get(equip.location) : undefined;
-    if (!p) return [];
+    const anchor = equipmentAnchor(equip, units, tracking);
+    if (!anchor) return [];
+    const p = anchor.kind === 'post' ? placed.get(anchor.post) : undefined;
+    const at = anchor.kind === 'point' ? { lat: anchor.lat, lng: anchor.lon } : p?.at;
+    if (!at) return [];
+    const post = p ? atPin(p.post) : { name: equip.name, x: 0, y: 0 };
     return [
       {
         key: `equipment:${equip.id}`,
-        lat: p.at.lat,
-        lng: p.at.lng,
-        node: <EquipmentMarker equipment={equip} post={atPin(p.post)} rect={AT_PIN} scale={1} isSelected={selectedEquipmentName === equip.name} staggerIndex={stagger.get(equip.id)} />,
+        lat: at.lat,
+        lng: at.lng,
+        node: (
+          <EquipmentMarker
+            equipment={equip}
+            post={post}
+            rect={AT_PIN}
+            scale={1}
+            isSelected={selectedEquipmentName === equip.name}
+            staggerIndex={stagger.get(equip.id)}
+            faded={anchor.kind === 'point' && anchor.faded}
+          />
+        ),
       },
     ];
   });

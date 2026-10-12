@@ -16,6 +16,7 @@ import {
   TeamMemberList,
   TeamPostSchedule,
   TeamActivityLog,
+  TeamCarrying,
 } from './teamcardparts';
 
 // Compact team card: one-line name/status/location header; controls,
@@ -42,6 +43,7 @@ export default function TeamCardCondensed(props: TeamCardProps) {
           <span className="text-sm font-semibold text-surface-light truncate">
             {staff.team}
           </span>
+          <TeamCarrying staff={staff} event={event} compact />
           <span className={`text-sm font-bold truncate flex items-center gap-1 min-w-0 ${model.statusTone.textClass}`}>
             <TeamStatusText status={staff.status} iconType={model.teamEquipmentIconType} />
           </span>

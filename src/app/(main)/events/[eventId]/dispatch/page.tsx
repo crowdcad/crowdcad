@@ -3371,6 +3371,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     onPickedUp: handleEquipmentPickedUp,
     onDelete: handleEquipmentDelete,
     onViewOnMap: viewEquipmentOnMap,
+    unitTracked: (unitName: string) => event.mapMode === 'tak' && !!unitTracking?.positions[unitName],
   };
 
   // Plain render function (not a component) so the toolbar keeps its
