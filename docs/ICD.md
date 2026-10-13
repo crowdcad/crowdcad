@@ -194,6 +194,11 @@ PocketBase stores these as opaque `json` fields with no server-side schema; the 
 
 **`EventEquipment`** = `Equipment` + `locationId?`, `defaultLocation?`, `notes?`.
 
+Equipment custody (optional, on event equipment; written by `src/lib/equipmentCustody.ts`, absent on older data and derived from `status`/`assignedTeam`/`location` when missing):
+- `phase?`: `'staged' | 'retrieving' | 'carried' | 'with_care_team' | 'returning' | 'in_clinic'`.
+- `holder?`: `{ kind: 'post' | 'team' | 'clinic', name }`, who or what has it. `location` mirrors `holder.name`; `assignedTeam` is the unit fetching it (`retrieving`) or the holding unit.
+- `custodyLog?`: `{ t, phase, holder, team?, by: 'status' | 'dispatcher' | 'tracking' }[]`, the last 50 changes, oldest first.
+
 **`Staff`** (a field team / "unit"):
 | Field | Type | Description |
 |---|---|---|

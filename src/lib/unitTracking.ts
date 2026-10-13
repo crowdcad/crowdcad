@@ -21,6 +21,17 @@ export interface UnitTracking {
   positions: Record<string, UnitPosition>;
   /** Alignment per layer id, for drawing positions on image maps. */
   alignments: Record<string, MapAlignment>;
+  /**
+   * By unit name: the post a connected unit has steadily been at (within the
+   * source's arrival radius, held past its dwell time). Drives equipment
+   * pickup and return suggestions (equipmentArrivals.ts).
+   */
+  atPost?: Record<string, string>;
+  /**
+   * By equipment name: positions of equipment with a tracker of its own.
+   * A tracked item is drawn at its tracker, not with its holder.
+   */
+  equipmentPositions?: Record<string, UnitPosition>;
 }
 
 /** True while a unit has a fresh position: its Location is then tracked, not edited. */

@@ -69,8 +69,8 @@ export default function GeoVenueMap({
       ),
     });
   }
-  pins.push(...geoEquipmentPins(layer, equipment, selectedEquipmentName, placed));
   const tracking = overlay?.unitTracking;
+  pins.push(...geoEquipmentPins(layer, equipment, selectedEquipmentName, placed, [...staff, ...supervisor], tracking));
   // Live tracking: each unit at its own position, or not at all (D66).
   if (tracking) {
     for (const team of staff) {

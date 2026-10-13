@@ -7,7 +7,7 @@ import type { UnitTracking } from '@/lib/unitTracking';
 import { useTakEvent } from '../data/hub';
 import { linkDevice, listMappings, saveCallState, type TakDeviceMapping } from '../data/takStore';
 import { isStale, proposeAutoLinks, teamIdsOnCall, teamPositions } from '../lib/linking';
-import { ensureTeamIds, takTeams } from '../lib/teamIds';
+import { ensureTeamIds, takTargets, takTeams } from '../lib/teamIds';
 import { alignmentFor } from '../data/alignmentStore';
 import { saveAutoLocations, type AutoLocationChange } from '../data/autoLocationStore';
 import { EMPTY_TRACK, postPoints, step, type TrackState } from '../lib/autoLocation';
@@ -42,6 +42,11 @@ export default function TakEventAgent({ eventId, event, uid, onTracking }: TakEv
   const published = useRef<string | null>(null);
 
   const teams = useMemo(() => takTeams(event.staff, event.supervisor), [event.staff, event.supervisor]);
+  // Devices link to teams, supervisors or equipment (a tracker on the item itself, D69).
+  const targets = useMemo(
+    () => takTargets(event.staff, event.supervisor, event.eventEquipment),
+    [event.staff, event.supervisor, event.eventEquipment]
+  );
   const config = tak.config;
   const active = !!config?.bridgeUid && !!config.enabled && !config.closed && !event.ended;
 
@@ -59,13 +64,13 @@ export default function TakEventAgent({ eventId, event, uid, onTracking }: TakEv
 
   useEffect(() => {
     if (!active) return;
-    for (const p of proposeAutoLinks(tak.live, tak.links, teams, mappings)) {
+    for (const p of proposeAutoLinks(tak.live, tak.links, targets, mappings)) {
       const key = `${p.deviceUid}->${p.teamId}`;
       if (attempted.current.has(key)) continue;
       attempted.current.add(key);
       void linkDevice(eventId, p.deviceUid, p.teamId, 'auto', uid).catch(() => {});
     }
-  }, [active, tak.live, tak.links, teams, mappings, eventId, uid]);
+  }, [active, tak.live, tak.links, targets, mappings, eventId, uid]);
 
   // Live location labels (D65, D66). Every open dispatch page computes the
   // same labels from the same positions; the write is a no-op once one has landed.
@@ -87,7 +92,7 @@ export default function TakEventAgent({ eventId, event, uid, onTracking }: TakEv
     return out;
   }, [layers, tak.alignments, tak.venueAlignments]);
   const posts = useMemo(() => postPoints(layers, (l) => alignments[l.id]), [layers, alignments]);
-  const positions = useMemo(() => teamPositions(tak.live, tak.links, teams), [tak.live, tak.links, teams]);
+  const positions = useMemo(() => teamPositions(tak.live, tak.links, targets), [tak.live, tak.links, targets]);
 
   useEffect(() => {
     if (!active || !posts.length) return;
@@ -122,10 +127,18 @@ export default function TakEventAgent({ eventId, event, uid, onTracking }: TakEv
   useEffect(() => {
     if (!onTracking) return;
     const now = Date.now();
-    const tracking: UnitTracking = { positions: {}, alignments };
+    const tracking: UnitTracking = { positions: {}, alignments, atPost: {}, equipmentPositions: {} };
     if (config?.enabled && !config.closed) {
       for (const { team, position } of positions) {
-        tracking.positions[team.name] = { lat: position.lat, lon: position.lon, stale: isStale(position, now) };
+        const stale = isStale(position, now);
+        if (team.kind === 'equipment') {
+          tracking.equipmentPositions![team.name] = { lat: position.lat, lon: position.lon, stale };
+          continue;
+        }
+        tracking.positions[team.name] = { lat: position.lat, lon: position.lon, stale };
+        // At a post: the steadied label's band (25 m, held past the dwell), for equipment arrival suggestions.
+        const placed = tracks.current.get(team.id)?.current;
+        if (!stale && placed?.band === 'at') tracking.atPost![team.name] = placed.post;
       }
     }
     const key = JSON.stringify(tracking);

@@ -14,7 +14,7 @@ import { imageCorners } from '@/lib/geo/basemapFrame';
 import { DEFAULT_BASEMAP_ID, validChoice } from '@/lib/geo/basemaps';
 import { heatCells, teamHistoryStats, type HistorySegment, type PostLocation } from '../lib/historyStats';
 import { exportFileName, heatCsv, heatGeoJson, historyCsv } from '../lib/historyExport';
-import { takTeams } from '../lib/teamIds';
+import { takTargets } from '../lib/teamIds';
 import { TAK_MODULE_MARKER } from '../marker';
 import { ACCENT_SLIDER_CLASSNAMES } from '@/lib/geo/ui';
 import type { TakMapAlignment } from '../types';
@@ -102,7 +102,11 @@ export default function TakEventSummary({ eventId, event, className }: TakEventS
 
   const layers = useMemo(() => getEventVenueLayers(event), [event]);
   const aligned = useMemo(() => layers.filter((l) => alignmentFor(l, alignments, venueAlignments)), [layers, alignments, venueAlignments]);
-  const teams = useMemo(() => takTeams(event.staff, event.supervisor), [event.staff, event.supervisor]);
+  // Equipment trackers keep history too (D69), listed by the item's name.
+  const teams = useMemo(
+    () => takTargets(event.staff, event.supervisor, event.eventEquipment),
+    [event.staff, event.supervisor, event.eventEquipment]
+  );
   const teamName = (id: string) => teams.find((t) => t.id === id)?.name ?? 'Unknown team';
   const heat = useMemo(() => (history ? heatCells(history) : []), [history]);
   const posts = useMemo(() => postLocations(layers, alignments, venueAlignments), [layers, alignments, venueAlignments]);

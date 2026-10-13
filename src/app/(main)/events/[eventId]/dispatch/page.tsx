@@ -58,6 +58,29 @@ import { formatAgeSex, parseAgeSex } from '@/lib/ageSex';
 import { getActivePostingTime, hasPostingSchedule } from '@/lib/postingTimes';
 import FillToTabBar from '@/components/dispatch/filltotabbar';
 import { keepTrackedLocations } from '@/lib/teamLocationGuard';
+import { arrivalKey, arrivalQuestion, equipmentArrivals, type EquipmentArrival } from '@/lib/equipmentArrivals';
+import {
+  custodyOf,
+  EQUIPMENT_RUN_STATUSES,
+  fleetOf,
+  handOffEquipment,
+  materializeEventEquipment as materializeEquipment,
+  moveEquipment,
+  pickUpEquipment,
+  releaseEquipment,
+  returnAllFromUnit,
+  returnEquipment,
+  RETRIEVING_EQ,
+  RETURNING_EQ,
+  settleReturningUnits,
+  stagingLocation as stagingLocationOf,
+  unitHolder,
+  unPickUpEquipment,
+  withCustody,
+  type Fleet,
+  type CustodyActor,
+  changedFleet,
+} from '@/lib/equipmentCustody';
 import type { UnitTracking } from '@/lib/unitTracking';
 import { stampStatusSince, deriveStatusSinceFromLogs } from '@/lib/teamStatusSince';
 import { newTeamId } from '@/lib/teamId';
@@ -957,6 +980,14 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
 
 
   const handleSupervisorStatusChange = useCallback((supervisor: Staff, newStatus: string) => {
+    // Same as handleStatusChange: equipment-run statuses go through the call flow.
+    const equipmentCall = EQUIPMENT_RUN_STATUSES.includes(newStatus)
+      ? event?.calls.find(c => c.equipmentTeams?.includes(supervisor.team) && !RESOLVED_CALL_STATUSES.includes(c.status))
+      : undefined;
+    if (equipmentCall) {
+      handleTeamStatusChangeRef.current(equipmentCall.id, supervisor.team, newStatus);
+      return;
+    }
     // "at <location>" gives the log entry real context (which call this
     // status change belongs to) without needing a separate call reference.
     const activeCall = event?.calls?.find(c =>
@@ -978,9 +1009,13 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
           }
         : s
     );
-    // updateEvent({ supervisor: updatedSupervisors });
+    // Available after 'Returning Eq': what it was bringing back is at its staging location.
+    const returned = event && supervisor.status === RETURNING_EQ && newStatus === 'Available' && updatedSupervisors
+      ? returnAllFromUnit({ ...fleetOf(event), supervisor: updatedSupervisors }, event, supervisor.team, now.getTime())
+      : null;
     updateEvent({ 
       supervisor: updatedSupervisors,
+      ...(returned && { eventEquipment: returned.eventEquipment }),
       postAssignments
     });
   }, [event, updateEvent, postAssignments]);
@@ -1027,9 +1062,10 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
       const eventEq = event.eventEquipment?.find(e => e.name === eqName);
       
       // Get staging location - prefer eventEquipment's defaultLocation, fallback to equipment location from venue
-      const stagingLocation = eventEq?.defaultLocation || 
-                             (typeof eq !== 'string' && eq.location) || 
-                             'Staging';
+      // (an event item's own location is where it is now, not where it lives)
+      const stagingLocation = eventEq
+        ? stagingLocationOf(eventEq, event)
+        : (typeof eq !== 'string' && eq.location) || 'Staging';
       
       // Check if equipment is on any active call
       const activeCall = event.calls?.find(c => 
@@ -1040,13 +1076,9 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
       // Determine delivery team
       const deliveryTeam = activeCall?.equipmentTeams?.[0];
       
-      // Determine current location - prefer eventEquipment location if set
-      let currentLocation = eventEq?.location;
-      
-      // If on call and delivered eq, location is the assigned team
-      if (activeCall && activeCall.status === 'Delivered Eq') {
-        currentLocation = activeCall.assignedTeam[0];
-      }
+      // Where it is: its holder (a post, a unit or a clinic), see equipmentCustody.ts
+      const custody = eventEq ? custodyOf(eventEq, event) : undefined;
+      const currentLocation = custody?.holder.name ?? eventEq?.location;
       
       // Check if equipment is in clinic
       const inClinic = currentLocation === 'In Clinic' || eventEq?.status === 'In Clinic';
@@ -1072,73 +1104,52 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
         deliveryTeam: deliveryTeam,
         needsRefresh: inClinic && !activeCall, // Only needs refresh if in clinic but not on active call
         notes: eventEq?.notes,
+        phase: custody?.phase,
+        holder: custody?.holder,
+        assignedTeam: eventEq?.assignedTeam ?? null,
       });
     });
     
     return items;
   };
 
+  // Manual equipment edits on its card (the dispatcher's override): each one
+  // goes through equipmentCustody.ts, so the holder, the custody log and a
+  // unit left in 'Returning Eq' with nothing to return all stay consistent.
+  const saveEquipmentChange = useCallback(async (change: (fleet: Fleet, current: Event, t: number) => Fleet) => {
+    await updateEvent((current) => {
+      const before: Fleet = { ...fleetOf(current), eventEquipment: materializeEquipment(current) };
+      return changedFleet(fleetOf(current), change(before, current, Date.now()));
+    });
+  }, [updateEvent]);
+
   const handleEquipmentStatusChange = useCallback(async (equipmentName: string, newStatus: string) => {
-    if (!event) return;
-    
     try {
-      const existing = (event.eventEquipment || []).find(eq => eq.name === equipmentName);
-
-      let updatedEventEquipment: EventEquipment[] = event.eventEquipment ? [...event.eventEquipment] : [];
-
-      if (existing) {
-        updatedEventEquipment = updatedEventEquipment.map(eq =>
-          eq.name === equipmentName ? { ...eq, status: newStatus as EquipmentStatus } : eq
-        );
-      } else {
-        // Not currently tracked in event.eventEquipment — add it so changes persist
-        // Try to derive a staging/location from venue definition if available
-        const venueEq = (event.venue?.equipment || []).find(v => (typeof v === 'string' ? v : v.name) === equipmentName);
-        const derivedLocation = typeof venueEq === 'string' ? '' : (venueEq && (venueEq as { location?: string }).location) || '';
-        const newItem: EventEquipment = {
-          id: `eq_${Date.now()}_${Math.random().toString(36).slice(2,8)}`,
-          name: equipmentName,
-          status: newStatus as EquipmentStatus,
-          location: derivedLocation,
-          assignedTeam: null,
-        } as EventEquipment;
-        updatedEventEquipment.push(newItem);
-      }
-
-      // Optimistically update local state so the UI reflects the change immediately
-      setEvent(prev => prev ? { ...prev, eventEquipment: updatedEventEquipment } : prev);
-
-      await updateEvent({ eventEquipment: updatedEventEquipment });
+      await saveEquipmentChange((fleet, current, t) => {
+        const eq = fleet.eventEquipment.find(e => e.name === equipmentName);
+        if (!eq) return fleet;
+        const custody = custodyOf(eq, current);
+        if (newStatus === 'Available') {
+          // Back where it is waiting, or to its staging location when a unit or clinic had it.
+          return returnEquipment(fleet, current, equipmentName, t, 'dispatcher', custody.holder.kind === 'post' ? custody.holder.name : undefined);
+        }
+        if (newStatus === 'In Clinic') return moveEquipment(fleet, current, equipmentName, 'Clinic', t);
+        return { ...fleet, eventEquipment: fleet.eventEquipment.map(e => e.name === equipmentName ? { ...e, status: newStatus as EquipmentStatus } : e) };
+      });
     } catch (error) {
       console.error('Error updating equipment status:', error);
       toast.error('Failed to update equipment status');
     }
-  }, [event, updateEvent, setEvent]);
+  }, [saveEquipmentChange]);
 
+  // A post, a unit (it has it now) or a clinic.
   const handleEquipmentLocationChange = (equipmentName: string, newLocation: string) => {
-    if (!event) return;
-    const existing = event.eventEquipment?.find(e => e.name === equipmentName);
-    const updatedEquipment = existing 
-      ? (event.eventEquipment || []).map(e => e.name === equipmentName ? { ...e, location: newLocation } : e)
-      : [...(event.eventEquipment || []), { 
-          id: `eq_${Date.now()}_${Math.random().toString(36).slice(2,8)}`,
-          name: equipmentName,
-          status: 'Available' as EquipmentStatus,
-          location: newLocation,
-          assignedTeam: null,
-        }];
-    updateEvent({ eventEquipment: updatedEquipment });
+    void saveEquipmentChange((fleet, current, t) => moveEquipment(fleet, current, equipmentName, newLocation, t));
   };
 
+  // Back at its staging location (after the clinic, or a return by hand).
   const handleEquipmentMarkReady = (equipmentName: string) => {
-    // Mark equipment as ready: reset to staging location
-    if (!event) return;
-    const eqItem = event.venue?.equipment?.find(e => (typeof e === 'string' ? e : e.name) === equipmentName);
-    const stagingLocation = typeof eqItem === 'string' ? '' : eqItem?.location || 'Not Set';
-    const updatedEquipment = (event.eventEquipment || []).map(e => 
-      e.name === equipmentName ? { ...e, location: stagingLocation } : e
-    );
-    updateEvent({ eventEquipment: updatedEquipment });
+    void saveEquipmentChange((fleet, current, t) => returnEquipment(fleet, current, equipmentName, t));
   };
 
   const handleEquipmentDelete = useCallback(async (equipmentName: string) => {
@@ -1165,25 +1176,16 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
   }, [event, updateEvent]);
 
   const handleResetEquipmentLocations = useCallback(async () => {
-    if (!event) return;
-    
-    const updatedEventEquipment = (event.eventEquipment || []).map(eq => {
-      // Get the default/staging location from venue equipment definition
-      const venueEq = (event.venue?.equipment || []).find(v => 
-        (typeof v === 'string' ? v : v.name) === eq.name
-      );
-      const defaultLocation = typeof venueEq === 'string' ? 'Staging' : (venueEq?.location || 'Staging');
-      
-      return {
-        ...eq,
-        location: eq.defaultLocation || defaultLocation,
-        status: 'Available' as EquipmentStatus
-      };
-    });
-
-    await updateEvent({ eventEquipment: updatedEventEquipment });
+    await saveEquipmentChange((fleet, current, t) =>
+      settleReturningUnits({
+        ...fleet,
+        eventEquipment: fleet.eventEquipment.map(eq =>
+          withCustody(eq, { phase: 'staged', holder: { kind: 'post', name: stagingLocationOf(eq, current) } }, { t, by: 'dispatcher' })
+        ),
+      }, current, t)
+    );
     toast.success('Equipment locations reset to defaults');
-  }, [event, updateEvent]);
+  }, [saveEquipmentChange]);
 
   // getEquipmentItems() (above) only renders event.eventEquipment once it has
   // any items at all — otherwise it falls back to showing the venue's raw
@@ -1191,23 +1193,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
   // that fallback off and make every other venue equipment card vanish, so
   // any add-equipment path materializes the venue catalog into eventEquipment
   // first (a no-op once it's already populated).
-  const materializeEventEquipment = useCallback((currentEvent: Event): EventEquipment[] => {
-    if (currentEvent.eventEquipment && currentEvent.eventEquipment.length > 0) {
-      return currentEvent.eventEquipment;
-    }
-    return (currentEvent.venue?.equipment || []).map(v => {
-      const name = typeof v === 'string' ? v : v.name;
-      const location = typeof v === 'string' ? 'Staging' : (v.location || 'Staging');
-      return {
-        id: `eq_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-        name,
-        status: 'Available' as EquipmentStatus,
-        location,
-        defaultLocation: location,
-        assignedTeam: null,
-      };
-    });
-  }, []);
+  const materializeEventEquipment = useCallback((currentEvent: Event): EventEquipment[] => materializeEquipment(currentEvent), []);
 
   const handleAddVenueEquipment = useCallback(async (equipmentName: string) => {
     if (!event) return;
@@ -1284,7 +1270,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
   // on it releases back to post, not just the team that reported it.
   const RESOLVING_STATUSES = ['Delivered', 'Refusal', 'NMM', 'Treat and Release', 'Unable to Locate', 'Rolled from Scene'];
 
-  const handleTeamStatusChange = (callId: string, team: string, newStatus: string, clinicId?: string, transportUnitValue?: string) => {
+  const handleTeamStatusChange = (callId: string, team: string, newStatus: string, clinicId?: string, transportUnitValue?: string, custodyBy: CustodyActor = 'status') => {
     console.log("FUNCTION CALLED", { callId, team, newStatus });
     setTeamStatusMap(prev => {
       const updatedStatusMap = { ...prev };
@@ -1500,9 +1486,8 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
       };
     });
 
-    // Rest of the function continues as before...
-    const updatedStaff = event?.staff.map(t => {
-      if (t.team === team) {
+    // The acting unit's own status and location (a team, or a supervisor running equipment).
+    const actingUnitUpdate = <U extends Staff | Supervisor>(t: U): U => {
         let updatedLocation = t.location;
         let updatedStatus = newStatus;
 
@@ -1533,7 +1518,10 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
           status: updatedStatus,
           location: updatedLocation,
         };
-      }
+    };
+
+    const updatedStaff = event?.staff.map(t => {
+      if (t.team === team) return actingUnitUpdate(t);
 
       // Auto-return every other team on the call once it resolves via any
       // one team — they weren't the one who reported the resolution, but
@@ -1580,112 +1568,92 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
       }
     }
 
-    // Handle equipment status updates when call / team status changes
+    // A supervisor running equipment changes its own status here too.
+    if (event?.supervisor?.some(s => s.team === team)) {
+      updatedSupervisor = (updatedSupervisor || event.supervisor).map(s => s.team === team ? actingUnitUpdate(s) : s);
+    }
+
+    // Equipment custody (equipmentCustody.ts): what the units on this call
+    // fetch, carry, hand off or bring back follows their statuses.
     let updatedEquipment = event?.eventEquipment;
-
-    // Determine the call after updates and equipment listed on that call
-    const callAfterUpdate = (updatedCalls || event?.calls || []).find(c => c.id === callId);
-    const callEquipmentNames = new Set(
-      (callAfterUpdate?.equipment || []).map((n: unknown) => (typeof n === 'string' ? n : (n as { name?: string }).name || ''))
-    );
-
-    // The acting team plus every other team the resolving cascade above just
-    // released — equipment held by any of them needs to come back too.
-    const resolvingTeams = [team, ...otherAssignedTeams];
-
-    // Equipment currently held by the team(s) that just changed status OR listed on the call
-    const teamEquipment = (event?.eventEquipment || []).filter(eq => resolvingTeams.includes(eq.assignedTeam || '') || callEquipmentNames.has(eq.name));
-
-    if (teamEquipment.length > 0) {
-      const callAfterUpdate = (updatedCalls || event?.calls || []).find(c => c.id === callId);
-      
-      if (isEqDetaching) {
-        // Delivered Eq: transfer to patient care team
-        updatedEquipment = event?.eventEquipment?.map(eq =>
-          eq.assignedTeam === team
-            ? {
-                ...eq,
-                assignedTeam: null,
-                status: 'Available',
-                location: callAfterUpdate?.assignedTeam?.[0] || 'Clinic'
-              }
-            : eq
-        );
-      } else if (newStatus === 'Assisting') {
-        // Assisting: keep with assisting team
-        updatedEquipment = event?.eventEquipment?.map(eq =>
-          eq.assignedTeam === team
-            ? {
-                ...eq,
-                location: team
-              }
-            : eq
-        );
-      } else {
-        // Case A: Call has no remaining assigned teams → resolve equipment to Clinic
-        const noTeamsRemain = !callAfterUpdate?.assignedTeam || callAfterUpdate.assignedTeam.length === 0;
-        const callResolvedLike = ['Resolved', 'Delivered', 'Refusal', 'NMM', 'Treat and Release', 'Unable to Locate', 'Rolled'].includes(
-          callAfterUpdate?.status || newCallStatus
-        );
-
-        if (noTeamsRemain && callResolvedLike) {
-          // If the call was Delivered to clinic, mark equipment as In Clinic
-          // but keep the same team recorded as the assignedTeam (they delivered it).
-          const resolvedStatus = callAfterUpdate?.status || newCallStatus;
-          if (resolvedStatus === 'Delivered') {
-            updatedEquipment = event?.eventEquipment?.map(eq =>
-              resolvingTeams.includes(eq.assignedTeam || '')
-                ? {
-                    ...eq,
-                    // keep assignedTeam so history shows who delivered it
-                    assignedTeam: eq.assignedTeam,
-                    status: 'In Clinic' as EquipmentStatus,
-                    location: 'Clinic'
-                  }
-                : eq
-            );
-          } else {
-            updatedEquipment = event?.eventEquipment?.map(eq =>
-              resolvingTeams.includes(eq.assignedTeam || '')
-                ? {
-                    ...eq,
-                    assignedTeam: null,
-                    status: 'Available' as EquipmentStatus,
-                    location: 'Clinic'
-                  }
-                : eq
-            );
-          }
-        } else {
-          // Other teams remain on the call or the call is still active.
-          // Keep equipment marked as In Use and preserve/transfer assignment appropriately.
-          const newAssigned = (callAfterUpdate?.assignedTeam && callAfterUpdate.assignedTeam.length > 0)
-            ? (callAfterUpdate.assignedTeam.includes(team) ? team : callAfterUpdate.assignedTeam[0])
-            : team;
-
-          updatedEquipment = event?.eventEquipment?.map(eq =>
-            eq.assignedTeam === team
-              ? {
-                  ...eq,
-                  assignedTeam: newAssigned,
-                  status: 'In Use' as EquipmentStatus,
-                  location: callAfterUpdate?.location || eq.location || newAssigned || 'Roaming'
-                }
-              : eq
-          );
-        }
+    let finalStaff = updatedStaff;
+    let finalSupervisor = updatedSupervisor;
+    if (event && (event.eventEquipment || []).length > 0) {
+      const t = now.getTime();
+      const callAfterUpdate = (updatedCalls || event.calls || []).find(c => c.id === callId);
+      let fleet: Fleet = {
+        eventEquipment: event.eventEquipment || [],
+        staff: updatedStaff || event.staff || [],
+        supervisor: updatedSupervisor || event.supervisor || [],
+      };
+      if (newStatus === 'En Route Eq' || newStatus === 'Assisting') {
+        fleet = pickUpEquipment(fleet, event, team, t, custodyBy);
+      } else if (newStatus === RETRIEVING_EQ) {
+        fleet = unPickUpEquipment(fleet, event, team, t);
+      } else if (newStatus === 'Delivered Eq') {
+        // Left with the care team: the first unit on the call that isn't running equipment.
+        const careTeam = (callAfterUpdate?.assignedTeam || []).find(u => !callAfterUpdate?.equipmentTeams?.includes(u)) ?? null;
+        fleet = handOffEquipment(fleet, event, team, careTeam, latestCall.location, t);
+      } else if (RESOLVING_STATUSES.includes(newStatus) || newStatus === 'Detached') {
+        // Delivered to a clinic: it stays there. Otherwise the units holding it bring it back.
+        const clinicName = newStatus === 'Delivered' ? destinationClinicName || 'Clinic' : undefined;
+        fleet = releaseEquipment(fleet, event, [team, ...otherAssignedTeams], t, clinicName);
       }
+      updatedEquipment = fleet.eventEquipment;
+      finalStaff = fleet.staff;
+      finalSupervisor = fleet.supervisor;
     }
 
     // Update the event with all changes
     updateEvent({
       calls: updatedCalls,
-      staff: updatedStaff,
+      staff: finalStaff,
       postAssignments,
-      ...(updatedSupervisor && { supervisor: updatedSupervisor }),
+      ...(finalSupervisor && { supervisor: finalSupervisor }),
       ...(updatedEquipment && { eventEquipment: updatedEquipment })
     });
   };
+
+  // The unit sent to fetch it has it: on a call that is its 'En Route Eq', otherwise just the equipment changes hands.
+  const handleEquipmentPickedUp = (equipmentName: string, by: CustodyActor = 'dispatcher') => {
+    const eq = event?.eventEquipment?.find(e => e.name === equipmentName);
+    const unit = eq?.assignedTeam;
+    if (!event || !eq || !unit) return;
+    const unitStatus = [...(event.staff || []), ...(event.supervisor || [])].find(u => u.team === unit)?.status;
+    const call = event.calls.find(c => c.equipmentTeams?.includes(unit) && !RESOLVED_CALL_STATUSES.includes(c.status));
+    if (call && unitStatus === RETRIEVING_EQ) {
+      handleTeamStatusChange(call.id, unit, 'En Route Eq', undefined, undefined, by);
+      return;
+    }
+    void saveEquipmentChange((fleet, current, t) => pickUpEquipment(fleet, current, unit, t, by, equipmentName));
+  };
+
+  // Pickup and return suggestions from live tracking (equipmentArrivals.ts):
+  // offered on the equipment card and announced once; nothing changes until confirmed.
+  const [dismissedArrivals, setDismissedArrivals] = useState<Set<string>>(() => new Set());
+  const unitsAtPost = unitTracking?.atPost;
+  const arrivals = useMemo(
+    () => (event?.mapMode === 'tak' ? equipmentArrivals(event, unitsAtPost).filter(a => !dismissedArrivals.has(arrivalKey(a))) : []),
+    [event, unitsAtPost, dismissedArrivals]
+  );
+  const announcedArrivals = useRef(new Set<string>());
+  useEffect(() => {
+    for (const a of arrivals) {
+      const key = arrivalKey(a);
+      if (announcedArrivals.current.has(key)) continue;
+      announcedArrivals.current.add(key);
+      toast.info(arrivalQuestion(a));
+    }
+  }, [arrivals]);
+  const confirmArrival = (a: EquipmentArrival) => {
+    if (a.kind === 'picked_up') handleEquipmentPickedUp(a.equipmentName, 'tracking');
+    else void saveEquipmentChange((fleet, current, t) => returnEquipment(fleet, current, a.equipmentName, t, 'tracking', a.post));
+  };
+  const dismissArrival = (a: EquipmentArrival) => setDismissedArrivals(prev => new Set(prev).add(arrivalKey(a)));
+
+  // Lets the team card's status handler (a stable useCallback) hand equipment-run statuses to the call flow above.
+  const handleTeamStatusChangeRef = useRef(handleTeamStatusChange);
+  handleTeamStatusChangeRef.current = handleTeamStatusChange;
 
   // Reverses a single detached-team entry (regular team, equipment run, or auto-detached
   // supervisor): restores its prior status/location, re-attaches it to the call, and — for a
@@ -1800,9 +1768,10 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
 
     let updatedEquipment = event?.eventEquipment;
     if (kind === 'equipment' && detachedEntry.equipmentNames?.length) {
+      // Back in the hands of the unit that delivered it.
       updatedEquipment = event?.eventEquipment?.map(eq =>
         detachedEntry.equipmentNames?.includes(eq.name)
-          ? { ...eq, assignedTeam: team, status: 'In Use' as EquipmentStatus, location: call.location }
+          ? withCustody(eq, { phase: 'carried', holder: unitHolder(team) }, { t: now.getTime(), by: 'dispatcher' })
           : eq
       );
     }
@@ -2138,6 +2107,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     const updatedCall: Call = {
       ...call,
       assignedTeam: (call.assignedTeam || []).filter(t => t !== teamToRemove),
+      equipmentTeams: (call.equipmentTeams || []).filter(t => t !== teamToRemove),
       status: (call.assignedTeam || []).length <= 1 ? 'Pending' : call.status,
       log: [...(call.log || []), callLogEntry]
     };
@@ -2157,11 +2127,15 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     const updatedStaff = event.staff.map(t => 
       t.team === teamToRemove ? updatedTeam : t
     );
+
+    // Equipment it hadn't picked up stays put; anything it has, it brings back ('Returning Eq').
+    const fleet = releaseEquipment({ ...fleetOf(event), staff: updatedStaff }, event, [teamToRemove], now.getTime());
   
     // Save to Firestore
     await updateEvent({ 
       calls: updatedCalls, 
-      staff: updatedStaff,
+      staff: fleet.staff,
+      eventEquipment: fleet.eventEquipment,
       postAssignments
     });
   };  
@@ -2382,6 +2356,15 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
   const handleStatusChange = useCallback(async (staff: Staff, newStatus: string, clinicId?: string) => {
     const team = staff.team;
 
+    // An equipment run's statuses fetch, carry and hand off equipment, which only the call flow does.
+    const equipmentCall = EQUIPMENT_RUN_STATUSES.includes(newStatus)
+      ? event?.calls.find(c => c.equipmentTeams?.includes(team) && !RESOLVED_CALL_STATUSES.includes(c.status))
+      : undefined;
+    if (equipmentCall) {
+      handleTeamStatusChangeRef.current(equipmentCall.id, team, newStatus);
+      return;
+    }
+
     setTeamTimers(prev => ({ ...prev, [team]: Date.now() }));
 
     await updateEvent((currentEvent) => {
@@ -2454,12 +2437,18 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
          });
       }
 
+      // Available after 'Returning Eq': what it was bringing back is at its staging location.
+      if (staff.status === RETURNING_EQ && newStatus === 'Available') {
+        const fleet = returnAllFromUnit({ ...fleetOf(currentEvent), staff: updatedStaff }, currentEvent, team, now.getTime());
+        return { staff: fleet.staff, calls: updatedCalls, eventEquipment: fleet.eventEquipment };
+      }
+
       return {
         staff: updatedStaff,
         calls: updatedCalls
       };
     });
-  }, [updateEvent]);
+  }, [updateEvent, event?.calls]);
 
   const handleLocationChange = useCallback(async (staff: Staff, newLocation: string) => {
     // On a live-tracking event Location is where the team is, never its post, and never sets a status (D66).
@@ -2526,36 +2515,11 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
       c.id === callId ? updatedCall : c
     );
 
-    // Update equipment: mark as In Use any equipment already assigned to this team
-    // or explicitly listed on the call's equipment list.
-    let updatedEquipment = event.eventEquipment || [];
-    try {
-      const callEquipmentNames = new Set(
-        (call.equipment || []).map((n: unknown) => (typeof n === 'string' ? n : (n as { name?: string }).name || ''))
-      );
-      updatedEquipment = (event.eventEquipment || []).map(eq => {
-        const eqName = eq.name;
-        const isListedOnCall = callEquipmentNames.has(eqName);
-        const isCurrentlyAssignedToTeam = eq.assignedTeam === team;
-        if (isListedOnCall || isCurrentlyAssignedToTeam) {
-          return {
-            ...eq,
-            assignedTeam: team,
-            status: 'In Use' as EquipmentStatus,
-            location: call.location || eq.location || team
-          };
-        }
-        return eq;
-      });
-    } catch (e) {
-      console.error('Error updating equipment on team add:', e);
-    }
-
+    // Equipment keeps its holder: adding a care team doesn't take it from the unit running it.
     await updateEvent({ 
       calls: updatedCalls, 
       staff: updatedStaff,
       postAssignments,
-      eventEquipment: updatedEquipment
     });
 
     setTeamToAdd(prev => ({ ...prev, [callId]: '' }));
@@ -3429,8 +3393,14 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     onStatusChange: handleEquipmentStatusChange,
     onLocationChange: handleEquipmentLocationChange,
     onMarkReady: handleEquipmentMarkReady,
+    onPickedUp: handleEquipmentPickedUp,
     onDelete: handleEquipmentDelete,
     onViewOnMap: viewEquipmentOnMap,
+    unitTracked: (unitName: string) => event.mapMode === 'tak' && !!unitTracking?.positions[unitName],
+    equipmentTracked: (equipmentName: string) => event.mapMode === 'tak' && !!unitTracking?.equipmentPositions?.[equipmentName],
+    arrivals,
+    onConfirmArrival: confirmArrival,
+    onDismissArrival: dismissArrival,
   };
 
   // Plain render function (not a component) so the toolbar keeps its

@@ -17,7 +17,7 @@ vi.mock('@/lib/services', () => ({
   },
 }));
 
-const { ensureTeamIds, takTeams, withTeamIds } = await import('./teamIds');
+const { ensureTeamIds, equipmentLinkId, takTargets, takTeams, withTeamIds } = await import('./teamIds');
 
 const staff = (team: string, id?: string): Staff => ({ team, location: 'Gate A', status: 'Available', members: ['A [EMT]'], ...(id ? { id } : {}) });
 const sup = (team: string, id?: string): Supervisor => ({ team, location: 'Roaming', status: 'Available', member: 'B [RN]', ...(id ? { id } : {}) });
@@ -73,6 +73,18 @@ describe('takTeams', () => {
     expect(takTeams([staff('Medic 1', 'a'), staff('No Id')], [sup('Sup', 'b')])).toEqual([
       { id: 'a', name: 'Medic 1', kind: 'team' },
       { id: 'b', name: 'Sup', kind: 'supervisor' },
+    ]);
+  });
+});
+
+describe('takTargets', () => {
+  it('adds equipment after teams and supervisors, with prefixed ids', () => {
+    const wheelchair = { id: 'eq1', name: 'Wheelchair 1', status: 'Available' };
+    expect(equipmentLinkId('eq1')).toBe('equipment:eq1');
+    expect(takTargets([staff('Medic 1', 'a')], [sup('Sup', 'b')], [wheelchair])).toEqual([
+      { id: 'a', name: 'Medic 1', kind: 'team' },
+      { id: 'b', name: 'Sup', kind: 'supervisor' },
+      { id: 'equipment:eq1', name: 'Wheelchair 1', kind: 'equipment' },
     ]);
   });
 });
