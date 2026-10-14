@@ -20,6 +20,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 
 ### Fixed
 
+- **Custom dispatch-language presets work again.** `firestore.rules` had no rule for the `dispatchVocabularyPresets` collection, so under default-deny the preset list failed to load (saved presets vanished) and creating one was rejected. Added the rule (readable by any signed-in user; only the creator or an admin can edit or delete), and the "Create preset" form now shows an error instead of failing silently. **Deployments with their own copy of the rules (e.g. the hosted site) must port this block.**
+- **Call and clinic table columns fit their headers.** Column widths now follow the active language preset's header strings instead of fixed widths, so wider translations no longer wrap onto a second line.
 - **Backing out of event setup no longer leaves an empty event.** "Start New Event" (and "Save & Start Event" in the venue builder) used to write a draft event as soon as the builder opened. The builder now opens at `/events/new/create?venueId=…` and the event is written only when "Create Event" is pressed.
 - **Docker builds work from a fresh clone.** `Dockerfile` copied `next-env.d.ts`, which is gitignored, so `docker compose up --build` failed in the builder stage for anyone who had not run Next locally first.
 - **PocketBase runs natively on Apple Silicon.** `Dockerfile.pocketbase` now downloads the release matching the host CPU (`amd64` or `arm64`) using BuildKit's `TARGETARCH`. Before this it always pulled `amd64` and ran under emulation on ARM Macs.

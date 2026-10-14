@@ -121,6 +121,19 @@ service cloud.firestore {
       allow write: if isRequestingUserAdmin();
     }
 
+    // Dispatch language presets (Profile > Preferences > Dispatch language):
+    // shared with every signed-in user, but only the creator (or an admin)
+    // may edit or delete one. This collection had no rule at all, so under
+    // default-deny the preset list read failed (custom presets vanished from
+    // the UI) and creating one was rejected.
+    match /dispatchVocabularyPresets/{presetId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null &&
+        request.resource.data.createdBy == request.auth.uid;
+      allow update, delete: if request.auth != null &&
+        (resource.data.createdBy == request.auth.uid || isRequestingUserAdmin());
+    }
+
     // IMPORTANT: dot-notation field access (`doc.data.someField`) THROWS if
     // the field is absent, it does not evaluate to null/false the way it
     // would in JS. An uncaught throw anywhere in an `allow` expression
