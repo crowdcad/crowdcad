@@ -52,18 +52,6 @@ interface ClinicTrackingTableProps {
 
 const DETAILS_CLOSE_ANIMATION_MS = 320;
 
-const TableColGroup = () => (
-  <colgroup>
-    <col className="w-16" />
-    <col className="w-40" />
-    <col className="w-16" />
-    <col className="w-48" />
-    <col className="w-40" />
-    <col />
-    <col className="w-20" />
-  </colgroup>
-);
-
 export default function ClinicTrackingTable({
   event,
   clinicId,
@@ -229,7 +217,6 @@ export default function ClinicTrackingTable({
   return (
     <div className="col-span-2 text-black w-full h-full min-h-0">
       <TrackingTableBase
-        TableColGroup={TableColGroup}
         showStatusColumn={true}
         showTeamAssignmentChips={false}
         footer={resolvedToggleFooter}
