@@ -59,6 +59,7 @@ export default function LanguageSection() {
   const [newPresetBaseId, setNewPresetBaseId] = useState(presetId);
   const [newPresetName, setNewPresetName] = useState('');
   const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
 
   const target = useMemo(
     () => availablePresets.find((p) => p.id === editingTargetId) ?? null,
@@ -109,6 +110,7 @@ export default function LanguageSection() {
     const name = newPresetName.trim();
     if (!name) return;
     setCreating(true);
+    setCreateError(null);
     try {
       const terms =
         newPresetBaseId === BLANK_TEMPLATE_ID
@@ -119,6 +121,9 @@ export default function LanguageSection() {
       setCreatingNew(false);
       setNewPresetName('');
       setEditingTargetId(newId);
+    } catch (err) {
+      console.error('Failed to create dispatch language preset', err);
+      setCreateError("Couldn't create the preset. Check your connection and permissions, then try again.");
     } finally {
       setCreating(false);
     }
@@ -279,6 +284,7 @@ export default function LanguageSection() {
                 className="flex-1"
               />
             </div>
+            {createError && <p className="text-sm text-status-red">{createError}</p>}
             <div className="flex gap-2">
               <Button
                 onPress={handleCreateFromTemplate}
