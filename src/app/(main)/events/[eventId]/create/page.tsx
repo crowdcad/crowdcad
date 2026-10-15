@@ -1,11 +1,10 @@
 'use client';
 
 import { useRouter, useParams, useSearchParams } from 'next/navigation';
-import React, { useEffect, useRef, useState } from 'react';
-import { Event, Venue, Staff, Supervisor, Post, Equipment, EventEquipment } from '@/app/types';
+import React, { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import { Event, Venue, Staff, Supervisor, Post, EventEquipment } from '@/app/types';
 import { authService, dbService } from '@/lib/services';
 import { Button, Card, ScrollShadow } from '@heroui/react';
-import { parseDate, getLocalTimeZone, today } from '@internationalized/date';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { syncClinicsFromVenue } from '@/lib/clinics';
 import { syncDispatchZonesFromVenue } from '@/lib/zones';
@@ -19,15 +18,30 @@ import SupervisorStaffingSection from '@/components/event-create/SupervisorStaff
 import PostingScheduleSection from '@/components/event-create/PostingScheduleSection';
 import { EquipmentSelectionSection, PostsSelectionSection } from '@/components/event-create/PostsEquipmentSection';
 import { WizardShell, StepProgress, ReviewColumns, type WizardStep, type ReviewColumn } from '@/components/wizard';
-import { countLabel, eventConfigReviewFields, staffReviewFields, postScheduleReviewValue, getStepNavigation } from '@/components/wizard/eventReview';
+import { countLabel, eventConfigReviewFields, staffReviewFields, postScheduleReviewValue, getStepNavigation, primaryStepLabel } from '@/components/wizard/eventReview';
 import { randomId, stripUndefined } from '@/lib/utils';
 import AddTeamModal, { TeamDraft } from '@/components/modals/event/addteammodal';
 import AddSupervisorModal from '@/components/modals/event/addsupervisormodal';
 import BulkImportModal from '@/components/modals/event/bulkimportmodal';
 import { VenueMapWithPosts } from '@/components/modals/event/venuemapmodal';
+import dynamic from 'next/dynamic';
+import { isGeoLayer } from '@/lib/geo/layers';
+
+// The live map for venues with an aligned image or a drawn area (P8, D64), loaded only when needed.
+const GeoLayerMap = dynamic(() => import('@/components/geo/GeoLayerMap'), { ssr: false });
+import { geoEquipmentPins } from '@/components/dispatch/geoPins';
 import { MAP_CHECKER_BG } from '@/lib/mapStyles';
+import { useZoomPan } from '@/hooks/useZoomPan';
+import { newSupervisor, newTeam, teamDraftFromStaff, teamMemberStrings } from '@/lib/teamDraft';
+import { EVENT_INPUT_CLASSNAMES, EVENT_SELECT_CLASSNAMES } from '@/components/event-create/fieldClassNames';
 import LoadingScreen from '@/components/ui/loading-screen';
 import { NEW_EVENT_ID } from '@/lib/newEvent';
+
+// TAK live tracking (optional, in development): the map-mode choice is
+// compiled out entirely unless NEXT_PUBLIC_TAK is exactly "on".
+import type { TakEventConfig } from '@/features/tak';
+const TakMapModeChoice =
+  process.env.NEXT_PUBLIC_TAK === 'on' ? lazy(() => import('@/features/tak').then((m) => ({ default: m.TakMapModeChoice }))) : null;
 
 // Helper to get post name regardless of type
 const getPostName = (post: Post): string => {
@@ -94,32 +108,15 @@ export default function EventCreation() {
   const [, setContainerSize] = useState<{ width: number; height: number }>({ width: 0, height: 0 });
   const imgRef = useRef<HTMLImageElement>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // A new event's TAK settings, held until the event exists (TakMapModeChoice
+  // saves them itself for an existing event).
+  const [pendingTakConfig, setPendingTakConfig] = useState<TakEventConfig | null>(null);
 
-  // Pan/zoom state, mirroring the dispatch page's own venue map modal
-  // (VenueMapModal) exactly, since VenueMapWithPosts is shared with it.
-  const [scale, setScale] = useState(1);
-  const [position, setPosition] = useState({ x: 0, y: 0 });
-  const [isPanning, setIsPanning] = useState(false);
-  const [panStart, setPanStart] = useState({ x: 0, y: 0 });
-
-  const handleZoomIn = () => setScale((prev) => Math.min(prev + 0.25, 3));
-  const handleZoomOut = () => setScale((prev) => Math.max(prev - 0.25, 0.5));
-  const handleResetZoom = () => {
-    setScale(1);
-    setPosition({ x: 0, y: 0 });
-  };
-  const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
-    e.preventDefault();
-  };
-  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
-    setIsPanning(true);
-    setPanStart({ x: e.clientX - position.x, y: e.clientY - position.y });
-  };
-  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!isPanning) return;
-    setPosition({ x: e.clientX - panStart.x, y: e.clientY - panStart.y });
-  };
-  const handleMouseUp = () => setIsPanning(false);
+  // Pan/zoom for the map panel (VenueMapWithPosts), with the dispatch map modal's limits.
+  const { scale, position, isPanning, handleWheel, handleMouseDown, handleMouseMove, handleMouseUp, zoomIn, zoomOut, resetZoom } = useZoomPan({
+    minScale: 0.5,
+    maxScale: 3,
+  });
 
   const [postsEnabled, setPostsEnabled] = useState(false);
 
@@ -195,8 +192,6 @@ export default function EventCreation() {
     const timeout = setTimeout(async () => {
       try {
         await dbService.updateDocument('events', eventId, stripUndefined({ postingTimes: times }) as Record<string, unknown>);
-        // eslint-disable-next-line no-console
-        console.log('Autosaved postingTimes to draft:', { eventId, postingTimes: times });
       } catch (err) {
         console.error('Failed to autosave postingTimes:', err);
       }
@@ -275,48 +270,19 @@ export default function EventCreation() {
   }, [eventId, isNew, newEventVenueId]);
 
   const handleSaveTeam = (team: TeamDraft, editIdx: number | null) => {
-    const members = team.members.map(
-      m => `${m.name} [${m.cert}]${m.lead ? " (Lead)" : ""}`
-    );
     setEventData(prev => {
-      if (editIdx !== null) {
-        const staff = [...(prev.staff || [])];
-        staff[editIdx] = { ...staff[editIdx], team: team.name, members };
-        return { ...prev, staff };
-      }
-      const newStaff: Staff = {
-        team: team.name,
-        location: "No Post",
-        status: "On Break",
-        members,
-      };
-      return { ...prev, staff: [...(prev.staff || []), newStaff] };
+      if (editIdx === null) return { ...prev, staff: [...(prev.staff || []), newTeam(team)] };
+      const staff = [...(prev.staff || [])];
+      staff[editIdx] = { ...staff[editIdx]!, team: team.name, members: teamMemberStrings(team) };
+      return { ...prev, staff };
     });
   };
 
-  // Reverses the "Name [CERT] (Lead)" string format handleSaveTeam writes,
-  // so an existing Staff record can prefill AddTeamModal for editing.
-  const parseTeamForEdit = (team: Staff): TeamDraft => ({
-    name: team.team,
-    members: team.members.map((m) => {
-      const match = m.match(/^(.*) \[(.*)\](?: \(Lead\))?$/);
-      const lead = / \(Lead\)$/.test(m);
-      if (!match) return { name: m, cert: '', lead };
-      return { name: match[1], cert: match[2], lead };
-    }),
-  });
-
   const handleAddSamUnit = () => {
     if (!samName.trim() || !samCert) return;
-    const newSupervisor: Supervisor = {
-      team: samName.trim(),
-      location: 'Roaming',
-      status: 'On Break',
-      member: samMemberName.trim() ? `${samMemberName.trim()} [${samCert}]` : `${samName.trim()} [${samCert}]`,
-    };
     setEventData(prev => ({
       ...prev,
-      supervisor: [...(prev.supervisor || []), newSupervisor]
+      supervisor: [...(prev.supervisor || []), newSupervisor(samName, samMemberName, samCert)]
     }));
     setSamName('');
     setSamMemberName('');
@@ -383,6 +349,15 @@ export default function EventCreation() {
           createdAt: new Date().toISOString(),
         }));
       }
+      if (process.env.NEXT_PUBLIC_TAK === 'on' && !draftExists && eventData.mapMode === 'tak' && pendingTakConfig) {
+        try {
+          const { saveEventConfig } = await import('@/features/tak');
+          await saveEventConfig(eventDocId, pendingTakConfig);
+        } catch (err) {
+          console.error('Failed to save TAK settings:', err);
+          alert(`Event created, but its TAK settings could not be saved: ${(err as Error).message}`);
+        }
+      }
       // Replace, so Back from dispatch can't return to the builder and create the event twice.
       router.replace(`/events/${eventDocId}/dispatch`);
     } catch (error) {
@@ -404,23 +379,16 @@ export default function EventCreation() {
   if (loading) return <LoadingScreen label="Loading event data…" />;
   
   const hasVenue = Boolean(eventData.venue?.name && eventData.venue?.layers?.length);
-  const hasMap = hasVenue && Boolean(eventData.venue?.layers?.[currentLayer]?.mapUrl);
+  const currentVenueLayer = eventData.venue?.layers?.[currentLayer];
+  const currentIsGeo = !!currentVenueLayer && isGeoLayer(currentVenueLayer);
+  const hasMap = hasVenue && (Boolean(currentVenueLayer?.mapUrl) || currentIsGeo);
   const allPosts = hasVenue ? (eventData.venue?.layers?.flatMap(layer => layer.posts || []) || []) : [];
   const flattenedPosts = hasVenue ? (eventData.venue?.layers?.flatMap(layer => (layer.posts || []).map(p => ({ post: p, layerName: layer.name }))) || []) : [];
 
   
 
-  const inputClassNames = {
-    label: 'text-surface-light font-medium',
-    inputWrapper: 'rounded-large px-4',
-    input: 'text-surface-light outline-none focus:outline-none data-[focus=true]:outline-none focus:ring-0 focus-visible:ring-0',
-  };
-
-  const selectClassNames = {
-    label: 'text-surface-light font-medium',
-    input: 'text-surface-light text-sm outline-none focus:outline-none data-[focus=true]:outline-none',
-    inputWrapper: 'rounded-large px-4 pr-6 shadow-none group-data-[focus-visible=true]:ring-0 group-data-[focus-visible=true]:ring-offset-0',
-  };
+  const inputClassNames = EVENT_INPUT_CLASSNAMES;
+  const selectClassNames = EVENT_SELECT_CLASSNAMES;
 
   const handleDeleteTeam = (idx: number) => {
     setEventData(prev => ({
@@ -436,30 +404,31 @@ export default function EventCreation() {
     }));
   };
 
-  // Convert date string to CalendarDate
-  const getCalendarDate = () => {
-    if (eventData.date) {
-      try {
-        return parseDate(eventData.date);
-      } catch {
-        return today(getLocalTimeZone());
-      }
-    }
-    return today(getLocalTimeZone());
-  };
-
   const basicsStep = (
     <div className="px-6 pt-4 h-full overflow-y-auto minimal-scrollbar">
       <MetadataSection
         eventData={eventData}
         setEventData={setEventData}
-        getCalendarDate={getCalendarDate}
         scheduleFrom={scheduleFrom}
         setScheduleFrom={setScheduleFrom}
         scheduleTo={scheduleTo}
         setScheduleTo={setScheduleTo}
         inputClassNames={inputClassNames}
       />
+      {TakMapModeChoice && eventId && authService.currentUser && (
+        <Suspense fallback={null}>
+        <div className="mt-4">
+          <TakMapModeChoice
+            eventId={isNew ? null : eventId}
+            onPendingConfigChange={setPendingTakConfig}
+            uid={authService.currentUser.uid}
+            mapMode={eventData.mapMode}
+            onMapModeChange={(mode) => setEventData((prev) => ({ ...prev, mapMode: mode }))}
+            layers={eventData.venue?.layers ?? []}
+          />
+        </div>
+        </Suspense>
+      )}
     </div>
   );
 
@@ -626,6 +595,15 @@ export default function EventCreation() {
 
   const { isFirstStep, isLastStep, goNext, goBack } = getStepNavigation(STEP_ORDER, currentStepId, setCurrentStepId);
 
+  // Whether the user has entered anything in each step yet (Skip until then).
+  const stepHasInput: Record<StepId, boolean> = {
+    basics: true,
+    teams: (eventData.staff ?? []).length > 0 || (eventData.supervisor ?? []).length > 0,
+    equipment: eventData.eventEquipment.length > 0,
+    postschedule: postsEnabled || (eventData.eventPosts ?? []).length > 0,
+    review: true,
+  };
+
   const backButton = !isFirstStep && (
     <Button variant="flat" size="md" onPress={goBack} className="px-6">
       Back
@@ -641,7 +619,7 @@ export default function EventCreation() {
       isLoading={isLastStep && isSubmitting}
       className="px-6 bg-accent hover:bg-accent/90 text-surface-light"
     >
-      {isLastStep ? 'Create Event' : 'Continue'}
+      {primaryStepLabel(isLastStep, stepHasInput[currentStepId as StepId])}
     </Button>
   );
 
@@ -676,6 +654,15 @@ export default function EventCreation() {
             the same VenueMapWithPosts marker/icon rendering and pan/zoom behavior
             as the dispatch page's own venue map modal. */}
         <div className="w-full flex flex-col flex-1 min-h-0">
+          {currentIsGeo && currentVenueLayer ? (
+          <div className="relative w-full flex-1 min-h-0 overflow-hidden rounded-t-sm">
+            <GeoLayerMap
+              className="absolute inset-0"
+              layer={currentVenueLayer}
+              extraPins={geoEquipmentPins(currentVenueLayer, (eventData.eventEquipment || []).map((e) => ({ ...e, location: e.defaultLocation })))}
+            />
+          </div>
+          ) : (
           <div className="relative w-full flex-1 min-h-0 overflow-hidden rounded-t-sm" style={MAP_CHECKER_BG}>
             <VenueMapWithPosts
               layers={eventData.venue?.layers || []}
@@ -697,13 +684,14 @@ export default function EventCreation() {
             />
 
             <MapZoomControls
-              onZoomIn={handleZoomIn}
-              onZoomOut={handleZoomOut}
-              onReset={handleResetZoom}
+              onZoomIn={() => zoomIn(0.25)}
+              onZoomOut={() => zoomOut(0.25)}
+              onReset={resetZoom}
               buttonClassName="bg-surface-deepest/90 backdrop-blur"
               resetButtonClassName="bg-surface-deepest/90 backdrop-blur"
             />
           </div>
+          )}
 
           {/* Bottom Control Bar — merges flush with the map above: square where
               they meet, sharp radius only at the map's top and this bar's bottom. */}
@@ -793,7 +781,7 @@ export default function EventCreation() {
         existingTeamNames={(eventData.staff || [])
           .map(s => s.team)
           .filter((_, i) => i !== editingTeamIndex)}
-        initialTeam={editingTeamIndex !== null ? parseTeamForEdit((eventData.staff || [])[editingTeamIndex]) : undefined}
+        initialTeam={editingTeamIndex !== null ? teamDraftFromStaff((eventData.staff || [])[editingTeamIndex]) : undefined}
         onSave={(team) => handleSaveTeam(team, editingTeamIndex)}
         roles={certifications.map(name => ({ name, fullName: name }))}
       />

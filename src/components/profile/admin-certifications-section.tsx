@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Button, Card, CardBody, Chip, Input, Spinner } from '@heroui/react';
 import { useCertifications } from '@/hooks/useCertifications';
 import { DEFAULT_CERTIFICATIONS } from '@/lib/certificationsService';
+import { PROFILE_ACTION_BUTTON } from './buttonStyles';
 
 export default function AdminCertificationsSection() {
   const { certifications, loading, save } = useCertifications();
@@ -45,7 +46,7 @@ export default function AdminCertificationsSection() {
       <CardBody className="p-6">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-xl font-semibold">Certifications</h3>
-          <Button size="sm" radius="full" variant="bordered" onPress={handleReset} isDisabled={loading || saving}>
+          <Button size="md" radius="lg" variant="bordered" className={PROFILE_ACTION_BUTTON} onPress={handleReset} isDisabled={loading || saving}>
             Reset to defaults
           </Button>
         </div>

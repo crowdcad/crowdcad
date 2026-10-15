@@ -3,6 +3,7 @@
 'use client';
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import dynamic from 'next/dynamic';
 import Image from 'next/image';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/hooks/useauth';
@@ -14,9 +15,10 @@ import { hasDuplicateZoneName } from '@/lib/zones';
 import { getNextZoneColor } from '@/lib/zoneColors';
 import { randomId, stripUndefined } from '@/lib/utils';
 import { newEventCreatePath } from '@/lib/newEvent';
-import { uploadWithRetry } from '@/lib/uploadUtils';
 import { useZoomPan } from '@/hooks/useZoomPan';
 import { MAP_CHECKER_BG } from '@/lib/mapStyles';
+import { isGeoLayer, layerArea } from '@/lib/geo/layers';
+import { postAt, withCoordinates, zonePointsFor, type LatLng } from '@/lib/geo/positions';
 import NewLayerModal from '@/components/modals/venue/newlayer';
 import GeoJsonImportModal from '@/components/modals/venue/geojsonimport';
 import LocationEditModal from '@/components/modals/venue/locationedit';
@@ -30,9 +32,11 @@ import PendingZoneDialog from '@/components/venue-management/PendingZoneDialog';
 import VenueMapZones from '@/components/venue-management/VenueMapZones';
 import MarkerPlacementInstruction from '@/components/venue-management/MarkerPlacementInstruction';
 import VenueMapMarker from '@/components/venue-management/VenueMapMarker';
+import AreaVertex, { MIN_AREA_POINTS } from '@/components/geo/AreaVertex';
 import MapZoomControls from '@/components/ui/map-zoom-controls';
 import MapPanSurface from '@/components/ui/map-pan-surface';
 import { VenueMapWithPosts } from '@/components/modals/event/venuemapmodal';
+import { geoEquipmentPins } from '@/components/dispatch/geoPins';
 import { WizardShell, StepProgress, ReviewColumns, type WizardStep, type ReviewColumn } from '@/components/wizard';
 import {
   Button,
@@ -55,7 +59,17 @@ import {
 } from 'lucide-react';
 
 
+// Real-world maps (P8, D64): the Map alignment step and the drawn-area map
+// source. Loaded on demand, so the live map's code stays out of this page's
+// first load.
+const MapAlignmentStep = dynamic(() => import('@/components/venue-management/MapAlignmentStep'), { ssr: false });
+const AreaEditor = dynamic(() => import('@/components/geo/AreaEditor'), { ssr: false });
+const GeoLayerMap = dynamic(() => import('@/components/geo/GeoLayerMap'), { ssr: false });
+
 // Props: none required for this page
+
+/** The name of a layer drawn on the live map (no image), which needs none of its own. */
+const CUSTOM_AREA_LAYER_NAME = 'Custom Map Area';
 
 interface EquipmentWithLocation extends Equipment {
   locationId?: string;
@@ -106,6 +120,8 @@ export default function VenueManagementPageClient() {
   // naming dialog, mirroring pendingMarker's place-then-name flow.
   const [pendingZone, setPendingZone] = useState<{
     points: { x: number; y: number }[];
+    /** Set when the zone is drawn on the live map (a geo layer): its vertices in coordinates. */
+    coords?: LatLng[];
     layerIdx: number;
     isDrawing: boolean;
   } | null>(null);
@@ -166,28 +182,7 @@ export default function VenueManagementPageClient() {
   // switching steps never carries marker-placement mode or drag state into
   // a plain reference view.
   const readOnlyImgRef = useRef<HTMLImageElement | null>(null);
-  const [readOnlyScale, setReadOnlyScale] = useState(1);
-  const [readOnlyPosition, setReadOnlyPosition] = useState({ x: 0, y: 0 });
-  const [readOnlyIsPanning, setReadOnlyIsPanning] = useState(false);
-  const [readOnlyPanStart, setReadOnlyPanStart] = useState({ x: 0, y: 0 });
-  const handleReadOnlyZoomIn = () => setReadOnlyScale((prev) => Math.min(prev + 0.25, 3));
-  const handleReadOnlyZoomOut = () => setReadOnlyScale((prev) => Math.max(prev - 0.25, 0.5));
-  const handleReadOnlyResetZoom = () => {
-    setReadOnlyScale(1);
-    setReadOnlyPosition({ x: 0, y: 0 });
-  };
-  const handleReadOnlyWheel = (e: React.WheelEvent<HTMLDivElement>) => {
-    e.preventDefault();
-  };
-  const handleReadOnlyMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
-    setReadOnlyIsPanning(true);
-    setReadOnlyPanStart({ x: e.clientX - readOnlyPosition.x, y: e.clientY - readOnlyPosition.y });
-  };
-  const handleReadOnlyMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!readOnlyIsPanning) return;
-    setReadOnlyPosition({ x: e.clientX - readOnlyPanStart.x, y: e.clientY - readOnlyPanStart.y });
-  };
-  const handleReadOnlyMouseUp = () => setReadOnlyIsPanning(false);
+  const readOnlyView = useZoomPan({ minScale: 0.5, maxScale: 3 });
 
   // Drag/hover
   const [pendingLayer, setPendingLayer] = useState<number | null>(null);
@@ -217,23 +212,29 @@ export default function VenueManagementPageClient() {
   const [editingEquipmentIndex, setEditingEquipmentIndex] = useState<number | null>(null);
   const [equipmentEditInput, setEquipmentEditInput] = useState('');
 
-  const STEP_ORDER = ['basics', 'map', 'locations', 'equipment', 'review'] as const;
+  // Map alignment only applies to map images; a venue with none (no map, or only drawn areas) skips it.
+  const hasMapImage = venueData.layers.some((l) => !!l.mapUrl) || !!mapFile;
+  const STEP_ORDER: string[] = ['basics', 'map', ...(hasMapImage ? ['align'] : []), 'locations', 'equipment', 'review'];
   const [currentStepId, setCurrentStepId] = useState<string>('basics');
 
 
+  // One local URL per chosen map file. Making it inside the preview effect
+  // below created a new URL (and reset zoom/pan) on every layer change,
+  // e.g. each marker edit or TAK alignment point, while a new image was
+  // still unsaved; anything keyed by the image URL then started over.
+  const mapFileUrl = useMemo(() => (mapFile ? URL.createObjectURL(mapFile) : null), [mapFile]);
+  useEffect(() => {
+    if (!mapFileUrl) return;
+    // Reset zoom/pan when a new image is chosen
+    setScale(1);
+    setPosition({ x: 0, y: 0 });
+    return () => URL.revokeObjectURL(mapFileUrl);
+  }, [mapFileUrl, setPosition, setScale]);
+
   // Update preview when a new map file is selected
   useEffect(() => {
-    if (mapFile && pendingLayer === currentLayer) {
-      const url = URL.createObjectURL(mapFile);
-      setPreviewUrl(url);
-      // Reset zoom/pan when new image loads
-      setScale(1);
-      setPosition({ x: 0, y: 0 });
-      return () => URL.revokeObjectURL(url);
-    } else {
-      setPreviewUrl(venueData.layers[currentLayer]?.mapUrl || null);
-    }
-  }, [mapFile, pendingLayer, currentLayer, venueData.layers, setPosition, setScale]);
+    setPreviewUrl(mapFileUrl && pendingLayer === currentLayer ? mapFileUrl : venueData.layers[currentLayer]?.mapUrl || null);
+  }, [mapFileUrl, pendingLayer, currentLayer, venueData.layers]);
 
   // Auto-focus marker name input when pending marker is set
   useEffect(() => {
@@ -253,6 +254,7 @@ export default function VenueManagementPageClient() {
   // awaiting a name) the same way it already cancels the naming dialog's
   // own input via PendingZoneDialog's onKeyDown — this covers Escape
   // pressed anywhere while drawing, not just while the input is focused.
+  // Only clicking the first point's open circle completes an area (AreaVertex).
   useEffect(() => {
     if (!pendingZone) return;
     const onKeyDown = (e: KeyboardEvent) => {
@@ -261,8 +263,6 @@ export default function VenueManagementPageClient() {
         setZoneNameInput('');
         setZoneColorInput('');
         setZoneIsDispatchZoneInput(false);
-      } else if (e.key === 'Enter' && pendingZone.isDrawing && pendingZone.points.length >= 3) {
-        setPendingZone((prev) => (prev ? { ...prev, isDrawing: false } : prev));
       }
     };
     window.addEventListener('keydown', onKeyDown);
@@ -426,12 +426,6 @@ export default function VenueManagementPageClient() {
     setLocationInput('');
   };
 
-  // Distance (in percent units) below which a click while drawing an area is
-  // treated as "close the loop" rather than "place another vertex" — chosen
-  // to be forgiving at typical zoom levels without triggering on a vertex
-  // placed deliberately near, but not on, the start point.
-  const ZONE_CLOSE_THRESHOLD_PERCENT = 2.5;
-
   // Handle map click for area (zone) drawing — routes here instead of
   // handleImageClick's marker-placement branch whenever area mode is active.
   const handleAreaImageClick = (evt: React.MouseEvent<HTMLDivElement>) => {
@@ -453,32 +447,22 @@ export default function VenueManagementPageClient() {
 
     if (!pendingZone.isDrawing) return;
 
-    if (pendingZone.points.length >= 3) {
-      const first = pendingZone.points[0];
-      const distance = Math.hypot(x - first.x, y - first.y);
-      if (distance <= ZONE_CLOSE_THRESHOLD_PERCENT) {
-        setPendingZone({ ...pendingZone, isDrawing: false });
-        return;
-      }
-    }
-
     setPendingZone({ ...pendingZone, points: [...pendingZone.points, { x, y }] });
   };
 
-  // Double-clicking while drawing closes the loop immediately, same
-  // "click near the start point" outcome as handleAreaImageClick's own
-  // distance check, for anyone who'd rather not click back on the start.
-  const handleAreaImageDoubleClick = () => {
-    if (!pendingZone || !pendingZone.isDrawing || pendingZone.points.length < 3) return;
-    setPendingZone({ ...pendingZone, isDrawing: false });
-  };
+  // Clicking the first point's open circle (AreaVertex) completes the area
+  // and opens the naming dialog; the only way to complete one.
+  const completePendingZone = () =>
+    setPendingZone((prev) =>
+      prev && prev.isDrawing && (prev.coords ?? prev.points).length >= MIN_AREA_POINTS ? { ...prev, isDrawing: false } : prev,
+    );
 
   // Confirm the pending zone's name/color/dispatch-zone flag
   const confirmZoneName = () => {
     if (!pendingZone) return;
 
     const name = zoneNameInput.trim();
-    if (!name || pendingZone.points.length < 3) {
+    if (!name || (pendingZone.coords ?? pendingZone.points).length < 3) {
       cancelZoneDrawing();
       return;
     }
@@ -492,7 +476,8 @@ export default function VenueManagementPageClient() {
       id: randomId(),
       name,
       color: zoneColorInput || getNextZoneColor(venueData.layers[pendingZone.layerIdx]?.zones || []),
-      points: pendingZone.points,
+      points: pendingZone.coords ? zonePointsFor(pendingZone.coords, layersForMapDisplay[pendingZone.layerIdx]) : pendingZone.points,
+      ...(pendingZone.coords ? { coords: pendingZone.coords } : {}),
       isDispatchZone: zoneIsDispatchZoneInput,
     };
 
@@ -811,7 +796,15 @@ export default function VenueManagementPageClient() {
 
       // Update current layer's mapUrl if new map uploaded
       const updatedLayers = venueData.layers.map((layer, idx) => {
-        const layerData = idx === (pendingLayer ?? currentLayer) && newMapUrl ? { ...layer, mapUrl: newMapUrl } : layer;
+        let layerData = idx === (pendingLayer ?? currentLayer) && newMapUrl ? { ...layer, mapUrl: newMapUrl } : layer;
+        // An alignment made against the new image's local preview follows it to its uploaded URL.
+        // Compared with the file's own URL, not previewUrl, which is the layer on screen and
+        // left the alignment on a dead blob: URL whenever another layer was showing at save.
+        if (layerData !== layer && layer.alignment && layer.alignment.mapUrl === mapFileUrl) {
+          layerData = { ...layerData, alignment: { ...layer.alignment, mapUrl: newMapUrl! } };
+        }
+        // On an aligned layer, posts and zones placed on the image also get coordinates (D64).
+        layerData = withCoordinates(layerData);
         // Remove undefined properties from each layer
         const filteredLayer: Record<string, unknown> = {};
         Object.entries(layerData).forEach(([key, value]) => {
@@ -982,7 +975,7 @@ export default function VenueManagementPageClient() {
     setCurrentLayer(Math.max(0, currentLayer - 1));
   };
 
-  const hasMapForStep = Boolean(previewUrl);
+  const hasMapForStep = Boolean(previewUrl) || !!layerArea(venueData.layers[currentLayer]);
   // A just-uploaded map isn't in venueData.layers yet — it only becomes a
   // real mapUrl there once the venue is saved (handleSubmit uploads it and
   // patches this layer in). The interactive map already shows it via
@@ -994,13 +987,16 @@ export default function VenueManagementPageClient() {
     : venueData.layers;
   // The Map step always renders full-width (header + its own interactive
   // map), never the half-split every other map-showing step uses.
-  const showMapPanel = currentStepId !== 'basics' && currentStepId !== 'map' && currentStepId !== 'review';
+  const showMapPanel = currentStepId !== 'basics' && currentStepId !== 'map' && currentStepId !== 'align' && currentStepId !== 'review';
   const showMapColumn = showMapPanel && hasMapForStep;
   // The interactive editor (place/drag markers) only applies to Locations
   // (placing a location directly on the map); Equipment and Review just
   // need a plain reference view, matching event creation's read-only map
   // panel exactly. The Map step renders its own dedicated interactive map
   // below, outside this left/right split entirely.
+
+  // A layer drawn as an area on the real map instead of an image (P8, D64).
+  const currentArea = !venueData.layers[currentLayer]?.mapUrl && !mapFile ? venueData.layers[currentLayer]?.area : undefined;
 
   // The map/floor-controls header for the Map step: floor name top-left,
   // Add Markers top-right.
@@ -1010,7 +1006,8 @@ export default function VenueManagementPageClient() {
         <label className="text-sm font-medium text-surface-light">
           Venue Map
         </label>
-        <Input
+        {/* A map drawn on the live map needs no layer name (CUSTOM_AREA_LAYER_NAME). */}
+        {!currentArea && <Input
           value={venueData.layers[currentLayer].name}
           onValueChange={updateLayerName}
           variant="flat"
@@ -1020,7 +1017,7 @@ export default function VenueManagementPageClient() {
             inputWrapper: 'rounded-large px-4 pr-6 hover:bg-surface-deep',
           }}
           placeholder="Layer name"
-        />
+        />}
       </div>
       {previewUrl && (
         <div className="flex gap-2">
@@ -1074,6 +1071,13 @@ export default function VenueManagementPageClient() {
             className="text-xs text-surface-light/60 underline transition hover:text-status-blue"
           >
             Or import a GIS map with pre-placed points and areas
+          </button>
+          <button
+            type="button"
+            onClick={() => setCurrentArea({ polygon: [] })}
+            className="text-xs text-surface-light/60 underline transition hover:text-status-blue"
+          >
+            Or draw the area on the real map, with no image
           </button>
         </div>
       </Card>
@@ -1144,7 +1148,6 @@ export default function VenueManagementPageClient() {
           <div
             className="relative inline-block"
             onClick={handleImageClick}
-            onDoubleClick={handleAreaImageDoubleClick}
             style={{
               transform: `scale(${scale}) translate(${position.x / scale}px, ${position.y / scale}px)`,
               transformOrigin: 'left top',
@@ -1215,43 +1218,20 @@ export default function VenueManagementPageClient() {
                     />
                   )}
                 </svg>
-                {/* Point dots: plain HTML circles positioned by percent (like
-                    VenueMapMarker's pins), sized in real pixels so they stay
-                    round no matter how the underlying image is stretched. */}
+                {/* Point dots (AreaVertex): plain HTML circles positioned by
+                    percent (like VenueMapMarker's pins), sized in real pixels so
+                    they stay round no matter how the image is stretched. */}
                 <div className="absolute inset-0" style={{ pointerEvents: 'none' }}>
-                  {pendingZone.points.map((p, i) => {
-                    const isFirst = i === 0;
-                    const canClose = isFirst && pendingZone.isDrawing && pendingZone.points.length >= 3;
-                    return (
-                      <div key={i} style={{ position: 'absolute', left: `${p.x}%`, top: `${p.y}%`, transform: 'translate(-50%, -50%)' }}>
-                        {canClose && (
-                          <div
-                            style={{
-                              position: 'absolute',
-                              left: '50%',
-                              top: '50%',
-                              transform: 'translate(-50%, -50%)',
-                              width: 28,
-                              height: 28,
-                              borderRadius: '9999px',
-                              border: `2px solid ${zoneColorInput || '#3b82f6'}`,
-                              opacity: 0.7,
-                            }}
-                          />
-                        )}
-                        <div
-                          style={{
-                            width: isFirst ? 16 : 12,
-                            height: isFirst ? 16 : 12,
-                            borderRadius: '9999px',
-                            backgroundColor: zoneColorInput || '#3b82f6',
-                            border: '2px solid white',
-                            boxShadow: '0 1px 3px rgb(0 0 0 / 0.6)',
-                          }}
+                  {pendingZone.isDrawing &&
+                    pendingZone.points.map((p, i) => (
+                      <div key={i} style={{ position: 'absolute', left: `${p.x}%`, top: `${p.y}%`, transform: 'translate(-50%, -50%)', zIndex: i === 0 ? 1 : undefined }}>
+                        <AreaVertex
+                          color={zoneColorInput || '#3b82f6'}
+                          first={i === 0}
+                          onClose={i === 0 && pendingZone.points.length >= MIN_AREA_POINTS ? completePendingZone : undefined}
                         />
                       </div>
-                    );
-                  })}
+                    ))}
                 </div>
               </>
             )}
@@ -1301,13 +1281,13 @@ export default function VenueManagementPageClient() {
         {/* Instructions overlay - Top Left */}
         {isAddMarkerMode && !pendingMarker && <MarkerPlacementInstruction />}
         {isAddAreaMode && !pendingZone && (
-          <MarkerPlacementInstruction message="Click on the map to start placing points. The area only registers once you connect the dots back to the first point." />
+          <MarkerPlacementInstruction message="Click on the map to place the area's first point." />
         )}
         {isAddAreaMode && pendingZone?.isDrawing && pendingZone.points.length < 3 && (
-          <MarkerPlacementInstruction message={`${pendingZone.points.length} point${pendingZone.points.length === 1 ? '' : 's'} placed. Add at least ${3 - pendingZone.points.length} more, then connect back to the first point to finish.`} />
+          <MarkerPlacementInstruction message={`${pendingZone.points.length} point${pendingZone.points.length === 1 ? '' : 's'} placed. Add at least ${MIN_AREA_POINTS - pendingZone.points.length} more, then click the open circle to complete the area.`} />
         )}
-        {isAddAreaMode && pendingZone?.isDrawing && pendingZone.points.length >= 3 && (
-          <MarkerPlacementInstruction message={`${pendingZone.points.length} points placed. Click the highlighted first point (or double-click) to connect the dots and complete the area.`} />
+        {isAddAreaMode && pendingZone?.isDrawing && pendingZone.points.length >= MIN_AREA_POINTS && (
+          <MarkerPlacementInstruction message={`${pendingZone.points.length} points placed. Click the open circle at the first point to complete the area.`} />
         )}
       </div>
   );
@@ -1353,20 +1333,20 @@ export default function VenueManagementPageClient() {
           staff={[]}
           equipment={venueData.equipment}
           teamTimers={{}}
-          scale={readOnlyScale}
-          position={readOnlyPosition}
-          isPanning={readOnlyIsPanning}
-          onMouseDown={handleReadOnlyMouseDown}
-          onMouseMove={handleReadOnlyMouseMove}
-          onMouseUp={handleReadOnlyMouseUp}
-          onWheel={handleReadOnlyWheel}
+          scale={readOnlyView.scale}
+          position={readOnlyView.position}
+          isPanning={readOnlyView.isPanning}
+          onMouseDown={readOnlyView.handleMouseDown}
+          onMouseMove={readOnlyView.handleMouseMove}
+          onMouseUp={readOnlyView.handleMouseUp}
+          onWheel={readOnlyView.handleWheel}
           imgRef={readOnlyImgRef}
           imageRadiusClassName="rounded-none"
         />
         <MapZoomControls
-          onZoomIn={handleReadOnlyZoomIn}
-          onZoomOut={handleReadOnlyZoomOut}
-          onReset={handleReadOnlyResetZoom}
+          onZoomIn={() => readOnlyView.zoomIn(0.25)}
+          onZoomOut={() => readOnlyView.zoomOut(0.25)}
+          onReset={readOnlyView.resetZoom}
           buttonClassName="bg-surface-deepest/90 backdrop-blur"
           resetButtonClassName="bg-surface-deepest/90 backdrop-blur"
         />
@@ -1375,7 +1355,143 @@ export default function VenueManagementPageClient() {
     </div>
   );
 
-  const rightPanelContent = currentStepId === 'locations' ? locationsMapPanel : readOnlyMapPanel;
+  // A geo layer (aligned image or drawn area) places and shows locations on the live map (P8, D64).
+  const currentDisplayLayer = layersForMapDisplay[currentLayer];
+  const currentIsGeo = !!currentDisplayLayer && isGeoLayer(currentDisplayLayer);
+
+  const handleGeoMapClick = (p: LatLng) => {
+    if (!currentDisplayLayer) return;
+    if (isAddAreaMode) {
+      if (!pendingZone) {
+        setZoneColorInput(getNextZoneColor(venueData.layers[currentLayer]?.zones || []));
+        setPendingZone({ points: [], coords: [p], layerIdx: currentLayer, isDrawing: true });
+      } else if (pendingZone.isDrawing) {
+        setPendingZone({ ...pendingZone, coords: [...(pendingZone.coords ?? []), p] });
+      }
+      return;
+    }
+    if (!isAddMarkerMode || pendingMarker) return;
+    const newPost = postAt({ name: '', x: null, y: null }, p, currentDisplayLayer);
+    setVenueData((prev) => {
+      const newLayers = [...prev.layers];
+      newLayers[currentLayer] = { ...newLayers[currentLayer], posts: [...newLayers[currentLayer].posts, newPost] };
+      return { ...prev, layers: newLayers };
+    });
+    setPendingMarker({ x: newPost.x ?? 0, y: newPost.y ?? 0, layerIdx: currentLayer, postIdx: venueData.layers[currentLayer].posts.length });
+    setMarkerNameInput('');
+    setMarkerIsClinicInput(false);
+  };
+
+  const moveGeoPost = (postIdx: number, p: LatLng) => {
+    if (!currentDisplayLayer) return;
+    setVenueData((prev) => {
+      const newLayers = [...prev.layers];
+      const posts = [...newLayers[currentLayer].posts];
+      const post = posts[postIdx];
+      if (!post || typeof post === 'string') return prev;
+      posts[postIdx] = postAt(post, p, currentDisplayLayer);
+      newLayers[currentLayer] = { ...newLayers[currentLayer], posts };
+      return { ...prev, layers: newLayers };
+    });
+  };
+
+  const geoDrawing = pendingZone?.isDrawing && pendingZone.coords ? pendingZone : null;
+  const geoLocationsPanel = currentDisplayLayer ? (
+    <div className="flex flex-col h-full">
+      <div className="flex flex-shrink-0 flex-wrap items-center gap-2 pb-2">
+        <MarkerModeToggleButton
+          isAddMarkerMode={isAddMarkerMode}
+          onToggle={() => {
+            if (!isAddMarkerMode) cancelZoneDrawing();
+            setIsAddAreaMode(false);
+            setIsAddMarkerMode(!isAddMarkerMode);
+          }}
+        />
+        <AreaModeToggleButton
+          isAddAreaMode={isAddAreaMode}
+          onToggle={() => {
+            if (!isAddAreaMode) {
+              if (pendingMarker) cancelMarkerName();
+              setIsAddMarkerMode(false);
+            } else {
+              cancelZoneDrawing();
+            }
+            setIsAddAreaMode(!isAddAreaMode);
+          }}
+        />
+        <span className="text-xs text-surface-faint">
+          {isAddMarkerMode
+            ? 'Click anywhere on the map to place a location. Drag a location to move it.'
+            : isAddAreaMode
+              ? geoDrawing
+                ? geoDrawing.coords!.length >= MIN_AREA_POINTS
+                  ? `${geoDrawing.coords!.length} points placed. Click the open circle at the first point to complete the area.`
+                  : `${geoDrawing.coords!.length} point${geoDrawing.coords!.length === 1 ? '' : 's'} placed. Add at least ${MIN_AREA_POINTS - geoDrawing.coords!.length} more, then click the open circle to complete the area.`
+                : pendingZone
+                  ? ''
+                  : 'Click on the map to place the area\'s first point.'
+              : 'Drag a location to move it.'}
+        </span>
+      </div>
+      <div className="relative min-h-0 flex-1 overflow-hidden rounded-t-sm">
+        <GeoLayerMap
+          className="absolute inset-0"
+          layer={currentDisplayLayer}
+          onMapClick={isAddMarkerMode || isAddAreaMode ? handleGeoMapClick : undefined}
+          cursor={isAddMarkerMode || isAddAreaMode ? 'crosshair' : 'grab'}
+          onPostMove={moveGeoPost}
+          draftZone={
+            pendingZone?.coords && pendingZone.layerIdx === currentLayer
+              ? { coords: pendingZone.coords, color: zoneColorInput || '#3eb1fd', closed: !pendingZone.isDrawing, onClose: completePendingZone }
+              : null
+          }
+        />
+        {pendingMarker && (
+          <PendingMarkerDialog
+            markerNameInput={markerNameInput}
+            markerInputRef={markerInputRef}
+            setMarkerNameInput={setMarkerNameInput}
+            markerIsClinicInput={markerIsClinicInput}
+            setMarkerIsClinicInput={setMarkerIsClinicInput}
+            onConfirm={confirmMarkerName}
+            onCancel={cancelMarkerName}
+          />
+        )}
+        {pendingZone && !pendingZone.isDrawing && (
+          <PendingZoneDialog
+            zoneNameInput={zoneNameInput}
+            zoneNameInputRef={zoneNameInputRef}
+            setZoneNameInput={setZoneNameInput}
+            zoneColorInput={zoneColorInput}
+            setZoneColorInput={setZoneColorInput}
+            zoneIsDispatchZoneInput={zoneIsDispatchZoneInput}
+            setZoneIsDispatchZoneInput={setZoneIsDispatchZoneInput}
+            onConfirm={confirmZoneName}
+            onCancel={cancelZoneDrawing}
+          />
+        )}
+      </div>
+      {simpleLayerBar}
+    </div>
+  ) : null;
+
+  const geoReadOnlyPanel = currentDisplayLayer ? (
+    <div className="flex flex-col h-full">
+      <div className="relative min-h-0 flex-1 overflow-hidden rounded-t-sm">
+        <GeoLayerMap className="absolute inset-0" layer={currentDisplayLayer} extraPins={geoEquipmentPins(currentDisplayLayer, venueData.equipment)} />
+      </div>
+      {simpleLayerBar}
+    </div>
+  ) : null;
+
+  const rightPanelContent =
+    currentStepId === 'locations'
+      ? currentIsGeo
+        ? geoLocationsPanel
+        : locationsMapPanel
+      : currentIsGeo
+        ? geoReadOnlyPanel
+        : readOnlyMapPanel;
 
   const basicsStep = (
     <div className="flex h-full items-center justify-center">
@@ -1398,10 +1514,41 @@ export default function VenueManagementPageClient() {
     </div>
   );
 
+  // A layer drawn as an area on the real map instead of an image (P8, D64).
+  const setCurrentArea = (area: Layer['area'] | null) =>
+    setVenueData((prev) => ({
+      ...prev,
+      layers: prev.layers.map((l, i) => {
+        if (i !== currentLayer) return l;
+        const rest = { ...l };
+        delete rest.area;
+        if (area) return { ...rest, name: CUSTOM_AREA_LAYER_NAME, area };
+        // Back to an image: the floor name it would have had.
+        return rest.name === CUSTOM_AREA_LAYER_NAME ? { ...rest, name: `Floor ${i + 1}` } : rest;
+      }),
+    }));
+  const areaEditor = (
+    <div className="flex h-full min-h-0 flex-col gap-2">
+      <AreaEditor
+        className="min-h-0 flex-1"
+        heightClassName="min-h-[240px] flex-1"
+        area={currentArea?.polygon.length ? currentArea : undefined}
+        onChange={(area) => setCurrentArea(area ?? { polygon: [] })}
+      />
+      <button
+        type="button"
+        onClick={() => setCurrentArea(null)}
+        className="self-start text-xs text-surface-light/60 underline transition hover:text-status-blue"
+      >
+        Use an image instead
+      </button>
+    </div>
+  );
+
   const mapFloorsStep = (
     <div className="flex flex-col h-full">
       {mapStepHeader}
-      <div className="flex-1 min-h-0">{hasMapForStep ? interactiveMapPanel : mapUploadPrompt}</div>
+      <div className="flex-1 min-h-0">{previewUrl ? interactiveMapPanel : currentArea ? areaEditor : mapUploadPrompt}</div>
     </div>
   );
 
@@ -1615,12 +1762,36 @@ export default function VenueManagementPageClient() {
   const steps: WizardStep[] = [
     { id: 'basics', label: 'Venue Configuration', component: basicsStep, isComplete: hasName },
     { id: 'map', label: 'Map', component: mapFloorsStep, isComplete: hasName },
+    ...(hasMapImage ? [{
+      id: 'align',
+      label: 'Map alignment',
+      component: userId ? (
+        <MapAlignmentStep
+          uid={userId}
+          layers={layersForMapDisplay}
+          onAlignmentChange={(layerId, alignment) =>
+            setVenueData((prev) => ({
+              ...prev,
+              layers: prev.layers.map((l) => {
+                if (l.id !== layerId) return l;
+                const rest = { ...l };
+                delete rest.takAlignment;
+                if (alignment) return { ...rest, alignment };
+                delete rest.alignment;
+                return rest;
+              }),
+            }))
+          }
+        />
+      ) : null,
+      isComplete: hasName,
+    }] : []),
     { id: 'locations', label: 'Locations', component: locationsStep, isComplete: hasName },
     { id: 'equipment', label: 'Equipment', component: equipmentStep, isComplete: hasName },
     { id: 'review', label: 'Review', component: reviewStep, isComplete: hasName },
   ];
 
-  const stepIdx = STEP_ORDER.indexOf(currentStepId as (typeof STEP_ORDER)[number]);
+  const stepIdx = STEP_ORDER.indexOf(currentStepId);
   const isFirstStep = stepIdx <= 0;
   const isLastStep = stepIdx === STEP_ORDER.length - 1;
   const goNext = () => {

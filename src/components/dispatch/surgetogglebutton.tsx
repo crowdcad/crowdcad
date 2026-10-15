@@ -41,7 +41,7 @@ export default function SurgeToggleButton({ active, startedAt, onToggle }: Props
           : 'border-surface-liner bg-transparent text-surface-faint hover:text-surface-light hover:bg-surface-liner/30'
       }`}
     >
-      {t('Surge')}: {active ? formatMMSS(elapsed) : t('Inactive')}
+      {t('Surge')}: {active ? <span className="ui-timer">{formatMMSS(elapsed)}</span> : t('Inactive')}
     </button>
   );
 }

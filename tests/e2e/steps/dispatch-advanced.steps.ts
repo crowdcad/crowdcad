@@ -61,3 +61,46 @@ Then('the equipment {string} should show status {string}', async ({ page }, equi
   // .first() targets the visible trigger span
   await expect(card.locator('[aria-label="Status"] [data-slot="value"]').first()).toHaveText(status);
 });
+
+// Equipment runs (src/lib/equipmentCustody.ts)
+
+When('I send team {string} with equipment {string} on the latest call', async ({ page }, teamName: string, equipName: string) => {
+  await page.getByRole('button', { name: 'Add', exact: true }).last().click();
+  // Nested Radix submenus are driven by keyboard: a pointer click jumps
+  // straight from one submenu trigger to the next menu's item, and Radix closes
+  // the submenu as the pointer leaves its trigger. ArrowRight opens a submenu,
+  // Enter picks an item.
+  await page.getByRole('menuitem', { name: 'Add Equipment' }).press('ArrowRight');
+  await page.getByTestId(`add-equipment-${equipName}`).press('ArrowRight');
+  await page.getByRole('menuitem', { name: teamName, exact: true }).press('Enter');
+});
+
+Then('the equipment {string} should show custody {string}', async ({ page }, equipName: string, custody: string) => {
+  await expect(page.getByTestId(`equipment-custody-${equipName}`)).toHaveText(custody);
+});
+
+Then('the equipment {string} should show no custody line', async ({ page }, equipName: string) => {
+  await expect(page.getByTestId(`equipment-custody-${equipName}`)).toHaveCount(0);
+});
+
+When('I set team {string} card status to {string}', async ({ page }, teamName: string, status: string) => {
+  // The card renders in both the desktop sidebar and the mobile tabs; .first() picks either.
+  const trigger = page.getByTestId(`team-card-${teamName}`).locator('[aria-label="Status"]').first();
+  const option = page.locator('[role="listbox"]').getByText(status, { exact: true });
+  // Same Select open-and-pick retry as the equipment status step above.
+  await expect(async () => {
+    await trigger.click();
+    await option.click({ timeout: 2_000 });
+  }).toPass({ timeout: 15_000 });
+});
+
+When('I move equipment {string} to {string}', async ({ page }, equipName: string, location: string) => {
+  const input = page.getByTestId(`equipment-card-${equipName}`).getByRole('combobox', { name: 'Location' });
+  await input.fill(location);
+  await input.press('Enter');
+});
+
+When('I mark equipment {string} returned', async ({ page }, equipName: string) => {
+  await page.getByTestId(`equipment-card-${equipName}`).getByRole('button', { name: 'Equipment actions' }).click();
+  await page.getByRole('menuitem', { name: /^Mark Returned/ }).click();
+});

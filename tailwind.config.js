@@ -1,5 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 const { heroui } = require("@heroui/react");
+const { BORDER_RADIUS, HEROUI_RADIUS, FONT_FAMILY, scaledPadding } = require("./src/lib/designTokens");
 const {
   STATUS_COLORS_HEX,
   STATUS_CARD_FILL_OPACITY,
@@ -48,6 +49,8 @@ module.exports = {
     "./node_modules/@heroui/**/*.{js,ts,jsx,tsx}",
   ],
   theme: {
+    // Padding scales with the UI style's density (--ui-pad-scale).
+    padding: scaledPadding,
     extend: {
       colors: {
         /* ── App Design Tokens ─────────────────────────────────── */
@@ -117,26 +120,13 @@ module.exports = {
         ring:   'hsl(var(--ring))',
       },
 
-      /* ── Border Radius ───────────────────────────────────── */
-      // Every non-none/non-full radius tier (sm/md/lg/xl/2xl/3xl) resolves to
-      // the same value — the one HeroUI's Button renders at by default
-      // (size="md" → rounded-medium). Components used to reach for whichever
-      // tier they liked (Cards defaulted to "lg", inputs were hardcoded to
-      // "large", a few dispatch cards used Tailwind's own xl/2xl) and the
-      // corners visibly didn't match across the app. Collapsing the scale
-      // here — instead of hunting down every call site — makes every
-      // existing (and future) rounded-* usage converge on the button's
-      // corner automatically; `rounded-none` and `rounded-full` are
-      // deliberately untouched since those are a different shape choice, not
-      // a scale mismatch.
-      borderRadius: {
-        sm: 'calc(var(--radius) - 2px)',
-        md: 'calc(var(--radius) - 2px)',
-        lg: 'calc(var(--radius) - 2px)',
-        xl: 'calc(var(--radius) - 2px)',
-        '2xl': 'calc(var(--radius) - 2px)',
-        '3xl': 'calc(var(--radius) - 2px)',
-      },
+      /* ── Border Radius & fonts ───────────────────────────── */
+      // Shared with the other Tailwind config via src/lib/designTokens.js:
+      // every rounded-* tier reads one --ui-radius (so corners match across
+      // Tailwind, HeroUI and shadcn components) and font-sans/font-mono read
+      // the UI style's fonts. Tune the values in src/styles/ui-style.css.
+      borderRadius: BORDER_RADIUS,
+      fontFamily: FONT_FAMILY,
 
       /* ── Animations ──────────────────────────────────────── */
       animation: {
@@ -169,19 +159,8 @@ module.exports = {
     },
     heroui({
       layout: {
-        // Ties every HeroUI component's corners to the same shadcn `--radius`
-        // token (see globals.css) used by the plain Tailwind rounded-lg/md/sm
-        // utilities and shadcn/radix components (e.g. dropdown-menu.tsx) —
-        // one shared lever instead of a second, independently-tuned scale.
-        // small/medium/large all resolve to the same value (see the plain
-        // borderRadius block above for why) so every HeroUI component's
-        // corners match Button's regardless of which tier — or none at all —
-        // it happens to request.
-        radius: {
-          small: "calc(var(--radius) - 2px)",
-          medium: "calc(var(--radius) - 2px)",
-          large: "calc(var(--radius) - 2px)",
-        },
+        // Same --ui-radius as every rounded-* utility (src/lib/designTokens.js).
+        radius: HEROUI_RADIUS,
       },
       themes: {
         light: {

@@ -7,21 +7,26 @@ import {
   Card, Dropdown, DropdownTrigger, DropdownMenu, DropdownItem,
   Select, SelectItem, Autocomplete, AutocompleteItem
 } from '@heroui/react';
-import { ChevronDown, ChevronUp, MapPin, MoreVertical, Map as MapIcon } from 'lucide-react';
+import { ChevronDown, ChevronUp, MapPin, MoreVertical, Map as MapIcon, X } from 'lucide-react';
 import type { Event, EquipmentItem } from '@/app/types';
 import TrackingTextEntry from '@/components/dispatch/trackingtextentry';
 import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
 import { getStatusColor } from '@/lib/statusColors';
 import EquipmentTypeIcon from '@/components/dispatch/equipmenttypeicon';
 import { getEquipmentIconType } from '@/lib/equipmentIcon';
-import { STATIC_SELECTOR_BUTTON_CLASS, staticSelectorButtonProps } from '@/lib/autocompleteSelector';
+import { staticSelectorButtonProps } from '@/lib/heroStatic';
+import { describeCustody } from '@/lib/equipmentCustody';
+import { arrivalQuestion, type EquipmentArrival } from '@/lib/equipmentArrivals';
 
 type EquipmentCardProps = {
   equipment: EquipmentItem;
   event: Event;
   onStatusChange: (equipmentName: string, newStatus: string) => void;
   onLocationChange: (equipmentName: string, newLocation: string) => void;
+  /** Back at its staging location (the dispatcher's manual return). */
   onMarkReady?: (equipmentName: string) => void;
+  /** The unit sent to fetch it has it. */
+  onPickedUp?: (equipmentName: string) => void;
   onDelete?: (equipmentName: string) => void;
   updateEvent: (updates: Partial<Event>) => Promise<void>;
   /** Whether the venue has a map uploaded — gates the "view on map" button. */
@@ -29,6 +34,10 @@ type EquipmentCardProps = {
   onViewOnMap?: (equipmentName: string) => void;
   /** Whether this item's current location is an actual pin on the map — the button still shows, but disabled, when it's a free-text/non-post value or unset. */
   canLocateOnMap?: boolean;
+  /** Live tracking puts the unit running it where it was heading: offer to confirm the pickup or return. */
+  arrival?: EquipmentArrival;
+  onConfirmArrival?: (arrival: EquipmentArrival) => void;
+  onDismissArrival?: (arrival: EquipmentArrival) => void;
 };
 
 // Shares statusColors.ts's team/supervisor status→color convention
@@ -49,11 +58,15 @@ export default function EquipmentCard({
   onStatusChange,
   onLocationChange,
   onMarkReady,
+  onPickedUp,
   onDelete,
   updateEvent,
   hasVenueMap,
   onViewOnMap,
   canLocateOnMap,
+  arrival,
+  onConfirmArrival,
+  onDismissArrival,
 }: EquipmentCardProps) {
   const { t } = useDispatchTerms();
   const [expanded, setExpanded] = useState(false);
@@ -93,6 +106,13 @@ export default function EquipmentCard({
 
   const statusTone = equipmentStatusTone(equipment.status);
 
+  // Where it is in its run, e.g. "Being retrieved by Team 3 from Gate A".
+  const custodyLine = equipment.phase && equipment.holder
+    ? describeCustody({ phase: equipment.phase, holder: equipment.holder }, equipment.assignedTeam)
+    : null;
+  const isHome = equipment.phase === 'staged' && equipment.holder?.name === equipment.stagingLocation;
+  const canReturn = !isHome && (equipment.phase ? true : !!equipment.needsRefresh);
+
   return (
     <Card
       className={`dispatch-shell-card ${expanded ? 'dispatch-shell-card--open' : ''} w-full border-0 transition-colors duration-200 ${expanded ? 'rounded-2xl bg-surface-deep shadow-sm' : 'rounded-none bg-transparent shadow-none hover:bg-surface-deep'}`}
@@ -107,9 +127,14 @@ export default function EquipmentCard({
             <EquipmentTypeIcon type={getEquipmentIconType(equipment.name)} className="w-4 h-4 shrink-0" />
             <span className="truncate">{equipment.name}</span>
           </div>
+          {custodyLine && !isHome && (
+            <div className="text-xs text-surface-faint truncate" data-testid={`equipment-custody-${equipment.name}`}>
+              {custodyLine}
+            </div>
+          )}
         </div>
 
-        <div className="absolute top-3 right-3 flex items-center gap-2">
+        <div className="absolute top-0 right-0 pt-3 pr-3 flex items-center gap-2">
           <div className="text-surface-light/70">
             {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
           </div>
@@ -149,12 +174,18 @@ export default function EquipmentCard({
                 aria-label="Equipment actions"
                 itemClasses={{ base: 'px-3 py-2 text-sm text-surface-light rounded-xl' }}
                 onAction={(key) => {
-                  if (key === 'ready' && equipment.needsRefresh) onMarkReady?.(equipment.name);
+                  if (key === 'ready') onMarkReady?.(equipment.name);
+                  if (key === 'picked-up') onPickedUp?.(equipment.name);
                   if (key === 'delete') onDelete?.(equipment.name);
                 }}
               >
-                {equipment.needsRefresh ? (
-                  <DropdownItem key="ready">{t('Mark Ready')}</DropdownItem>
+                {equipment.phase === 'retrieving' ? (
+                  <DropdownItem key="picked-up">{t('Mark Picked Up')}</DropdownItem>
+                ) : null}
+                {canReturn ? (
+                  <DropdownItem key="ready">
+                    {equipment.needsRefresh ? t('Mark Ready') : `${t('Mark Returned')} (${t(equipment.stagingLocation || 'Staging')})`}
+                  </DropdownItem>
                 ) : null}
                 <DropdownItem key="delete" className="text-status-red">{t('Delete')}</DropdownItem>
               </DropdownMenu>
@@ -162,6 +193,22 @@ export default function EquipmentCard({
           </div>
         </div>
       </div>
+
+      {arrival && (
+        <div
+          className="mx-4 mb-2 flex items-center gap-2 rounded-lg border border-status-card-ring-yellow bg-status-card-yellow px-3 py-1.5 text-xs text-surface-light"
+          data-testid={`equipment-arrival-${equipment.name}`}
+          onClick={e => e.stopPropagation()}
+        >
+          <span className="min-w-0 flex-1">{arrivalQuestion(arrival)}</span>
+          <button type="button" className="font-semibold hover:text-status-blue" onClick={() => onConfirmArrival?.(arrival)}>
+            {t('Confirm')}
+          </button>
+          <button type="button" aria-label={t('Dismiss')} className="text-surface-faint hover:text-surface-light" onClick={() => onDismissArrival?.(arrival)}>
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
 
       {/* BODY*/}
       <div className="px-4 pb-3 pt-0">
@@ -226,7 +273,6 @@ export default function EquipmentCard({
                 className="min-w-0"
                 classNames={{
                   base: 'min-w-0 data-[focus-visible=true]:outline-none data-[focus=true]:outline-none',
-                  selectorButton: STATIC_SELECTOR_BUTTON_CLASS,
                 }}
                 selectorButtonProps={staticSelectorButtonProps}
                 inputProps={{
@@ -238,7 +284,7 @@ export default function EquipmentCard({
               >
                 {(() => {
                   const posts = (event.venue?.posts || []).map(p => (typeof p === 'string' ? p : p.name));
-                  const teams = (event.staff || []).map(s => s.team);
+                  const teams = [...(event.staff || []), ...(event.supervisor || [])].map(s => s.team);
                   const opts = Array.from(new Set(['Clinic', ...posts, ...teams, equipment.stagingLocation].filter(Boolean)));
                   return opts.map(p => <AutocompleteItem key={p}>{t(p)}</AutocompleteItem>);
                 })()}
