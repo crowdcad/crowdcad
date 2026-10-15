@@ -52,6 +52,7 @@ export default function AdminUsersSection({ currentUser }: { currentUser: Servic
   const [deleteTarget, setDeleteTarget] = useState<UserRow | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [adminTarget, setAdminTarget] = useState<UserRow | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -76,6 +77,7 @@ export default function AdminUsersSection({ currentUser }: { currentUser: Servic
   }, [rows, search]);
 
   const toggleAdmin = async (row: UserRow) => {
+    setAdminTarget(null);
     setUpdatingId(row.id);
     try {
       await dbService.setDocument('users', row.id, { isAdmin: !row.isAdmin }, { merge: true });
@@ -163,7 +165,7 @@ export default function AdminUsersSection({ currentUser }: { currentUser: Servic
                   )}
                   <Switch
                     isSelected={row.isAdmin}
-                    onValueChange={() => toggleAdmin(row)}
+                    onValueChange={() => setAdminTarget(row)}
                     isDisabled={updatingId === row.id}
                     aria-label={`Admin access for ${row.email}`}
                     classNames={{ wrapper: 'group-data-[selected=true]:bg-accent' }}
@@ -175,6 +177,35 @@ export default function AdminUsersSection({ currentUser }: { currentUser: Servic
           </div>
         )}
       </CardBody>
+
+      {adminTarget && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <Card className="max-w-md w-full bg-surface-deepest border border-default-200">
+            <CardBody className="p-6">
+              <h3 className="text-xl font-semibold mb-2">
+                {adminTarget.isAdmin ? 'Remove Admin Access?' : 'Grant Admin Access?'}
+              </h3>
+              <p className="text-surface-light/80 mb-4">
+                {adminTarget.isAdmin
+                  ? <>Are you sure? <span className="font-medium">{adminTarget.email}</span> will lose admin privileges.</>
+                  : <>Are you sure? <span className="font-medium">{adminTarget.email}</span> will get full admin privileges.</>}
+              </p>
+              <div className="flex gap-3">
+                <Button
+                  onPress={() => toggleAdmin(adminTarget)}
+                  color={adminTarget.isAdmin ? 'danger' : 'default'}
+                  className={adminTarget.isAdmin ? 'flex-1' : 'flex-1 bg-accent'}
+                >
+                  {adminTarget.isAdmin ? 'Remove Admin' : 'Make Admin'}
+                </Button>
+                <Button onPress={() => setAdminTarget(null)} variant="bordered" className="flex-1">
+                  Cancel
+                </Button>
+              </div>
+            </CardBody>
+          </Card>
+        </div>
+      )}
 
       {deleteTarget && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">

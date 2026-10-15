@@ -86,19 +86,6 @@ interface LogEntry {
 
 const DETAILS_CLOSE_ANIMATION_MS = 320;
 
-// Call #, Chief Complaint, A/S, Location, Team (flex), row actions (kebab
-// menu + priority/pin indicator icons).
-const DefaultTableColGroup = () => (
-  <colgroup>
-    <col style={{ width: '5.25rem' }} />
-    <col style={{ width: '11rem' }} />
-    <col style={{ width: '4rem' }} />
-    <col style={{ width: '11rem' }} />
-    <col />
-    <col style={{ width: '4.5rem' }} />
-  </colgroup>
-);
-
 export const CallTrackingTable: React.FC<CallTrackingTableProps> = ({
   event,
   filterCalls,
@@ -128,7 +115,7 @@ export const CallTrackingTable: React.FC<CallTrackingTableProps> = ({
   handleAddTeamToCall,
   handleRevertDetachment,
   formatAgeSex,
-  TableColGroup = DefaultTableColGroup,
+  TableColGroup,
 }) => {
   // const ButtonRefs = useRef<Record<string, HTMLElement | null>>({});
   const [closingCallId, setClosingCallId] = React.useState<string | null>(null);
