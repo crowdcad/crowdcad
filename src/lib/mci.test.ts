@@ -331,6 +331,20 @@ describe('declare and stand down', () => {
     expect(isMciActive(e)).toBe(true);
   });
 
+  it('ends an open surge and keeps its period in the surge log', () => {
+    const base = baseEvent({
+      manualSurgeActive: true,
+      manualSurgeStartedAt: 100,
+      surgeLog: [{ startedAt: 50, endedAt: 80 }, { startedAt: 100 }],
+    });
+    const patch = declareMci(base, { zones: [], areas: [] }, 700);
+    expect(patch.manualSurgeActive).toBe(false);
+    expect(patch.manualSurgeStartedAt).toBeUndefined();
+    expect(patch.surgeLog).toEqual([{ startedAt: 50, endedAt: 80 }, { startedAt: 100, endedAt: 700 }]);
+    // No surge running: the patch leaves the surge fields alone.
+    expect('manualSurgeActive' in declareMci(baseEvent(), { zones: [], areas: [] }, 700)).toBe(false);
+  });
+
   it('does not open a second period while one is open', () => {
     const e = activeEvent();
     const again = declareMci(e, { zones: [], areas: [] }, 900);

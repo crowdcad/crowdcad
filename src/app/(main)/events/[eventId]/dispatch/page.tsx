@@ -421,7 +421,8 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
   }, [eventId, isLiteMode]);
 
   // MCI mode (src/lib/mci.ts): every write goes through updateEvent's functional form.
-  const mciActions = useMciActions(updateEvent, authUser?.uid);
+  const mciWritesInFlight = useRef(0);
+  const mciActions = useMciActions(updateEvent, authUser?.uid, { setLocal: setEvent, inFlight: mciWritesInFlight });
   const [showDeclareMci, setShowDeclareMci] = useState(false);
 
   const handlePostAssignment = useCallback(async (time: string, post: string, team: string) => {
@@ -2056,9 +2057,13 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
             return;
           }
           setEvent(prev => {
-            if (!isEqual(prev, eventData)) {
-              setPostAssignments(eventData.postAssignments || {});
-              return eventData;
+            // While this dispatcher's own MCI taps are still saving, a snapshot with a shorter log is the
+            // echo of an earlier tap; keeping the local log stops the counts stepping back and forward.
+            const staleMci = mciWritesInFlight.current > 0 && prev?.mci && (eventData.mci?.log.length ?? 0) < prev.mci.log.length;
+            const incoming = staleMci ? { ...eventData, mci: prev.mci } : eventData;
+            if (!isEqual(prev, incoming)) {
+              setPostAssignments(incoming.postAssignments || {});
+              return incoming;
             }
             return prev;
           });

@@ -7,11 +7,11 @@ Feature: MCI mode on the dispatch board
 
   Scenario: An event with no MCI shows no MCI tab
     Then I should see a "Declare MCI" button
-    And I should not see the text "Since declared"
+    And I should not see the text "Duration"
 
   Scenario: Run an MCI from declaration to the summary
     When I declare an MCI with zones "Zone A" and "Zone B" and the default clinic
-    Then I should see the text "Since declared"
+    Then I should see the text "Duration"
     When I tag 3 "red" patients in zone "Zone A"
     And I tag 2 "yellow" patients in zone "Zone A"
     Then zone "Zone A" should show 3 "red" patients in the zone

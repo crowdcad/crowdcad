@@ -302,7 +302,11 @@ export interface DeclareMciInput {
 }
 
 /** Starts an MCI period. Declaring again keeps existing zones, areas and log and appends a period. */
-export function declareMci(event: Pick<Event, 'mci'>, input: DeclareMciInput, now: number): Partial<Event> {
+export function declareMci(
+  event: Pick<Event, 'mci' | 'manualSurgeActive' | 'surgeLog'>,
+  input: DeclareMciInput,
+  now: number
+): Partial<Event> {
   const base = event.mci ?? emptyMci();
   const zones = [...base.zones];
   for (const zone of input.zones) {
@@ -315,7 +319,17 @@ export function declareMci(event: Pick<Event, 'mci'>, input: DeclareMciInput, no
     areas.push(area);
   }
   const hasOpenPeriod = base.periods.length > 0 && base.periods[base.periods.length - 1].endedAt === undefined;
+  // An MCI replaces a surge: close any open surge period so its time is kept in the surge log.
+  const surgeLog = event.surgeLog || [];
+  const surgeEnd: Partial<Event> = event.manualSurgeActive
+    ? {
+        manualSurgeActive: false,
+        manualSurgeStartedAt: undefined,
+        surgeLog: surgeLog.map((period, i) => (i === surgeLog.length - 1 && period.endedAt === undefined ? { ...period, endedAt: now } : period)),
+      }
+    : {};
   return {
+    ...surgeEnd,
     mci: {
       ...base,
       active: true,

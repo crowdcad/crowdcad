@@ -24,7 +24,7 @@ export default function MciToggleButton({ active, startedAt, onDeclare, onOpenTa
       onClick={active ? onOpenTab : onDeclare}
       data-testid="mci-declare-button"
       aria-label={active ? 'Open MCI tab' : t('Declare MCI')}
-      className={`self-start shrink-0 h-8 px-4 flex items-center rounded-md border text-[15px] sm:text-base font-semibold tabular-nums transition-colors ${
+      className={`self-start shrink-0 h-8 px-4 flex items-center rounded-md border text-sm sm:text-[15px] font-semibold tabular-nums transition-colors ${
         active
           ? 'border-status-card-ring-red bg-status-card-red text-surface-light'
           : 'border-surface-liner bg-transparent text-surface-faint hover:text-surface-light hover:bg-surface-liner/30'

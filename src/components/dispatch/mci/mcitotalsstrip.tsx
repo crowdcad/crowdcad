@@ -31,7 +31,7 @@ export default function MciTotalsStrip({ mci, totals }: Props) {
 
   return (
     <div className="flex flex-wrap items-end divide-x divide-surface-liner gap-y-2" data-testid="mci-totals-strip">
-      <Stat label={mci.active ? 'Since declared' : 'Lasted'} testId="mci-timer">
+      <Stat label="Duration" testId="mci-timer">
         <span className="ui-timer">{formatElapsed(seconds)}</span>
       </Stat>
       <Stat label={t('Tagged')} testId="mci-total-tagged">

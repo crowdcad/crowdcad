@@ -42,11 +42,13 @@ export default function TeamCard(props: TeamCardProps) {
         className="relative flex items-center justify-between gap-3 px-4 py-3 cursor-pointer select-none"
       >
         <div className="min-w-0">
-          <div className="text-[15px] sm:text-base font-semibold text-surface-light truncate">
-            {staff.team}
+          <div className="flex min-w-0 items-center gap-2">
+            <div className="text-[15px] sm:text-base font-semibold text-surface-light truncate">
+              {staff.team}
+            </div>
+            <TeamMciChip staff={staff} event={event} compact />
           </div>
           <TeamCarrying staff={staff} event={event} />
-          <TeamMciChip staff={staff} event={event} />
         </div>
 
         <div className="absolute top-0 right-0 pt-3 pr-3 flex items-center gap-2">

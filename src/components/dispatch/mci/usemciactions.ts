@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useRef, type MutableRefObject } from 'react';
 import { toast } from 'react-toastify';
 import type { Event, MciColor, MciTreatmentArea, MciZone } from '@/app/types';
 import {
@@ -35,16 +35,30 @@ export interface MciActions {
   undo: (entryId: string) => Promise<void>;
 }
 
+export interface MciLocalState {
+  /** Applies a patch to the page's copy of the event right away, before the transaction commits. */
+  setLocal: (update: (current: Event | undefined) => Event | undefined) => void;
+  /** Counts MCI writes still saving; the page ignores a stale server snapshot of the log while it is above 0. */
+  inFlight: MutableRefObject<number>;
+}
+
 /**
  * The dispatch page's MCI writes. Each one builds its patch from the event the
  * transaction read (the functional form of `updateEvent`), never from React
  * state, so two dispatchers writing at once both count. A write that had to
  * be reduced, or was refused, tells the dispatcher with a toast.
+ *
+ * The count writes also apply to the page's copy at once, so a tap shows
+ * immediately, and they are saved one after another, so quick taps neither
+ * contend for the document nor land out of order.
  */
-export function useMciActions(updateEvent: UpdateEvent, uid: string | undefined): MciActions {
+export function useMciActions(updateEvent: UpdateEvent, uid: string | undefined, local?: MciLocalState): MciActions {
   const { t } = useDispatchTerms();
+  const queue = useRef<Promise<unknown>>(Promise.resolve());
+  const setLocal = local?.setLocal;
+  const inFlight = local?.inFlight;
 
-  const run = useCallback(
+  const save = useCallback(
     async (build: (current: Event, ctx: MciWriteContext) => MciWrite): Promise<MciWrite | null> => {
       let result = null as MciWrite | null;
       await updateEvent((current) => {
@@ -58,6 +72,24 @@ export function useMciActions(updateEvent: UpdateEvent, uid: string | undefined)
       return outcome;
     },
     [updateEvent, uid, t]
+  );
+
+  const run = useCallback(
+    (build: (current: Event, ctx: MciWriteContext) => MciWrite): Promise<MciWrite | null> => {
+      if (inFlight) inFlight.current += 1;
+      setLocal?.((current) => (current ? { ...current, ...build(current, { now: Date.now(), by: uid }).patch } : current));
+      const task = async (): Promise<MciWrite | null> => {
+        try {
+          return await save(build);
+        } finally {
+          if (inFlight) inFlight.current -= 1;
+        }
+      };
+      const next = queue.current.then(task, task);
+      queue.current = next;
+      return next;
+    },
+    [save, uid, setLocal, inFlight]
   );
 
   return useMemo<MciActions>(
