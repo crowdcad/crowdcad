@@ -155,7 +155,7 @@ function DeclareMciForm({ event, onClose, onDeclare }: Omit<Props, 'isOpen'>) {
               classNames={inputClassNames}
               data-testid="mci-declare-zone-input"
             />
-            <Button size="sm" variant="bordered" radius="lg" onPress={addZone} isDisabled={!zoneDraft.trim() || zoneDraftTaken} data-testid="mci-declare-zone-add">
+            <Button size="sm" variant="bordered" radius="lg" className="shrink-0 whitespace-nowrap" onPress={addZone} isDisabled={!zoneDraft.trim() || zoneDraftTaken} data-testid="mci-declare-zone-add">
               {t('Add zone')}
             </Button>
           </div>
@@ -206,7 +206,7 @@ function DeclareMciForm({ event, onClose, onDeclare }: Omit<Props, 'isOpen'>) {
               classNames={inputClassNames}
               data-testid="mci-declare-area-input"
             />
-            <Button size="sm" variant="bordered" radius="lg" onPress={addArea} isDisabled={!areaDraft.trim() || areaDraftTaken} data-testid="mci-declare-area-add">
+            <Button size="sm" variant="bordered" radius="lg" className="shrink-0 whitespace-nowrap" onPress={addArea} isDisabled={!areaDraft.trim() || areaDraftTaken} data-testid="mci-declare-area-add">
               {t('Add treatment area')}
             </Button>
           </div>
@@ -241,6 +241,7 @@ export default function DeclareMciModal({ isOpen, event, onClose, onDeclare }: P
       backdrop="opaque"
       hideCloseButton
       radius="lg"
+      size="xl"
       scrollBehavior="inside"
       classNames={{ base: 'mt-20 rounded-lg bg-surface-deepest text-surface-light', header: 'pb-0', footer: 'pt-0' }}
     >

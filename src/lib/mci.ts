@@ -257,6 +257,9 @@ export function mciSeries(mci: MciState | undefined): MciSeriesPoint[] {
     } else continue;
     points.push({ t: entry.t, inZones, inTreatment });
   }
+  // Hold the last values to the end of a finished MCI so the chart shows the whole period.
+  const endedAt = mci.periods[mci.periods.length - 1].endedAt;
+  if (endedAt !== undefined && endedAt > points[points.length - 1].t) points.push({ t: endedAt, inZones, inTreatment });
   return points;
 }
 
@@ -585,4 +588,39 @@ export function mciAvailability(event: Event): MciAvailability {
     else result.unavailable += 1;
   }
   return result;
+}
+
+const csvQuote = (text: string) => `"${text.replace(/"/g, '""')}"`;
+
+/**
+ * MCI rows for the summary CSV, in time order: period start and end rows (like
+ * Surge) and one row per log entry, undone entries and undo entries included.
+ * Format: `MCI,<zone or area>,<timestamp>,"<kind> <color> <n> ..."`.
+ */
+export function mciCsvLines(event: Pick<Event, 'mci'>, formatTimestamp: (ms: number) => string): string[] {
+  const mci = event.mci;
+  if (!mci) return [];
+  const zoneName = (id?: string) => mci.zones.find((z) => z.id === id)?.name;
+  const areaName = (id?: string) => mci.areas.find((a) => a.id === id)?.name;
+  const describe = (entry: MciLogEntry): string =>
+    [entry.kind, entry.color, entry.n !== undefined ? String(entry.n) : undefined, entry.areaId ? `to ${areaName(entry.areaId) ?? entry.areaId}` : undefined]
+      .filter(Boolean)
+      .join(' ');
+
+  const rows: { t: number; order: number; line: string }[] = [];
+  mci.periods.forEach((period, i) => {
+    rows.push({ t: period.startedAt, order: -1, line: `MCI,-,${formatTimestamp(period.startedAt)},${csvQuote('MCI declared')}` });
+    if (period.endedAt !== undefined) {
+      const minutes = Math.round((period.endedAt - period.startedAt) / 60000);
+      rows.push({ t: period.endedAt, order: 1e9 + i, line: `MCI,-,${formatTimestamp(period.endedAt)},${csvQuote(`MCI stood down (active for ${minutes} min)`)}` });
+    }
+  });
+  mci.log.forEach((entry, i) => {
+    // An undo row names the zone of the entry it reverses.
+    const target = entry.kind === 'undo' ? mci.log.find((e) => e.id === entry.undoes) : undefined;
+    const scope = zoneName(entry.zoneId ?? target?.zoneId) ?? '-';
+    const text = entry.kind === 'undo' && target ? `undo ${describe(target)}` : describe(entry);
+    rows.push({ t: entry.t, order: i, line: `MCI,${scope},${formatTimestamp(entry.t)},${csvQuote(text)}` });
+  });
+  return rows.sort((a, b) => a.t - b.t || a.order - b.order).map((r) => r.line);
 }

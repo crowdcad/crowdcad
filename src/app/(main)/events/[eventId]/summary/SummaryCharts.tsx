@@ -8,6 +8,7 @@ import {
 } from 'recharts';
 import { STATUS_COLORS_HEX } from '@/lib/colorTokens';
 import type { TeamStatusBreakdown, AvailabilityPoint } from '@/lib/analyticsUtils';
+import type { MciSeriesPoint } from '@/lib/mci';
 import { GRID_WRAPPER, GRID_CELL } from './summaryGrid';
 
 type Interaction = { sessionId: string; startTime: string; duration: number; clicks: number; keystrokes: number };
@@ -27,10 +28,13 @@ export default function SummaryCharts({
   teamStatusBreakdown = [] as TeamStatusBreakdown[],
   availabilitySeries = [] as AvailabilityPoint[],
   interactionTimeline = [] as Interaction[],
+  mciSeries,
 }: {
   teamStatusBreakdown?: TeamStatusBreakdown[];
   availabilitySeries?: AvailabilityPoint[];
   interactionTimeline?: Interaction[];
+  /** Patients in zones and in treatment over time; present when the event had an MCI. */
+  mciSeries?: MciSeriesPoint[];
 }) {
   return (
     <>
@@ -115,6 +119,38 @@ export default function SummaryCharts({
           </div>
         </div>
       </div>
+
+      {mciSeries && mciSeries.length > 0 && (
+        <div className={GRID_WRAPPER}>
+          <div className={`${GRID_CELL} p-6`} data-testid="mci-chart">
+            <h2 className="text-xl font-semibold mb-4">MCI Patients Over Time</h2>
+            <div className="w-full h-[300px]">
+              <ResponsiveContainer width="100%" height="100%">
+                {/* Step chart from the MCI log: each entry changes the count at its own time and holds until the next. */}
+                <LineChart data={mciSeries} margin={{ top: 8, right: 16, left: 12, bottom: 12 }}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis
+                    dataKey="t"
+                    type="number"
+                    scale="time"
+                    domain={['dataMin', 'dataMax']}
+                    tickFormatter={(t: number) => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  />
+                  <YAxis allowDecimals={false} />
+                  <Tooltip
+                    contentStyle={TOOLTIP_CONTENT_STYLE}
+                    labelStyle={TOOLTIP_LABEL_STYLE}
+                    labelFormatter={(t) => new Date(Number(t)).toLocaleTimeString()}
+                  />
+                  <Legend />
+                  <Line type="stepAfter" dataKey="inZones" name="In zones" stroke={STATUS_COLORS_HEX.red} strokeWidth={2} dot={false} isAnimationActive={false} />
+                  <Line type="stepAfter" dataKey="inTreatment" name="In treatment (MCI)" stroke={STATUS_COLORS_HEX.blue} strokeWidth={2} dot={false} isAnimationActive={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </div>
+      )}
 
       {interactionTimeline && interactionTimeline.length > 0 && (
         <div className={`grid grid-cols-1 lg:grid-cols-2 ${GRID_WRAPPER}`}>

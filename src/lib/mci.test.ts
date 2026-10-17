@@ -13,6 +13,7 @@ import {
   isMciActive,
   mciAssignmentPatch,
   mciAvailability,
+  mciCsvLines,
   mciStatusPatch,
   mciSeries,
   mciStatusOptions,
@@ -464,5 +465,36 @@ describe('appendMciEntries', () => {
   it('starts from an empty state when there is none', () => {
     const next = appendMciEntries(undefined, []);
     expect(next).toEqual({ active: false, periods: [], zones: [], areas: [], log: [] });
+  });
+});
+
+describe('CSV rows', () => {
+  it('lists period rows and every log entry in time order', () => {
+    let e = activeEvent();
+    e = apply(e, tagPatch(e, 'za', 'red', 3, ctx(1000)));
+    e = apply(e, movePatch(e, 'za', 'c1', { red: 2 }, ctx(2000)));
+    e = apply(e, undoPatch(e, e.mci!.log.at(-1)!.id, ctx(3000)));
+    e = apply(e, clearZonePatch({ ...e, mci: appendMciEntries(e.mci, []) }, 'zb', ctx(3500)));
+    e = { ...e, ...standDownMci(e, 60500 + 500) } as Event;
+    const lines = mciCsvLines(e, (ms) => `T${ms}`);
+    expect(lines).toEqual([
+      'MCI,-,T500,"MCI declared"',
+      'MCI,Zone A,T1000,"tagged red 3"',
+      'MCI,Zone A,T2000,"moved red 2 to Clinic"',
+      'MCI,Zone A,T3000,"undo moved red 2 to Clinic"',
+      'MCI,Zone B,T3500,"zone_cleared"',
+      'MCI,-,T61000,"MCI stood down (active for 1 min)"',
+    ]);
+  });
+
+  it('is empty without an mci', () => {
+    expect(mciCsvLines(baseEvent(), String)).toEqual([]);
+  });
+
+  it('holds the chart series to the end of a finished MCI', () => {
+    let e = activeEvent();
+    e = apply(e, tagPatch(e, 'za', 'red', 2, ctx(1000)));
+    e = { ...e, ...standDownMci(e, 5000) } as Event;
+    expect(mciSeries(e.mci).at(-1)).toEqual({ t: 5000, inZones: 2, inTreatment: 0 });
   });
 });
