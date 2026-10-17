@@ -124,6 +124,62 @@ export interface Event {
   manualSurgeStartedAt?: number;
   /** Every surge period this event has had, oldest first. The last entry's `endedAt` is unset while a surge is currently active (mirrors `manualSurgeActive`/`manualSurgeStartedAt`). */
   surgeLog?: SurgePeriod[];
+
+  /** Mass casualty incident (MCI) mode. Unset on events that never declared one. See src/lib/mci.ts. */
+  mci?: MciState;
+}
+
+export type MciColor = 'red' | 'yellow' | 'green' | 'black';
+
+/** A zone patients are found in. Counts only; MCI mode never stores patient details. */
+export interface MciZone {
+  id: string; // stable; the venue zone's id when created from one
+  name: string;
+  venueZoneId?: string;
+  /** Set while the zone is cleared, unset when reopened. Kept in step with the log by appendMciEntries. */
+  clearedAt?: number;
+}
+
+/** A place patients are moved to: an event clinic or an MCI-only treatment area. */
+export interface MciTreatmentArea {
+  id: string;
+  name: string;
+  /** Set when this area is an existing event clinic. */
+  clinicId?: string;
+}
+
+export type MciLogKind = 'tagged' | 'moved' | 'zone_cleared' | 'zone_reopened' | 'undo';
+
+export interface MciLogEntry {
+  id: string;
+  /** Epoch ms at entry time. */
+  t: number;
+  kind: MciLogKind;
+  color?: MciColor;
+  /** Signed for 'tagged', positive for 'moved'. */
+  n?: number;
+  zoneId?: string;
+  /** Destination, for 'moved'. */
+  areaId?: string;
+  /** The entry an 'undo' reverses. */
+  undoes?: string;
+  /** Auth uid when signed in. */
+  by?: string;
+}
+
+/** Where a unit in Triage (a zone) or Treatment (a treatment area) is working. */
+export interface MciAssignment {
+  kind: 'zone' | 'area';
+  id: string;
+}
+
+export interface MciState {
+  active: boolean;
+  periods: { startedAt: number; endedAt?: number }[];
+  zones: MciZone[];
+  areas: MciTreatmentArea[];
+  /** The only source of counts. Entries are appended, never edited or removed. */
+  log: MciLogEntry[];
 }
 
 export interface SurgePeriod {
@@ -148,6 +204,8 @@ export interface Staff {
   originalPost?: string;
   /** Epoch ms when the unit entered its current status/location — drives its timer. Stamped by the dispatch page on every status or location change. */
   statusSince?: number;
+  /** Where this unit is working during an MCI (status Triage or Treatment). Cleared on Available, Unavailable and stand down. */
+  mciAssignment?: MciAssignment;
 }
 
 export interface Supervisor {
@@ -161,6 +219,8 @@ export interface Supervisor {
   originalPost?: string;
   /** Epoch ms when the unit entered its current status/location — drives its timer. Stamped by the dispatch page on every status or location change. */
   statusSince?: number;
+  /** Where this unit is working during an MCI (status Triage or Treatment). Cleared on Available, Unavailable and stand down. */
+  mciAssignment?: MciAssignment;
 }
 
 export type PostAssignment = {

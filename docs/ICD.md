@@ -115,6 +115,7 @@ The central planning/dispatch record for a single event: a snapshot of the venue
 | `supervisor` | json (`Supervisor[]`) | Supervisory units. See §3.7. | Yes | `[{"team":"Supervisor 1","status":"Available",...}]` |
 | `calls` | json (`Call[]`) | Incidents/calls logged during the event. See §3.7. | Yes | `[{"id":"c1","order":1,"status":"Active",...}]` |
 | `dispatchZones` | json (`DispatchZone[]`) | Dispatch zones, one per dispatch-zone-flagged `venue.layers[].zones` entry. Each gets its own "{name} Calls" tab in the dispatch view. See §3.7. | Yes | `[{"id":"z1","name":"Zone 2"}]` |
+| `mci` | json (`MciState`) | Mass casualty incident (MCI) mode: periods, zones, treatment areas and the entry log. Unset on events that never declared one. Counts only, never patient details. See §3.7. | Yes | `{"active":true,"periods":[{"startedAt":1766000000000}],"zones":[...],"areas":[...],"log":[...]}` |
 | `status` | text | Event lifecycle state. Observed values: `"draft"`, `"active"`. | Yes | `"active"` |
 | `eventPosts` | json (`Post[]`) | Posts as configured for this specific event (may diverge from the venue template). See §3.7. | Yes | `[{"name":"Gate A","x":12.5,"y":40.0}]` |
 | `eventEquipment` | json (`EventEquipment[]`) | Equipment inventory for this event. See §3.7. | Yes | `[{"id":"eq1","name":"AED #1","status":"Available","locationId":"Gate A"}]` |
@@ -190,6 +191,15 @@ PocketBase stores these as opaque `json` fields with no server-side schema; the 
 
 **`DispatchZone`**: `id` (matches a dispatch-zone-flagged `Zone.id`), `name` (kept in sync with that zone's current name). `events.dispatchZones: DispatchZone[]` is populated additively from the event's `venue.layers[].zones` (see `src/lib/zones.ts`'s `syncDispatchZonesFromVenue`). A call is routed into a dispatch zone's tab purely by geometry: whether `call.location` names a post whose coordinates fall inside that zone's polygon (`src/lib/zones.ts`'s `findZonesForPost`/`getCallZoneIds`). `Call` has no `zoneId` field.
 
+**`MciState`** (`events.mci`, see `src/lib/mci.ts`): mass casualty incident mode. The `log` is the only source of counts; zone and treatment totals are derived from it and never stored. Entries are appended and never edited or removed. MCI mode holds counts only: no chief complaint, age, sex, location found or other patient data.
+| Field | Type | Description |
+|---|---|---|
+| `active` | bool | True from declaration until stand down. |
+| `periods` | `{startedAt:number, endedAt?:number}[]` | Epoch ms. The last entry has no `endedAt` while the MCI is active. Declaring again appends a period. |
+| `zones` | `MciZone[]` | `id` (a venue zone's id when created from one, else generated), `name`, `venueZoneId?`, `clearedAt?` (epoch ms, set while the zone is cleared and unset when reopened; kept in step with the log). |
+| `areas` | `MciTreatmentArea[]` | Treatment locations: `id`, `name`, `clinicId?` (set when the area is an event clinic, whose unresolved regular patients are then shown beside the MCI patients). |
+| `log` | `MciLogEntry[]` | `id`, `t` (epoch ms), `kind` (`'tagged'` \| `'moved'` \| `'zone_cleared'` \| `'zone_reopened'` \| `'undo'`), `color?` (`'red'` \| `'yellow'` \| `'green'` \| `'black'`), `n?` (signed for `tagged`, positive for `moved`), `zoneId?`, `areaId?` (destination of a move), `undoes?` (the entry an `undo` reverses), `by?` (auth uid). |
+
 **`Equipment`** (venue-level): `id`, `name`, `status` (free-text status string), `assignedTeam?`, `location?`.
 
 **`EventEquipment`** = `Equipment` + `locationId?`, `defaultLocation?`, `notes?`.
@@ -209,8 +219,9 @@ Equipment custody (optional, on event equipment; written by `src/lib/equipmentCu
 | `log?` | `{timestamp:number, message:string}[]` | Activity log for this team. |
 | `originalPost?` | string | Post the team was originally assigned before any reassignment. |
 | `statusSince?` | number | Epoch ms when the team entered its current `status`/`location`; drives the team timer. Stamped by the dispatch page on every status or location change (absent on events that predate it, in which case the timer falls back to the logs). |
+| `mciAssignment?` | `{kind:'zone'\|'area', id}` | Where the unit works during an MCI: a zone (status `Triage`) or a treatment area (status `Treatment`). Cleared on Available, Unavailable and stand down. |
 
-**`Supervisor`**: same shape as `Staff` but with a single `member: string` instead of `members: string[]`.
+**`Supervisor`**: same shape as `Staff` but with a single `member: string` instead of `members: string[]`. It carries `mciAssignment?` too.
 
 **`Call`** (an incident):
 | Field | Type | Description |
@@ -243,7 +254,7 @@ Equipment custody (optional, on event equipment; written by `src/lib/equipmentCu
 
 `isOrgEvent`, `ended` and `endedAt` **are** schema-backed `events` fields (§3.3). PocketBase persists them, unlike the Firebase-only fields listed above.
 
-`clinics` **is** a schema-backed `json` field on `events` (added alongside multi-clinic support) and persists on PocketBase. Same for `dispatchZones` (added alongside map zones support).
+`clinics` **is** a schema-backed `json` field on `events` (added alongside multi-clinic support) and persists on PocketBase. Same for `dispatchZones` (added alongside map zones support) and `mci` (added alongside MCI mode).
 
 ## 5. Notes
 
