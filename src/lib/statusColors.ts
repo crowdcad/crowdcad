@@ -64,6 +64,22 @@ export const STATUS_COLORS: Record<string, DispatchStatusColor> = {
     chipClass: 'border border-status-card-ring-blue bg-status-card-blue',
     rowClass: '',
   },
+  // MCI mode: Triage reads as on call, Treatment as clinic, Unavailable as the default gray.
+  Triage: {
+    borderClass: 'border-status-card-ring-red',
+    fillClass: 'bg-status-card-red',
+    textClass: 'text-status-red',
+    chipClass: 'border border-status-card-ring-red bg-status-card-red',
+    rowClass: '',
+  },
+  Treatment: {
+    borderClass: 'border-status-card-ring-blue',
+    fillClass: 'bg-status-card-blue',
+    textClass: 'text-status-blue',
+    chipClass: 'border border-status-card-ring-blue bg-status-card-blue',
+    rowClass: '',
+  },
+  Unavailable: DEFAULT_STATUS_COLOR,
   'Retrieving Eq': {
     borderClass: 'border-status-card-ring-yellow',
     fillClass: 'bg-status-card-yellow',

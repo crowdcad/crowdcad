@@ -13,7 +13,7 @@ import EndEventModal from "@/components/modals/event/endeventmodal";
 import TransportUnitModal from "@/components/modals/event/transportunitmodal";
 import React from 'react';
 import { dbService, ServiceError } from '@/lib/services';
-import { PostAssignment, Event, Staff, Supervisor, Call, EquipmentStatus, CallLogEntry, TeamLogEntry, EquipmentItem, EventEquipment, ClinicOutcome, Clinic, Layer, DispatchZone } from '@/app/types';
+import { PostAssignment, Event, Staff, Supervisor, Call, EquipmentStatus, CallLogEntry, TeamLogEntry, EquipmentItem, EventEquipment, ClinicOutcome, Clinic, Layer, DispatchZone, MciAssignment } from '@/app/types';
 import { toast, Slide, ToastContainer } from 'react-toastify';
 import { useRouter } from 'next/navigation';
 import isEqual from 'lodash.isequal';
@@ -35,6 +35,12 @@ import DebugModal from '@/components/modals/debugmodal';
 import { ShieldAlert } from 'lucide-react';
 import { Select, SelectItem, Tabs, Tab, Button, Tooltip } from "@heroui/react"
 import AvailabilitySurgeStrip from '@/components/dispatch/availabilitysurgestrip';
+import DeclareMciModal from '@/components/dispatch/mci/declaremcimodal';
+import MciAvailabilityStrip from '@/components/dispatch/mci/mciavailabilitystrip';
+import MciTab from '@/components/dispatch/mci/mcitab';
+import MciToggleButton from '@/components/dispatch/mci/mcitogglebutton';
+import { useMciActions } from '@/components/dispatch/mci/usemciactions';
+import { hasMci, isMciActive, mciStatusPatch } from '@/lib/mci';
 import SurgeToggleButton from '@/components/dispatch/surgetogglebutton';
 import PanelTab from '@/components/dispatch/paneltab';
 import DuplicateCallModal from '@/components/modals/event/duplicatecallmodal';
@@ -413,6 +419,10 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
       toast.error("Failed to save changes. Please try again.");
     }
   }, [eventId, isLiteMode]);
+
+  // MCI mode (src/lib/mci.ts): every write goes through updateEvent's functional form.
+  const mciActions = useMciActions(updateEvent, authUser?.uid);
+  const [showDeclareMci, setShowDeclareMci] = useState(false);
 
   const handlePostAssignment = useCallback(async (time: string, post: string, team: string) => {
     await updateEvent((currentEvent) => {
@@ -979,7 +989,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
   }
 
 
-  const handleSupervisorStatusChange = useCallback((supervisor: Staff, newStatus: string) => {
+  const handleSupervisorStatusChange = useCallback((supervisor: Staff, newStatus: string, _clinicId?: string, mciAssignment?: MciAssignment) => {
     // Same as handleStatusChange: equipment-run statuses go through the call flow.
     const equipmentCall = EQUIPMENT_RUN_STATUSES.includes(newStatus)
       ? event?.calls.find(c => c.equipmentTeams?.includes(supervisor.team) && !RESOLVED_CALL_STATUSES.includes(c.status))
@@ -997,14 +1007,17 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     const hhmm = now.getHours().toString().padStart(2, '0') + now.getMinutes().toString().padStart(2, '0');
     const logMessage = `${hhmm} - status changed to ${newStatus}${activeCall ? ` at ${activeCall.location}` : ''}`;
 
+    const mciPatch = event && isMciActive(event) ? mciStatusPatch(event, supervisor, newStatus, mciAssignment) : null;
     const updatedSupervisors = event?.supervisor.map(s =>
       s.team === supervisor.team
         ? {
             ...s,
+            ...mciPatch?.patch,
             status: newStatus,
             log: [
               ...(s.log || []),
-              { timestamp: now.getTime(), message: logMessage }
+              { timestamp: now.getTime(), message: logMessage },
+              ...(mciPatch?.logMessage ? [{ timestamp: now.getTime(), message: `${hhmm} - ${mciPatch.logMessage}` }] : [])
             ]
           }
         : s
@@ -1883,6 +1896,13 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
 
   const [selectedLeftTab, setSelectedLeftTab] = useState<string>('teams');
   const [selectedRightTab, setSelectedRightTab] = useState<string>('calls');
+  // An active MCI opens its tab once, including for a dispatcher who loads the page mid-MCI or whose colleague declared it.
+  const mciTabOpenedRef = useRef(false);
+  useEffect(() => {
+    if (mciTabOpenedRef.current || !isMciActive(event)) return;
+    mciTabOpenedRef.current = true;
+    setSelectedRightTab('mci');
+  }, [event]);
   // Which dispatch zone(s) the Calls tab is scoped to — the 'all' sentinel
   // means unfiltered ("All Calls"); it's mutually exclusive with any zone
   // id, enforced in the dropdown's onSelectionChange below, never both at
@@ -2353,7 +2373,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     };
   }, []);
 
-  const handleStatusChange = useCallback(async (staff: Staff, newStatus: string, clinicId?: string) => {
+  const handleStatusChange = useCallback(async (staff: Staff, newStatus: string, clinicId?: string, mciAssignment?: MciAssignment) => {
     const team = staff.team;
 
     // An equipment run's statuses fetch, carry and hand off equipment, which only the call flow does.
@@ -2394,9 +2414,13 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
         if (s.team !== team) return s;
         
         const teamLogEntry: TeamLogEntry = { timestamp: now.getTime(), message: logMessage };
+        // Picking Triage or Treatment sets the unit's zone or treatment location; Available and Unavailable clear it.
+        const mciPatch = isMciActive(currentEvent) ? mciStatusPatch(currentEvent, s, newStatus, mciAssignment) : null;
+        const mciLogEntry: TeamLogEntry[] = mciPatch?.logMessage ? [{ timestamp: now.getTime(), message: `${hhmm} - ${mciPatch.logMessage}` }] : [];
 
         return {
             ...s,
+            ...mciPatch?.patch,
             status: newStatus,
             // Location is never this handler's call — teamcard.tsx/
             // teamcard-condensed.tsx already compute the right destination
@@ -2404,7 +2428,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
             // location) and apply it via their own onLocationChange before
             // calling this. Overwriting it here with a cruder originalPost-
             // or-'Roaming' fallback used to stomp on that right after.
-            log: [...(s.log || []), teamLogEntry]
+            log: [...(s.log || []), teamLogEntry, ...mciLogEntry]
         };
       });
 
@@ -3001,8 +3025,9 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
       // closure's possibly-stale `event`, so a surge someone else just started
       // (or that this effect itself already started a moment ago) never gets
       // its start time clobbered by a second, redundant Date.now().
+      // Automatic alerts are muted while an MCI is active (MCI decision D6).
       updateEvent((current) =>
-        current.manualSurgeActive ? {} : withSurgeStarted(current, Date.now())
+        current.manualSurgeActive || isMciActive(current) ? {} : withSurgeStarted(current, Date.now())
       );
     }
     wasAboveSurgeThresholdRef.current = aboveThreshold;
@@ -3017,7 +3042,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
 
     if (aboveThreshold && !wasPendingTransportAboveThresholdRef.current && !event.manualSurgeActive) {
       updateEvent((current) =>
-        current.manualSurgeActive ? {} : withSurgeStarted(current, Date.now())
+        current.manualSurgeActive || isMciActive(current) ? {} : withSurgeStarted(current, Date.now())
       );
     }
     wasPendingTransportAboveThresholdRef.current = aboveThreshold;
@@ -3043,7 +3068,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
 
       if (aboveThreshold && !wasUnassignedCallAboveThresholdRef.current && !currentEvent.manualSurgeActive) {
         updateEvent((current) =>
-          current.manualSurgeActive ? {} : withSurgeStarted(current, Date.now())
+          current.manualSurgeActive || isMciActive(current) ? {} : withSurgeStarted(current, Date.now())
         );
       }
       wasUnassignedCallAboveThresholdRef.current = aboveThreshold;
@@ -3717,6 +3742,16 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
         parseAgeSex={parseAgeSex}
         clinicId={isMobile ? mobileClinicId : (clinics.find(c => c.id === selectedRightTab)?.id || clinics[0]?.id)}
       />
+      <DeclareMciModal
+        isOpen={showDeclareMci}
+        event={event}
+        onClose={() => setShowDeclareMci(false)}
+        onDeclare={async (input) => {
+          await mciActions.declare(input);
+          mciTabOpenedRef.current = true;
+          setSelectedRightTab('mci');
+        }}
+      />
       <TransportUnitModal
         isOpen={showTransportUnitModal}
         onClose={() => {
@@ -3859,7 +3894,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
                     {renderTeamActions(selectedLeftTab as LeftPanelTab)}
                   </div>
 
-                  {event && <div className="shrink-0"><AvailabilitySurgeStrip event={event} /></div>}
+                  {event && <div className="shrink-0">{isMciActive(event) ? <MciAvailabilityStrip event={event} /> : <AvailabilitySurgeStrip event={event} />}</div>}
 
                   {/* Content with ScrollShadow */}
                   <div className="flex-1 min-h-0 overflow-auto scrollbar-hide">
@@ -3893,6 +3928,11 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
                   <div className="w-full flex flex-col flex-1 min-h-0">
                     <div className="relative z-0 mx-1.5 pb-0 flex items-start justify-between gap-1 h-10 shrink-0">
                       <div className="flex items-end gap-1 min-w-0">
+                        {hasMci(event) && (
+                          <PanelTab active={selectedRightTab === 'mci'} onSelect={() => setSelectedRightTab('mci')} data-testid="mci-tab-button">
+                            {t('MCI')}{isMciActive(event) ? '' : ' (ended)'}
+                          </PanelTab>
+                        )}
                         <PanelTab active={selectedRightTab === 'calls'} onSelect={() => setSelectedRightTab('calls')}>
                           {dispatchZones.length > 0 ? callZoneFilterLabel : t('Calls')} ({getActiveCallsForZoneSelection(callZoneFilter).length})
                         </PanelTab>
@@ -3920,12 +3960,26 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
                         )}
                       </div>
 
-                      <SurgeToggleButton
-                        active={!!event.manualSurgeActive}
-                        startedAt={event.manualSurgeStartedAt}
-                        onToggle={handleToggleSurge}
-                      />
+                      <div className="flex items-start gap-1.5 shrink-0">
+                        <MciToggleButton
+                          active={isMciActive(event)}
+                          startedAt={event.mci?.periods[event.mci.periods.length - 1]?.startedAt}
+                          onDeclare={() => setShowDeclareMci(true)}
+                          onOpenTab={() => setSelectedRightTab('mci')}
+                        />
+                        <SurgeToggleButton
+                          active={!!event.manualSurgeActive}
+                          startedAt={event.manualSurgeStartedAt}
+                          onToggle={handleToggleSurge}
+                        />
+                      </div>
                     </div>
+
+                    {selectedRightTab === 'mci' && !isMobile && event.mci && (
+                      <div className="relative z-10 -mt-px mx-1.5 rounded-lg bg-surface-deep px-2.5 py-2 flex flex-col flex-1 min-h-0">
+                        <MciTab event={event} actions={mciActions} />
+                      </div>
+                    )}
 
                     {selectedRightTab === 'calls' && !isMobile && (() => {
                       const zoneCounts = getInsightCountsForZoneSelection(callZoneFilter);
@@ -4100,7 +4154,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
           {/* Mobile/Tablet Layout - Bottom Tabs */}
           <div className="lg:hidden">
             <div className="sticky top-14 z-40 bg-surface-deepest">
-              {event && <AvailabilitySurgeStrip event={event} />}
+              {event && (isMciActive(event) ? <MciAvailabilityStrip event={event} /> : <AvailabilitySurgeStrip event={event} />)}
               {mobileActiveTab !== 'map' && (
                 <div className="flex justify-between items-center py-2">
                   {renderMobileTabHeader()}

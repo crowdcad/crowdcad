@@ -16,6 +16,7 @@ import {
   TeamPostSchedule,
   TeamActivityLog,
   TeamCarrying,
+  TeamMciChip,
 } from './teamcardparts';
 
 // Standard team card: name + timer header, status/location controls always
@@ -45,6 +46,7 @@ export default function TeamCard(props: TeamCardProps) {
             {staff.team}
           </div>
           <TeamCarrying staff={staff} event={event} />
+          <TeamMciChip staff={staff} event={event} />
         </div>
 
         <div className="absolute top-0 right-0 pt-3 pr-3 flex items-center gap-2">

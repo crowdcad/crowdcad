@@ -535,6 +535,27 @@ export function mciAssignmentPatch(
   return { patch: { mciAssignment: assignment, location: name }, logMessage: `Post changed to ${name} (MCI)` };
 }
 
+/**
+ * What a status change does to a unit's MCI assignment. Triage and Treatment
+ * take the picked zone or treatment location (or keep a matching one the unit
+ * already has); Available and Unavailable clear it; any other status (a call's
+ * En Route, an equipment run) leaves it alone.
+ */
+export function mciStatusPatch(
+  event: Pick<Event, 'mci' | 'mapMode'>,
+  unit: Pick<Staff, 'mciAssignment'>,
+  newStatus: string,
+  assignment?: MciAssignment
+): MciAssignmentPatch {
+  const kind = mciAssignmentKindFor(newStatus);
+  if (kind) {
+    const chosen = assignment?.kind === kind ? assignment : unit.mciAssignment?.kind === kind ? unit.mciAssignment : null;
+    return chosen ? mciAssignmentPatch(event, chosen) : { patch: {} };
+  }
+  if (newStatus === 'Available' || newStatus === 'Unavailable') return mciAssignmentPatch(event, null);
+  return { patch: {} };
+}
+
 /** Names of the units working at a zone or treatment location right now. */
 export function mciUnitsAt(event: Event, assignment: MciAssignment): string[] {
   const wanted = assignment.kind === 'zone' ? 'Triage' : 'Treatment';

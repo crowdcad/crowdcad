@@ -1,5 +1,6 @@
 import type { Event } from '@/app/types';
 import { deriveTeamVisualStatus } from '@/lib/statusColors';
+import { isMciActive, mciAvailability, type MciAvailability } from '@/lib/mci';
 
 export const DEFAULT_SURGE_LIMIT_PERCENT = 70;
 export const DEFAULT_PENDING_TRANSPORT_SURGE_THRESHOLD = 3;
@@ -18,6 +19,8 @@ export interface TeamAvailabilitySummary {
   other: number;
   /** Rounded 0-100. */
   percentOnCalls: number;
+  /** Present only while an MCI is active: the strip shows these buckets instead of the three above. */
+  mci?: MciAvailability;
 }
 
 /**
@@ -48,7 +51,7 @@ export function getTeamAvailabilitySummary(event: Event): TeamAvailabilitySummar
   const other = total - available - onBreakOrClinic - onCalls;
   const percentOnCalls = total > 0 ? Math.round((onCalls / total) * 100) : 0;
 
-  return { total, available, onBreakOrClinic, onCalls, other, percentOnCalls };
+  return { total, available, onBreakOrClinic, onCalls, other, percentOnCalls, ...(isMciActive(event) ? { mci: mciAvailability(event) } : {}) };
 }
 
 export function getSurgeLimitPercent(event: Event): number {

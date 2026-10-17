@@ -13,6 +13,7 @@ import {
   isMciActive,
   mciAssignmentPatch,
   mciAvailability,
+  mciStatusPatch,
   mciSeries,
   mciStatusOptions,
   mciUnitsAt,
@@ -404,6 +405,20 @@ describe('teams', () => {
     const e = activeEvent();
     expect(mciAssignmentPatch(e, null).patch).toEqual({ mciAssignment: undefined });
     expect(mciAssignmentPatch(e, { kind: 'zone', id: 'gone' }).patch).toEqual({ mciAssignment: undefined });
+  });
+
+  it('applies the picked assignment with Triage and Treatment, and clears it with Available and Unavailable', () => {
+    const e = activeEvent();
+    const zoneA = { kind: 'zone', id: 'za' } as const;
+    expect(mciStatusPatch(e, {}, 'Triage', zoneA).patch).toEqual({ mciAssignment: zoneA, location: 'Zone A' });
+    // A zone cannot be picked for Treatment, and a missing pick keeps a matching assignment.
+    expect(mciStatusPatch(e, {}, 'Treatment', zoneA).patch).toEqual({});
+    expect(mciStatusPatch(e, { mciAssignment: zoneA }, 'Triage').patch).toEqual({ mciAssignment: zoneA, location: 'Zone A' });
+    expect(mciStatusPatch(e, { mciAssignment: zoneA }, 'Available').patch).toEqual({ mciAssignment: undefined });
+    expect(mciStatusPatch(e, { mciAssignment: zoneA }, 'Unavailable').patch).toEqual({ mciAssignment: undefined });
+    // A call's status leaves the assignment alone.
+    expect(mciStatusPatch(e, { mciAssignment: zoneA }, 'En Route').patch).toEqual({});
+    expect('location' in mciStatusPatch({ ...e, mapMode: 'tak' }, {}, 'Triage', zoneA).patch).toBe(false);
   });
 
   it('lists the units at a zone and buckets availability', () => {

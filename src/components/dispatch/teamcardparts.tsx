@@ -11,7 +11,7 @@ import {
   Select, SelectItem, Autocomplete, AutocompleteItem, Button,
 } from '@heroui/react';
 import { MapPin, MoreVertical, Map as MapIcon, Radio } from 'lucide-react';
-import type { Clinic, Event, Staff } from '@/app/types';
+import type { Clinic, Event, MciAssignment, Staff } from '@/app/types';
 import TrackingTextEntry from '@/components/dispatch/trackingtextentry';
 import { deriveTeamVisualStatus, getStatusColor } from '@/lib/statusColors';
 import StatusLabel from './statuslabel';
@@ -19,6 +19,7 @@ import EquipmentTypeIcon, { getEquipmentStatusMenuLabel, getEquipmentStatusWord,
 import { EQUIPMENT_RUN_STATUSES, RETURNING_EQ, equipmentOfUnit, fleetOf, heldBy } from '@/lib/equipmentCustody';
 import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
 import { getEventClinics } from '@/lib/clinics';
+import { isMciActive, mciAssignmentKindFor, mciAssignmentName, mciStatusOptions } from '@/lib/mci';
 import { getEquipmentIconType, type EquipmentIconType } from '@/lib/equipmentIcon';
 import { textToLog } from '@/lib/logText';
 import { parseTimeToMinutes } from '@/lib/postingTimes';
@@ -28,7 +29,8 @@ export type TeamCardProps = {
   staff: Staff;
   event: Event;
   sinceMs?: number;
-  onStatusChange: (staff: Staff, newStatus: string, clinicId?: string) => void;
+  /** `mciAssignment` goes with Triage (a zone) and Treatment (a treatment location) while an MCI is active. */
+  onStatusChange: (staff: Staff, newStatus: string, clinicId?: string, mciAssignment?: MciAssignment) => void;
   onLocationChange: (staff: Staff, newLocation: string) => void;
   onEdit?: (staff: Staff) => void;
   onDelete?: (teamName: string) => void;
@@ -55,6 +57,8 @@ export type TeamStatusModel = {
   teamEquipmentIconType: EquipmentIconType | null;
   statusTone: ReturnType<typeof getStatusColor>;
   clinics: Clinic[];
+  /** An MCI is active: Triage and Treatment need a zone or treatment location. */
+  mciActive: boolean;
 };
 
 /** Which statuses a team can move to right now, plus the display bits derived alongside. */
@@ -69,13 +73,18 @@ export function useTeamStatusModel(staff: Staff, event: Event): TeamStatusModel 
   // Bringing equipment back after a call: Available marks it returned.
   const isReturning = !isOnAnyActiveCall && staff.status === RETURNING_EQ;
 
+  // While an MCI is active a free unit's menu is Available, Triage, Treatment and Unavailable.
+  // A unit on a call or an equipment run keeps its own options.
+  const mciActive = isMciActive(event);
+  const freeOptions = mciActive ? mciStatusOptions(staff) : ['Available', 'On Break', 'In Clinic'];
+
   const statusOptions = isOnEq
     ? EQUIPMENT_RUN_STATUSES
     : isOnAnyActiveCall
       ? ['En Route', 'On Scene', 'Transporting', 'Pending Transport']
       : isReturning
-        ? [RETURNING_EQ, 'Available', 'On Break', 'In Clinic']
-        : ['Available', 'On Break', 'In Clinic'];
+        ? [RETURNING_EQ, ...freeOptions]
+        : freeOptions;
 
   // Equipment this team/supervisor is actually running — same icon
   // convention as the call tracker's team chip (see equipmenttypeicon.tsx).
@@ -89,6 +98,7 @@ export function useTeamStatusModel(staff: Staff, event: Event): TeamStatusModel 
     teamEquipmentIconType: teamEquipment[0] ? getEquipmentIconType(teamEquipment[0].name) : null,
     statusTone: getStatusColor(deriveTeamVisualStatus(staff.status, event, staff.team)),
     clinics: getEventClinics(event.clinics),
+    mciActive,
   };
 }
 
@@ -110,6 +120,25 @@ export function TeamCarrying({ staff, event, compact = false }: { staff: Staff; 
     >
       {items.map(eq => <EquipmentTypeIcon key={eq.id} type={getEquipmentIconType(eq.name)} className="w-3.5 h-3.5 shrink-0" />)}
       {!compact && <span className="truncate">{t('Carrying')} {names}</span>}
+    </span>
+  );
+}
+
+/**
+ * The zone or treatment location a unit is working at during an MCI. On a TAK
+ * event Location is where the unit is and MCI code never writes it (D66), so
+ * the assignment shows here as its own chip.
+ */
+export function TeamMciChip({ staff, event, compact = false }: { staff: Staff; event: Event; compact?: boolean }) {
+  const name = isMciActive(event) && mciAssignmentKindFor(staff.status) ? mciAssignmentName(event.mci, staff.mciAssignment) : undefined;
+  if (!name) return null;
+  return (
+    <span
+      className={`inline-flex max-w-full items-center truncate rounded-md border border-status-card-ring-red bg-status-card-red px-1.5 text-xs text-surface-light ${compact ? '' : 'mt-0.5'}`}
+      title={`MCI assignment: ${name}`}
+      data-testid={`team-mci-chip-${staff.team}`}
+    >
+      {name}
     </span>
   );
 }
@@ -145,8 +174,10 @@ export function TeamStatusSelect({
   onLocationChange: TeamCardProps['onLocationChange'];
 }) {
   const { t } = useDispatchTerms();
-  const { statusOptions, teamEquipmentNames, teamEquipmentIconType, statusTone, clinics } = model;
+  const { statusOptions, teamEquipmentNames, teamEquipmentIconType, statusTone, clinics, mciActive } = model;
   const [showClinicPicker, setShowClinicPicker] = useState(false);
+  // Triage needs a zone and Treatment a treatment location, so picking either opens a small picker first.
+  const [mciPickerStatus, setMciPickerStatus] = useState<'Triage' | 'Treatment' | null>(null);
   const lastValidLocation = useRef<string | undefined>(undefined);
   useEffect(() => {
     if (staff.location && staff.location !== 'Clinic') {
@@ -179,6 +210,33 @@ export function TeamStatusSelect({
     );
   }
 
+  if (mciPickerStatus) {
+    const kind = mciAssignmentKindFor(mciPickerStatus);
+    const targets = (kind === 'zone' ? event.mci?.zones : event.mci?.areas) ?? [];
+    return (
+      <Dropdown isOpen onOpenChange={(isOpen) => { if (!isOpen) setMciPickerStatus(null); }}>
+        <DropdownTrigger>
+          <Button size="sm" className={`w-full min-w-0 justify-start ${pillClass}`}>
+            {kind === 'zone' ? t('Zone') : t('Treatment location')}
+          </Button>
+        </DropdownTrigger>
+        <DropdownMenu
+          aria-label={kind === 'zone' ? 'Select triage zone' : 'Select treatment location'}
+          emptyContent={kind === 'zone' ? 'Declare or add a zone first' : 'Add a treatment location first'}
+          onAction={(key) => {
+            const status = mciPickerStatus;
+            setMciPickerStatus(null);
+            if (kind) onStatusChange(staff, status, undefined, { kind, id: String(key) });
+          }}
+        >
+          {targets.map((target) => (
+            <DropdownItem key={target.id}>{target.name}</DropdownItem>
+          ))}
+        </DropdownMenu>
+      </Dropdown>
+    );
+  }
+
   return (
     <Select
       aria-label="Status"
@@ -186,6 +244,10 @@ export function TeamStatusSelect({
       onSelectionChange={(keys) => {
         const val = Array.from(keys as Set<string>)[0] || '';
         if (!val) return;
+        if (mciActive && mciAssignmentKindFor(val)) {
+          setMciPickerStatus(val as 'Triage' | 'Treatment');
+          return;
+        }
         // On a live-tracking event Location is where the team is, so a status change never moves it (D66).
         if (val === 'Available' && event.mapMode !== 'tak') {
           const targetLocation =
@@ -269,8 +331,11 @@ function EditableTeamLocation({
 
   const postOptions = useMemo(() => {
     const posts = (event.venue?.posts || []).map(p => (typeof p === 'string' ? p : p.name));
-    return Array.from(new Set(['Clinic', ...posts]));
-  }, [event.venue?.posts]);
+    // During an MCI on a standard event, MCI zones come first, then treatment locations, then the venue's posts.
+    const mci = isMciActive(event) && event.mapMode !== 'tak' ? event.mci : undefined;
+    const mciNames = [...(mci?.zones || []), ...(mci?.areas || [])].map(x => x.name);
+    return Array.from(new Set([...mciNames, 'Clinic', ...posts]));
+  }, [event]);
 
   const commitTypedValue = () => {
     const value = locationInput.trim();

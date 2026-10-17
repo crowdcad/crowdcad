@@ -93,6 +93,10 @@ export const DISPATCH_TERMS: DispatchTerm[] = [
     'En Route Eq',
     'Assisting',
     'Returning Eq',
+    // Mass casualty incident (MCI) mode statuses.
+    'Triage',
+    'Treatment',
+    'Unavailable',
   ]),
 
   // Equipment.
@@ -230,6 +234,25 @@ export const DISPATCH_TERMS: DispatchTerm[] = [
     'This event has ended',
     'Data collection is locked. Go to the Event Summary for a read-only record.',
     'Go to Event Summary',
+    // Mass casualty incident (MCI) mode.
+    'MCI',
+    'Declare MCI',
+    'Stand down',
+    'Tagged',
+    'Moved',
+    'In zone',
+    'Zone clear',
+    'Zone',
+    'Zones',
+    'Treatment location',
+    'Treatment locations',
+    'Add zone',
+    'Add treatment area',
+    'Move to treatment',
+    'Mark clear',
+    'Reopen zone',
+    'Undo',
+    'Regular',
   ]),
 ].map((term) => (LABEL_OVERRIDES[term.key] ? { ...term, defaultLabel: LABEL_OVERRIDES[term.key] } : term));
 
