@@ -35,3 +35,10 @@ Related: [plan.md](plan.md), [../tak-integration/decisions.md](../tak-integratio
 ### D7. A team on a normal call keeps its call statuses and counts as Unavailable
 - **What.** A team on an active normal call keeps the call status menu, so the call workflow is unchanged, and counts as Unavailable in the availability strip. Its card shows the call status and call chip as it does today. When the call resolves the team returns to Available as it does today. Assigning normal calls during an MCI is not blocked.
 - **Stale assignments.** A unit that goes on a call keeps its `mciAssignment` until it is changed or the MCI stands down. A zone or treatment card lists only units whose current status is Triage or Treatment.
+
+## 2026-10-18
+
+### D8. Declaring an MCI ends an open surge
+- **Requested** by the maintainer after previewing.
+- **What.** `declareMci` closes the open surge period (its `endedAt` is the declare time, so the surge log keeps it) and clears `manualSurgeActive`. The MCI timer and the surge timer never run together. The Surge toggle still works by hand during an MCI (D6).
+- **Why.** An MCI is the larger event. Leaving the surge flashing beside it gave two alarms for one situation.
