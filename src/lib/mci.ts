@@ -807,3 +807,30 @@ export function mciShapePatch(event: Pick<Event, 'venue' | 'mci'>, target: { kin
     },
   };
 }
+
+export interface MciTransportTrip {
+  t: number;
+  unit: string;
+  destination?: string;
+  /** Patients by tag color on this trip. */
+  counts: MciCounts;
+  total: number;
+}
+
+/**
+ * The ambulance trips that left a treatment location, newest first. Entries written together (same time and
+ * ambulance) are one trip; undone entries are left out.
+ */
+export function mciTransportTrips(mci: MciState | undefined, areaId: string): MciTransportTrip[] {
+  if (!mci) return [];
+  const trips = new Map<string, MciTransportTrip>();
+  for (const entry of liveEntries(mci.log)) {
+    if (entry.kind !== 'transported' || entry.areaId !== areaId || !entry.color || !entry.n) continue;
+    const key = `${entry.t}|${entry.unit ?? ''}|${entry.destination ?? ''}`;
+    const trip = trips.get(key) ?? { t: entry.t, unit: entry.unit ?? '', ...(entry.destination ? { destination: entry.destination } : {}), counts: emptyCounts(), total: 0 };
+    trip.counts[entry.color] += entry.n;
+    trip.total += entry.n;
+    trips.set(key, trip);
+  }
+  return [...trips.values()].sort((a, b) => b.t - a.t);
+}

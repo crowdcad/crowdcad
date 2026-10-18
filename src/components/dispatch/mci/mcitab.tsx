@@ -3,7 +3,7 @@
 import React, { useMemo, useState } from 'react';
 import { Button, Input } from '@heroui/react';
 import type { Event, MciColor } from '@/app/types';
-import { deriveMci, mciMapLayers, mciShapeOf, mciTransportUnits, mciUnitsAt, type MciCounts } from '@/lib/mci';
+import { deriveMci, mciMapLayers, mciShapeOf, mciTransportTrips, mciTransportUnits, mciUnitsAt, type MciCounts } from '@/lib/mci';
 import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
 import type { MciActions } from './usemciactions';
 import MciTotalsStrip from './mcitotalsstrip';
@@ -162,7 +162,8 @@ export default function MciTab({ event, actions }: Props) {
           <h2 className="text-base font-bold text-surface-light">{t('Zones')}</h2>
           {!readOnly && <AddByName label={t('Add zone')} testId="mci-add-zone" onAdd={actions.addZone} />}
         </div>
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(14rem,1fr))] gap-3">
+        {/* Cards share the row and grow to fill it, at most 4 across; below 14rem each a new row starts. */}
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(max(14rem,calc((100%-2.25rem)/4)),1fr))] gap-3">
           {derived.zones.map((stats) => (
             <MciZoneCard
               key={stats.zone.id}
@@ -194,7 +195,7 @@ export default function MciTab({ event, actions }: Props) {
               key={stats.area.id}
               stats={stats}
               teams={mciUnitsAt(event, { kind: 'area', id: stats.area.id })}
-              ambulances={mciTransportUnits({ ...mci, log: mci.log.filter((e) => e.areaId === stats.area.id) })}
+              trips={mciTransportTrips(mci, stats.area.id)}
               readOnly={readOnly}
               onTransport={setTransportAreaId}
               mapEnabled={mapEnabled && !readOnly}

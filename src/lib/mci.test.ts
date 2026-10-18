@@ -17,6 +17,7 @@ import {
   mciMapLayers,
   mciShapeOf,
   mciShapePatch,
+  mciTransportTrips,
   mciTransportUnits,
   transportPatch,
   mciStatusPatch,
@@ -638,5 +639,25 @@ describe('map shapes', () => {
     const coords = [{ lat: 1, lng: 1 }, { lat: 1, lng: 2 }, { lat: 2, lng: 2 }];
     e = apply(e, mciShapePatch(e, { kind: 'zone', id: 'zb' }, { layerId: 'l1', points: [], coords }));
     expect(mciShapeOf(e.venue, e.mci!.zones[1])!.zone.coords).toEqual(coords);
+  });
+});
+
+describe('transport trips', () => {
+  it('groups one ambulance trip, skips undone trips and lists newest first', () => {
+    let e = activeEvent();
+    e = apply(e, tagPatch(e, 'za', 'red', 4, ctx(1000)));
+    e = apply(e, tagPatch(e, 'za', 'yellow', 2, ctx(1100)));
+    e = apply(e, movePatch(e, 'za', 'c1', { red: 4, yellow: 2 }, ctx(2000)));
+    e = apply(e, transportPatch(e, 'c1', { red: 2, yellow: 1 }, { unit: 'A1', destination: 'General' }, ctx(3000)));
+    e = apply(e, transportPatch(e, 'c1', { red: 1 }, { unit: 'A2' }, ctx(4000)));
+    e = apply(e, transportPatch(e, 'c1', { red: 1 }, { unit: 'A3' }, ctx(5000)));
+    e = apply(e, undoPatch(e, e.mci!.log.at(-1)!.id, ctx(5500)));
+    const trips = mciTransportTrips(e.mci, 'c1');
+    expect(trips.map((t) => [t.t, t.unit, t.destination, t.total])).toEqual([
+      [4000, 'A2', undefined, 1],
+      [3000, 'A1', 'General', 3],
+    ]);
+    expect(trips[1].counts).toMatchObject({ red: 2, yellow: 1, green: 0, black: 0 });
+    expect(mciTransportTrips(e.mci, 'ar1')).toEqual([]);
   });
 });

@@ -1,18 +1,18 @@
 'use client';
 
-import React from 'react';
-import { MapPin } from 'lucide-react';
+import React, { useState } from 'react';
+import { ChevronDown, ChevronUp, MapPin } from 'lucide-react';
 import { Button } from '@heroui/react';
-import type { MciAreaStats } from '@/lib/mci';
+import type { MciAreaStats, MciTransportTrip } from '@/lib/mci';
 import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
-import { MciCountsLine, MciTeamChips } from './mciparts';
+import { MciCountsLine, MciTeamChips, formatClock } from './mciparts';
 
 type Props = {
   stats: MciAreaStats;
   /** Names of the teams in Treatment at this location. */
   teams: string[];
-  /** Ambulance numbers that have taken patients from here, oldest first. */
-  ambulances: string[];
+  /** Ambulance trips that left from here, newest first. */
+  trips: MciTransportTrip[];
   readOnly: boolean;
   onTransport: (areaId: string) => void;
   /** The venue has a map and this is not a clinic (a clinic is already a pin): show the draw-on-map button. */
@@ -22,8 +22,9 @@ type Props = {
 };
 
 /** A treatment location: MCI patients here now by color, a clinic's regular patients and what has left in an ambulance. */
-export default function MciTreatmentCard({ stats, teams, ambulances, readOnly, onTransport, mapEnabled = false, hasShape = false, onDraw }: Props) {
+export default function MciTreatmentCard({ stats, teams, trips, readOnly, onTransport, mapEnabled = false, hasShape = false, onDraw }: Props) {
   const { t } = useDispatchTerms();
+  const [logOpen, setLogOpen] = useState(false);
   const { name, isClinic, regular, inTreatmentTotal, transportedTotal, receivedTotal } = stats;
   return (
     <section
@@ -40,7 +41,7 @@ export default function MciTreatmentCard({ stats, teams, ambulances, readOnly, o
               onClick={() => onDraw(stats.area.id)}
               aria-label={`${hasShape ? 'Edit' : 'Draw'} ${name} on the map`}
               title={hasShape ? 'Edit on the map' : 'Draw on the map'}
-              className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border hover:bg-surface-liner ${hasShape ? 'border-surface-liner text-surface-faint' : 'border-status-card-ring-yellow text-surface-light'}`}
+              className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md hover:bg-surface-liner ${hasShape ? 'text-surface-faint' : 'text-status-orange'}`}
               data-testid={`mci-area-draw-${name}`}
             >
               <MapPin className="h-3.5 w-3.5" />
@@ -63,17 +64,39 @@ export default function MciTreatmentCard({ stats, teams, ambulances, readOnly, o
       {receivedTotal > 0 && (
         <div className="flex flex-col gap-1 text-xs text-surface-faint" data-testid={`mci-area-transported-${name}`}>
           <span>
-            Received {receivedTotal}. {t('Transported')} {transportedTotal}.
+            Received {receivedTotal}. Transported {transportedTotal}.
           </span>
           {transportedTotal > 0 && <MciCountsLine counts={stats.transported} />}
-          {ambulances.length > 0 && (
-            <span className="flex flex-wrap gap-1">
-              {ambulances.map((unit) => (
-                <span key={unit} className="rounded-md border border-surface-liner px-1.5 py-0.5 text-xs text-surface-light">
-                  {unit}
-                </span>
-              ))}
+        </div>
+      )}
+
+      {trips.length > 0 && (
+        <div data-testid={`mci-area-transport-log-${name}`}>
+          <button
+            type="button"
+            onClick={() => setLogOpen((open) => !open)}
+            aria-expanded={logOpen}
+            className="flex w-full items-center justify-between gap-2 text-xs font-bold text-surface-light"
+            data-testid={`mci-area-transport-log-toggle-${name}`}
+          >
+            <span>
+              {t('Transport')} log ({trips.length})
             </span>
+            {logOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          </button>
+          {logOpen && (
+            <ul className="minimal-scrollbar mt-1 flex max-h-44 flex-col divide-y divide-surface-liner overflow-y-auto">
+              {trips.map((trip) => (
+                <li key={`${trip.t}|${trip.unit}|${trip.destination ?? ''}`} className="flex flex-col gap-0.5 py-1 text-xs" data-testid="mci-transport-trip">
+                  <span className="text-surface-light">
+                    <span className="mr-2 tabular-nums text-surface-faint">{formatClock(trip.t)}</span>
+                    <span className="font-semibold">{trip.unit}</span>
+                    {trip.destination ? ` to ${trip.destination}` : ''}
+                  </span>
+                  <MciCountsLine counts={trip.counts} />
+                </li>
+              ))}
+            </ul>
           )}
         </div>
       )}

@@ -43,7 +43,7 @@ export default function MciTotalsStrip({ mci, totals }: Props) {
       <Stat label="In treatment now (MCI)" testId="mci-total-intreatment">
         {totals.inTreatmentTotal}
       </Stat>
-      <Stat label={t('Transported')} testId="mci-total-transported">
+      <Stat label="Transported" testId="mci-total-transported">
         {totals.transportedTotal}
       </Stat>
       <Stat label="Regular clinic patients" testId="mci-total-regular">

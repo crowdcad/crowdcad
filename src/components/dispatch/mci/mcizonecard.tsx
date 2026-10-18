@@ -98,7 +98,7 @@ export default function MciZoneCard({ stats, teams, readOnly, onTag, onSetTagged
               onClick={() => onDraw(zone.id)}
               aria-label={`${hasShape ? 'Edit' : 'Draw'} ${name} on the map`}
               title={hasShape ? 'Edit on the map' : 'Draw on the map'}
-              className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border hover:bg-surface-liner ${hasShape ? 'border-surface-liner text-surface-faint' : 'border-status-card-ring-yellow text-surface-light'}`}
+              className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md hover:bg-surface-liner ${hasShape ? 'text-surface-faint' : 'text-status-orange'}`}
               data-testid={`mci-zone-draw-${name}`}
             >
               <MapPin className="h-3.5 w-3.5" />
