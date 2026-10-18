@@ -27,8 +27,8 @@ function DeclareMciForm({ event, onClose, onDeclare }: Omit<Props, 'isOpen'>) {
 
   // A zone or clinic already on the event's MCI (from an earlier period) is kept as it is, so it is not offered again.
   const venueZones = useMemo(
-    () => getVenueZones(event.venue).filter((z) => !existing?.zones.some((e) => e.id === z.id)),
-    [event.venue, existing?.zones]
+    () => getVenueZones(event.venue).filter((z) => !existing?.zones.some((e) => e.id === z.id) && !existing?.areas.some((a) => a.id === z.id || a.venueZoneId === z.id)),
+    [event.venue, existing?.zones, existing?.areas]
   );
   const dispatchZoneIds = useMemo(() => new Set((event.dispatchZones || []).map((z) => z.id)), [event.dispatchZones]);
   const clinics = useMemo(

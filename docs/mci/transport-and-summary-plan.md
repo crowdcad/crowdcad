@@ -1,6 +1,6 @@
 # MCI mode: transport and the end-of-event summary
 
-Status: plan for review. Nothing here is built yet.
+Status: Part 1 (transport) is built, with the decisions below taken as recommended (D9). Part 2 (the summary) is still a plan.
 
 Related: [plan.md](plan.md), [decisions.md](decisions.md).
 

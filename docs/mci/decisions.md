@@ -42,3 +42,14 @@ Related: [plan.md](plan.md), [../tak-integration/decisions.md](../tak-integratio
 - **Requested** by the maintainer after previewing.
 - **What.** `declareMci` closes the open surge period (its `endedAt` is the declare time, so the surge log keeps it) and clears `manualSurgeActive`. The MCI timer and the surge timer never run together. The Surge toggle still works by hand during an MCI (D6).
 - **Why.** An MCI is the larger event. Leaving the surge flashing beside it gave two alarms for one situation.
+
+### D9. Transport takes patients off site from a treatment location
+- **Requested** by the maintainer; designed in [transport-and-summary-plan.md](transport-and-summary-plan.md).
+- **What.** A `transported` log entry names the treatment location the patients left, the color, the count, the ambulance number and an optional destination. In treatment now is received minus transported. One trip is one write with one entry per color. A transport is clamped to the patients in that location. Undoing a transport always works. Undoing a move is refused when its patients have since been transported.
+- **Why.** The ambulance number is a unit label, so counts only (D1) still holds. Transport runs from treatment locations only for the first drill; the entry already names its source if zones are added later.
+
+### D10. A zone or treatment location can be drawn on the venue map
+- **Requested** by the maintainer, and only offered when the venue has a map.
+- **What.** After a zone or treatment location is added, the dispatcher is asked to draw it on the map and can skip. The shape is stored as an ordinary zone on the event's copy of the venue layers (never the venue itself), with the same id as the MCI item or its `venueZoneId`. The map then shows it like any other zone. The shape is not a dispatch zone, so it adds no Calls tab. A card's map button redraws it, which replaces the first shape. Clinics already have a pin and are not drawn.
+- **Skips.** A skipped prompt is remembered for the browser session and not asked again. The card's button still works.
+- **Limits.** Image layers are drawn at the size of the dialog with no zoom. Live-map layers store coordinates.

@@ -68,3 +68,19 @@ Then('the MCI summary should list zone {string} with {int} tagged and {int} move
   await expect(cells.nth(5)).toHaveText(String(tagged));
   await expect(cells.nth(6)).toHaveText(String(moved));
 });
+
+When('I transport {int} {string} patients from {string} in ambulance {string}', async ({ page }, count: number, color: string, area: string, unit: string) => {
+  await page.getByTestId(`mci-area-transport-${area}`).click();
+  const dialog = page.getByTestId('mci-transport-modal');
+  await expect(dialog).toBeVisible();
+  await dialog.getByTestId('mci-transport-unit').fill(unit);
+  await dialog.getByTestId(`mci-transport-${color}`).fill(String(count));
+  await dialog.getByTestId('mci-transport-confirm').click();
+  await expect(dialog).not.toBeVisible();
+});
+
+Then('the MCI summary should list treatment location {string} with {int} transported', async ({ page }, area: string, transported: number) => {
+  const row = page.getByTestId('mci-summary-areas').getByRole('row', { name: new RegExp(`^${capitalize(area)}`) });
+  // Location, four colors, received, transported, still here.
+  await expect(row.getByRole('cell').nth(6)).toHaveText(String(transported));
+});

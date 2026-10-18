@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Minus, Plus } from 'lucide-react';
+import { MapPin, Minus, Plus } from 'lucide-react';
 import { Button } from '@heroui/react';
 import type { MciColor } from '@/app/types';
 import { MCI_COLORS, type MciZoneStats } from '@/lib/mci';
@@ -18,6 +18,11 @@ type Props = {
   onMove: (zoneId: string) => void;
   onClear: (zoneId: string) => void;
   onReopen: (zoneId: string) => void;
+  /** The venue has a map: show the draw-on-map button. */
+  mapEnabled?: boolean;
+  /** The zone already has a shape on the map (the button then edits it). */
+  hasShape?: boolean;
+  onDraw?: (zoneId: string) => void;
 };
 
 /** The Tagged number. Tapping it lets the dispatcher type a new total, written as one delta entry. */
@@ -70,7 +75,7 @@ function TaggedValue({ value, label, disabled, onCommit }: { value: number; labe
   );
 }
 
-export default function MciZoneCard({ stats, teams, readOnly, onTag, onSetTagged, onMove, onClear, onReopen }: Props) {
+export default function MciZoneCard({ stats, teams, readOnly, onTag, onSetTagged, onMove, onClear, onReopen, mapEnabled = false, hasShape = false, onDraw }: Props) {
   const { t } = useDispatchTerms();
   const { zone } = stats;
   const name = zone.name;
@@ -82,7 +87,21 @@ export default function MciZoneCard({ stats, teams, readOnly, onTag, onSetTagged
       data-testid={`mci-zone-${name}`}
     >
       <header className="flex items-center justify-between gap-2">
-        <h3 className="truncate text-base font-bold text-surface-light">{name}</h3>
+        <div className="flex min-w-0 items-center gap-1.5">
+          <h3 className="truncate text-base font-bold text-surface-light">{name}</h3>
+          {mapEnabled && onDraw && (
+            <button
+              type="button"
+              onClick={() => onDraw(zone.id)}
+              aria-label={`${hasShape ? 'Edit' : 'Draw'} ${name} on the map`}
+              title={hasShape ? 'Edit on the map' : 'Draw on the map'}
+              className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border hover:bg-surface-liner ${hasShape ? 'border-surface-liner text-surface-faint' : 'border-status-card-ring-yellow text-surface-light'}`}
+              data-testid={`mci-zone-draw-${name}`}
+            >
+              <MapPin className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
         {stats.cleared && (
           <span className="rounded-md border border-status-card-ring-green px-2 py-0.5 text-xs font-semibold text-status-green" data-testid={`mci-zone-cleared-${name}`}>
             {t('Zone clear')}

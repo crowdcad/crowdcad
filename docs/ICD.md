@@ -197,8 +197,8 @@ PocketBase stores these as opaque `json` fields with no server-side schema; the 
 | `active` | bool | True from declaration until stand down. |
 | `periods` | `{startedAt:number, endedAt?:number}[]` | Epoch ms. The last entry has no `endedAt` while the MCI is active. Declaring again appends a period. |
 | `zones` | `MciZone[]` | `id` (a venue zone's id when created from one, else generated), `name`, `venueZoneId?`, `clearedAt?` (epoch ms, set while the zone is cleared and unset when reopened; kept in step with the log). |
-| `areas` | `MciTreatmentArea[]` | Treatment locations: `id`, `name`, `clinicId?` (set when the area is an event clinic, whose unresolved regular patients are then shown beside the MCI patients). |
-| `log` | `MciLogEntry[]` | `id`, `t` (epoch ms), `kind` (`'tagged'` \| `'moved'` \| `'zone_cleared'` \| `'zone_reopened'` \| `'undo'`), `color?` (`'red'` \| `'yellow'` \| `'green'` \| `'black'`), `n?` (signed for `tagged`, positive for `moved`), `zoneId?`, `areaId?` (destination of a move), `undoes?` (the entry an `undo` reverses), `by?` (auth uid). |
+| `areas` | `MciTreatmentArea[]` | Treatment locations: `id`, `name`, `clinicId?` (set when the area is an event clinic, whose unresolved regular patients are then shown beside the MCI patients), `venueZoneId?` (the zone drawn for this area on the event's copy of the venue map). |
+| `log` | `MciLogEntry[]` | `id`, `t` (epoch ms), `kind` (`'tagged'` \| `'moved'` \| `'transported'` \| `'zone_cleared'` \| `'zone_reopened'` \| `'undo'`), `color?` (`'red'` \| `'yellow'` \| `'green'` \| `'black'`), `n?` (signed for `tagged`, positive for `moved` and `transported`), `zoneId?`, `areaId?` (destination of a move; the treatment location a transport left), `unit?` (ambulance number as typed, for `transported`), `destination?` (free text, for `transported`), `undoes?` (the entry an `undo` reverses), `by?` (auth uid). |
 
 **`Equipment`** (venue-level): `id`, `name`, `status` (free-text status string), `assignedTeam?`, `location?`.
 

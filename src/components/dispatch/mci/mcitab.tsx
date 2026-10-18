@@ -3,7 +3,7 @@
 import React, { useMemo, useState } from 'react';
 import { Button, Input } from '@heroui/react';
 import type { Event, MciColor } from '@/app/types';
-import { deriveMci, mciTransportUnits, mciUnitsAt, type MciCounts } from '@/lib/mci';
+import { deriveMci, mciMapLayers, mciShapeOf, mciTransportUnits, mciUnitsAt, type MciCounts } from '@/lib/mci';
 import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
 import type { MciActions } from './usemciactions';
 import MciTotalsStrip from './mcitotalsstrip';
@@ -11,6 +11,7 @@ import MciZoneCard from './mcizonecard';
 import MciTreatmentCard from './mcitreatmentcard';
 import MciMoveModal from './mcimovemodal';
 import MciTransportModal from './mcitransportmodal';
+import MciDrawZoneModal, { type MciDrawTarget } from './mcidrawzonemodal';
 import MciLogDrawer from './mcilogdrawer';
 
 type Props = {
@@ -64,6 +65,9 @@ export default function MciTab({ event, actions }: Props) {
   const derived = useMemo(() => deriveMci(event), [event]);
   const [moveZoneId, setMoveZoneId] = useState<string | null>(null);
   const [transportAreaId, setTransportAreaId] = useState<string | null>(null);
+  // A shape the dispatcher chose to draw or edit; otherwise the first zone or area still without one is offered.
+  const [drawChoice, setDrawChoice] = useState<{ kind: 'zone' | 'area'; id: string } | null>(null);
+  const [, setSkippedTick] = useState(0);
   const [showLog, setShowLog] = useState(false);
 
   if (!mci) return null;
@@ -71,6 +75,44 @@ export default function MciTab({ event, actions }: Props) {
   const moveZone = derived.zones.find((z) => z.zone.id === moveZoneId) ?? null;
   const transportArea = derived.areas.find((a) => a.area.id === transportAreaId) ?? null;
   const transportUnits = mciTransportUnits(mci);
+
+  // Drawing is offered only when the venue has a map.
+  const mapLayers = mciMapLayers(event.venue);
+  const mapEnabled = mapLayers.length > 0;
+  const shapeOf = (item: { id: string; venueZoneId?: string }) => mciShapeOf(event.venue, item);
+  const skipKey = (kind: string, id: string) => `ccad-mci-draw-skipped:${event.id}:${kind}:${id}`;
+  const wasSkipped = (kind: string, id: string) => {
+    try {
+      return sessionStorage.getItem(skipKey(kind, id)) === '1';
+    } catch {
+      return false;
+    }
+  };
+  const nextToDraw: MciDrawTarget | null = (() => {
+    if (!mapEnabled || readOnly) return null;
+    const zone = mci.zones.find((z) => !shapeOf(z) && !wasSkipped('zone', z.id));
+    if (zone) return { kind: 'zone', id: zone.id, name: zone.name, venueZoneId: zone.venueZoneId };
+    const area = mci.areas.find((a) => !a.clinicId && !shapeOf(a) && !wasSkipped('area', a.id));
+    return area ? { kind: 'area', id: area.id, name: area.name, venueZoneId: area.venueZoneId } : null;
+  })();
+  const chosenItem = drawChoice ? (drawChoice.kind === 'zone' ? mci.zones : mci.areas).find((x) => x.id === drawChoice.id) : undefined;
+  const drawTarget: MciDrawTarget | null =
+    drawChoice && chosenItem ? { kind: drawChoice.kind, id: chosenItem.id, name: chosenItem.name, venueZoneId: chosenItem.venueZoneId } : nextToDraw;
+  const closeDraw = () => {
+    if (drawChoice) {
+      setDrawChoice(null);
+      return;
+    }
+    // A skipped prompt is not asked again this session; the card's map button still draws it.
+    if (nextToDraw) {
+      try {
+        sessionStorage.setItem(skipKey(nextToDraw.kind, nextToDraw.id), '1');
+      } catch {
+        // storage unavailable: the prompt may return on reload
+      }
+      setSkippedTick((n) => n + 1);
+    }
+  };
 
   const handleTag = (zoneId: string, color: MciColor, delta: number) => {
     const zone = derived.zones.find((z) => z.zone.id === zoneId);
@@ -132,6 +174,9 @@ export default function MciTab({ event, actions }: Props) {
               onMove={setMoveZoneId}
               onClear={(id) => void actions.clearZone(id)}
               onReopen={(id) => void actions.reopenZone(id)}
+              mapEnabled={mapEnabled && !readOnly}
+              hasShape={!!shapeOf(stats.zone)}
+              onDraw={(id) => setDrawChoice({ kind: 'zone', id })}
             />
           ))}
           {derived.zones.length === 0 && <p className="text-sm italic text-surface-faint">No zones yet. Add one by name.</p>}
@@ -152,6 +197,9 @@ export default function MciTab({ event, actions }: Props) {
               ambulances={mciTransportUnits({ ...mci, log: mci.log.filter((e) => e.areaId === stats.area.id) })}
               readOnly={readOnly}
               onTransport={setTransportAreaId}
+              mapEnabled={mapEnabled && !readOnly}
+              hasShape={!!shapeOf(stats.area)}
+              onDraw={(id) => setDrawChoice({ kind: 'area', id })}
             />
           ))}
           {derived.areas.length === 0 && <p className="text-sm italic text-surface-faint">No treatment locations yet. Add one by name.</p>}
@@ -159,6 +207,15 @@ export default function MciTab({ event, actions }: Props) {
       </section>
 
       <MciMoveModal zone={readOnly ? null : moveZone} areas={derived.areas} onClose={() => setMoveZoneId(null)} onMove={handleMove} />
+      <MciDrawZoneModal
+        target={readOnly ? null : drawTarget}
+        layers={mapLayers}
+        existing={drawTarget && chosenItem ? shapeOf(chosenItem) : undefined}
+        onSave={async (shape) => {
+          if (drawTarget) await actions.saveShape(drawTarget.kind, drawTarget.id, shape);
+        }}
+        onClose={closeDraw}
+      />
       <MciTransportModal
         area={readOnly ? null : transportArea}
         units={transportUnits}

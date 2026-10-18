@@ -20,7 +20,10 @@ Feature: MCI mode on the dispatch board
     And zone "Zone A" should show 0 "red" patients in the zone
     When I mark zone "Zone A" clear
     Then I should see the text "Zone clear"
+    When I transport 2 "red" patients from "Clinic" in ambulance "A14"
+    Then the treatment location "Clinic" should read "0 regular + 3 MCI"
     When I stand down the MCI
     Then I should see the text "This MCI has stood down"
     When I open the MCI summary from the event summary
     Then the MCI summary should list zone "Zone A" with 5 tagged and 5 moved
+    And the MCI summary should list treatment location "Clinic" with 2 transported

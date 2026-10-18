@@ -1,5 +1,6 @@
 import type {
   Event,
+  Layer,
   MciAssignment,
   MciColor,
   MciLogEntry,
@@ -8,9 +9,12 @@ import type {
   MciZone,
   Staff,
   Supervisor,
+  Venue,
+  Zone,
 } from '@/app/types';
 import { getEventClinics, isClinicCallResolved } from '@/lib/clinics';
 import { deriveTeamVisualStatus } from '@/lib/statusColors';
+import { isGeoLayer } from '@/lib/geo/layers';
 
 // Mass casualty incident (MCI) mode. The log on `event.mci` is the only source
 // of counts: every number on screen is derived here, nothing is stored as a
@@ -723,4 +727,83 @@ export function mciCsvLines(event: Pick<Event, 'mci'>, formatTimestamp: (ms: num
     rows.push({ t: entry.t, order: i, line: `MCI,${scope},${formatTimestamp(entry.t)},${csvQuote(text)}` });
   });
   return rows.sort((a, b) => a.t - b.t || a.order - b.order).map((r) => r.line);
+}
+
+// ---------------------------------------------------------------------------
+// Map shapes. A zone or treatment area can be drawn on the venue map. The
+// shape is an ordinary zone on the event's copy of the venue layers, so the
+// map shows it like any other, and the MCI item keeps its id in `venueZoneId`.
+// ---------------------------------------------------------------------------
+
+const MCI_ZONE_COLOR = '#ef4444';
+const MCI_AREA_COLOR = '#3b82f6';
+
+export interface MciShape {
+  layerId: string;
+  /** Percent-of-image vertices (an image layer). */
+  points: { x: number; y: number }[];
+  /** Real coordinates (a live-map layer). */
+  coords?: { lat: number; lng: number }[];
+}
+
+/** The layers a shape can be drawn on: those with a map image or a live map. Empty when the event has no map. */
+export function mciMapLayers(venue: Pick<Venue, 'layers'> | undefined | null): Layer[] {
+  return (venue?.layers || []).filter((layer) => !!layer.mapUrl || isGeoLayer(layer));
+}
+
+/** The id an item's map shape is stored under: the venue zone it came from, else its own id. */
+export function mciShapeId(item: { id: string; venueZoneId?: string }): string {
+  return item.venueZoneId ?? item.id;
+}
+
+/** The drawn shape of a zone or treatment area, with the layer it is on. */
+export function mciShapeOf(
+  venue: Pick<Venue, 'layers'> | undefined | null,
+  item: { id: string; venueZoneId?: string }
+): { layer: Layer; zone: Zone } | undefined {
+  const shapeId = mciShapeId(item);
+  for (const layer of venue?.layers || []) {
+    const zone = (layer.zones || []).find((z) => z.id === shapeId);
+    if (zone && (zone.points.length >= 3 || (zone.coords?.length ?? 0) >= 3)) return { layer, zone };
+  }
+  return undefined;
+}
+
+/**
+ * Stores a drawn shape for a zone or treatment area on a layer of the event's
+ * venue, replacing any earlier shape (on any layer) so a redraw moves it.
+ * Allowed after stand down too, so the record's map can be tidied.
+ */
+export function mciShapePatch(event: Pick<Event, 'venue' | 'mci'>, target: { kind: 'zone' | 'area'; id: string }, shape: MciShape): MciWrite {
+  const mci = event.mci;
+  const layers = event.venue?.layers;
+  if (!mci || !layers) return { patch: {}, error: 'invalid' };
+  const item = (target.kind === 'zone' ? mci.zones : mci.areas).find((x) => x.id === target.id);
+  if (!item) return { patch: {}, error: target.kind === 'zone' ? 'unknown-zone' : 'unknown-area' };
+  if (!layers.some((l) => l.id === shape.layerId)) return { patch: {}, error: 'invalid' };
+  if (shape.points.length < 3 && (shape.coords?.length ?? 0) < 3) return { patch: {}, error: 'invalid' };
+
+  const shapeId = mciShapeId(item);
+  const previous = layers.flatMap((l) => l.zones || []).find((z) => z.id === shapeId);
+  const zone: Zone = {
+    id: shapeId,
+    name: item.name,
+    color: previous?.color ?? (target.kind === 'zone' ? MCI_ZONE_COLOR : MCI_AREA_COLOR),
+    points: shape.points,
+    ...(shape.coords ? { coords: shape.coords } : {}),
+    ...(previous?.isDispatchZone ? { isDispatchZone: true } : {}),
+  };
+  const nextLayers = layers.map((layer) => {
+    const others = (layer.zones || []).filter((z) => z.id !== shapeId);
+    if (layer.id === shape.layerId) return { ...layer, zones: [...others, zone] };
+    return layer.zones ? { ...layer, zones: others } : layer;
+  });
+  const link = <T extends { id: string; venueZoneId?: string }>(list: T[]): T[] =>
+    list.map((x) => (x.id === item.id && !x.venueZoneId ? { ...x, venueZoneId: shapeId } : x));
+  return {
+    patch: {
+      venue: { ...event.venue, layers: nextLayers },
+      mci: { ...mci, zones: target.kind === 'zone' ? link(mci.zones) : mci.zones, areas: target.kind === 'area' ? link(mci.areas) : mci.areas },
+    },
+  };
 }

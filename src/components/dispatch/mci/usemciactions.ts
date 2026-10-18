@@ -8,6 +8,7 @@ import {
   addMciZone,
   clearZonePatch,
   declareMci,
+  mciShapePatch,
   movePatch,
   reopenZonePatch,
   setTaggedTotalPatch,
@@ -16,6 +17,7 @@ import {
   transportPatch,
   undoPatch,
   type MciCounts,
+  type MciShape,
   type MciWrite,
   type MciWriteContext,
 } from '@/lib/mci';
@@ -31,6 +33,7 @@ export interface MciActions {
   tag: (zoneId: string, color: MciColor, delta: number) => Promise<void>;
   setTagged: (zoneId: string, color: MciColor, total: number) => Promise<void>;
   move: (zoneId: string, areaId: string, counts: Partial<MciCounts>) => Promise<boolean>;
+  saveShape: (kind: 'zone' | 'area', id: string, shape: MciShape) => Promise<boolean>;
   transport: (areaId: string, counts: Partial<MciCounts>, trip: { unit: string; destination?: string }) => Promise<boolean>;
   clearZone: (zoneId: string) => Promise<void>;
   reopenZone: (zoneId: string) => Promise<void>;
@@ -118,6 +121,10 @@ export function useMciActions(updateEvent: UpdateEvent, uid: string | undefined,
       },
       move: async (zoneId, areaId, counts) => {
         const out = await run((current, ctx) => movePatch(current, zoneId, areaId, counts, ctx));
+        return !!out && !out.error;
+      },
+      saveShape: async (kind, id, shape) => {
+        const out = await run((current) => mciShapePatch(current, { kind, id }, shape));
         return !!out && !out.error;
       },
       transport: async (areaId, counts, trip) => {

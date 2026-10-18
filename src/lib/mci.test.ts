@@ -14,6 +14,9 @@ import {
   mciAssignmentPatch,
   mciAvailability,
   mciCsvLines,
+  mciMapLayers,
+  mciShapeOf,
+  mciShapePatch,
   mciTransportUnits,
   transportPatch,
   mciStatusPatch,
@@ -577,5 +580,63 @@ describe('transport', () => {
     e = apply(e, transportPatch(e, 'c1', { red: 2 }, { unit: 'A1', destination: 'General' }, ctx(3000)));
     expect(mciSeries(e.mci).at(-1)).toEqual({ t: 3000, inZones: 0, inTreatment: 3, transported: 2 });
     expect(mciCsvLines(e, (ms) => `T${ms}`)).toContain('MCI,Clinic,T3000,"transported red 2 from Clinic by A1 to General"');
+  });
+});
+
+describe('map shapes', () => {
+  const triangle = [{ x: 10, y: 10 }, { x: 40, y: 10 }, { x: 25, y: 40 }];
+  const withMap = (): Event => {
+    const e = activeEvent();
+    return {
+      ...e,
+      venue: {
+        ...e.venue,
+        layers: [
+          { id: 'l1', name: 'Main', mapUrl: 'map.png', posts: [], zones: [{ id: 'old', name: 'Old', color: '#111111', points: triangle }] },
+          { id: 'l2', name: 'Plain', posts: [] },
+        ],
+      },
+    } as Event;
+  };
+
+  it('offers only layers that have a map', () => {
+    expect(mciMapLayers(withMap().venue).map((l) => l.id)).toEqual(['l1']);
+    expect(mciMapLayers(undefined)).toEqual([]);
+  });
+
+  it('stores a drawn zone on the layer and links it to the MCI zone', () => {
+    let e = withMap();
+    expect(mciShapeOf(e.venue, e.mci!.zones[0])).toBeUndefined();
+    e = apply(e, mciShapePatch(e, { kind: 'zone', id: 'za' }, { layerId: 'l1', points: triangle }));
+    const found = mciShapeOf(e.venue, e.mci!.zones[0])!;
+    expect(found.layer.id).toBe('l1');
+    expect(found.zone).toMatchObject({ id: 'za', name: 'Zone A', color: '#ef4444', points: triangle });
+    expect(found.zone.isDispatchZone).toBeUndefined();
+    expect(e.mci!.zones[0].venueZoneId).toBe('za');
+  });
+
+  it('draws a treatment area in blue and a redraw replaces the first shape, even on another layer', () => {
+    let e = withMap();
+    e = apply(e, mciShapePatch(e, { kind: 'area', id: 'ar1' }, { layerId: 'l1', points: triangle }));
+    expect(mciShapeOf(e.venue, e.mci!.areas[1])!.zone.color).toBe('#3b82f6');
+    const square = [{ x: 0, y: 0 }, { x: 5, y: 0 }, { x: 5, y: 5 }, { x: 0, y: 5 }];
+    e = apply(e, mciShapePatch(e, { kind: 'area', id: 'ar1' }, { layerId: 'l2', points: square }));
+    const zones = e.venue.layers!.flatMap((l) => (l.zones || []).map((z) => [l.id, z.id]));
+    expect(zones.filter(([, id]) => id === 'ar1')).toEqual([['l2', 'ar1']]);
+    expect(zones).toContainEqual(['l1', 'old']);
+  });
+
+  it('refuses a shape with too few points, an unknown layer or an unknown zone', () => {
+    const e = withMap();
+    expect(mciShapePatch(e, { kind: 'zone', id: 'za' }, { layerId: 'l1', points: triangle.slice(0, 2) }).error).toBe('invalid');
+    expect(mciShapePatch(e, { kind: 'zone', id: 'za' }, { layerId: 'nope', points: triangle }).error).toBe('invalid');
+    expect(mciShapePatch(e, { kind: 'zone', id: 'nope' }, { layerId: 'l1', points: triangle }).error).toBe('unknown-zone');
+  });
+
+  it('keeps a live-map shape as coordinates', () => {
+    let e = withMap();
+    const coords = [{ lat: 1, lng: 1 }, { lat: 1, lng: 2 }, { lat: 2, lng: 2 }];
+    e = apply(e, mciShapePatch(e, { kind: 'zone', id: 'zb' }, { layerId: 'l1', points: [], coords }));
+    expect(mciShapeOf(e.venue, e.mci!.zones[1])!.zone.coords).toEqual(coords);
   });
 });

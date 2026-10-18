@@ -250,6 +250,7 @@ export const DISPATCH_TERMS: DispatchTerm[] = [
     'Add treatment area',
     'Move to treatment',
     'Transport',
+    'Draw on map',
     'Ambulance number',
     'Destination',
     'Mark clear',

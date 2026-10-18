@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { MapPin } from 'lucide-react';
 import { Button } from '@heroui/react';
 import type { MciAreaStats } from '@/lib/mci';
 import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
@@ -14,10 +15,14 @@ type Props = {
   ambulances: string[];
   readOnly: boolean;
   onTransport: (areaId: string) => void;
+  /** The venue has a map and this is not a clinic (a clinic is already a pin): show the draw-on-map button. */
+  mapEnabled?: boolean;
+  hasShape?: boolean;
+  onDraw?: (areaId: string) => void;
 };
 
 /** A treatment location: MCI patients here now by color, a clinic's regular patients and what has left in an ambulance. */
-export default function MciTreatmentCard({ stats, teams, ambulances, readOnly, onTransport }: Props) {
+export default function MciTreatmentCard({ stats, teams, ambulances, readOnly, onTransport, mapEnabled = false, hasShape = false, onDraw }: Props) {
   const { t } = useDispatchTerms();
   const { name, isClinic, regular, inTreatmentTotal, transportedTotal, receivedTotal } = stats;
   return (
@@ -27,7 +32,21 @@ export default function MciTreatmentCard({ stats, teams, ambulances, readOnly, o
       data-testid={`mci-area-${name}`}
     >
       <header className="flex items-center justify-between gap-2">
-        <h3 className="truncate text-base font-bold text-surface-light">{name}</h3>
+        <div className="flex min-w-0 items-center gap-1.5">
+          <h3 className="truncate text-base font-bold text-surface-light">{name}</h3>
+          {mapEnabled && !isClinic && onDraw && (
+            <button
+              type="button"
+              onClick={() => onDraw(stats.area.id)}
+              aria-label={`${hasShape ? 'Edit' : 'Draw'} ${name} on the map`}
+              title={hasShape ? 'Edit on the map' : 'Draw on the map'}
+              className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border hover:bg-surface-liner ${hasShape ? 'border-surface-liner text-surface-faint' : 'border-status-card-ring-yellow text-surface-light'}`}
+              data-testid={`mci-area-draw-${name}`}
+            >
+              <MapPin className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
         {isClinic && (
           <span className="rounded-md border border-status-card-ring-blue bg-status-card-blue px-2 py-0.5 text-xs text-surface-light">Clinic</span>
         )}
