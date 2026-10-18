@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { Modal, ModalContent, ModalHeader, ModalBody, ModalFooter, Button, Select, SelectItem } from '@heroui/react';
 import { MCI_COLORS, sumCounts, type MciAreaStats, type MciCounts, type MciZoneStats } from '@/lib/mci';
 import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
-import { MCI_COLOR_STYLES, MciColorDot } from './mciparts';
+import { MCI_COLOR_STYLES, MCI_NUMBER_INPUT, MciColorDot } from './mciparts';
 
 type Props = {
   /** The zone patients are moved out of; null keeps the dialog closed. */
@@ -79,7 +79,7 @@ function MoveForm({ zone, areas, onClose, onMove }: Omit<Props, 'zone'> & { zone
                 aria-label={`Move ${MCI_COLOR_STYLES[color].label.toLowerCase()}`}
                 value={counts[color]}
                 onChange={(e) => set(color, e.target.value)}
-                className="h-8 w-16 rounded-md border border-surface-liner bg-surface-deep text-center tabular-nums text-surface-light outline-none focus:outline-none focus:ring-0 focus-visible:ring-0"
+                className={`h-8 w-16 ${MCI_NUMBER_INPUT}`}
                 data-testid={`mci-move-${color}`}
               />
             </React.Fragment>
@@ -115,7 +115,7 @@ export default function MciMoveModal({ zone, areas, onClose, onMove }: Props) {
       backdrop="opaque"
       hideCloseButton
       radius="lg"
-      classNames={{ base: 'mt-20 rounded-lg bg-surface-deepest text-surface-light', header: 'pb-0', footer: 'pt-0' }}
+      classNames={{ base: 'mt-20 rounded-lg bg-surface-deepest text-surface-light', header: 'pb-0', footer: 'pt-0', body: 'minimal-scrollbar' }}
     >
       <ModalContent data-testid="mci-move-modal">
         {() => (zone ? <MoveForm key={zone.zone.id} zone={zone} areas={areas} onClose={onClose} onMove={onMove} /> : null)}

@@ -59,6 +59,9 @@ html :is(.animate-spinner-ease-spin, .animate-spinner-linear-spin) {
    attribute selector outranks the element's font-* class). */
 html[data-ui='condensed'] .ui-timer {
   font-weight: 400;
+  /* JetBrains Mono sits above Rajdhani's (lowered) baseline in the same line box; nudge it to match. */
+  position: relative;
+  top: var(--ui-timer-nudge, 0.15em);
 }
 .ui-timer {
   font-family: var(--ui-font-timer);

@@ -145,6 +145,7 @@ export default function SummaryCharts({
                   <Legend />
                   <Line type="stepAfter" dataKey="inZones" name="In zones" stroke={STATUS_COLORS_HEX.red} strokeWidth={2} dot={false} isAnimationActive={false} />
                   <Line type="stepAfter" dataKey="inTreatment" name="In treatment (MCI)" stroke={STATUS_COLORS_HEX.blue} strokeWidth={2} dot={false} isAnimationActive={false} />
+                  <Line type="stepAfter" dataKey="transported" name="Transported so far" stroke={STATUS_COLORS_HEX.green} strokeWidth={2} dot={false} isAnimationActive={false} />
                 </LineChart>
               </ResponsiveContainer>
             </div>

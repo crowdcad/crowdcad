@@ -13,6 +13,7 @@ import {
   setTaggedTotalPatch,
   standDownMci,
   tagPatch,
+  transportPatch,
   undoPatch,
   type MciCounts,
   type MciWrite,
@@ -30,6 +31,7 @@ export interface MciActions {
   tag: (zoneId: string, color: MciColor, delta: number) => Promise<void>;
   setTagged: (zoneId: string, color: MciColor, total: number) => Promise<void>;
   move: (zoneId: string, areaId: string, counts: Partial<MciCounts>) => Promise<boolean>;
+  transport: (areaId: string, counts: Partial<MciCounts>, trip: { unit: string; destination?: string }) => Promise<boolean>;
   clearZone: (zoneId: string) => Promise<void>;
   reopenZone: (zoneId: string) => Promise<void>;
   undo: (entryId: string) => Promise<void>;
@@ -59,14 +61,14 @@ export function useMciActions(updateEvent: UpdateEvent, uid: string | undefined,
   const inFlight = local?.inFlight;
 
   const save = useCallback(
-    async (build: (current: Event, ctx: MciWriteContext) => MciWrite): Promise<MciWrite | null> => {
+    async (build: (current: Event, ctx: MciWriteContext) => MciWrite, clampedText = 'Reduced to the patients still in the zone.'): Promise<MciWrite | null> => {
       let result = null as MciWrite | null;
       await updateEvent((current) => {
         result = build(current, { now: Date.now(), by: uid });
         return result.patch;
       });
       const outcome = result as MciWrite | null;
-      if (outcome?.clamped) toast.info(t('Reduced to the patients still in the zone.'));
+      if (outcome?.clamped) toast.info(t(clampedText));
       if (outcome?.error === 'duplicate') toast.error(t('A zone or treatment location with that name already exists.'));
       if (outcome?.error === 'cannot-undo') toast.error(t('That entry can no longer be undone.'));
       return outcome;
@@ -75,12 +77,12 @@ export function useMciActions(updateEvent: UpdateEvent, uid: string | undefined,
   );
 
   const run = useCallback(
-    (build: (current: Event, ctx: MciWriteContext) => MciWrite): Promise<MciWrite | null> => {
+    (build: (current: Event, ctx: MciWriteContext) => MciWrite, clampedText?: string): Promise<MciWrite | null> => {
       if (inFlight) inFlight.current += 1;
       setLocal?.((current) => (current ? { ...current, ...build(current, { now: Date.now(), by: uid }).patch } : current));
       const task = async (): Promise<MciWrite | null> => {
         try {
-          return await save(build);
+          return await save(build, clampedText);
         } finally {
           if (inFlight) inFlight.current -= 1;
         }
@@ -116,6 +118,10 @@ export function useMciActions(updateEvent: UpdateEvent, uid: string | undefined,
       },
       move: async (zoneId, areaId, counts) => {
         const out = await run((current, ctx) => movePatch(current, zoneId, areaId, counts, ctx));
+        return !!out && !out.error;
+      },
+      transport: async (areaId, counts, trip) => {
+        const out = await run((current, ctx) => transportPatch(current, areaId, counts, trip, ctx), 'Reduced to the patients still in the treatment location.');
         return !!out && !out.error;
       },
       clearZone: async (zoneId) => {

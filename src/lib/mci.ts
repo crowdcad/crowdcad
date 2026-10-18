@@ -113,6 +113,12 @@ export interface MciAreaStats {
   /** MCI patients moved in. */
   received: MciCounts;
   receivedTotal: number;
+  /** MCI patients that left in an ambulance. */
+  transported: MciCounts;
+  transportedTotal: number;
+  /** Received minus transported: the MCI patients here now. */
+  inTreatment: MciCounts;
+  inTreatmentTotal: number;
   /** Unresolved regular clinic patients, 0 for an MCI-only area. */
   regular: number;
   isClinic: boolean;
@@ -121,7 +127,10 @@ export interface MciAreaStats {
 export interface MciTotals {
   tagged: MciCounts;
   taggedTotal: number;
+  transported: MciCounts;
+  transportedTotal: number;
   inZonesTotal: number;
+  /** MCI patients in treatment locations now (received minus transported). */
   inTreatmentTotal: number;
   regularTotal: number;
 }
@@ -202,15 +211,24 @@ export function deriveMci(event: Pick<Event, 'mci' | 'calls' | 'clinics'>): MciD
   const clinics = getEventClinics(event.clinics);
   const areas: MciAreaStats[] = mci.areas.map((area) => {
     const received = emptyCounts();
+    const transported = emptyCounts();
     for (const entry of live) {
-      if (entry.kind === 'moved' && entry.areaId === area.id && entry.color && entry.n) received[entry.color] += entry.n;
+      if (entry.areaId !== area.id || !entry.color || !entry.n) continue;
+      if (entry.kind === 'moved') received[entry.color] += entry.n;
+      else if (entry.kind === 'transported') transported[entry.color] += entry.n;
     }
+    const inTreatment = emptyCounts();
+    for (const color of MCI_COLORS) inTreatment[color] = received[color] - transported[color];
     const clinicName = area.clinicId ? clinics.find((c) => c.id === area.clinicId)?.name : undefined;
     return {
       area,
       name: clinicName ?? area.name,
       received,
       receivedTotal: sumCounts(received),
+      transported,
+      transportedTotal: sumCounts(transported),
+      inTreatment,
+      inTreatmentTotal: sumCounts(inTreatment),
       regular: regularClinicCount(event, area),
       isClinic: !!area.clinicId,
     };
@@ -218,6 +236,8 @@ export function deriveMci(event: Pick<Event, 'mci' | 'calls' | 'clinics'>): MciD
 
   const tagged = emptyCounts();
   for (const stats of zones) for (const color of MCI_COLORS) tagged[color] += stats.tagged[color];
+  const transported = emptyCounts();
+  for (const stats of areas) for (const color of MCI_COLORS) transported[color] += stats.transported[color];
 
   return {
     zones,
@@ -225,8 +245,10 @@ export function deriveMci(event: Pick<Event, 'mci' | 'calls' | 'clinics'>): MciD
     totals: {
       tagged,
       taggedTotal: sumCounts(tagged),
+      transported,
+      transportedTotal: sumCounts(transported),
       inZonesTotal: zones.reduce((n, z) => n + z.inZoneTotal, 0),
-      inTreatmentTotal: areas.reduce((n, a) => n + a.receivedTotal, 0),
+      inTreatmentTotal: areas.reduce((n, a) => n + a.inTreatmentTotal, 0),
       regularTotal: areas.reduce((n, a) => n + a.regular, 0),
     },
   };
@@ -236,10 +258,12 @@ export interface MciSeriesPoint {
   t: number;
   inZones: number;
   inTreatment: number;
+  /** Patients that have left in an ambulance so far. */
+  transported: number;
 }
 
 /**
- * Patients in zones and in treatment after each counted entry, for the summary
+ * Patients in zones, in treatment and transported so far after each counted entry, for the summary
  * chart. Undone entries are left out entirely, as if they were never entered.
  * The first point is the start of the first period.
  */
@@ -247,19 +271,23 @@ export function mciSeries(mci: MciState | undefined): MciSeriesPoint[] {
   if (!mci || mci.periods.length === 0) return [];
   let inZones = 0;
   let inTreatment = 0;
-  const points: MciSeriesPoint[] = [{ t: mci.periods[0].startedAt, inZones, inTreatment }];
+  let transported = 0;
+  const points: MciSeriesPoint[] = [{ t: mci.periods[0].startedAt, inZones, inTreatment, transported }];
   for (const entry of liveEntries(mci.log)) {
-    if (!entry.n || !entry.zoneId) continue;
-    if (entry.kind === 'tagged') inZones += entry.n;
-    else if (entry.kind === 'moved') {
+    if (!entry.n) continue;
+    if (entry.kind === 'tagged' && entry.zoneId) inZones += entry.n;
+    else if (entry.kind === 'moved' && entry.zoneId) {
       inZones -= entry.n;
       inTreatment += entry.n;
+    } else if (entry.kind === 'transported') {
+      inTreatment -= entry.n;
+      transported += entry.n;
     } else continue;
-    points.push({ t: entry.t, inZones, inTreatment });
+    points.push({ t: entry.t, inZones, inTreatment, transported });
   }
   // Hold the last values to the end of a finished MCI so the chart shows the whole period.
   const endedAt = mci.periods[mci.periods.length - 1].endedAt;
-  if (endedAt !== undefined && endedAt > points[points.length - 1].t) points.push({ t: endedAt, inZones, inTreatment });
+  if (endedAt !== undefined && endedAt > points[points.length - 1].t) points.push({ t: endedAt, inZones, inTreatment, transported });
   return points;
 }
 
@@ -465,6 +493,51 @@ export function movePatch(
   return { patch: { mci: appendMciEntries(event.mci, entries) }, ...(clamped ? { clamped } : {}) };
 }
 
+const MAX_UNIT_LENGTH = 40;
+const MAX_DESTINATION_LENGTH = 80;
+
+/** The distinct ambulance numbers used so far (live entries), oldest first, for the dialog's suggestions. */
+export function mciTransportUnits(mci: MciState | undefined): string[] {
+  if (!mci) return [];
+  const seen: string[] = [];
+  for (const entry of liveEntries(mci.log)) {
+    if (entry.kind === 'transported' && entry.unit && !seen.includes(entry.unit)) seen.push(entry.unit);
+  }
+  return seen;
+}
+
+/**
+ * Sends patients off site from a treatment location in an ambulance. Each color is clamped to what is in that
+ * location; the ambulance number is required. One entry per color that has a count, all sharing the unit and
+ * destination, so a single ambulance trip is one write.
+ */
+export function transportPatch(
+  event: Pick<Event, 'mci' | 'calls' | 'clinics'>,
+  areaId: string,
+  counts: Partial<MciCounts>,
+  trip: { unit: string; destination?: string },
+  ctx: MciWriteContext
+): MciWrite {
+  if (!event.mci?.active) return { patch: {}, error: 'inactive' };
+  const stats = deriveMci(event).areas.find((a) => a.area.id === areaId);
+  if (!stats) return { patch: {}, error: 'unknown-area' };
+  const unit = trip.unit.trim().replace(/\s+/g, ' ').slice(0, MAX_UNIT_LENGTH);
+  if (!unit) return { patch: {}, error: 'invalid' };
+  const destination = trip.destination?.trim().replace(/\s+/g, ' ').slice(0, MAX_DESTINATION_LENGTH);
+
+  const entries: MciLogEntry[] = [];
+  let clamped = false;
+  for (const color of MCI_COLORS) {
+    const asked = Math.floor(counts[color] ?? 0);
+    if (asked <= 0) continue;
+    const n = Math.min(asked, stats.inTreatment[color]);
+    if (n < asked) clamped = true;
+    if (n > 0) entries.push(makeEntry(ctx, { kind: 'transported', areaId, color, n, unit, ...(destination ? { destination } : {}) }));
+  }
+  if (entries.length === 0) return { patch: {}, clamped, error: 'invalid' };
+  return { patch: { mci: appendMciEntries(event.mci, entries) }, ...(clamped ? { clamped } : {}) };
+}
+
 export function clearZonePatch(event: Pick<Event, 'mci' | 'calls' | 'clinics'>, zoneId: string, ctx: MciWriteContext): MciWrite {
   if (!event.mci?.active) return { patch: {}, error: 'inactive' };
   const stats = zoneStatsOf(event, zoneId);
@@ -496,7 +569,11 @@ export function undoPatch(event: Pick<Event, 'mci' | 'calls' | 'clinics'>, entry
   if (!target || target.kind === 'undo' || undoneIds(mci.log).has(entryId)) return { patch: {}, error: 'cannot-undo' };
 
   const next = appendMciEntries(mci, [makeEntry(ctx, { kind: 'undo', undoes: entryId })]);
-  const valid = deriveMci({ ...event, mci: next }).zones.every((z) => MCI_COLORS.every((c) => z.inZone[c] >= 0));
+  const after = deriveMci({ ...event, mci: next });
+  // Undoing a tag or a move must not leave a zone, and undoing a move must not leave a treatment location, below zero.
+  const valid =
+    after.zones.every((z) => MCI_COLORS.every((c) => z.inZone[c] >= 0)) &&
+    after.areas.every((a) => MCI_COLORS.every((c) => a.inTreatment[c] >= 0));
   if (!valid) return { patch: {}, error: 'cannot-undo' };
   return { patch: { mci: next } };
 }
@@ -616,11 +693,19 @@ export function mciCsvLines(event: Pick<Event, 'mci'>, formatTimestamp: (ms: num
   if (!mci) return [];
   const zoneName = (id?: string) => mci.zones.find((z) => z.id === id)?.name;
   const areaName = (id?: string) => mci.areas.find((a) => a.id === id)?.name;
-  const describe = (entry: MciLogEntry): string =>
-    [entry.kind, entry.color, entry.n !== undefined ? String(entry.n) : undefined, entry.areaId ? `to ${areaName(entry.areaId) ?? entry.areaId}` : undefined]
+  const describe = (entry: MciLogEntry): string => {
+    const area = entry.areaId ? areaName(entry.areaId) ?? entry.areaId : undefined;
+    return [
+      entry.kind,
+      entry.color,
+      entry.n !== undefined ? String(entry.n) : undefined,
+      area ? `${entry.kind === 'transported' ? 'from' : 'to'} ${area}` : undefined,
+      entry.unit ? `by ${entry.unit}` : undefined,
+      entry.destination ? `to ${entry.destination}` : undefined,
+    ]
       .filter(Boolean)
       .join(' ');
-
+  };
   const rows: { t: number; order: number; line: string }[] = [];
   mci.periods.forEach((period, i) => {
     rows.push({ t: period.startedAt, order: -1, line: `MCI,-,${formatTimestamp(period.startedAt)},${csvQuote('MCI declared')}` });
@@ -632,7 +717,8 @@ export function mciCsvLines(event: Pick<Event, 'mci'>, formatTimestamp: (ms: num
   mci.log.forEach((entry, i) => {
     // An undo row names the zone of the entry it reverses.
     const target = entry.kind === 'undo' ? mci.log.find((e) => e.id === entry.undoes) : undefined;
-    const scope = zoneName(entry.zoneId ?? target?.zoneId) ?? '-';
+    const scopeEntry = target ?? entry;
+    const scope = zoneName(scopeEntry.zoneId) ?? (scopeEntry.kind === 'transported' ? areaName(scopeEntry.areaId) : undefined) ?? '-';
     const text = entry.kind === 'undo' && target ? `undo ${describe(target)}` : describe(entry);
     rows.push({ t: entry.t, order: i, line: `MCI,${scope},${formatTimestamp(entry.t)},${csvQuote(text)}` });
   });

@@ -562,7 +562,7 @@ export function TeamPostSchedule({
             aria-label={`Post from ${slot.time}`}
             selectionMode="single"
             selectedKeys={new Set([slot.post ?? UNASSIGNED_POST])}
-            className="max-h-64 overflow-y-auto"
+            className="minimal-scrollbar max-h-64 overflow-y-auto"
             onAction={(key) => {
               const post = key === UNASSIGNED_POST ? null : (key as string);
               if (post === slot.post) return;

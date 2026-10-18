@@ -243,7 +243,7 @@ export default function DeclareMciModal({ isOpen, event, onClose, onDeclare }: P
       radius="lg"
       size="xl"
       scrollBehavior="inside"
-      classNames={{ base: 'mt-20 rounded-lg bg-surface-deepest text-surface-light', header: 'pb-0', footer: 'pt-0' }}
+      classNames={{ base: 'mt-20 rounded-lg bg-surface-deepest text-surface-light', header: 'pb-0', footer: 'pt-0', body: 'minimal-scrollbar' }}
     >
       <ModalContent data-testid="mci-declare-modal">
         {() => <DeclareMciForm event={event} onClose={onClose} onDeclare={onDeclare} />}

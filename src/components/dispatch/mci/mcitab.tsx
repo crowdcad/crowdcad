@@ -3,13 +3,14 @@
 import React, { useMemo, useState } from 'react';
 import { Button, Input } from '@heroui/react';
 import type { Event, MciColor } from '@/app/types';
-import { deriveMci, mciUnitsAt, type MciCounts } from '@/lib/mci';
+import { deriveMci, mciTransportUnits, mciUnitsAt, type MciCounts } from '@/lib/mci';
 import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
 import type { MciActions } from './usemciactions';
 import MciTotalsStrip from './mcitotalsstrip';
 import MciZoneCard from './mcizonecard';
 import MciTreatmentCard from './mcitreatmentcard';
 import MciMoveModal from './mcimovemodal';
+import MciTransportModal from './mcitransportmodal';
 import MciLogDrawer from './mcilogdrawer';
 
 type Props = {
@@ -62,11 +63,14 @@ export default function MciTab({ event, actions }: Props) {
   const mci = event.mci;
   const derived = useMemo(() => deriveMci(event), [event]);
   const [moveZoneId, setMoveZoneId] = useState<string | null>(null);
+  const [transportAreaId, setTransportAreaId] = useState<string | null>(null);
   const [showLog, setShowLog] = useState(false);
 
   if (!mci) return null;
   const readOnly = !mci.active;
   const moveZone = derived.zones.find((z) => z.zone.id === moveZoneId) ?? null;
+  const transportArea = derived.areas.find((a) => a.area.id === transportAreaId) ?? null;
+  const transportUnits = mciTransportUnits(mci);
 
   const handleTag = (zoneId: string, color: MciColor, delta: number) => {
     const zone = derived.zones.find((z) => z.zone.id === zoneId);
@@ -88,7 +92,7 @@ export default function MciTab({ event, actions }: Props) {
   };
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto" data-testid="mci-tab">
+    <div className="minimal-scrollbar flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto" data-testid="mci-tab">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <MciTotalsStrip mci={mci} totals={derived.totals} />
         <div className="flex items-center gap-2">
@@ -141,13 +145,26 @@ export default function MciTab({ event, actions }: Props) {
         </div>
         <div className="grid grid-cols-[repeat(auto-fill,minmax(20rem,1fr))] gap-3">
           {derived.areas.map((stats) => (
-            <MciTreatmentCard key={stats.area.id} stats={stats} teams={mciUnitsAt(event, { kind: 'area', id: stats.area.id })} />
+            <MciTreatmentCard
+              key={stats.area.id}
+              stats={stats}
+              teams={mciUnitsAt(event, { kind: 'area', id: stats.area.id })}
+              ambulances={mciTransportUnits({ ...mci, log: mci.log.filter((e) => e.areaId === stats.area.id) })}
+              readOnly={readOnly}
+              onTransport={setTransportAreaId}
+            />
           ))}
           {derived.areas.length === 0 && <p className="text-sm italic text-surface-faint">No treatment locations yet. Add one by name.</p>}
         </div>
       </section>
 
       <MciMoveModal zone={readOnly ? null : moveZone} areas={derived.areas} onClose={() => setMoveZoneId(null)} onMove={handleMove} />
+      <MciTransportModal
+        area={readOnly ? null : transportArea}
+        units={transportUnits}
+        onClose={() => setTransportAreaId(null)}
+        onTransport={(areaId, counts, trip) => actions.transport(areaId, counts, trip)}
+      />
     </div>
   );
 }

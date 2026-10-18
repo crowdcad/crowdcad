@@ -14,6 +14,8 @@ import {
   mciAssignmentPatch,
   mciAvailability,
   mciCsvLines,
+  mciTransportUnits,
+  transportPatch,
   mciStatusPatch,
   mciSeries,
   mciStatusOptions,
@@ -310,9 +312,9 @@ describe('series', () => {
       ],
     };
     expect(mciSeries(mci)).toEqual([
-      { t: 100, inZones: 0, inTreatment: 0 },
-      { t: 200, inZones: 4, inTreatment: 0 },
-      { t: 400, inZones: 1, inTreatment: 3 },
+      { t: 100, inZones: 0, inTreatment: 0, transported: 0 },
+      { t: 200, inZones: 4, inTreatment: 0, transported: 0 },
+      { t: 400, inZones: 1, inTreatment: 3, transported: 0 },
     ]);
   });
 });
@@ -509,6 +511,71 @@ describe('CSV rows', () => {
     let e = activeEvent();
     e = apply(e, tagPatch(e, 'za', 'red', 2, ctx(1000)));
     e = { ...e, ...standDownMci(e, 5000) } as Event;
-    expect(mciSeries(e.mci).at(-1)).toEqual({ t: 5000, inZones: 2, inTreatment: 0 });
+    expect(mciSeries(e.mci).at(-1)).toEqual({ t: 5000, inZones: 2, inTreatment: 0, transported: 0 });
+  });
+});
+
+describe('transport', () => {
+  /** Zone A with 3 red and 2 yellow, all moved to the clinic. */
+  function withPatientsInClinic(): Event {
+    let e = activeEvent();
+    e = apply(e, tagPatch(e, 'za', 'red', 3, ctx(1000)));
+    e = apply(e, tagPatch(e, 'za', 'yellow', 2, ctx(1100)));
+    return apply(e, movePatch(e, 'za', 'c1', { red: 3, yellow: 2 }, ctx(2000)));
+  }
+
+  it('takes patients out of treatment and records the ambulance', () => {
+    let e = withPatientsInClinic();
+    const out = transportPatch(e, 'c1', { red: 2, yellow: 1 }, { unit: '  Ambulance   14 ', destination: ' General ' }, ctx(3000));
+    expect(out.error).toBeUndefined();
+    e = apply(e, out);
+    const area = deriveMci(e).areas.find((a) => a.area.id === 'c1')!;
+    expect(area.received).toMatchObject({ red: 3, yellow: 2 });
+    expect(area.transported).toMatchObject({ red: 2, yellow: 1 });
+    expect(area.inTreatment).toMatchObject({ red: 1, yellow: 1 });
+    expect(area.inTreatmentTotal).toBe(2);
+    expect(deriveMci(e).totals).toMatchObject({ transportedTotal: 3, inTreatmentTotal: 2, inZonesTotal: 0 });
+    expect(e.mci!.log.filter((x) => x.kind === 'transported').map((x) => [x.color, x.n, x.unit, x.destination])).toEqual([
+      ['red', 2, 'Ambulance 14', 'General'],
+      ['yellow', 1, 'Ambulance 14', 'General'],
+    ]);
+  });
+
+  it('clamps to what is in the location and needs an ambulance number', () => {
+    const e = withPatientsInClinic();
+    const clamped = transportPatch(e, 'c1', { red: 9 }, { unit: 'A1' }, ctx(3000));
+    expect(clamped.clamped).toBe(true);
+    expect(apply(e, clamped).mci!.log.at(-1)).toMatchObject({ kind: 'transported', color: 'red', n: 3 });
+    expect(transportPatch(e, 'c1', { red: 1 }, { unit: '   ' }, ctx(3000)).error).toBe('invalid');
+    expect(transportPatch(e, 'c1', { black: 1 }, { unit: 'A1' }, ctx(3000)).error).toBe('invalid');
+    expect(transportPatch(e, 'nope', { red: 1 }, { unit: 'A1' }, ctx(3000)).error).toBe('unknown-area');
+  });
+
+  it('undoes a transport, and refuses to undo a move whose patients have left', () => {
+    let e = withPatientsInClinic();
+    const move = e.mci!.log.find((x) => x.kind === 'moved' && x.color === 'red')!;
+    e = apply(e, transportPatch(e, 'c1', { red: 3 }, { unit: 'A1' }, ctx(3000)));
+    expect(undoPatch(e, move.id, ctx(3500)).error).toBe('cannot-undo');
+    const trip = e.mci!.log.find((x) => x.kind === 'transported')!;
+    e = apply(e, undoPatch(e, trip.id, ctx(4000)));
+    expect(deriveMci(e).areas.find((a) => a.area.id === 'c1')!.inTreatment.red).toBe(3);
+    expect(deriveMci(e).totals.transportedTotal).toBe(0);
+  });
+
+  it('lists ambulance numbers once and drops undone trips', () => {
+    let e = withPatientsInClinic();
+    e = apply(e, transportPatch(e, 'c1', { red: 1 }, { unit: 'A1' }, ctx(3000)));
+    e = apply(e, transportPatch(e, 'c1', { red: 1 }, { unit: 'A1' }, ctx(3100)));
+    e = apply(e, transportPatch(e, 'c1', { yellow: 1 }, { unit: 'A2' }, ctx(3200)));
+    expect(mciTransportUnits(e.mci)).toEqual(['A1', 'A2']);
+    e = apply(e, undoPatch(e, e.mci!.log.at(-1)!.id, ctx(3300)));
+    expect(mciTransportUnits(e.mci)).toEqual(['A1']);
+  });
+
+  it('adds transported patients to the series and the CSV', () => {
+    let e = withPatientsInClinic();
+    e = apply(e, transportPatch(e, 'c1', { red: 2 }, { unit: 'A1', destination: 'General' }, ctx(3000)));
+    expect(mciSeries(e.mci).at(-1)).toEqual({ t: 3000, inZones: 0, inTreatment: 3, transported: 2 });
+    expect(mciCsvLines(e, (ms) => `T${ms}`)).toContain('MCI,Clinic,T3000,"transported red 2 from Clinic by A1 to General"');
   });
 });

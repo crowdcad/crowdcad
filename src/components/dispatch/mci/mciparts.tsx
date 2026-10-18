@@ -39,6 +39,10 @@ export function MciCountsLine({ counts, testId }: { counts: MciCounts; testId?: 
   );
 }
 
+/** A typed patient count: an off-colored box (against the card's own background) with no spinner arrows. */
+export const MCI_NUMBER_INPUT =
+  'rounded-md border border-surface-liner bg-surface-liner/40 text-center tabular-nums text-surface-light outline-none focus:outline-none focus:ring-0 focus-visible:ring-0 focus:border-surface-faint [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:m-0 [&::-webkit-outer-spin-button]:m-0';
+
 /** Teams working at a zone or treatment location. */
 export function MciTeamChips({ names, emptyText }: { names: string[]; emptyText: string }) {
   if (names.length === 0) return <span className="text-xs italic text-surface-faint">{emptyText}</span>;

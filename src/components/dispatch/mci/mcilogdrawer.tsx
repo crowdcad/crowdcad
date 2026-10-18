@@ -28,6 +28,10 @@ export function describeMciEntry(mci: NonNullable<Event['mci']>, entry: MciLogEn
       return `${zone}: ${(entry.n ?? 0) > 0 ? '+' : ''}${entry.n} ${color} tagged`;
     case 'moved':
       return `${zone}: ${entry.n} ${color} moved to ${area}`;
+    case 'transported': {
+      const from = mci.areas.find((a) => a.id === entry.areaId)?.name ?? 'treatment';
+      return `${from}: ${entry.n} ${color} transported${entry.unit ? ` in ${entry.unit}` : ''}${entry.destination ? ` to ${entry.destination}` : ''}`;
+    }
     case 'zone_cleared':
       return `${zone}: marked clear`;
     case 'zone_reopened':

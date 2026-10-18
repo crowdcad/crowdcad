@@ -6,7 +6,7 @@ import { Button } from '@heroui/react';
 import type { MciColor } from '@/app/types';
 import { MCI_COLORS, type MciZoneStats } from '@/lib/mci';
 import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
-import { MCI_COLOR_STYLES, MciColorDot, MciTeamChips } from './mciparts';
+import { MCI_COLOR_STYLES, MCI_NUMBER_INPUT, MciColorDot, MciTeamChips } from './mciparts';
 
 type Props = {
   stats: MciZoneStats;
@@ -53,7 +53,7 @@ function TaggedValue({ value, label, disabled, onCommit }: { value: number; labe
             setEditing(false);
           }
         }}
-        className="h-7 w-14 rounded-md border border-surface-liner bg-surface-deep text-center text-sm tabular-nums text-surface-light outline-none focus:outline-none focus:ring-0 focus-visible:ring-0"
+        className={`h-7 w-14 text-sm ${MCI_NUMBER_INPUT}`}
       />
     );
   }
@@ -63,7 +63,7 @@ function TaggedValue({ value, label, disabled, onCommit }: { value: number; labe
       disabled={disabled}
       onClick={() => setEditing(true)}
       aria-label={`${label} tagged total ${value}. Edit`}
-      className="h-7 min-w-10 rounded-md px-1 text-center text-sm font-semibold tabular-nums text-surface-light hover:bg-surface-liner disabled:cursor-default disabled:hover:bg-transparent"
+      className="h-7 min-w-10 rounded-md border border-surface-liner bg-surface-liner/40 px-1 text-center text-sm font-semibold tabular-nums text-surface-light hover:bg-surface-liner disabled:cursor-default disabled:hover:bg-surface-liner/40"
     >
       {value}
     </button>
@@ -87,6 +87,14 @@ export default function MciZoneCard({ stats, teams, readOnly, onTag, onSetTagged
           <span className="rounded-md border border-status-card-ring-green px-2 py-0.5 text-xs font-semibold text-status-green" data-testid={`mci-zone-cleared-${name}`}>
             {t('Zone clear')}
           </span>
+        )}
+        {!readOnly && stats.suggestClear && (
+          <div className="flex shrink-0 items-center gap-1.5" data-testid={`mci-zone-suggest-${name}`}>
+            <span className="text-xs text-surface-faint">0 patients</span>
+            <Button size="sm" variant="flat" radius="lg" className="h-6 min-w-0 border border-status-card-ring-yellow bg-status-card-yellow px-2 text-xs" onPress={() => onClear(zone.id)} data-testid={`mci-zone-clear-${name}`}>
+              {t('Mark clear')}?
+            </Button>
+          </div>
         )}
       </header>
 
@@ -150,17 +158,6 @@ export default function MciZoneCard({ stats, teams, readOnly, onTag, onSetTagged
           </tr>
         </tbody>
       </table>
-
-      {!readOnly && stats.suggestClear && (
-        <div className="flex items-center justify-between gap-2 rounded-md border border-status-card-ring-yellow bg-status-card-yellow px-2 py-1" data-testid={`mci-zone-suggest-${name}`}>
-          <span className="text-sm text-surface-light">
-            {name}: 0 left. {t('Mark clear')}?
-          </span>
-          <Button size="sm" variant="flat" radius="lg" onPress={() => onClear(zone.id)} data-testid={`mci-zone-clear-${name}`}>
-            {t('Mark clear')}
-          </Button>
-        </div>
-      )}
 
       <div className="flex items-center justify-between gap-2">
         <MciTeamChips names={teams} emptyText="No teams in triage" />

@@ -146,9 +146,11 @@ export interface MciTreatmentArea {
   name: string;
   /** Set when this area is an existing event clinic. */
   clinicId?: string;
+  /** The map zone drawn for this area, in the event venue's layers. */
+  venueZoneId?: string;
 }
 
-export type MciLogKind = 'tagged' | 'moved' | 'zone_cleared' | 'zone_reopened' | 'undo';
+export type MciLogKind = 'tagged' | 'moved' | 'transported' | 'zone_cleared' | 'zone_reopened' | 'undo';
 
 export interface MciLogEntry {
   id: string;
@@ -159,8 +161,12 @@ export interface MciLogEntry {
   /** Signed for 'tagged', positive for 'moved'. */
   n?: number;
   zoneId?: string;
-  /** Destination, for 'moved'. */
+  /** Destination for 'moved'; the treatment location the patients left for 'transported'. */
   areaId?: string;
+  /** Ambulance number as typed, for 'transported'. A unit label, never patient data. */
+  unit?: string;
+  /** Where the ambulance took them (free text, optional), for 'transported'. */
+  destination?: string;
   /** The entry an 'undo' reverses. */
   undoes?: string;
   /** Auth uid when signed in. */

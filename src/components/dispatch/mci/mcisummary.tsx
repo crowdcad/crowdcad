@@ -38,7 +38,7 @@ export default function MciSummary({ event, formatTimestamp }: Props) {
         </ul>
 
         <h3 className="mb-1 text-sm font-semibold text-surface-faint">Zones</h3>
-        <div className="mb-5 overflow-x-auto">
+        <div className="minimal-scrollbar mb-5 overflow-x-auto">
           <table className="w-full text-sm" data-testid="mci-summary-zones">
             <thead>
               <tr className="text-left text-surface-faint">
@@ -75,7 +75,7 @@ export default function MciSummary({ event, formatTimestamp }: Props) {
         </div>
 
         <h3 className="mb-1 text-sm font-semibold text-surface-faint">Treatment locations</h3>
-        <div className="overflow-x-auto">
+        <div className="minimal-scrollbar overflow-x-auto">
           <table className="w-full text-sm" data-testid="mci-summary-areas">
             <thead>
               <tr className="text-left text-surface-faint">
@@ -86,6 +86,8 @@ export default function MciSummary({ event, formatTimestamp }: Props) {
                   </th>
                 ))}
                 <th className="px-2 text-center font-normal">MCI patients received</th>
+                <th className="px-2 text-center font-normal">Transported</th>
+                <th className="px-2 text-center font-normal">Still here</th>
               </tr>
             </thead>
             <tbody>
@@ -96,10 +98,12 @@ export default function MciSummary({ event, formatTimestamp }: Props) {
                     <td key={color} className="px-2 text-center tabular-nums">{a.received[color]}</td>
                   ))}
                   <td className="px-2 text-center font-semibold tabular-nums">{a.receivedTotal}</td>
+                  <td className="px-2 text-center tabular-nums">{a.transportedTotal}</td>
+                  <td className="px-2 text-center tabular-nums">{a.inTreatmentTotal}</td>
                 </tr>
               ))}
               {derived.areas.length === 0 && (
-                <tr><td colSpan={6} className="py-2 italic text-surface-faint">No treatment locations</td></tr>
+                <tr><td colSpan={8} className="py-2 italic text-surface-faint">No treatment locations</td></tr>
               )}
             </tbody>
           </table>
