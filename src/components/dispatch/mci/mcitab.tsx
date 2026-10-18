@@ -162,7 +162,7 @@ export default function MciTab({ event, actions }: Props) {
           <h2 className="text-base font-bold text-surface-light">{t('Zones')}</h2>
           {!readOnly && <AddByName label={t('Add zone')} testId="mci-add-zone" onAdd={actions.addZone} />}
         </div>
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(20rem,1fr))] gap-3">
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(14rem,1fr))] gap-3">
           {derived.zones.map((stats) => (
             <MciZoneCard
               key={stats.zone.id}

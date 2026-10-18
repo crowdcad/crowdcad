@@ -51,7 +51,7 @@ export default function TeamCard(props: TeamCardProps) {
           <TeamCarrying staff={staff} event={event} />
         </div>
 
-        <div className="absolute top-0 right-0 pt-3 pr-3 flex items-center gap-2">
+        <div className="absolute top-0 right-0 pt-3 pr-3 flex items-center gap-2 box-content h-6">
           <div className="text-surface-light/70">
             {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
           </div>

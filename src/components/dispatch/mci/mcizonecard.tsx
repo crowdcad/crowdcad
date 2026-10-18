@@ -6,7 +6,7 @@ import { Button } from '@heroui/react';
 import type { MciColor } from '@/app/types';
 import { MCI_COLORS, type MciZoneStats } from '@/lib/mci';
 import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
-import { MCI_COLOR_STYLES, MCI_NUMBER_INPUT, MciColorDot, MciTeamChips } from './mciparts';
+import { MCI_COLOR_STYLES, MCI_PILL_STYLES, MciTeamChips } from './mciparts';
 
 type Props = {
   stats: MciZoneStats;
@@ -25,7 +25,10 @@ type Props = {
   onDraw?: (zoneId: string) => void;
 };
 
-/** The Tagged number. Tapping it lets the dispatcher type a new total, written as one delta entry. */
+const NUMBER_WELL = 'h-6 w-10 rounded-sm bg-black/25 text-center text-sm font-semibold tabular-nums';
+const STEP_BUTTON = 'flex h-8 w-6 shrink-0 items-center justify-center hover:bg-black/20 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent';
+
+/** The Tagged number, in a slightly darker well inside the pill. Tapping it lets the dispatcher type a new total, written as one delta entry. */
 function TaggedValue({ value, label, disabled, onCommit }: { value: number; label: string; disabled: boolean; onCommit: (total: number) => void }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(String(value));
@@ -58,7 +61,7 @@ function TaggedValue({ value, label, disabled, onCommit }: { value: number; labe
             setEditing(false);
           }
         }}
-        className={`h-7 w-14 text-sm ${MCI_NUMBER_INPUT}`}
+        className={`${NUMBER_WELL} border-0 text-inherit outline-none focus:outline-none focus:ring-0 focus-visible:ring-0 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}
       />
     );
   }
@@ -68,7 +71,7 @@ function TaggedValue({ value, label, disabled, onCommit }: { value: number; labe
       disabled={disabled}
       onClick={() => setEditing(true)}
       aria-label={`${label} tagged total ${value}. Edit`}
-      className="h-7 min-w-10 rounded-md border border-surface-liner bg-surface-liner/40 px-1 text-center text-sm font-semibold tabular-nums text-surface-light hover:bg-surface-liner disabled:cursor-default disabled:hover:bg-surface-liner/40"
+      className={`${NUMBER_WELL} hover:bg-black/35 disabled:cursor-default disabled:hover:bg-black/25`}
     >
       {value}
     </button>
@@ -86,7 +89,7 @@ export default function MciZoneCard({ stats, teams, readOnly, onTag, onSetTagged
       aria-label={`${name} zone`}
       data-testid={`mci-zone-${name}`}
     >
-      <header className="flex items-center justify-between gap-2">
+      <header className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
         <div className="flex min-w-0 items-center gap-1.5">
           <h3 className="truncate text-base font-bold text-surface-light">{name}</h3>
           {mapEnabled && onDraw && (
@@ -102,108 +105,93 @@ export default function MciZoneCard({ stats, teams, readOnly, onTag, onSetTagged
             </button>
           )}
         </div>
-        {stats.cleared && (
-          <span className="rounded-md border border-status-card-ring-green px-2 py-0.5 text-xs font-semibold text-status-green" data-testid={`mci-zone-cleared-${name}`}>
-            {t('Zone clear')}
-          </span>
-        )}
-        {!readOnly && stats.suggestClear && (
-          <div className="flex shrink-0 items-center gap-1.5" data-testid={`mci-zone-suggest-${name}`}>
-            <span className="text-xs text-surface-faint">0 patients</span>
-            <Button size="sm" variant="flat" radius="lg" className="h-6 min-w-0 border border-status-card-ring-yellow bg-status-card-yellow px-2 text-xs" onPress={() => onClear(zone.id)} data-testid={`mci-zone-clear-${name}`}>
-              {t('Mark clear')}?
+
+        <div className="flex shrink-0 items-center gap-1.5">
+          {stats.cleared && (
+            <span className="rounded-md border border-status-card-ring-green px-2 py-0.5 text-xs font-semibold text-status-green" data-testid={`mci-zone-cleared-${name}`}>
+              {t('Zone clear')}
+            </span>
+          )}
+          {!readOnly && stats.cleared && (
+            <Button size="sm" variant="bordered" radius="lg" className="h-6 min-w-0 px-2 text-xs" onPress={() => onReopen(zone.id)} data-testid={`mci-zone-reopen-${name}`}>
+              {t('Reopen')}
             </Button>
-          </div>
-        )}
+          )}
+          {!readOnly && !stats.cleared && stats.suggestClear && (
+            <div className="flex items-center gap-1.5" data-testid={`mci-zone-suggest-${name}`}>
+              <span className="text-xs text-surface-faint">0 patients</span>
+              <Button size="sm" variant="flat" radius="lg" className="h-6 min-w-0 border border-status-card-ring-yellow bg-status-card-yellow px-2 text-xs" onPress={() => onClear(zone.id)} data-testid={`mci-zone-clear-${name}`}>
+                {t('Clear')}?
+              </Button>
+            </div>
+          )}
+          {!readOnly && !stats.cleared && !stats.suggestClear && (
+            <Button size="sm" variant="bordered" radius="lg" className="h-6 min-w-0 px-2 text-xs" onPress={() => onClear(zone.id)} data-testid={`mci-zone-clear-${name}`}>
+              {t('Clear')}
+            </Button>
+          )}
+        </div>
       </header>
 
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="text-xs text-surface-faint">
-            <th className="text-left font-normal" />
-            <th className="font-normal">{t('Tagged')}</th>
-            <th className="font-normal">{t('Moved')}</th>
-            <th className="font-normal">{t('In zone')}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {MCI_COLORS.map((color) => {
-            const label = MCI_COLOR_STYLES[color].label;
-            return (
-              <tr key={color} data-testid={`mci-zone-${name}-${color}`}>
-                <td className="py-0.5 pr-2">
-                  <span className="inline-flex items-center gap-1.5 text-surface-light">
-                    <MciColorDot color={color} />
-                    {label}
-                  </span>
-                </td>
-                <td className="py-0.5">
-                  <div className="flex items-center justify-center gap-0.5">
-                    <button
-                      type="button"
-                      disabled={readOnly || stats.inZone[color] <= 0}
-                      onClick={() => onTag(zone.id, color, -1)}
-                      aria-label={`Remove one ${label.toLowerCase()} from ${name}`}
-                      className="flex h-7 w-7 items-center justify-center rounded-md border border-surface-liner text-surface-light hover:bg-surface-liner disabled:cursor-not-allowed disabled:opacity-40"
-                    >
-                      <Minus className="h-3.5 w-3.5" />
-                    </button>
-                    <TaggedValue value={stats.tagged[color]} label={`${name} ${label}`} disabled={readOnly} onCommit={(total) => onSetTagged(zone.id, color, total)} />
-                    <button
-                      type="button"
-                      disabled={readOnly}
-                      onClick={() => onTag(zone.id, color, 1)}
-                      aria-label={`Add one ${label.toLowerCase()} to ${name}`}
-                      className="flex h-7 w-7 items-center justify-center rounded-md border border-surface-liner text-surface-light hover:bg-surface-liner disabled:cursor-not-allowed disabled:opacity-40"
-                    >
-                      <Plus className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                </td>
-                <td className="text-center tabular-nums text-surface-light">{stats.moved[color]}</td>
-                <td className="text-center font-semibold tabular-nums text-surface-light" data-testid={`mci-zone-${name}-${color}-inzone`}>
-                  {stats.inZone[color]}
-                </td>
-              </tr>
-            );
-          })}
-          <tr className="border-t border-surface-liner text-xs text-surface-faint">
-            <td className="pt-1">Total</td>
-            <td className="pt-1 text-center tabular-nums">{stats.taggedTotal}</td>
-            <td className="pt-1 text-center tabular-nums">{stats.movedTotal}</td>
-            <td className="pt-1 text-center font-semibold tabular-nums text-surface-light" data-testid={`mci-zone-${name}-inzone-total`}>
-              {stats.inZoneTotal}
-            </td>
-          </tr>
-        </tbody>
-      </table>
+      <div className="grid grid-cols-[auto_1fr_1fr] items-center gap-x-3 gap-y-1">
+        <span className="text-center text-xs uppercase text-surface-faint">{t('Tagged')}</span>
+        <span className="text-center text-xs uppercase text-surface-faint">{t('Moved')}</span>
+        <span className="text-center text-xs uppercase text-surface-faint">{t('In zone')}</span>
 
-      <div className="flex items-center justify-between gap-2">
+        {MCI_COLORS.map((color) => {
+          const label = MCI_COLOR_STYLES[color].label;
+          const pill = MCI_PILL_STYLES[color];
+          return (
+            <React.Fragment key={color}>
+              <div className={`flex h-8 items-center justify-center overflow-hidden rounded-md ${pill.pill}`} data-testid={`mci-zone-${name}-${color}`}>
+                <button
+                  type="button"
+                  disabled={readOnly || stats.inZone[color] <= 0}
+                  onClick={() => onTag(zone.id, color, -1)}
+                  aria-label={`Remove one ${label.toLowerCase()} from ${name}`}
+                  className={STEP_BUTTON}
+                >
+                  <Minus className="h-3.5 w-3.5" />
+                </button>
+                <TaggedValue value={stats.tagged[color]} label={`${name} ${label}`} disabled={readOnly} onCommit={(total) => onSetTagged(zone.id, color, total)} />
+                <button
+                  type="button"
+                  disabled={readOnly}
+                  onClick={() => onTag(zone.id, color, 1)}
+                  aria-label={`Add one ${label.toLowerCase()} to ${name}`}
+                  className={STEP_BUTTON}
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                </button>
+              </div>
+              <span className="text-center text-sm tabular-nums text-surface-light">{stats.moved[color]}</span>
+              <span className="text-center text-sm font-semibold tabular-nums text-surface-light" data-testid={`mci-zone-${name}-${color}-inzone`}>
+                {stats.inZone[color]}
+              </span>
+            </React.Fragment>
+          );
+        })}
+
+        <span className="border-t border-surface-liner pt-1 text-center text-xs tabular-nums text-surface-faint">{stats.taggedTotal}</span>
+        <span className="border-t border-surface-liner pt-1 text-center text-xs tabular-nums text-surface-faint">{stats.movedTotal}</span>
+        <span className="border-t border-surface-liner pt-1 text-center text-xs font-semibold tabular-nums text-surface-light" data-testid={`mci-zone-${name}-inzone-total`}>
+          {stats.inZoneTotal}
+        </span>
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <MciTeamChips names={teams} emptyText="No teams in triage" />
         {!readOnly && (
-          <div className="flex shrink-0 items-center gap-1.5">
-            {stats.cleared ? (
-              <Button size="sm" variant="bordered" radius="lg" onPress={() => onReopen(zone.id)} data-testid={`mci-zone-reopen-${name}`}>
-                {t('Reopen zone')}
-              </Button>
-            ) : (
-              !stats.suggestClear && (
-                <Button size="sm" variant="bordered" radius="lg" onPress={() => onClear(zone.id)} data-testid={`mci-zone-clear-${name}`}>
-                  {t('Mark clear')}
-                </Button>
-              )
-            )}
-            <Button
-              size="sm"
-              radius="lg"
-              className="bg-accent text-surface-light"
-              isDisabled={stats.inZoneTotal <= 0}
-              onPress={() => onMove(zone.id)}
-              data-testid={`mci-zone-move-${name}`}
-            >
-              {t('Move to treatment')}
-            </Button>
-          </div>
+          <Button
+            size="sm"
+            radius="lg"
+            className="shrink-0 bg-accent text-surface-light"
+            isDisabled={stats.inZoneTotal <= 0}
+            onPress={() => onMove(zone.id)}
+            data-testid={`mci-zone-move-${name}`}
+          >
+            {t('Move to treatment')}
+          </Button>
         )}
       </div>
     </section>

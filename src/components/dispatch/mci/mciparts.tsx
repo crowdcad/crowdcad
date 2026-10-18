@@ -13,6 +13,14 @@ export const MCI_COLOR_STYLES: Record<MciColor, { label: string; dotClass: strin
   black: { label: 'Black', dotClass: 'bg-neutral-900 border-neutral-500', textClass: 'text-surface-faint' },
 };
 
+/** The Tagged pill: a solid tag color behind the - number + control, with text that reads on it. */
+export const MCI_PILL_STYLES: Record<MciColor, { pill: string }> = {
+    red: { pill: 'bg-red-600 text-white' },
+    yellow: { pill: 'bg-yellow-400 text-neutral-900' },
+    green: { pill: 'bg-green-600 text-white' },
+    black: { pill: 'bg-neutral-800 text-white' },
+};
+
 export function MciColorDot({ color, className = '' }: { color: MciColor; className?: string }) {
   return (
     <span

@@ -29,7 +29,7 @@ export default function PendingCallChip({ since, label }: Props) {
           : 'border-surface-liner bg-surface-liner/30'
       }`}
     >
-      {label} <span className="ui-timer">{formatMMSS(elapsed)}</span>
+      {label} <span className="ui-timer !top-0">{formatMMSS(elapsed)}</span>
     </Chip>
   );
 }
