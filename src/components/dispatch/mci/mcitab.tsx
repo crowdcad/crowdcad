@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
+import { CornerDownLeft } from 'lucide-react';
 import { Button, Input } from '@heroui/react';
 import type { Event, MciColor } from '@/app/types';
 import { deriveMci, mciMapLayers, mciShapeOf, mciTransportTrips, mciTransportUnits, mciUnitsAt, type MciCounts } from '@/lib/mci';
@@ -46,11 +47,9 @@ function AddByName({ label, testId, onAdd }: { label: string; testId: string; on
           if (e.key === 'Enter') void submit();
         }}
         classNames={inputClassNames}
+        endContent={<CornerDownLeft className={`h-4 w-4 shrink-0 ${name.trim() ? 'text-surface-light' : 'text-surface-faint'}`} aria-hidden />}
         data-testid={`${testId}-input`}
       />
-      <Button size="sm" variant="bordered" radius="lg" onPress={submit} isDisabled={!name.trim()} data-testid={`${testId}-add`}>
-        {label}
-      </Button>
     </div>
   );
 }
@@ -138,7 +137,7 @@ export default function MciTab({ event, actions }: Props) {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <MciTotalsStrip mci={mci} totals={derived.totals} />
         <div className="flex items-center gap-2">
-          <Button size="sm" variant="bordered" radius="lg" onPress={() => setShowLog((v) => !v)} aria-expanded={showLog} data-testid="mci-log-toggle">
+          <Button size="sm" variant="flat" radius="lg" onPress={() => setShowLog((v) => !v)} aria-expanded={showLog} data-testid="mci-log-toggle">
             Log
           </Button>
           {!readOnly && (
@@ -189,7 +188,7 @@ export default function MciTab({ event, actions }: Props) {
           <h2 className="text-base font-bold text-surface-light">{t('Treatment locations')}</h2>
           {!readOnly && <AddByName label={t('Add treatment area')} testId="mci-add-area" onAdd={actions.addArea} />}
         </div>
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(20rem,1fr))] gap-3">
+        <div className="dispatch-shell-list">
           {derived.areas.map((stats) => (
             <MciTreatmentCard
               key={stats.area.id}

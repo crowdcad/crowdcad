@@ -3981,7 +3981,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
                     </div>
 
                     {selectedRightTab === 'mci' && !isMobile && event.mci && (
-                      <div className="relative z-10 -mt-px mx-1.5 rounded-lg bg-surface-deep px-2.5 py-2 flex flex-col flex-1 min-h-0">
+                      <div className="relative z-10 -mt-px mx-1.5 rounded-lg bg-surface-deep px-2.5 pb-2 pt-1 flex flex-col flex-1 min-h-0">
                         <MciTab event={event} actions={mciActions} />
                       </div>
                     )}

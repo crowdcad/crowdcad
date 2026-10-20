@@ -59,7 +59,7 @@ export default function MciLogDrawer({ mci, readOnly, onUndo }: Props) {
               {describeMciEntry(mci, entry)}
             </span>
             {entry.kind !== 'undo' && !undone && !readOnly && (
-              <Button size="sm" variant="bordered" radius="lg" onPress={() => onUndo(entry.id)} data-testid="mci-log-undo">
+              <Button size="sm" variant="flat" radius="lg" onPress={() => onUndo(entry.id)} data-testid="mci-log-undo">
                 {t('Undo')}
               </Button>
             )}

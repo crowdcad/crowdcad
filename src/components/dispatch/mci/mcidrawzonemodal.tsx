@@ -115,7 +115,7 @@ function DrawForm({ target, layers, existing, onSave, onClose }: Omit<Props, 'ta
                 key={l.id}
                 size="sm"
                 radius="lg"
-                variant={i === layerIdx ? 'solid' : 'bordered'}
+                variant={i === layerIdx ? 'solid' : 'flat'}
                 className={i === layerIdx ? 'bg-accent text-surface-light' : ''}
                 onPress={() => {
                   setLayerIdx(i);
@@ -192,20 +192,20 @@ function DrawForm({ target, layers, existing, onSave, onClose }: Omit<Props, 'ta
       </ModalBody>
       <ModalFooter className="flex flex-wrap justify-between gap-2">
         <div className="flex gap-2">
-          <Button size="sm" variant="bordered" radius="lg" onPress={undoPoint} isDisabled={closed || count === 0} data-testid="mci-draw-undo">
+          <Button size="sm" variant="flat" radius="lg" onPress={undoPoint} isDisabled={closed || count === 0} data-testid="mci-draw-undo">
             Undo point
           </Button>
-          <Button size="sm" variant="bordered" radius="lg" onPress={reset} isDisabled={count === 0} data-testid="mci-draw-reset">
+          <Button size="sm" variant="flat" radius="lg" onPress={reset} isDisabled={count === 0} data-testid="mci-draw-reset">
             Start over
           </Button>
           {!closed && (
-            <Button size="sm" variant="bordered" radius="lg" onPress={complete} isDisabled={count < MIN_AREA_POINTS} data-testid="mci-draw-finish">
+            <Button size="sm" variant="flat" radius="lg" onPress={complete} isDisabled={count < MIN_AREA_POINTS} data-testid="mci-draw-finish">
               Finish
             </Button>
           )}
         </div>
         <div className="flex gap-2">
-          <Button onPress={onClose} variant="bordered" radius="lg" className="border-status-red px-4 py-2 text-status-red hover:bg-status-red/10" data-testid="mci-draw-skip">
+          <Button onPress={onClose} variant="flat" radius="lg" className="bg-status-red/20 px-4 py-2 text-status-red hover:bg-status-red/30" data-testid="mci-draw-skip">
             {existing ? t('Cancel') : 'Skip for now'}
           </Button>
           <Button radius="lg" className="bg-accent px-4 py-2 text-surface-light" isDisabled={!closed || saving} onPress={save} data-testid="mci-draw-save">

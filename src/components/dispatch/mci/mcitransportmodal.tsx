@@ -120,7 +120,7 @@ function TransportForm({ area, units, onClose, onTransport }: Omit<Props, 'area'
         </div>
       </ModalBody>
       <ModalFooter className="flex justify-end gap-2">
-        <Button onPress={onClose} variant="bordered" radius="lg" className="border-status-red px-4 py-2 text-status-red hover:bg-status-red/10">
+        <Button onPress={onClose} variant="flat" radius="lg" className="bg-status-red/20 px-4 py-2 text-status-red hover:bg-status-red/30">
           {t('Cancel')}
         </Button>
         <Button radius="lg" className="bg-accent px-4 py-2 text-surface-light" isDisabled={!canSubmit} onPress={submit} data-testid="mci-transport-confirm">

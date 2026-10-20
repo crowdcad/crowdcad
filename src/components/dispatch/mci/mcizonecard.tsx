@@ -113,7 +113,7 @@ export default function MciZoneCard({ stats, teams, readOnly, onTag, onSetTagged
             </span>
           )}
           {!readOnly && stats.cleared && (
-            <Button size="sm" variant="bordered" radius="lg" className="h-6 min-w-0 px-2 text-xs" onPress={() => onReopen(zone.id)} data-testid={`mci-zone-reopen-${name}`}>
+            <Button size="sm" variant="flat" radius="lg" className="h-6 min-w-0 px-2 text-xs" onPress={() => onReopen(zone.id)} data-testid={`mci-zone-reopen-${name}`}>
               {t('Reopen')}
             </Button>
           )}
@@ -126,7 +126,7 @@ export default function MciZoneCard({ stats, teams, readOnly, onTag, onSetTagged
             </div>
           )}
           {!readOnly && !stats.cleared && !stats.suggestClear && (
-            <Button size="sm" variant="bordered" radius="lg" className="h-6 min-w-0 px-2 text-xs" onPress={() => onClear(zone.id)} data-testid={`mci-zone-clear-${name}`}>
+            <Button size="sm" variant="flat" radius="lg" className="h-6 min-w-0 px-2 text-xs" onPress={() => onClear(zone.id)} data-testid={`mci-zone-clear-${name}`}>
               {t('Clear')}
             </Button>
           )}

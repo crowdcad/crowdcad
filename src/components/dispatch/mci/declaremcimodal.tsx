@@ -155,7 +155,7 @@ function DeclareMciForm({ event, onClose, onDeclare }: Omit<Props, 'isOpen'>) {
               classNames={inputClassNames}
               data-testid="mci-declare-zone-input"
             />
-            <Button size="sm" variant="bordered" radius="lg" className="shrink-0 whitespace-nowrap" onPress={addZone} isDisabled={!zoneDraft.trim() || zoneDraftTaken} data-testid="mci-declare-zone-add">
+            <Button size="sm" variant="flat" radius="lg" className="shrink-0 whitespace-nowrap" onPress={addZone} isDisabled={!zoneDraft.trim() || zoneDraftTaken} data-testid="mci-declare-zone-add">
               {t('Add zone')}
             </Button>
           </div>
@@ -206,14 +206,14 @@ function DeclareMciForm({ event, onClose, onDeclare }: Omit<Props, 'isOpen'>) {
               classNames={inputClassNames}
               data-testid="mci-declare-area-input"
             />
-            <Button size="sm" variant="bordered" radius="lg" className="shrink-0 whitespace-nowrap" onPress={addArea} isDisabled={!areaDraft.trim() || areaDraftTaken} data-testid="mci-declare-area-add">
+            <Button size="sm" variant="flat" radius="lg" className="shrink-0 whitespace-nowrap" onPress={addArea} isDisabled={!areaDraft.trim() || areaDraftTaken} data-testid="mci-declare-area-add">
               {t('Add treatment area')}
             </Button>
           </div>
         </section>
       </ModalBody>
       <ModalFooter className="flex justify-end gap-2">
-        <Button onPress={onClose} variant="bordered" radius="lg" className="border-status-red px-4 py-2 text-status-red hover:bg-status-red/10">
+        <Button onPress={onClose} variant="flat" radius="lg" className="bg-status-red/20 px-4 py-2 text-status-red hover:bg-status-red/30">
           {t('Cancel')}
         </Button>
         <Button
