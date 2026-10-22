@@ -37,7 +37,7 @@ cd crowdcad
 git remote add upstream https://github.com/crowdcad/crowdcad.git
 ```
 
-Common prerequisites are Git and Node.js 20 or newer. PocketBase also needs Docker Desktop.
+Common prerequisites are Git and Node.js 22 or newer. PocketBase also needs Docker Desktop.
 
 ## Staying up to date
 

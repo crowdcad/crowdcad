@@ -22,7 +22,7 @@
     "@tailwindcss/postcss": "^4.3.3",
     "clsx": "^2.1.1",
     "firebase": "^11.10.0",
-    "firebase-admin": "^13.10.0",
+    "firebase-admin": "^14.5.0",
     "framer-motion": "^12.43.0",
     "lodash.isequal": "^4.5.0",
     "lucide-react": "^0.546.0",
@@ -69,5 +69,8 @@
     "vite": "^6.4.4",
     "vitest": "^3.2.7",
     "wait-on": "^9.1.0"
+  },
+  "engines": {
+    "node": ">=22"
   }
 }
