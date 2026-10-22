@@ -16,7 +16,7 @@ on:
 jobs:
   set-env:
     name: Resolve environment
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       environment: ${{ steps.set-env.outputs.environment }}
       base-url: ${{ steps.set-prefix.outputs.base-url }}
@@ -44,7 +44,7 @@ jobs:
  
     
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
 
     needs: set-env
@@ -102,7 +102,7 @@ jobs:
           retention-days: 30
 
   e2e-pocketbase:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     env:
       POCKETBASE_VERSION: '0.36.7'
@@ -149,7 +149,7 @@ jobs:
 
   publish-report:
     name: Publish failed report to GitHub Pages
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [set-env, test]
     if: always() && needs.test.result == 'failure'
     continue-on-error: true
