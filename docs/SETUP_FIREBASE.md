@@ -11,7 +11,7 @@ Firebase web config values (including the API key) are public by design and ship
 ## Prerequisites
 
 - Git
-- Node.js 20 or newer with npm (current LTS recommended)
+- Node.js 22 or newer with npm (current LTS recommended)
 - Firebase CLI: `npm install -g firebase-tools`
 - A Google account
 

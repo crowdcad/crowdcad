@@ -20,6 +20,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 
 ### Fixed
 
+- **Upgraded `firebase-admin` to v14** (closes #128). v14 removed the namespaced API and requires Node.js 22+, so `scripts/setAdmin.js` and `scripts/backfillOrgIds.js` now use the modular imports (`firebase-admin/app`, `/auth`, `/firestore`). **Node.js 22 or newer is now required** (declared in `engines`); CI, the Dockerfile and the setup docs were updated to match. Update the `NODE_VERSION` repository variable to 22 if you run your own CI.
 - **Custom dispatch-language presets work again.** `firestore.rules` had no rule for the `dispatchVocabularyPresets` collection, so under default-deny the preset list failed to load (saved presets vanished) and creating one was rejected. Added the rule (readable by any signed-in user; only the creator or an admin can edit or delete), and the "Create preset" form now shows an error instead of failing silently. **Deployments with their own copy of the rules (e.g. the hosted site) must port this block.**
 - **Call and clinic table columns fit their headers.** Column widths now follow the active language preset's header strings instead of fixed widths, so wider translations no longer wrap onto a second line.
 - **Backing out of event setup no longer leaves an empty event.** "Start New Event" (and "Save & Start Event" in the venue builder) used to write a draft event as soon as the builder opened. The builder now opens at `/events/new/create?venueId=…` and the event is written only when "Create Event" is pressed.

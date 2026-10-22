@@ -16,7 +16,7 @@ Keep `.env.local` and superuser credentials out of version control.
 ## Prerequisites
 
 - **Git**
-- **Node.js 20 or newer** with npm. The current LTS release is recommended. Node runs the provisioning scripts on the host even when the app itself runs in Docker.
+- **Node.js 22 or newer** with npm. The current LTS release is recommended. Node runs the provisioning scripts on the host even when the app itself runs in Docker.
 - **Docker Desktop** (Windows, macOS or Linux). On Windows it can be installed with `winget install -e --id Docker.DockerDesktop`. It depends on WSL2 and usually needs a restart after the first install.
 
 Commands below work in PowerShell on Windows and in bash or zsh on macOS and Linux. Git Bash on Windows rewrites arguments that start with `/`, which breaks the `docker exec ... /pb/pocketbase` command in step 5. If you use Git Bash, prefix that command with `MSYS_NO_PATHCONV=1`.
