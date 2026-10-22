@@ -11,7 +11,7 @@ concurrency:
 
 jobs:
   check:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Validate semver tag
         run: |
@@ -23,7 +23,7 @@ jobs:
           fi
   set-environment:
     name: Resolve environment
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       environment: ${{ steps.set-env.outputs.environment }}
     steps:
@@ -34,7 +34,7 @@ jobs:
 
   deploy:
     name: Build & Deploy
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [check, set-environment]
     timeout-minutes: 20
     environment:
