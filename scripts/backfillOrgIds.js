@@ -8,7 +8,8 @@ Usage:
 Ensure you have a service account JSON and set `GOOGLE_APPLICATION_CREDENTIALS`.
 */
 
-const admin = require('firebase-admin');
+const { initializeApp } = require('firebase-admin/app');
+const { getFirestore } = require('firebase-admin/firestore');
 const fs = require('fs');
 
 if (!process.env.GOOGLE_APPLICATION_CREDENTIALS) {
@@ -16,8 +17,8 @@ if (!process.env.GOOGLE_APPLICATION_CREDENTIALS) {
   process.exit(1);
 }
 
-admin.initializeApp();
-const db = admin.firestore();
+initializeApp();
+const db = getFirestore();
 
 async function run() {
   console.log('Loading venues map...');

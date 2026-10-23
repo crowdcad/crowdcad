@@ -14,7 +14,9 @@ Usage:
 Ensure you have a service account JSON and set `GOOGLE_APPLICATION_CREDENTIALS`.
 */
 
-const admin = require('firebase-admin');
+const { initializeApp } = require('firebase-admin/app');
+const { getAuth } = require('firebase-admin/auth');
+const { getFirestore } = require('firebase-admin/firestore');
 
 if (!process.env.GOOGLE_APPLICATION_CREDENTIALS) {
   console.error('Set GOOGLE_APPLICATION_CREDENTIALS to a service account JSON path before running.');
@@ -29,11 +31,11 @@ if (!email) {
   process.exit(1);
 }
 
-admin.initializeApp();
+initializeApp();
 
 async function run() {
-  const userRecord = await admin.auth().getUserByEmail(email);
-  await admin.firestore().collection('users').doc(userRecord.uid).set(
+  const userRecord = await getAuth().getUserByEmail(email);
+  await getFirestore().collection('users').doc(userRecord.uid).set(
     { isAdmin: !revoke },
     { merge: true },
   );
