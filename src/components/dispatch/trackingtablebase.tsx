@@ -32,7 +32,7 @@ function FittedColGroup({ showStatusColumn }: { showStatusColumn: boolean }) {
   const { t } = useDispatchTerms();
   return (
     <colgroup>
-      <col style={{ width: fitWidth(t('Call #'), 4) }} />
+      <col style={{ width: fitWidth(t('Call #'), 5.25) }} />
       <col style={{ width: fitWidth(t('Chief Complaint'), 11) }} />
       <col style={{ width: fitWidth(t('A/S'), 4) }} />
       <col style={{ width: fitWidth(t('Location'), 12) }} />

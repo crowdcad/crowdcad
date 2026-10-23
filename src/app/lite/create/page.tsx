@@ -1,25 +1,30 @@
 'use client';
 
 import React, { Suspense, useEffect, useRef, useState } from 'react';
+import dynamic from 'next/dynamic';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Button, Card, Input, ScrollShadow, Tooltip } from '@heroui/react';
-import { parseDate, getLocalTimeZone, today, Time } from '@internationalized/date';
+import { Button, Card, Input, ScrollShadow, Select, SelectItem, Tooltip } from '@heroui/react';
+import { Time } from '@internationalized/date';
 import { CircleHelp, Pencil, Trash2 } from 'lucide-react';
-import type { Event, EventEquipment, Post, Staff, Supervisor, Venue } from '@/app/types';
+import type { Equipment, Event, EventEquipment, Post, Staff, Supervisor, Venue, Zone } from '@/app/types';
 import LoadingScreen from '@/components/ui/loading-screen';
+import TutorialTip from '@/components/ui/TutorialTip';
 import { useScheduleGeneration } from '@/hooks/useScheduleGeneration';
 import { scheduleTimesToWindow, formatTimeValue, parseTimeValue } from '@/lib/scheduleUtils';
 import { syncClinicsFromVenue } from '@/lib/clinics';
-import { syncDispatchZonesFromVenue } from '@/lib/zones';
+import { hasDuplicateZoneName, syncDispatchZonesFromVenue } from '@/lib/zones';
+import { liteVenueLayers } from '@/lib/liteEventAdapters';
+import { postAt, type LatLng } from '@/lib/geo/positions';
+import { geoEquipmentPins } from '@/components/dispatch/geoPins';
 import { stripUndefined } from '@/lib/utils';
 import MetadataSection from '@/components/event-create/MetadataSection';
 import TeamStaffingSection from '@/components/event-create/TeamStaffingSection';
 import SupervisorStaffingSection from '@/components/event-create/SupervisorStaffingSection';
 import PostingScheduleSection from '@/components/event-create/PostingScheduleSection';
-import { EquipmentSelectionSection, PostsSelectionSection } from '@/components/event-create/PostsEquipmentSection';
+import { PostsSelectionSection } from '@/components/event-create/PostsEquipmentSection';
 import { WizardShell, StepProgress, ReviewColumns, type WizardStep, type ReviewColumn } from '@/components/wizard';
-import { countLabel, eventConfigReviewFields, staffReviewFields, postScheduleReviewValue, getStepNavigation } from '@/components/wizard/eventReview';
-import AddTeamModal, { TeamDraft, TeamMemberDraft } from '@/components/modals/event/addteammodal';
+import { countLabel, eventConfigReviewFields, staffReviewFields, postScheduleReviewValue, getStepNavigation, primaryStepLabel } from '@/components/wizard/eventReview';
+import AddTeamModal, { TeamDraft } from '@/components/modals/event/addteammodal';
 import AddSupervisorModal from '@/components/modals/event/addsupervisormodal';
 import BulkImportModal from '@/components/modals/event/bulkimportmodal';
 import {
@@ -29,33 +34,34 @@ import {
   type LiteEventDraft,
   saveLiteEvent,
 } from '@/lib/liteEventStore';
+import { newSupervisor, newTeam, teamDraftFromStaff, teamMemberStrings } from '@/lib/teamDraft';
+import { randomId } from '@/lib/utils';
+import { EVENT_INPUT_CLASSNAMES, EVENT_SELECT_CLASSNAMES } from '@/components/event-create/fieldClassNames';
+
+// The live map (Map step and map-based Locations step), loaded on demand like
+// venue setup's: the same AreaEditor and map controls, without image layers or TAK.
+const AreaEditor = dynamic(() => import('@/components/geo/AreaEditor'), { ssr: false });
+const GeoLocationsEditor = dynamic(() => import('@/components/geo/GeoLocationsEditor'), { ssr: false });
+const GeoLayerMap = dynamic(() => import('@/components/geo/GeoLayerMap'), { ssr: false });
 
 const LICENSES = ['CPR', 'EMT-B', 'EMT-A', 'EMT-P', 'RN', 'MD/DO'];
 
-const makeId = () => {
-  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
-    return crypto.randomUUID();
-  }
-  return `${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
-};
-
 const getPostName = (post: Post): string => (typeof post === 'string' ? post : post.name);
+
+// Lite equipment exists only for its event: every item is event equipment,
+// keeping its default location (and any other event fields) by id.
+const withEventEquipment = (equipment: Equipment[], eventEquipment: EventEquipment[]): EventEquipment[] =>
+  equipment.map((item) => {
+    const prev = eventEquipment.find((e) => e.id === item.id);
+    return { ...prev, ...item, defaultLocation: prev?.defaultLocation };
+  });
 
 const setPostName = (post: Post, name: string): Post =>
   typeof post === 'string' ? { name, x: null, y: null } : { ...post, name };
 
-const parseMemberStrings = (members: string[]): TeamMemberDraft[] =>
-  members.map((member) => {
-    const match = member.match(/^(.+?)\s*\[([^\]]+)\]\s*(\(Lead\))?$/);
-    if (match) {
-      return { name: match[1], cert: match[2], lead: Boolean(match[3]) };
-    }
-    return { name: member, cert: '', lead: false };
-  });
-
 // The shape the shared event-create step components (also used by cloud
 // event creation) expect. Lite events don't have a pre-existing Venue
-// (no id/userId, no map, no layers) — this adapter fabricates the minimal
+// (no id/userId, no map image, no layers) — this adapter fabricates the minimal
 // Venue wrapper those components need around the same posts/equipment
 // arrays a LiteEventDraft already carries, so they can be reused unmodified.
 type SectionEventData = Partial<Event> & { venue: Venue; eventEquipment: EventEquipment[] };
@@ -81,6 +87,7 @@ const fromSectionData = (current: LiteEventDraft, next: SectionEventData): LiteE
   eventEquipment: next.eventEquipment,
   eventPosts: next.eventPosts ?? current.eventPosts,
   venue: {
+    ...current.venue,
     name: next.venue.name,
     posts: next.venue.posts ?? [],
     equipment: next.venue.equipment,
@@ -128,17 +135,8 @@ function LiteCreateContent() {
 
   const initializedScheduleRef = useRef<string | null>(null);
 
-  const inputClassNames = {
-    label: 'text-surface-light font-medium',
-    inputWrapper: 'rounded-large px-4',
-    input: 'text-surface-light outline-none focus:outline-none data-[focus=true]:outline-none focus:ring-0 focus-visible:ring-0',
-  };
-
-  const selectClassNames = {
-    label: 'text-surface-light font-medium',
-    input: 'text-surface-light text-sm outline-none focus:outline-none data-[focus=true]:outline-none',
-    inputWrapper: 'rounded-large px-4 pr-6 shadow-none group-data-[focus-visible=true]:ring-0 group-data-[focus-visible=true]:ring-offset-0',
-  };
+  const inputClassNames = EVENT_INPUT_CLASSNAMES;
+  const selectClassNames = EVENT_SELECT_CLASSNAMES;
 
   useEffect(() => {
     let cancelled = false;
@@ -195,7 +193,7 @@ function LiteCreateContent() {
     setScheduleBy(eventDraft.scheduleConfig.by || '75');
 
     if (eventDraft.postingTimes.length > 0) {
-      setScheduleChips(eventDraft.postingTimes.map((time) => ({ id: makeId(), time, editable: false })));
+      setScheduleChips(eventDraft.postingTimes.map((time) => ({ id: randomId(), time, editable: false })));
     } else {
       setScheduleChips([]);
     }
@@ -230,7 +228,7 @@ function LiteCreateContent() {
   useEffect(() => {
     if (!eventDraftId) return;
 
-    setScheduleChips(postingTimes.map((time) => ({ id: makeId(), time, editable: false })));
+    setScheduleChips(postingTimes.map((time) => ({ id: randomId(), time, editable: false })));
 
     updateDraft((current) => ({
       ...current,
@@ -344,12 +342,11 @@ function LiteCreateContent() {
       const duplicate = current.venue.equipment.some((equipment) => equipment.name.toLowerCase() === name.toLowerCase());
       if (duplicate) return current;
 
+      const equipment: Equipment[] = [...current.venue.equipment, { id: randomId(), name, status: 'Available' }];
       return {
         ...current,
-        venue: {
-          ...current.venue,
-          equipment: [...current.venue.equipment, { id: makeId(), name, status: 'Available' }],
-        },
+        venue: { ...current.venue, equipment },
+        eventEquipment: withEventEquipment(equipment, current.eventEquipment),
       };
     });
 
@@ -416,33 +413,63 @@ function LiteCreateContent() {
     setEquipmentEditInput('');
   };
 
-  const handleSaveTeam = (team: TeamDraft) => {
+  const setEquipmentDefaultLocation = (id: string, location: string | undefined) => {
+    updateDraft((current) => ({
+      ...current,
+      eventEquipment: withEventEquipment(current.venue.equipment, current.eventEquipment).map((e) =>
+        e.id === id ? { ...e, defaultLocation: location } : e
+      ),
+    }));
+  };
+
+  // Locations and areas placed on the Lite map (GeoLocationsEditor). Same
+  // unique-name rule as locations added by name.
+  const addMapPost = (post: Exclude<Post, string>): string | null => {
+    if (eventDraft?.venue.posts.some((p) => getPostName(p).toLowerCase() === post.name.toLowerCase())) {
+      return 'Another location already uses this name.';
+    }
+    updateDraft((current) => ({ ...current, venue: { ...current.venue, posts: [...current.venue.posts, post] } }));
+    return null;
+  };
+
+  const moveMapPost = (postIdx: number, p: LatLng) => {
     updateDraft((current) => {
-      if (editingTeamIndex !== null) {
-        const existing = current.staff[editingTeamIndex];
-        if (!existing) return current;
-
-        const nextStaff: Staff = {
-          ...existing,
-          team: team.name,
-          members: team.members.map((m) => `${m.name} [${m.cert}]${m.lead ? ' (Lead)' : ''}`),
-        };
-
-        const nextStaffArray = [...current.staff];
-        nextStaffArray[editingTeamIndex] = nextStaff;
-        return { ...current, staff: nextStaffArray };
-      }
-
-      const members = team.members.map((m) => `${m.name} [${m.cert}]${m.lead ? ' (Lead)' : ''}`);
-      const nextStaff: Staff = { team: team.name, location: 'No Post', status: 'On Break', members };
-      return { ...current, staff: [...current.staff, nextStaff] };
+      const layer = liteVenueLayers(current.venue)[0];
+      const post = current.venue.posts[postIdx];
+      if (!layer || !post || typeof post === 'string') return current;
+      const moved = postAt(post, p, layer);
+      const posts = [...current.venue.posts];
+      posts[postIdx] = moved;
+      return {
+        ...current,
+        venue: { ...current.venue, posts },
+        eventPosts: current.eventPosts.map((ep) => (getPostName(ep) === post.name && typeof ep !== 'string' ? { ...ep, lat: moved.lat, lng: moved.lng } : ep)),
+      };
     });
   };
 
-  const parseTeamForEdit = (team: Staff): TeamDraft => ({
-    name: team.team,
-    members: parseMemberStrings(team.members),
-  });
+  const addMapZone = (zone: Zone): string | null => {
+    const zones = eventDraft?.venue.zones ?? [];
+    if (zone.isDispatchZone && hasDuplicateZoneName(zone.name, zones.map((z, zoneIdx) => ({ zone: z, layerIdx: 0, zoneIdx })))) {
+      return 'Another dispatch zone already uses this name. Give each dispatch zone a unique name.';
+    }
+    updateDraft((current) => ({ ...current, venue: { ...current.venue, zones: [...(current.venue.zones ?? []), zone] } }));
+    return null;
+  };
+
+  const removeMapZone = (zoneId: string) => {
+    updateDraft((current) => ({ ...current, venue: { ...current.venue, zones: (current.venue.zones ?? []).filter((z) => z.id !== zoneId) } }));
+  };
+
+  const handleSaveTeam = (team: TeamDraft) => {
+    updateDraft((current) => {
+      if (editingTeamIndex === null) return { ...current, staff: [...current.staff, newTeam(team)] };
+      if (!current.staff[editingTeamIndex]) return current;
+      const staff = [...current.staff];
+      staff[editingTeamIndex] = { ...staff[editingTeamIndex]!, team: team.name, members: teamMemberStrings(team) };
+      return { ...current, staff };
+    });
+  };
 
   const handleDeleteTeam = (idx: number) => {
     updateDraft((current) => ({ ...current, staff: current.staff.filter((_, i) => i !== idx) }));
@@ -454,18 +481,7 @@ function LiteCreateContent() {
 
   const handleAddSamUnit = () => {
     if (!samName.trim() || !samCert) return;
-    updateDraft((current) => ({
-      ...current,
-      supervisor: [
-        ...current.supervisor,
-        {
-          team: samName.trim(),
-          location: 'Roaming',
-          status: 'On Break',
-          member: samMemberName.trim() ? `${samMemberName.trim()} [${samCert}]` : `${samName.trim()} [${samCert}]`,
-        },
-      ],
-    }));
+    updateDraft((current) => ({ ...current, supervisor: [...current.supervisor, newSupervisor(samName, samMemberName, samCert)] }));
     setSamName('');
     setSamMemberName('');
     setSamCert('');
@@ -485,17 +501,6 @@ function LiteCreateContent() {
     setBulkImportMode(null);
   };
 
-  const getCalendarDate = () => {
-    if (eventDraft?.date) {
-      try {
-        return parseDate(eventDraft.date);
-      } catch {
-        return today(getLocalTimeZone());
-      }
-    }
-    return today(getLocalTimeZone());
-  };
-
   const handleCreateLiteEvent = async () => {
     if (!eventDraft) return;
     if (!eventDraft.name.trim()) {
@@ -505,10 +510,11 @@ function LiteCreateContent() {
 
     const finalized: LiteEventDraft = {
       ...eventDraft,
+      eventEquipment: withEventEquipment(eventDraft.venue.equipment, eventDraft.eventEquipment),
       status: 'active',
       updatedAt: new Date().toISOString(),
       clinics: syncClinicsFromVenue(eventDraft.venue, eventDraft.clinics),
-      dispatchZones: syncDispatchZonesFromVenue(eventDraft.venue, eventDraft.dispatchZones),
+      dispatchZones: syncDispatchZonesFromVenue({ layers: liteVenueLayers(eventDraft.venue) }, eventDraft.dispatchZones),
     };
 
     await saveLiteEvent(stripUndefined(finalized));
@@ -525,14 +531,14 @@ function LiteCreateContent() {
   }
 
   const sectionData = toSectionData(eventDraft);
-  const hasVenueEquipment = eventDraft.venue.equipment.length > 0;
   const allPosts = eventDraft.venue.posts;
   const flattenedPosts = allPosts.map((post) => ({ post, layerName: '' }));
+  const mapLayer = liteVenueLayers(eventDraft.venue)[0];
+  const mapZones = eventDraft.venue.zones ?? [];
 
-  type StepId = 'basics' | 'locations' | 'teams' | 'equipment' | 'postschedule' | 'review';
-  const STEP_ORDER: StepId[] = hasVenueEquipment
-    ? ['basics', 'locations', 'teams', 'equipment', 'postschedule', 'review']
-    : ['basics', 'locations', 'teams', 'postschedule', 'review'];
+  type StepId = 'basics' | 'map' | 'locations' | 'teams' | 'equipment' | 'postschedule' | 'review';
+  const STEP_ORDER: StepId[] = ['basics', 'map', 'locations', 'equipment', 'teams', 'postschedule', 'review'];
+  const eventEquipment = withEventEquipment(eventDraft.venue.equipment, eventDraft.eventEquipment);
 
   const hasRequiredBasics = !!eventDraft.name.trim() && !!eventDraft.date;
 
@@ -545,12 +551,35 @@ function LiteCreateContent() {
             React.SetStateAction<Partial<Event> & { eventEquipment: EventEquipment[] }>
           >
         }
-        getCalendarDate={getCalendarDate}
         scheduleFrom={scheduleFrom}
         setScheduleFrom={setScheduleFrom}
         scheduleTo={scheduleTo}
         setScheduleTo={setScheduleTo}
         inputClassNames={inputClassNames}
+      />
+    </div>
+  );
+
+  const mapStep = (
+    <div className="px-6 pt-4 h-full min-h-0 flex flex-col gap-3">
+      <h3 className="flex-shrink-0 text-surface-light font-semibold text-xl inline-flex items-center gap-1.5">
+        Map
+        <Tooltip content="Optional. Find the place or type coordinates, then click around the event's area to place locations and areas on it. Requires Wifi." placement="top">
+          <CircleHelp className="w-3.5 h-3.5 text-surface-faint" />
+        </Tooltip>
+      </h3>
+      <AreaEditor
+        tutorial
+        className="min-h-0 flex-1"
+        heightClassName="min-h-[240px] flex-1"
+        area={eventDraft.venue.area}
+        onChange={(area) =>
+          updateDraft((current) => {
+            const venue = { ...current.venue };
+            delete venue.area;
+            return { ...current, venue: area ? { ...venue, area } : venue };
+          })
+        }
       />
     </div>
   );
@@ -564,7 +593,8 @@ function LiteCreateContent() {
     onCancel: () => void,
     onStartEdit: () => void,
     onRemove: () => void,
-    key: string
+    key: string,
+    extra?: React.ReactNode
   ) => (
     <Card key={key} radius="sm" className="bg-default/40">
       <div className="flex items-center justify-between px-3 py-2 gap-2">
@@ -595,6 +625,7 @@ function LiteCreateContent() {
           <>
             <span className="text-surface-light font-medium truncate leading-normal">{label}</span>
             <div className="flex items-center gap-2 flex-shrink-0">
+              {extra}
               <button type="button" onClick={onStartEdit} className="p-1 rounded bg-transparent" aria-label="Edit">
                 <Pencil className="h-4 w-4 text-surface-light" />
               </button>
@@ -608,81 +639,121 @@ function LiteCreateContent() {
     </Card>
   );
 
-  const locationsStep = (
-    <div className="flex h-full px-6 pt-4">
-      <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
-        <div className="flex-shrink-0 pb-3 flex items-center justify-between">
-          <h3 className="text-surface-light font-semibold text-lg inline-flex items-center gap-1.5">
-            Locations
-            <Tooltip content="Posts or areas teams can be assigned to and dispatched between during the event (e.g., Main Entrance, First Aid Tent)." placement="top">
-              <CircleHelp className="w-3.5 h-3.5 text-surface-faint" />
-            </Tooltip>
-          </h3>
-        </div>
-        <div className="flex-shrink-0 flex gap-2 pb-3">
-          <Input
-            placeholder="e.g., Main Entrance"
-            value={locationInput}
-            onValueChange={setLocationInput}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                addLocation();
-              }
-            }}
-            variant="flat"
-            classNames={inputClassNames}
-          />
-          <Button onPress={addLocation} className="flex-shrink-0 h-10 px-4 text-sm text-surface-light bg-default/40 hover:bg-default/60">
-            Add
-          </Button>
-        </div>
-        <ScrollShadow className="space-y-2 pr-2 scrollbar-hide flex-1 min-h-0" hideScrollBar style={{ overflow: 'auto' }}>
-          {allPosts.map((post, index) =>
-            locationListItem(
-              getPostName(post),
-              editingLocationIndex === index,
-              locationEditInput,
-              setLocationEditInput,
-              saveLocationEdit,
-              cancelLocationEdit,
-              () => startLocationEdit(index),
-              () => removeLocation(index),
-              `${getPostName(post)}_${index}`
-            )
-          )}
-        </ScrollShadow>
+  const locationsHeading = (
+    <div className="flex-shrink-0 pb-3 flex items-center justify-between">
+      <h3 className="text-surface-light font-semibold text-lg inline-flex items-center gap-1.5">
+        Locations
+        <Tooltip content="Posts or areas teams can be assigned to and dispatched between during the event (e.g., Main Entrance, First Aid Tent)." placement="top">
+          <CircleHelp className="w-3.5 h-3.5 text-surface-faint" />
+        </Tooltip>
+      </h3>
+    </div>
+  );
+
+  // Locations added by name; with a map they are placed on it instead.
+  const locationsAddRow = (
+    <>
+      <div className="relative flex-shrink-0 flex gap-2 pb-3">
+        <Input
+          placeholder="e.g., Main Entrance"
+          value={locationInput}
+          onValueChange={setLocationInput}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              addLocation();
+            }
+          }}
+          variant="flat"
+          classNames={inputClassNames}
+        />
+        <Button onPress={addLocation} className="flex-shrink-0 h-10 px-4 text-sm text-surface-light bg-default/40 hover:bg-default/60">
+          Add
+        </Button>
+        {allPosts.length === 0 && (
+          <TutorialTip className="top-10 mt-2 left-0">Name a location teams will work from, then click Add.</TutorialTip>
+        )}
       </div>
+    </>
+  );
 
-      <div className="w-px bg-surface-liner mx-2 flex-shrink-0" />
+  const locationsList = (
+    <>
+      <ScrollShadow className="space-y-2 pr-2 scrollbar-hide flex-1 min-h-0" hideScrollBar style={{ overflow: 'auto' }}>
+        {allPosts.map((post, index) =>
+          locationListItem(
+            getPostName(post),
+            editingLocationIndex === index,
+            locationEditInput,
+            setLocationEditInput,
+            saveLocationEdit,
+            cancelLocationEdit,
+            () => startLocationEdit(index),
+            () => removeLocation(index),
+            `${getPostName(post)}_${index}`
+          )
+        )}
+      </ScrollShadow>
+      {mapZones.length > 0 && (
+        <div className="flex-shrink-0 pt-3 pb-2 space-y-2">
+          <p className="text-surface-light font-semibold text-sm">Areas</p>
+          {mapZones.map((zone) => (
+            <Card key={zone.id} radius="sm" className="bg-default/40">
+              <div className="flex items-center justify-between px-3 py-2 gap-2">
+                <span className="inline-flex min-w-0 items-center gap-2 text-surface-light font-medium leading-normal">
+                  <span className="h-3 w-3 flex-shrink-0 rounded-full" style={{ backgroundColor: zone.color }} />
+                  <span className="truncate">{zone.name}</span>
+                  {zone.isDispatchZone && <span className="flex-shrink-0 text-xs text-surface-faint">Dispatch zone</span>}
+                </span>
+                <button type="button" onClick={() => removeMapZone(zone.id)} className="p-1 rounded bg-transparent flex-shrink-0" aria-label="Delete">
+                  <Trash2 className="h-4 w-4 text-status-red" />
+                </button>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+    </>
+  );
 
-      <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
-        <div className="flex-shrink-0 pb-3 flex items-center justify-between">
-          <h3 className="text-surface-light font-semibold text-lg inline-flex items-center gap-1.5">
-            Equipment
-            <Tooltip content="Trackable gear (e.g., a gurney or AED) that can be assigned a default location and its status followed during dispatch." placement="top">
-              <CircleHelp className="w-3.5 h-3.5 text-surface-faint" />
-            </Tooltip>
-          </h3>
-        </div>
-        <div className="flex-shrink-0 flex gap-2 pb-3">
-          <Input
-            placeholder="e.g., Gurney 1"
-            value={equipmentInput}
-            onValueChange={setEquipmentInput}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                addEquipment();
-              }
-            }}
-            variant="flat"
-            classNames={inputClassNames}
-          />
-          <Button onPress={addEquipment} className="flex-shrink-0 h-10 px-4 text-sm text-surface-light bg-default/40 hover:bg-default/60">
-            Add
-          </Button>
-        </div>
+  const equipmentColumn = (
+    <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
+      <div className="flex-shrink-0 pb-3 flex items-center justify-between">
+        <h3 className="text-surface-light font-semibold text-lg inline-flex items-center gap-1.5">
+          Equipment
+          <Tooltip content="Trackable gear (e.g., a gurney or AED) that can be assigned a default location and its status followed during dispatch." placement="top">
+            <CircleHelp className="w-3.5 h-3.5 text-surface-faint" />
+          </Tooltip>
+        </h3>
+      </div>
+      <div className="relative flex-shrink-0 flex gap-2 pb-3">
+        <Input
+          placeholder="e.g., Gurney 1"
+          value={equipmentInput}
+          onValueChange={setEquipmentInput}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              addEquipment();
+            }
+          }}
+          variant="flat"
+          classNames={inputClassNames}
+        />
+        <Button onPress={addEquipment} className="flex-shrink-0 h-10 px-4 text-sm text-surface-light bg-default/40 hover:bg-default/60">
+          Add
+        </Button>
+        {eventDraft.venue.equipment.length === 0 && (
+          <TutorialTip className="top-10 mt-2 left-0">Name a piece of equipment you will track, like a gurney or AED, then click Add.</TutorialTip>
+        )}
+      </div>
+      {/* Wraps the list so the default-location tip can sit under the first item's menu without being clipped by the scroll area. */}
+      <div className="relative flex-1 min-h-0 flex flex-col">
+        {allPosts.length > 0 && eventDraft.venue.equipment.length > 0 && !eventEquipment.some((e) => e.defaultLocation) && (
+          <TutorialTip className="top-[52px] right-12" arrowClassName="right-[116px]">
+            Optionally, choose where each item starts from its Default location menu.
+          </TutorialTip>
+        )}
         <ScrollShadow className="space-y-2 pr-2 scrollbar-hide flex-1 min-h-0" hideScrollBar style={{ overflow: 'auto' }}>
           {eventDraft.venue.equipment.map((item, index) =>
             locationListItem(
@@ -694,12 +765,65 @@ function LiteCreateContent() {
               cancelEquipmentEdit,
               () => startEquipmentEdit(index),
               () => removeEquipment(index),
-              item.id
+              item.id,
+              <Select
+                aria-label={`Default location for ${item.name}`}
+                placeholder="Default location"
+                size="sm"
+                variant="flat"
+                selectedKeys={eventEquipment[index]?.defaultLocation ? [eventEquipment[index]!.defaultLocation!] : []}
+                onSelectionChange={(keys) => setEquipmentDefaultLocation(item.id, (Array.from(keys)[0] as string | undefined) || undefined)}
+                classNames={{ ...selectClassNames, base: 'w-44' }}
+              >
+                {allPosts.map((post) => (
+                  <SelectItem key={getPostName(post)}>{getPostName(post)}</SelectItem>
+                ))}
+              </Select>
             )
           )}
         </ScrollShadow>
       </div>
     </div>
+  );
+
+  // With a map, the list sits beside it (locations can be placed on it, as in
+  // venue setup's GeoLocationsEditor); without one, the list fills the step.
+  const locationsStep = mapLayer ? (
+    <GeoLocationsEditor
+      className="h-full px-6 pt-4"
+      layer={mapLayer}
+      onAddPost={addMapPost}
+      onMovePost={moveMapPost}
+      onAddZone={addMapZone}
+      heading={locationsHeading}
+      tutorial
+    >
+      {locationsList}
+    </GeoLocationsEditor>
+  ) : (
+    <div className="flex h-full px-6 pt-4">
+      <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
+        {locationsHeading}
+        {locationsAddRow}
+        {locationsList}
+      </div>
+    </div>
+  );
+
+  // Same layout as Locations, with the map shown for reference.
+  const equipmentStep = mapLayer ? (
+    <div className="flex h-full gap-4 px-6 pt-4">
+      <div className="flex w-[420px] flex-shrink-0 flex-col min-h-0">{equipmentColumn}</div>
+      <div className="relative flex-1 min-w-0 overflow-hidden rounded-sm">
+        <GeoLayerMap
+          className="absolute inset-0"
+          layer={mapLayer}
+          extraPins={geoEquipmentPins(mapLayer, eventEquipment.map((e) => ({ ...e, location: e.defaultLocation })))}
+        />
+      </div>
+    </div>
+  ) : (
+    <div className="flex h-full px-6 pt-4">{equipmentColumn}</div>
   );
 
   const teamsSupervisorsStep = (
@@ -719,6 +843,7 @@ function LiteCreateContent() {
             setIsTeamModalOpen(true);
           }}
           onUploadCSV={() => setBulkImportMode('team')}
+          addTeamHint="Click Add Team to create your first team."
         />
       </div>
       <div className="w-px bg-surface-liner mx-2 flex-shrink-0" />
@@ -732,27 +857,6 @@ function LiteCreateContent() {
           onAddSupervisor={() => setIsSupervisorModalOpen(true)}
         />
       </div>
-    </div>
-  );
-
-  const equipmentStep = (
-    <div className="flex flex-col h-full overflow-hidden px-3 pt-4">
-      <div className="flex-shrink-0 pb-3 pl-3 flex items-center justify-between">
-        <h3 className="text-surface-light font-semibold text-xl inline-flex items-center gap-1.5">
-          Equipment
-          <Tooltip content="Select venue equipment for this event, or add equipment that only exists for this event and won't be saved to the venue." placement="top">
-            <CircleHelp className="w-3.5 h-3.5 text-surface-faint" />
-          </Tooltip>
-        </h3>
-      </div>
-      <EquipmentSelectionSection
-        hasVenue
-        eventData={sectionData}
-        setEventData={updateSectionData}
-        selectClassNames={selectClassNames}
-        allPosts={allPosts}
-        getPostName={getPostName}
-      />
     </div>
   );
 
@@ -771,6 +875,7 @@ function LiteCreateContent() {
           lastSelectedPostIndex={lastSelectedPostIndex}
           setLastSelectedPostIndex={setLastSelectedPostIndex}
           selectClassNames={selectClassNames}
+          postsHint={eventDraft.eventPosts.length === 0 ? 'Choose the locations teams are posted at, or click Enable All. Uncheck Enable Posts to go without a schedule.' : undefined}
         />
         <PostingScheduleSection
           postsEnabled={postsEnabled}
@@ -810,7 +915,11 @@ function LiteCreateContent() {
     {
       id: 'locations',
       label: 'Locations',
-      fields: [{ label: 'Locations', value: countLabel(allPosts.length, 'location') }],
+      fields: [
+        { label: 'Map', value: mapLayer ? 'Area marked' : 'None' },
+        { label: 'Locations', value: countLabel(allPosts.length, 'location') },
+        ...(mapZones.length ? [{ label: 'Areas', value: countLabel(mapZones.length, 'area') }] : []),
+      ],
     },
     {
       id: 'teams',
@@ -819,17 +928,11 @@ function LiteCreateContent() {
         ...staffReviewFields(eventDraft.staff.length, eventDraft.supervisor.length),
       ],
     },
-    ...(hasVenueEquipment
-      ? [
-          {
-            id: 'equipment',
-            label: 'Equipment',
-            fields: [
-              { label: 'Equipment', value: countLabel(eventDraft.eventEquipment.length, 'item') },
-            ],
-          },
-        ]
-      : []),
+    {
+      id: 'equipment',
+      label: 'Equipment',
+      fields: [{ label: 'Equipment', value: countLabel(eventDraft.venue.equipment.length, 'item') }],
+    },
     {
       id: 'postschedule',
       label: 'Post schedule',
@@ -851,16 +954,26 @@ function LiteCreateContent() {
 
   const steps: WizardStep[] = [
     { id: 'basics', label: 'Event Configuration', component: basicsStep, isComplete: hasRequiredBasics },
+    { id: 'map', label: 'Map', component: mapStep, isComplete: hasRequiredBasics },
     { id: 'locations', label: 'Locations', component: locationsStep, isComplete: hasRequiredBasics },
+    { id: 'equipment', label: 'Equipment', component: equipmentStep, isComplete: hasRequiredBasics },
     { id: 'teams', label: 'Staff Assignments', component: teamsSupervisorsStep, isComplete: hasRequiredBasics },
-    ...(hasVenueEquipment
-      ? [{ id: 'equipment', label: 'Equipment', component: equipmentStep, isComplete: hasRequiredBasics }]
-      : []),
     { id: 'postschedule', label: 'Post schedule', component: postScheduleStep, isComplete: hasRequiredBasics },
     { id: 'review', label: 'Review', component: reviewStep, isComplete: hasRequiredBasics },
   ];
 
   const { isFirstStep, isLastStep, goNext, goBack } = getStepNavigation(STEP_ORDER, currentStepId, setCurrentStepId);
+
+  // Whether the user has entered anything in each step yet (Skip until then).
+  const stepHasInput: Record<StepId, boolean> = {
+    basics: true,
+    map: !!eventDraft.venue.area,
+    locations: allPosts.length > 0 || mapZones.length > 0 || !!locationInput.trim(),
+    equipment: eventDraft.venue.equipment.length > 0 || !!equipmentInput.trim(),
+    teams: eventDraft.staff.length > 0 || eventDraft.supervisor.length > 0,
+    postschedule: !postsEnabled || eventDraft.eventPosts.length > 0,
+    review: true,
+  };
 
   const backButton = !isFirstStep && (
     <Button variant="flat" size="md" onPress={goBack} className="px-6">
@@ -875,7 +988,7 @@ function LiteCreateContent() {
       isDisabled={currentStepId === 'basics' && !hasRequiredBasics}
       className="px-6 bg-accent hover:bg-accent/90 text-surface-light"
     >
-      {isLastStep ? 'Create Event' : 'Continue'}
+      {primaryStepLabel(isLastStep, stepHasInput[currentStepId as StepId])}
     </Button>
   );
 
@@ -914,7 +1027,7 @@ function LiteCreateContent() {
         titleOverride={editingTeamIndex !== null ? 'Edit Team' : 'Add New Team'}
         submitLabelOverride={editingTeamIndex !== null ? 'Save Changes' : undefined}
         existingTeamNames={eventDraft.staff.map((s) => s.team).filter((_, i) => i !== editingTeamIndex)}
-        initialTeam={editingTeamIndex !== null ? parseTeamForEdit(eventDraft.staff[editingTeamIndex]) : undefined}
+        initialTeam={editingTeamIndex !== null ? teamDraftFromStaff(eventDraft.staff[editingTeamIndex]) : undefined}
         onSave={(team) => handleSaveTeam(team)}
         roles={LICENSES.map((name) => ({ name, fullName: name }))}
       />

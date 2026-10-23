@@ -5,7 +5,8 @@ export const DEFAULT_SURGE_LIMIT_PERCENT = 70;
 export const DEFAULT_PENDING_TRANSPORT_SURGE_THRESHOLD = 3;
 export const DEFAULT_UNASSIGNED_CALL_SURGE_SECONDS = 120;
 
-const ON_CALL_STATUSES = new Set(['En Route', 'On Scene', 'Transporting', 'En Route Eq', 'Assisting']);
+// 'Returning Eq' counts as busy: the unit is bringing equipment back from a call.
+const ON_CALL_STATUSES = new Set(['En Route', 'On Scene', 'Transporting', 'Retrieving Eq', 'En Route Eq', 'Assisting', 'Returning Eq']);
 const BREAK_OR_CLINIC_STATUSES = new Set(['On Break', 'In Clinic']);
 
 export interface TeamAvailabilitySummary {

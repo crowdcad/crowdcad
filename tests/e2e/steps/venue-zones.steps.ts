@@ -10,11 +10,9 @@ When('I enable Add Area mode', async ({ page }) => {
   await page.getByRole('button', { name: 'Add Area' }).click();
 });
 
-// Places three vertices around the map's center, then a fourth click back
-// near the first vertex to close the loop — mirrors how a real user finishes
-// a polygon (handleAreaImageClick treats a click within
-// ZONE_CLOSE_THRESHOLD_PERCENT of the start point as "close", not "add a
-// vertex"), so no separate double-click step is needed.
+// Places three vertices around the map's center, then clicks the first
+// vertex's open circle (AreaVertex) to complete the area — the only way a
+// real user finishes a polygon.
 When('I draw a triangular area on the venue map', async ({ page }) => {
   const mapImage = page.getByAltText('Venue map');
   const box = await mapImage.boundingBox();
@@ -31,12 +29,12 @@ When('I draw a triangular area on the venue map', async ({ page }) => {
 });
 
 When('I name the area {string}', async ({ page }, name: string) => {
-  await page.getByPlaceholder('Area name').fill(name);
+  await page.getByPlaceholder('Lower concourse').fill(name);
   await page.getByRole('button', { name: 'Confirm' }).click();
 });
 
 When('I name the area {string} and mark it a dispatch zone', async ({ page }, name: string) => {
-  await page.getByPlaceholder('Area name').fill(name);
+  await page.getByPlaceholder('Lower concourse').fill(name);
   // The label text sits under HeroUI's invisible native <input>, which
   // covers the whole control and intercepts a click aimed at the text
   // itself — target the checkbox by role instead.

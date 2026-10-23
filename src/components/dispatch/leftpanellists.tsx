@@ -5,10 +5,12 @@
 // previously each carried their own copy of the sort + map + empty-state code.
 
 import React, { useMemo } from 'react';
+import type { EquipmentArrival } from '@/lib/equipmentArrivals';
 import type { Event, Staff, Supervisor, EquipmentItem } from '@/app/types';
 import TeamWidget from '@/components/dispatch/teamwidget';
 import EquipmentCard from '@/components/dispatch/equipmentcard';
 import { sortTeams, type TeamSortMode } from '@/lib/teamSort';
+import type { UnitTracking } from '@/lib/unitTracking';
 
 type SharedTeamListProps = {
   event: Event;
@@ -18,6 +20,8 @@ type SharedTeamListProps = {
   cardViewMode: 'normal' | 'condensed';
   hasVenueMap: boolean;
   knownMapLocations: Set<string>;
+  /** Live positions on a TAK event (D66); null otherwise. */
+  unitTracking?: UnitTracking | null;
   onRefreshTeamPost: (team: string) => void;
   onNewCall: (team: string) => void;
 };
@@ -33,10 +37,12 @@ export type TeamListProps = SharedTeamListProps & {
   onEditTeam: (staff: Staff) => void;
   onDeleteTeam: (team: string) => void;
   onViewOnMap: (team: string) => void;
+  /** Edits a team's post for one posting time (shown in the card on TAK events with a schedule). */
+  onPostAssignment?: (time: string, post: string, team: string) => void;
 };
 
 export function TeamList({
-  sortMode, onStatusChange, onLocationChange, onEditTeam, onDeleteTeam, onViewOnMap,
+  sortMode, onStatusChange, onLocationChange, onEditTeam, onDeleteTeam, onViewOnMap, onPostAssignment,
   emptyText, ...shared
 }: TeamListProps & { emptyText: React.ReactNode }) {
   const staff = shared.event.staff;
@@ -52,6 +58,7 @@ export function TeamList({
           onEditTeam={onEditTeam}
           onDeleteTeam={onDeleteTeam}
           onViewOnMap={onViewOnMap}
+          onPostAssignment={onPostAssignment}
           {...shared}
         />
       ))}
@@ -118,12 +125,20 @@ export type EquipmentListProps = {
   onStatusChange: (equipmentName: string, newStatus: string) => void;
   onLocationChange: (equipmentName: string, newLocation: string) => void;
   onMarkReady: (equipmentName: string) => void;
+  onPickedUp: (equipmentName: string) => void;
   onDelete: (equipmentName: string) => void;
   onViewOnMap: (equipmentName: string) => void;
+  /** Whether a unit, or an equipment item's own tracker, has a live position (TAK), so it can be found on the map. */
+  unitTracked?: (unitName: string) => boolean;
+  equipmentTracked?: (equipmentName: string) => boolean;
+  /** Pickup/return suggestions from live tracking, shown on the matching cards. */
+  arrivals?: EquipmentArrival[];
+  onConfirmArrival?: (arrival: EquipmentArrival) => void;
+  onDismissArrival?: (arrival: EquipmentArrival) => void;
 };
 
 export function EquipmentList({
-  event, items, knownMapLocations, emptyText, ...cardProps
+  event, items, knownMapLocations, unitTracked, equipmentTracked, arrivals, emptyText, ...cardProps
 }: EquipmentListProps & { emptyText: React.ReactNode }) {
   const hasEquipment = !!(event.venue?.equipment?.length || event.eventEquipment?.length);
   // Available first, anything out on a call at the bottom (stable otherwise).
@@ -136,12 +151,16 @@ export function EquipmentList({
     <div className="dispatch-shell-list">
       {sorted.map(item => {
         const location = item.currentLocation || item.stagingLocation;
+        // With a unit, it is on the map wherever that unit is.
+        const unit = [...(event.staff || []), ...(event.supervisor || [])].find(u => u.team === location);
+        const mapLocation = unit ? unit.location : location;
         return (
           <EquipmentCard
             key={item.name}
             equipment={item}
             event={event}
-            canLocateOnMap={!!location && knownMapLocations.has(location)}
+            canLocateOnMap={!!equipmentTracked?.(item.name) || (!!unit && !!unitTracked?.(unit.team)) || (!!mapLocation && knownMapLocations.has(mapLocation))}
+            arrival={arrivals?.find(a => a.equipmentName === item.name)}
             {...cardProps}
           />
         );

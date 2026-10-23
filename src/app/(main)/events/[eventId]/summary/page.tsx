@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo } from 'react';
+import { lazy, Suspense, useEffect, useState, useMemo } from 'react';
 import { formatEventDate } from '@/lib/eventDate';
 import { useParams } from 'next/navigation';
 import { dbService } from '@/lib/services';
@@ -11,8 +11,14 @@ import { getScheduleWindow, teamStatusBreakdown, teamAvailabilitySeries, getSurg
 import { getZoneCallSummaries } from '@/lib/zones';
 import { formatLogTimestampForCsv } from '@/lib/csvFormat';
 import { GRID_WRAPPER, GRID_CELL } from './summaryGrid';
+import EquipmentTimeline from './EquipmentTimeline';
 import LoadingScreen from '@/components/ui/loading-screen';
 import ExportLogModal from '@/components/modals/event/exportlogmodal';
+
+// TAK location history (optional, in development): loaded only for TAK events,
+// and compiled out entirely unless NEXT_PUBLIC_TAK is exactly "on".
+const TakEventSummary =
+  process.env.NEXT_PUBLIC_TAK === 'on' ? lazy(() => import('@/features/tak').then((m) => ({ default: m.TakEventSummary }))) : null;
 
 const SummaryCharts = dynamic(() => import('./SummaryCharts'), { ssr: false, loading: () => <div className="p-6 bg-surface-deep border border-surface-liner">Loading charts...</div> });
 
@@ -333,14 +339,15 @@ export default function SummaryPage() {
         </div>
 
         {zoneCallSummaries.length > 0 && (
-          <div className={GRID_CELL}>
+          // A standalone box: the wrapper adds the top/left borders a grid cell leaves to its neighbours.
+          <div className={`${GRID_WRAPPER} ${GRID_CELL}`}>
             <div className="px-4 py-3">
               <span className="font-semibold">Zone Breakdown</span>
               <div className="text-sm text-surface-faint">{zoneCallSummaries.length} dispatch zone{zoneCallSummaries.length === 1 ? '' : 's'}</div>
             </div>
             <div className="px-4 pb-4 space-y-2">
               {zoneCallSummaries.map((zone) => (
-                <div key={zone.zoneId} className="bg-surface-deepest p-3 flex items-center justify-between">
+                <div key={zone.zoneId} className="bg-surface-deepest border border-surface-liner/70 p-3 flex items-center justify-between">
                   <span className="font-semibold">{zone.zoneName}</span>
                   <div className="flex gap-6 text-sm">
                     <div>
@@ -360,6 +367,14 @@ export default function SummaryPage() {
               ))}
             </div>
           </div>
+        )}
+
+        <EquipmentTimeline event={event} />
+
+        {process.env.NEXT_PUBLIC_TAK === 'on' && TakEventSummary && event.mapMode === 'tak' && eventId && (
+          <Suspense fallback={null}>
+            <TakEventSummary eventId={eventId} event={event} className={`${GRID_WRAPPER} ${GRID_CELL}`} />
+          </Suspense>
         )}
 
         <SummaryCharts

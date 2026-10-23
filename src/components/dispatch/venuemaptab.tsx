@@ -3,12 +3,23 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Autocomplete, AutocompleteItem, Button } from '@heroui/react';
 import { ChevronLeft, ChevronRight, Search } from 'lucide-react';
-import type { Layer, Staff, Supervisor, Equipment, Call, Clinic, Post } from '@/app/types';
+import type { Layer, Staff, Supervisor, Equipment, Call, Clinic } from '@/app/types';
 import { useZoomPan } from '@/hooks/useZoomPan';
 import { MAP_CHECKER_BG } from '@/lib/mapStyles';
-import { STATIC_SELECTOR_BUTTON_CLASS, staticSelectorButtonProps } from '@/lib/autocompleteSelector';
+import { staticSelectorButtonProps } from '@/lib/heroStatic';
 import MapZoomControls from '@/components/ui/map-zoom-controls';
-import { VenueMapWithPosts } from '@/components/modals/event/venuemapmodal';
+import { VenueMapWithPosts, type MapOverlay } from '@/components/modals/event/venuemapmodal';
+import dynamic from 'next/dynamic';
+import { isGeoLayer } from '@/lib/geo/layers';
+import { isPlacedPost, postLatLng } from '@/lib/geo/positions';
+import { layerAlignment } from '@/lib/geo/layers';
+import { latLonToPercent } from '@/lib/geo/affine';
+import type { UnitPosition } from '@/lib/unitTracking';
+import { equipmentHolderUnit } from '@/lib/equipmentPlacement';
+
+// The live map for geo layers (P8, D64), loaded only when a venue has one.
+const GeoVenueMap = dynamic(() => import('./GeoVenueMap'), { ssr: false });
+const GeoLayerMapControls = dynamic(() => import('@/components/geo/GeoLayerMap').then((m) => m.GeoLayerMapControls), { ssr: false });
 
 /** A request to jump to and highlight a specific team on the map. requestId
  *  must change (e.g. Date.now()) each time, including re-clicking the same
@@ -43,6 +54,8 @@ interface VenueMapTabProps {
   onAddCallAtPost?: (postName: string) => void;
   /** Clicking a team marker shows a small "Add Call" button under it prefilled with that team assigned. */
   onAddCallForTeam?: (teamName: string) => void;
+  /** Show posts in team and supervisor cards. Off when the event has no posting schedule. */
+  showPosts?: boolean;
   focusTeamRequest?: TeamFocusRequest | null;
   focusSupervisorRequest?: SupervisorFocusRequest | null;
   focusEquipmentRequest?: EquipmentFocusRequest | null;
@@ -55,11 +68,10 @@ interface VenueMapTabProps {
   onTeamFocusHandled?: () => void;
   onSupervisorFocusHandled?: () => void;
   onEquipmentFocusHandled?: () => void;
+  /** Optional add-on layer passed through to the map (see MapOverlay). */
+  overlay?: MapOverlay;
 }
 
-function isCoordinatedPost(post: Post): post is { name: string; x: number; y: number } {
-  return typeof post === 'object' && post !== null && typeof post.name === 'string' && typeof post.x === 'number';
-}
 
 interface SearchItem {
   key: string;
@@ -82,12 +94,14 @@ export default function VenueMapTab({
   clinics,
   onAddCallAtPost,
   onAddCallForTeam,
+  showPosts = true,
   focusTeamRequest,
   focusSupervisorRequest,
   focusEquipmentRequest,
   onTeamFocusHandled,
   onSupervisorFocusHandled,
   onEquipmentFocusHandled,
+  overlay,
 }: VenueMapTabProps) {
   const [currentLayer, setCurrentLayer] = useState(0);
   const [searchInput, setSearchInput] = useState('');
@@ -96,6 +110,8 @@ export default function VenueMapTab({
   const [selectedSupervisorName, setSelectedSupervisorName] = useState<string | null>(null);
   const [selectedEquipmentName, setSelectedEquipmentName] = useState<string | null>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
+  // Where the live map should fly for a search result or a "view on map" request (geo layers).
+  const [geoFocus, setGeoFocus] = useState<{ key: number; lat: number; lng: number } | null>(null);
 
   const {
     scale,
@@ -149,13 +165,7 @@ export default function VenueMapTab({
   useEffect(() => {
     if (!focusTeamRequest) return;
     const team = staff.find((s) => s.team === focusTeamRequest.teamName);
-    const location = team?.location;
-    if (location) {
-      const layerIdx = layers.findIndex((layer) =>
-        (layer.posts || []).some((post) => isCoordinatedPost(post) && post.name === location)
-      );
-      if (layerIdx >= 0) setCurrentLayer(layerIdx);
-    }
+    focusUnit(focusTeamRequest.teamName, team?.location);
     setSelectedTeamName(focusTeamRequest.teamName);
     resetZoom();
     onTeamFocusHandled?.();
@@ -166,13 +176,7 @@ export default function VenueMapTab({
   useEffect(() => {
     if (!focusSupervisorRequest) return;
     const sup = supervisor.find((s) => s.team === focusSupervisorRequest.supervisorName);
-    const location = sup?.location;
-    if (location) {
-      const layerIdx = layers.findIndex((layer) =>
-        (layer.posts || []).some((post) => isCoordinatedPost(post) && post.name === location)
-      );
-      if (layerIdx >= 0) setCurrentLayer(layerIdx);
-    }
+    focusUnit(focusSupervisorRequest.supervisorName, sup?.location);
     setSelectedSupervisorName(focusSupervisorRequest.supervisorName);
     resetZoom();
     onSupervisorFocusHandled?.();
@@ -183,12 +187,15 @@ export default function VenueMapTab({
   useEffect(() => {
     if (!focusEquipmentRequest) return;
     const equip = equipment.find((e) => e.name === focusEquipmentRequest.equipmentName);
-    const location = equip?.location;
-    if (location) {
-      const layerIdx = layers.findIndex((layer) =>
-        (layer.posts || []).some((post) => isCoordinatedPost(post) && post.name === location)
-      );
-      if (layerIdx >= 0) setCurrentLayer(layerIdx);
+    // Its own tracker, else wherever the unit holding it is, else the post it is at.
+    const tag = equip && overlay?.unitTracking?.equipmentPositions?.[equip.name];
+    const holder = equip && equipmentHolderUnit(equip, [...staff, ...supervisor]);
+    if (tag) {
+      focusPosition(tag);
+    } else if (holder) {
+      focusUnit(holder.team, holder.location);
+    } else if (equip?.location) {
+      focusLocation(equip.location);
     }
     setSelectedEquipmentName(focusEquipmentRequest.equipmentName);
     resetZoom();
@@ -196,11 +203,51 @@ export default function VenueMapTab({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusEquipmentRequest?.requestId]);
 
+  /** Switches to the layer holding a placed post and, on a live map, flies to it. */
+  /** A team or supervisor: its live position on a TAK event (D66), else the post its Location names. */
+  function focusUnit(name: string, location: string | undefined) {
+    const tracking = overlay?.unitTracking;
+    if (!tracking) {
+      if (location) focusLocation(location);
+      return;
+    }
+    const p = tracking.positions[name];
+    if (p) focusPosition(p);
+  }
+
+  /** Shows a live position: the current layer if it can, else a live-map layer, else an image layer covering it. */
+  function focusPosition(p: UnitPosition) {
+    const tracking = overlay?.unitTracking;
+    const onImage = (layer: Layer) => {
+      const a = tracking?.alignments[layer.id] ?? layerAlignment(layer);
+      if (!a) return false;
+      const { x, y } = latLonToPercent(a, { lat: p.lat, lon: p.lon });
+      return x >= 0 && x <= 100 && y >= 0 && y <= 100;
+    };
+    const shows = (layer: Layer) => isGeoLayer(layer) || onImage(layer);
+    const current = layers[safeCurrentLayer];
+    let idx = current && shows(current) ? safeCurrentLayer : layers.findIndex(isGeoLayer);
+    if (idx < 0) idx = layers.findIndex(onImage);
+    if (idx < 0) return;
+    setCurrentLayer(idx);
+    setGeoFocus(isGeoLayer(layers[idx]) ? { key: Date.now(), lat: p.lat, lng: p.lon } : null);
+  }
+
+  function focusLocation(postName: string) {
+    const layerIdx = layers.findIndex((layer) => (layer.posts || []).some((post) => isPlacedPost(post, layer) && post.name === postName));
+    if (layerIdx < 0) return;
+    setCurrentLayer(layerIdx);
+    const layer = layers[layerIdx]!;
+    const post = layer.posts.find((p) => typeof p !== 'string' && p.name === postName);
+    const at = post && isGeoLayer(layer) ? postLatLng(post, layer) : null;
+    setGeoFocus(at ? { key: Date.now(), ...at } : null);
+  }
+
   const searchItems = useMemo(() => {
     const items: SearchItem[] = [];
     layers.forEach((layer, layerIdx) => {
       (layer.posts || []).forEach((post) => {
-        if (!isCoordinatedPost(post)) return;
+        if (!isPlacedPost(post, layer)) return;
         items.push({
           key: `${layerIdx}::${post.name}`,
           label: layers.length > 1 ? `${post.name} (${layer.name})` : post.name,
@@ -215,6 +262,7 @@ export default function VenueMapTab({
   const goToLayer = (idx: number) => {
     setCurrentLayer(idx);
     setSelectedPostName(null);
+    setGeoFocus(null);
     resetZoom();
   };
 
@@ -222,7 +270,7 @@ export default function VenueMapTab({
     if (!key) return;
     const item = searchItems.find((i) => i.key === key);
     if (!item) return;
-    setCurrentLayer(item.layerIdx);
+    focusLocation(item.postName);
     setSelectedPostName(item.postName);
     resetZoom();
     setSearchInput('');
@@ -267,7 +315,15 @@ export default function VenueMapTab({
           </span>
         )}
 
-        <div className="ml-auto w-full max-w-xs">
+        <div className="ml-auto flex min-w-0 items-center gap-2">
+          {currentLayerData && isGeoLayer(currentLayerData) ? (
+            <GeoLayerMapControls layer={currentLayerData} />
+          ) : (
+            overlay?.toolbar?.({ layer: currentLayerData, layerIndex: safeCurrentLayer })
+          )}
+        </div>
+
+        <div className="w-full max-w-xs">
           <Autocomplete
             aria-label="Search locations"
             placeholder="Find a location..."
@@ -284,7 +340,6 @@ export default function VenueMapTab({
               // of the dropdown chevron. Overlaying it instead frees that
               // space for text.
               clearButton: 'absolute end-6 top-1/2 -translate-y-1/2',
-              selectorButton: STATIC_SELECTOR_BUTTON_CLASS,
             }}
             selectorButtonProps={staticSelectorButtonProps}
             inputProps={{
@@ -302,6 +357,30 @@ export default function VenueMapTab({
         </div>
       </div>
 
+      {currentLayerData && isGeoLayer(currentLayerData) ? (
+        <div className="relative min-h-0 flex-1 overflow-hidden rounded-lg">
+          <GeoVenueMap
+            className="absolute inset-0"
+            layer={currentLayerData}
+            layerIndex={safeCurrentLayer}
+            staff={staff}
+            supervisor={supervisor}
+            equipment={equipment}
+            teamTimers={teamTimers}
+            calls={calls}
+            clinics={clinics}
+            selectedPostName={selectedPostName}
+            selectedTeamName={selectedTeamName}
+            selectedSupervisorName={selectedSupervisorName}
+            selectedEquipmentName={selectedEquipmentName}
+            onAddCallAtPost={onAddCallAtPost}
+            onAddCallForTeam={onAddCallForTeam}
+            showPosts={showPosts}
+            focus={geoFocus}
+            overlay={overlay}
+          />
+        </div>
+      ) : (
       <div className="relative min-h-0 flex-1 overflow-hidden rounded-lg" style={MAP_CHECKER_BG}>
         <VenueMapWithPosts
           layers={layers}
@@ -330,9 +409,12 @@ export default function VenueMapTab({
           selectedEquipmentName={selectedEquipmentName}
           onAddCallAtPost={onAddCallAtPost}
           onAddCallForTeam={onAddCallForTeam}
+            showPosts={showPosts}
+          overlay={overlay}
         />
         <MapZoomControls onZoomIn={() => zoomIn(0.25)} onZoomOut={() => zoomOut(0.25)} onReset={resetZoom} />
       </div>
+      )}
     </div>
   );
 }
