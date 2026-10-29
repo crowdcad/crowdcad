@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { MapPin, Minus, Plus } from 'lucide-react';
-import { Button } from '@heroui/react';
+import { ChevronDown, MapPin, Minus, Plus } from 'lucide-react';
+import { Button, Dropdown, DropdownItem, DropdownMenu, DropdownTrigger } from '@heroui/react';
 import type { MciColor } from '@/app/types';
 import { MCI_COLORS, type MciZoneStats } from '@/lib/mci';
 import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
@@ -23,7 +23,16 @@ type Props = {
   /** The zone already has a shape on the map (the button then edits it). */
   hasShape?: boolean;
   onDraw?: (zoneId: string) => void;
+  /** Treatment locations the quick move can send to. */
+  areas: { id: string; name: string }[];
+  /** Where the plus beside Moved sends a patient. */
+  quickMoveAreaId?: string;
+  onQuickMove: (zoneId: string, color: MciColor) => void;
+  onQuickMoveAreaChange: (zoneId: string, areaId: string) => void;
 };
+
+const QUICK_MOVE_BUTTON =
+  'flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-surface-liner text-surface-light hover:bg-surface-liner disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent';
 
 const NUMBER_WELL = 'h-6 w-10 rounded-sm bg-black/25 text-center text-sm font-semibold tabular-nums';
 const STEP_BUTTON = 'flex h-8 w-6 shrink-0 items-center justify-center hover:bg-black/20 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent';
@@ -78,10 +87,57 @@ function TaggedValue({ value, label, disabled, onCommit }: { value: number; labe
   );
 }
 
-export default function MciZoneCard({ stats, teams, readOnly, onTag, onSetTagged, onMove, onClear, onReopen, mapEnabled = false, hasShape = false, onDraw }: Props) {
+/** "+ moves to Clinic", with a menu to pick another location when there are several. */
+function QuickMoveTarget({ zoneName, areas, areaId, onChange }: { zoneName: string; areas: Props['areas']; areaId?: string; onChange: (areaId: string) => void }) {
+  const current = areas.find((a) => a.id === areaId);
+  if (!current) return null;
+  const label = <span className="truncate font-semibold text-surface-light">{current.name}</span>;
+  return (
+    <div className="flex min-w-0 items-center gap-1 text-xs text-surface-faint" data-testid={`mci-zone-quick-target-${zoneName}`}>
+      <Plus className="h-3 w-3 shrink-0" aria-hidden />
+      <span className="shrink-0">moves to</span>
+      {areas.length === 1 ? (
+        label
+      ) : (
+        <Dropdown>
+          <DropdownTrigger>
+            <button type="button" className="flex min-w-0 items-center gap-0.5 rounded-md px-1 hover:bg-surface-liner" aria-label={`Quick move destination for ${zoneName}: ${current.name}. Change`}>
+              {label}
+              <ChevronDown className="h-3 w-3 shrink-0" aria-hidden />
+            </button>
+          </DropdownTrigger>
+          <DropdownMenu aria-label={`Quick move destination for ${zoneName}`} selectionMode="single" selectedKeys={new Set([current.id])} onAction={(key) => onChange(String(key))}>
+            {areas.map((a) => (
+              <DropdownItem key={a.id}>{a.name}</DropdownItem>
+            ))}
+          </DropdownMenu>
+        </Dropdown>
+      )}
+    </div>
+  );
+}
+
+export default function MciZoneCard({
+  stats,
+  teams,
+  readOnly,
+  onTag,
+  onSetTagged,
+  onMove,
+  onClear,
+  onReopen,
+  mapEnabled = false,
+  hasShape = false,
+  onDraw,
+  areas,
+  quickMoveAreaId,
+  onQuickMove,
+  onQuickMoveAreaChange,
+}: Props) {
   const { t } = useDispatchTerms();
   const { zone } = stats;
   const name = zone.name;
+  const quickArea = areas.find((a) => a.id === quickMoveAreaId);
 
   return (
     <section
@@ -164,7 +220,24 @@ export default function MciZoneCard({ stats, teams, readOnly, onTag, onSetTagged
                   <Plus className="h-3.5 w-3.5" />
                 </button>
               </div>
-              <span className="text-center text-sm tabular-nums text-surface-light">{stats.moved[color]}</span>
+              <div className="flex items-center justify-center gap-1.5">
+                {!readOnly && (
+                  <button
+                    type="button"
+                    disabled={!quickArea || stats.inZone[color] <= 0}
+                    onClick={() => onQuickMove(zone.id, color)}
+                    aria-label={`Move one ${label.toLowerCase()} from ${name}${quickArea ? ` to ${quickArea.name}` : ''}`}
+                    title={quickArea ? `Move one to ${quickArea.name}` : 'Add a treatment location first'}
+                    className={QUICK_MOVE_BUTTON}
+                    data-testid={`mci-zone-${name}-${color}-quickmove`}
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                  </button>
+                )}
+                <span className="min-w-[1.5ch] text-center text-sm tabular-nums text-surface-light" data-testid={`mci-zone-${name}-${color}-moved`}>
+                  {stats.moved[color]}
+                </span>
+              </div>
               <span className="text-center text-sm font-semibold tabular-nums text-surface-light" data-testid={`mci-zone-${name}-${color}-inzone`}>
                 {stats.inZone[color]}
               </span>
@@ -178,6 +251,8 @@ export default function MciZoneCard({ stats, teams, readOnly, onTag, onSetTagged
           {stats.inZoneTotal}
         </span>
       </div>
+
+      {!readOnly && <QuickMoveTarget zoneName={name} areas={areas} areaId={quickMoveAreaId} onChange={(areaId) => onQuickMoveAreaChange(zone.id, areaId)} />}
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <MciTeamChips names={teams} emptyText="No teams in triage" />

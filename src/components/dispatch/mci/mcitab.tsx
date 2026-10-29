@@ -4,7 +4,7 @@ import React, { useMemo, useState } from 'react';
 import { CornerDownLeft } from 'lucide-react';
 import { Button, Input } from '@heroui/react';
 import type { Event, MciColor } from '@/app/types';
-import { deriveMci, mciMapLayers, mciShapeOf, mciTransportTrips, mciTransportUnits, mciUnitsAt, type MciCounts } from '@/lib/mci';
+import { deriveMci, mciMapLayers, mciQuickMoveArea, mciShapeOf, mciTransportTrips, mciTransportUnits, mciUnitsAt, type MciCounts } from '@/lib/mci';
 import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
 import type { MciActions } from './usemciactions';
 import MciTotalsStrip from './mcitotalsstrip';
@@ -68,6 +68,8 @@ export default function MciTab({ event, actions }: Props) {
   const [drawChoice, setDrawChoice] = useState<{ kind: 'zone' | 'area'; id: string } | null>(null);
   const [, setSkippedTick] = useState(0);
   const [showLog, setShowLog] = useState(false);
+  // Quick move destinations the dispatcher picked on a zone card, this browser only; otherwise the log decides.
+  const [quickTargets, setQuickTargets] = useState<Record<string, string>>({});
 
   if (!mci) return null;
   const readOnly = !mci.active;
@@ -131,6 +133,15 @@ export default function MciTab({ event, actions }: Props) {
   const handleMove = async (zoneId: string, areaId: string, counts: MciCounts) => {
     await actions.move(zoneId, areaId, counts);
   };
+  const areaOptions = derived.areas.map((a) => ({ id: a.area.id, name: a.name }));
+  const quickMoveAreaOf = (zoneId: string) => {
+    const picked = quickTargets[zoneId];
+    return picked && mci.areas.some((a) => a.id === picked) ? picked : mciQuickMoveArea(mci, zoneId);
+  };
+  const handleQuickMove = (zoneId: string, color: MciColor) => {
+    const areaId = quickMoveAreaOf(zoneId);
+    if (areaId) void actions.move(zoneId, areaId, { [color]: 1 });
+  };
 
   return (
     <div className="minimal-scrollbar flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto" data-testid="mci-tab">
@@ -177,6 +188,10 @@ export default function MciTab({ event, actions }: Props) {
               mapEnabled={mapEnabled && !readOnly}
               hasShape={!!shapeOf(stats.zone)}
               onDraw={(id) => setDrawChoice({ kind: 'zone', id })}
+              areas={areaOptions}
+              quickMoveAreaId={quickMoveAreaOf(stats.zone.id)}
+              onQuickMove={handleQuickMove}
+              onQuickMoveAreaChange={(zoneId, areaId) => setQuickTargets((prev) => ({ ...prev, [zoneId]: areaId }))}
             />
           ))}
           {derived.zones.length === 0 && <p className="text-sm italic text-surface-faint">No zones yet. Add one by name.</p>}
