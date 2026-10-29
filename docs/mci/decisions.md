@@ -53,3 +53,29 @@ Related: [plan.md](plan.md), [../tak-integration/decisions.md](../tak-integratio
 - **What.** After a zone or treatment location is added, the dispatcher is asked to draw it on the map and can skip. The shape is stored as an ordinary zone on the event's copy of the venue layers (never the venue itself), with the same id as the MCI item or its `venueZoneId`. The map then shows it like any other zone. The shape is not a dispatch zone, so it adds no Calls tab. A card's map button redraws it, which replaces the first shape. Clinics already have a pin and are not drawn.
 - **Skips.** A skipped prompt is remembered for the browser session and not asked again. The card's button still works.
 - **Limits.** Image layers are drawn at the size of the dialog with no zoom. Live-map layers store coordinates.
+
+## 2026-10-29
+
+### D11. Treatment locations show a box per patient with age, sex and chief complaint (supersedes D1)
+- **Requested** by the maintainer so the treatment leader enters each report into CrowdCAD instead of on a whiteboard.
+- **What.** Patients are rebuilt from the log: a move or walk-in of n creates n patients, with ids taken from that entry, so the boxes and the counts can never disagree. The patient's zone and arrival time come from the move with no typing. What is typed (`age`, `sex`, `complaint`, the team that brought them in and the transport priority) sits in `mci.patients`, is edited in place and never changes a count. Names, tag numbers and location found are still never stored.
+- **Switch.** The declare dialog has "Track patients in treatment", ticked by default, and the tab can turn it on or off. It only changes what is shown, so a counts-only drill is still possible and turning it on later shows every patient already moved.
+- **Columns.** Red, yellow and green have columns of boxes. Black stays counts-only, as before.
+- **Formats.** Age is free text up to 5 characters ("34", "6mo"). Sex is any single letter, stored as a capital.
+
+### D12. A zone's quick move sends one patient per press
+- **What.** Each color row on a zone card has a plus beside Moved. A press moves one patient of that color to the location last moved to from this zone, else the first location. The card shows that location and it can be changed there. The Move dialog stays for several at once.
+
+### D13. A patient can be retriaged or sent to another location, with an optional note
+- **What.** Dragging a box to another column, or the box's menu, writes one `reassigned` entry with the patient's old and new color and location and an optional note. Counts follow the patient. The zone's Tagged counts stay as found. A patient sent to another location loses their transport priority there.
+- **Undo.** A patient entry can only be undone while nothing later depends on it: undo the patient's latest change first. Undoing a move or walk-in is refused while any of its patients has since been retriaged, moved on or transported. A transport written as a count (black, or the dialog's counts) takes the patients of that color who arrived first.
+- **Drag.** Native drag needs no new library. The menu is there because native drag does not work on touch screens or from a keyboard.
+
+### D14. A patient can be transported from their box; the ambulance number is optional there (amends D9)
+- **What.** The arrow on a box asks for an ambulance number (with this MCI's numbers suggested) and a destination, both optional, so a tap and Enter is enough. The Transport dialog lists the patients to pick, sorted by priority, and keeps a count for black. It still needs an ambulance number.
+
+### D15. Walk-ins are added at a treatment location
+- **What.** Each column has an add button for a patient who never went through a zone. It writes an `arrived` entry. Walk-ins count in treatment and in the totals but never in a zone's Tagged.
+
+### D16. Transport priority is shown as a rank
+- **What.** The treatment leader types a number on a box. Typing a number puts the patient at that place in the location's order and moves the patient there and everyone after down one, renumbering 1, 2, 3 in the same write. The number shown is the rank among the patients still there, so a transport moves everyone after it up one with no write. Clearing the number takes the patient out of the order.

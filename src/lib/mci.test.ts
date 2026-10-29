@@ -6,6 +6,7 @@ import {
   addMciArea,
   addMciZone,
   appendMciEntries,
+  arrivePatch,
   clearZonePatch,
   declareMci,
   deriveMci,
@@ -15,6 +16,15 @@ import {
   mciAvailability,
   mciCsvLines,
   mciMapLayers,
+  mciPatientId,
+  mciPatientLabel,
+  mciQuickMoveArea,
+  normalizePatientField,
+  reassignPatientPatch,
+  setPatientDetailsPatch,
+  setPatientPriorityPatch,
+  setTrackPatientsPatch,
+  transportPatientPatch,
   mciShapeOf,
   mciShapePatch,
   mciTransportTrips,
@@ -659,5 +669,214 @@ describe('transport trips', () => {
     ]);
     expect(trips[1].counts).toMatchObject({ red: 2, yellow: 1, green: 0, black: 0 });
     expect(mciTransportTrips(e.mci, 'ar1')).toEqual([]);
+  });
+});
+
+describe('patients in treatment locations', () => {
+  /** Zone A with 2 red and 1 yellow, all moved to the clinic. */
+  function withPatients(): Event {
+    let e = activeEvent();
+    e = apply(e, tagPatch(e, 'za', 'red', 2, ctx(1000)));
+    e = apply(e, tagPatch(e, 'za', 'yellow', 1, ctx(1100)));
+    return apply(e, movePatch(e, 'za', 'c1', { red: 2, yellow: 1 }, ctx(2000)));
+  }
+  const area = (e: Event, id: string) => deriveMci(e).areas.find((a) => a.area.id === id)!;
+  const patientsOf = (e: Event, id: string) => area(e, id).patients;
+
+  it('creates one patient per patient moved, with the zone they came from', () => {
+    const e = withPatients();
+    const move = e.mci!.log.find((x) => x.kind === 'moved' && x.color === 'red')!;
+    const patients = patientsOf(e, 'c1');
+    expect(patients.map((p) => [p.color, p.fromZoneId, p.arrivedAt])).toEqual([
+      ['red', 'za', 2000],
+      ['red', 'za', 2000],
+      ['yellow', 'za', 2000],
+    ]);
+    expect(patients[0].id).toBe(mciPatientId(move.id, 0));
+    expect(patients[1].id).toBe(mciPatientId(move.id, 1));
+    expect(deriveMci(e).consistent).toBe(true);
+  });
+
+  it('adds walk-ins to the location and the totals without touching the zones', () => {
+    let e = withPatients();
+    e = apply(e, arrivePatch(e, 'ar1', 'green', 1, ctx(2500)));
+    const p = patientsOf(e, 'ar1');
+    expect(p).toHaveLength(1);
+    expect(p[0].fromZoneId).toBeUndefined();
+    expect(deriveMci(e).totals).toMatchObject({ arrivedTotal: 1, taggedTotal: 3, inTreatmentTotal: 4 });
+    expect(mciSeries(e.mci).at(-1)).toMatchObject({ inZones: 0, inTreatment: 4 });
+    expect(arrivePatch(e, 'nope', 'red', 1, ctx(2600)).error).toBe('unknown-area');
+    expect(arrivePatch(e, 'ar1', 'red', 0, ctx(2600)).error).toBe('invalid');
+  });
+
+  it('saves typed details, normalized, and clears a field set to empty', () => {
+    let e = withPatients();
+    const id = patientsOf(e, 'c1')[0].id;
+    e = apply(e, setPatientDetailsPatch(e, id, { age: ' 34 years ', sex: 'male', complaint: '  chest   pain ' }));
+    expect(e.mci!.patients![id]).toEqual({ age: '34 ye', sex: 'M', complaint: 'chest pain' });
+    expect(patientsOf(e, 'c1')[0].details).toMatchObject({ sex: 'M' });
+    expect(mciPatientLabel(e.mci!.patients![id])).toBe('34 ye M chest pain');
+    e = apply(e, setPatientDetailsPatch(e, id, { age: '' }));
+    expect(e.mci!.patients![id]).toEqual({ sex: 'M', complaint: 'chest pain' });
+    expect(setPatientDetailsPatch(e, id, { sex: 'm' })).toEqual({ patch: {} });
+    expect(setPatientDetailsPatch(e, 'nope:0', { age: '3' }).error).toBe('unknown-patient');
+    expect(normalizePatientField('sex', '  f')).toBe('F');
+    expect(normalizePatientField('sex', '7')).toBe('');
+  });
+
+  it('retriages a patient to another color with a note, and the counts follow', () => {
+    let e = withPatients();
+    const id = patientsOf(e, 'c1').find((p) => p.color === 'yellow')!.id;
+    e = apply(e, reassignPatientPatch(e, id, { color: 'red' }, '  worse breathing ', ctx(3000)));
+    expect(e.mci!.log.at(-1)).toMatchObject({ kind: 'reassigned', areaId: 'c1', color: 'yellow', toColor: 'red', n: 1, patientId: id, note: 'worse breathing' });
+    expect(area(e, 'c1').inTreatment).toMatchObject({ red: 3, yellow: 0 });
+    expect(area(e, 'c1').received).toMatchObject({ red: 2, yellow: 1 });
+    // The zone's tag counts are what was found there and do not change.
+    expect(zone(e, 'za').tagged).toMatchObject({ red: 2, yellow: 1 });
+    expect(reassignPatientPatch(e, id, { color: 'red' }, undefined, ctx(3100))).toEqual({ patch: {} });
+  });
+
+  it('moves a patient to another location, dropping their priority there', () => {
+    let e = withPatients();
+    const id = patientsOf(e, 'c1')[0].id;
+    e = apply(e, setPatientPriorityPatch(e, id, 1));
+    e = apply(e, setPatientDetailsPatch(e, id, { age: '50' }));
+    e = apply(e, reassignPatientPatch(e, id, { areaId: 'ar1', color: 'yellow' }, undefined, ctx(3000)));
+    expect(area(e, 'c1').inTreatment).toMatchObject({ red: 1, yellow: 1 });
+    expect(area(e, 'c1').transferredOut).toMatchObject({ red: 1 });
+    expect(area(e, 'ar1').received).toMatchObject({ yellow: 1 });
+    expect(patientsOf(e, 'ar1').map((p) => [p.id, p.color, p.rank])).toEqual([[id, 'yellow', undefined]]);
+    expect(e.mci!.patients![id]).toEqual({ age: '50' });
+    expect(deriveMci(e).totals.inTreatmentTotal).toBe(3);
+    expect(reassignPatientPatch(e, id, { areaId: 'nope' }, undefined, ctx(3100)).error).toBe('unknown-area');
+  });
+
+  it('ranks the transport order, inserting and shifting, and a transport moves everyone up', () => {
+    let e = withPatients();
+    const [a, b, c] = patientsOf(e, 'c1').map((p) => p.id);
+    e = apply(e, setPatientPriorityPatch(e, a, 1));
+    e = apply(e, setPatientPriorityPatch(e, b, 2));
+    // Putting c at 1 moves a to 2 and b to 3.
+    e = apply(e, setPatientPriorityPatch(e, c, 1));
+    expect(patientsOf(e, 'c1').map((p) => [p.id, p.rank])).toEqual([[c, 1], [a, 2], [b, 3]]);
+    // Beyond the end goes last.
+    e = apply(e, setPatientPriorityPatch(e, c, 9));
+    expect(patientsOf(e, 'c1').map((p) => [p.id, p.rank])).toEqual([[a, 1], [b, 2], [c, 3]]);
+    e = apply(e, transportPatientPatch(e, a, {}, ctx(3000)));
+    expect(patientsOf(e, 'c1').map((p) => [p.id, p.rank])).toEqual([[b, 1], [c, 2]]);
+    e = apply(e, setPatientPriorityPatch(e, b, null));
+    expect(patientsOf(e, 'c1').map((p) => [p.id, p.rank])).toEqual([[c, 1], [b, undefined]]);
+    expect(e.mci!.patients![b]).toBeUndefined();
+    expect(setPatientPriorityPatch(e, c, 0).error).toBe('invalid');
+    expect(setPatientPriorityPatch(e, a, 1).error).toBe('unknown-patient');
+  });
+
+  it('transports one patient with or without an ambulance number', () => {
+    let e = withPatients();
+    const [a, b] = patientsOf(e, 'c1').map((p) => p.id);
+    e = apply(e, transportPatientPatch(e, a, { unit: ' A 1 ', destination: 'General' }, ctx(3000)));
+    e = apply(e, transportPatientPatch(e, b, { unit: '  ' }, ctx(3100)));
+    expect(e.mci!.log.slice(-2).map((x) => [x.patientId, x.color, x.n, x.unit, x.destination])).toEqual([
+      [a, 'red', 1, 'A 1', 'General'],
+      [b, 'red', 1, undefined, undefined],
+    ]);
+    expect(area(e, 'c1').inTreatment).toMatchObject({ red: 0, yellow: 1 });
+    expect(area(e, 'c1').transported).toMatchObject({ red: 2 });
+    expect(deriveMci(e).patients.find((p) => p.id === a)).toMatchObject({ transportedAt: 3000, unit: 'A 1', destination: 'General' });
+    expect(transportPatientPatch(e, a, {}, ctx(3200)).error).toBe('unknown-patient');
+  });
+
+  it('transports picked patients and counted ones in one trip', () => {
+    let e = withPatients();
+    e = apply(e, arrivePatch(e, 'c1', 'black', 2, ctx(2100)));
+    const yellow = patientsOf(e, 'c1').find((p) => p.color === 'yellow')!.id;
+    const out = transportPatch(e, 'c1', { black: 1 }, { unit: 'A1' }, ctx(3000), [yellow, yellow, 'nope:0']);
+    expect(out.clamped).toBe(true);
+    e = apply(e, out);
+    expect(e.mci!.log.filter((x) => x.kind === 'transported').map((x) => [x.color, x.n, x.patientId])).toEqual([
+      ['yellow', 1, yellow],
+      ['black', 1, undefined],
+    ]);
+    expect(area(e, 'c1').inTreatment).toMatchObject({ red: 2, yellow: 0, black: 1 });
+    // Counted patients cannot exceed those left after the picked ones.
+    const red = patientsOf(e, 'c1').filter((p) => p.color === 'red').map((p) => p.id);
+    const both = transportPatch(e, 'c1', { red: 1 }, { unit: 'A2' }, ctx(3100), red);
+    expect(both.clamped).toBe(true);
+    expect(apply(e, both).mci!.log.filter((x) => x.kind === 'transported' && x.unit === 'A2')).toHaveLength(2);
+  });
+
+  it('a counted transport takes the patients who arrived first', () => {
+    let e = withPatients();
+    e = apply(e, tagPatch(e, 'zb', 'red', 1, ctx(2100)));
+    e = apply(e, movePatch(e, 'zb', 'c1', { red: 1 }, ctx(2200)));
+    e = apply(e, transportPatch(e, 'c1', { red: 2 }, { unit: 'A1' }, ctx(3000)));
+    expect(patientsOf(e, 'c1').map((p) => [p.color, p.fromZoneId])).toEqual([
+      ['yellow', 'za'],
+      ['red', 'zb'],
+    ]);
+  });
+
+  it('undo: a patient change undoes, but an entry a later one depends on does not', () => {
+    let e = withPatients();
+    const move = e.mci!.log.find((x) => x.kind === 'moved' && x.color === 'yellow')!;
+    const id = patientsOf(e, 'c1').find((p) => p.color === 'yellow')!.id;
+    e = apply(e, reassignPatientPatch(e, id, { color: 'red' }, undefined, ctx(3000)));
+    const retriage = e.mci!.log.at(-1)!;
+    e = apply(e, transportPatientPatch(e, id, { unit: 'A1' }, ctx(3100)));
+    const trip = e.mci!.log.at(-1)!;
+    // The move made the patient and the retriage changed them before they left: both wait for the transport's undo.
+    expect(undoPatch(e, move.id, ctx(3200)).error).toBe('cannot-undo');
+    expect(undoPatch(e, retriage.id, ctx(3200)).error).toBe('cannot-undo');
+    e = apply(e, undoPatch(e, trip.id, ctx(3300)));
+    e = apply(e, undoPatch(e, retriage.id, ctx(3400)));
+    expect(patientsOf(e, 'c1').find((p) => p.id === id)!.color).toBe('yellow');
+    e = apply(e, undoPatch(e, move.id, ctx(3500)));
+    expect(patientsOf(e, 'c1').some((p) => p.id === id)).toBe(false);
+    expect(zone(e, 'za').inZone.yellow).toBe(1);
+    expect(deriveMci(e).consistent).toBe(true);
+  });
+
+  it('refuses to undo a walk-in whose patient was moved on', () => {
+    let e = activeEvent();
+    e = apply(e, arrivePatch(e, 'c1', 'green', 1, ctx(1000)));
+    const walkIn = e.mci!.log.at(-1)!;
+    const id = patientsOf(e, 'c1')[0].id;
+    e = apply(e, reassignPatientPatch(e, id, { areaId: 'ar1' }, 'overflow', ctx(1100)));
+    expect(undoPatch(e, walkIn.id, ctx(1200)).error).toBe('cannot-undo');
+  });
+
+  it('picks the quick move destination from the last move out of the zone', () => {
+    let e = activeEvent();
+    expect(mciQuickMoveArea(e.mci, 'za')).toBe('c1');
+    e = apply(e, tagPatch(e, 'za', 'red', 2, ctx(1000)));
+    e = apply(e, movePatch(e, 'za', 'ar1', { red: 1 }, ctx(1100)));
+    expect(mciQuickMoveArea(e.mci, 'za')).toBe('ar1');
+    expect(mciQuickMoveArea(e.mci, 'zb')).toBe('c1');
+    e = apply(e, undoPatch(e, e.mci!.log.at(-1)!.id, ctx(1200)));
+    expect(mciQuickMoveArea(e.mci, 'za')).toBe('c1');
+    expect(mciQuickMoveArea(undefined, 'za')).toBeUndefined();
+  });
+
+  it('turns patient boxes on at declare, keeps the choice on re-declare, and toggles', () => {
+    const base = baseEvent();
+    let e = { ...base, ...declareMci(base, { zones: [], areas: [], trackPatients: true }, 100) } as Event;
+    expect(e.mci!.trackPatients).toBe(true);
+    e = { ...e, ...standDownMci(e, 200) } as Event;
+    e = { ...e, ...declareMci(e, { zones: [], areas: [] }, 300) } as Event;
+    expect(e.mci!.trackPatients).toBe(true);
+    e = apply(e, setTrackPatientsPatch(e, false));
+    expect(e.mci!.trackPatients).toBe(false);
+    expect(setTrackPatientsPatch(e, false)).toEqual({ patch: {} });
+  });
+
+  it('describes patient entries in the CSV', () => {
+    let e = withPatients();
+    const id = patientsOf(e, 'c1').find((p) => p.color === 'yellow')!.id;
+    e = apply(e, setPatientDetailsPatch(e, id, { age: '34', sex: 'f', complaint: 'ankle' }));
+    e = apply(e, reassignPatientPatch(e, id, { color: 'red', areaId: 'ar1' }, 'worse', ctx(3000)));
+    e = apply(e, arrivePatch(e, 'c1', 'green', 1, ctx(3100)));
+    const lines = mciCsvLines(e, (ms) => `T${ms}`);
+    expect(lines).toContain('MCI,Clinic,T3000,"reassigned yellow 1 (34 F ankle) from Clinic as red to Overflow note: worse"');
+    expect(lines).toContain('MCI,Clinic,T3100,"arrived green 1 to Clinic"');
   });
 });

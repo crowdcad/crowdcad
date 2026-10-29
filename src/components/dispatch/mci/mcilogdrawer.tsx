@@ -3,7 +3,7 @@
 import React from 'react';
 import { Button } from '@heroui/react';
 import type { Event, MciLogEntry } from '@/app/types';
-import { MCI_LOG_DRAWER_SIZE, mciRecentEntries } from '@/lib/mci';
+import { MCI_LOG_DRAWER_SIZE, mciPatientLabel, mciRecentEntries } from '@/lib/mci';
 import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
 import { MCI_COLOR_STYLES } from './mciparts';
 
@@ -18,6 +18,12 @@ function clock(ms: number): string {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
 }
 
+/** "1 red (34 M chest pain)" for an entry about one patient. */
+function patientText(mci: NonNullable<Event['mci']>, entry: MciLogEntry, color: string): string {
+  const label = mciPatientLabel(entry.patientId ? mci.patients?.[entry.patientId] : undefined);
+  return `1 ${color}${label ? ` (${label})` : ''}`;
+}
+
 /** One log line in words, e.g. "Zone A: +3 red tagged" or "Zone A: 2 yellow moved to Clinic". */
 export function describeMciEntry(mci: NonNullable<Event['mci']>, entry: MciLogEntry): string {
   const zone = mci.zones.find((z) => z.id === entry.zoneId)?.name ?? 'Zone';
@@ -28,9 +34,18 @@ export function describeMciEntry(mci: NonNullable<Event['mci']>, entry: MciLogEn
       return `${zone}: ${(entry.n ?? 0) > 0 ? '+' : ''}${entry.n} ${color} tagged`;
     case 'moved':
       return `${zone}: ${entry.n} ${color} moved to ${area}`;
+    case 'arrived':
+      return `${area}: ${entry.n} ${color} walk-in`;
+    case 'reassigned': {
+      const changes = [
+        entry.toColor ? `retriaged ${color} to ${MCI_COLOR_STYLES[entry.toColor].label.toLowerCase()}` : '',
+        entry.toAreaId ? `moved to ${mci.areas.find((a) => a.id === entry.toAreaId)?.name ?? 'treatment'}` : '',
+      ].filter(Boolean);
+      return `${area}: ${patientText(mci, entry, color)} ${changes.join(', ')}${entry.note ? ` (${entry.note})` : ''}`;
+    }
     case 'transported': {
-      const from = mci.areas.find((a) => a.id === entry.areaId)?.name ?? 'treatment';
-      return `${from}: ${entry.n} ${color} transported${entry.unit ? ` in ${entry.unit}` : ''}${entry.destination ? ` to ${entry.destination}` : ''}`;
+      const who = entry.patientId ? patientText(mci, entry, color) : `${entry.n} ${color}`;
+      return `${area}: ${who} transported${entry.unit ? ` in ${entry.unit}` : ''}${entry.destination ? ` to ${entry.destination}` : ''}`;
     }
     case 'zone_cleared':
       return `${zone}: marked clear`;
