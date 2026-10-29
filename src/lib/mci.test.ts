@@ -16,6 +16,7 @@ import {
   mciAvailability,
   mciCsvLines,
   mciMapLayers,
+  mciPatientCsvLines,
   mciPatientId,
   mciPatientLabel,
   mciQuickMoveArea,
@@ -878,5 +879,19 @@ describe('patients in treatment locations', () => {
     const lines = mciCsvLines(e, (ms) => `T${ms}`);
     expect(lines).toContain('MCI,Clinic,T3000,"reassigned yellow 1 (34 F ankle) from Clinic as red to Overflow note: worse"');
     expect(lines).toContain('MCI,Clinic,T3100,"arrived green 1 to Clinic"');
+  });
+
+  it('lists one CSV row per patient with where they came from and how they left', () => {
+    let e = withPatients();
+    const [a] = patientsOf(e, 'c1').map((p) => p.id);
+    e = apply(e, setPatientDetailsPatch(e, a, { age: '34', sex: 'm', complaint: 'chest pain', team: '12' }));
+    e = apply(e, transportPatientPatch(e, a, { unit: 'A14', destination: 'General' }, ctx(2000 + 5 * 60000)));
+    e = apply(e, arrivePatch(e, 'ar1', 'green', 1, ctx(4000)));
+    const lines = mciPatientCsvLines(e, (ms) => `T${ms}`);
+    expect(lines).toHaveLength(4);
+    expect(lines[0]).toBe('MCI patient,Clinic,T2000,"red 34 M chest pain from Zone A team 12; transported T302000 by A14 to General (5 min in treatment)"');
+    expect(lines[1]).toBe('MCI patient,Clinic,T2000,"red from Zone A; still in treatment"');
+    expect(lines[3]).toBe('MCI patient,Overflow,T4000,"green walk-in; still in treatment"');
+    expect(mciPatientCsvLines(baseEvent(), String)).toEqual([]);
   });
 });

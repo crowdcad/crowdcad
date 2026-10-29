@@ -10,7 +10,7 @@ import { Button } from '@heroui/react';
 import { getScheduleWindow, teamStatusBreakdown, teamAvailabilitySeries, getSurgeIntervals } from '@/lib/analyticsUtils';
 import { getZoneCallSummaries } from '@/lib/zones';
 import { formatLogTimestampForCsv } from '@/lib/csvFormat';
-import { hasMci, mciCsvLines, mciSeries } from '@/lib/mci';
+import { hasMci, mciCsvLines, mciPatientCsvLines, mciSeries } from '@/lib/mci';
 import MciSummary from '@/components/dispatch/mci/mcisummary';
 import { GRID_WRAPPER, GRID_CELL } from './summaryGrid';
 import EquipmentTimeline from './EquipmentTimeline';
@@ -147,8 +147,9 @@ export default function SummaryPage() {
       }
     });
 
-    // MCI log, in time order
+    // MCI log, in time order, then one row per patient in treatment
     csvRows.push(...mciCsvLines(event, formatTimestamp));
+    csvRows.push(...mciPatientCsvLines(event, formatTimestamp));
 
     // Zone Summary
     zoneCallSummaries.forEach((zone) => {

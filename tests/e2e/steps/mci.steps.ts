@@ -74,9 +74,83 @@ When('I transport {int} {string} patients from {string} in ambulance {string}', 
   const dialog = page.getByTestId('mci-transport-modal');
   await expect(dialog).toBeVisible();
   await dialog.getByTestId('mci-transport-unit').fill(unit);
-  await dialog.getByTestId(`mci-transport-${color}`).fill(String(count));
+  // With patient boxes on (the default) red, yellow and green are picked by name; otherwise by count.
+  const named = dialog.getByTestId(`mci-transport-patient-${color}`);
+  if ((await named.count()) > 0) {
+    for (let i = 0; i < count; i++) await named.nth(i).click();
+  } else {
+    await dialog.getByTestId(`mci-transport-${color}`).fill(String(count));
+  }
   await dialog.getByTestId('mci-transport-confirm').click();
   await expect(dialog).not.toBeVisible();
+});
+
+// Patient boxes in a treatment location. "patient 2" is the second box in that color's column, top down.
+const patientBox = (page: import('@playwright/test').Page, color: string, n: number, area: string) =>
+  page.getByTestId(`mci-area-${area}`).getByTestId(`mci-patient-column-${color}`).getByTestId(`mci-patient-${color}`).nth(n - 1);
+
+When('I quick move {int} {string} patients from zone {string}', async ({ page }, count: number, color: string, zone: string) => {
+  const plus = page.getByTestId(`mci-zone-${zone}-${color}-quickmove`);
+  for (let i = 0; i < count; i++) await plus.click();
+});
+
+When('I enter age {string} sex {string} and complaint {string} for {string} patient {int} in {string}', async ({ page }, age: string, sex: string, complaint: string, color: string, n: number, area: string) => {
+  const box = patientBox(page, color, n, area);
+  await box.getByTestId('mci-patient-age').fill(age);
+  await box.getByTestId('mci-patient-age').press('Enter');
+  // One letter in Sex moves on to the chief complaint by itself.
+  await page.keyboard.type(sex);
+  await expect(box.getByTestId('mci-patient-complaint')).toBeFocused();
+  await page.keyboard.type(complaint);
+  await page.keyboard.press('Tab');
+});
+
+Then('{string} patient {int} in {string} should read age {string} sex {string} and complaint {string}', async ({ page }, color: string, n: number, area: string, age: string, sex: string, complaint: string) => {
+  const box = patientBox(page, color, n, area);
+  await expect(box.getByTestId('mci-patient-age')).toHaveValue(age);
+  await expect(box.getByTestId('mci-patient-sex')).toHaveValue(sex);
+  await expect(box.getByTestId('mci-patient-complaint')).toHaveValue(complaint);
+});
+
+When('I set the priority of {string} patient {int} in {string} to {int}', async ({ page }, color: string, n: number, area: string, rank: number) => {
+  const input = patientBox(page, color, n, area).getByTestId('mci-patient-priority');
+  await input.fill(String(rank));
+  await input.press('Enter');
+  await input.blur();
+});
+
+Then('{string} patient {int} in {string} should have priority {string}', async ({ page }, color: string, n: number, area: string, rank: string) => {
+  await expect(patientBox(page, color, n, area).getByTestId('mci-patient-priority')).toHaveValue(rank);
+});
+
+When('I retriage {string} patient {int} in {string} to {string} with note {string}', async ({ page }, color: string, n: number, area: string, to: string, note: string) => {
+  await patientBox(page, color, n, area).getByTestId('mci-patient-menu').click();
+  await page.getByTestId(`mci-patient-retriage-${to}`).click();
+  const dialog = page.getByTestId('mci-reassign-modal');
+  await expect(dialog).toBeVisible();
+  await dialog.getByTestId('mci-reassign-note').fill(note);
+  await dialog.getByTestId('mci-reassign-confirm').click();
+  await expect(dialog).not.toBeVisible();
+});
+
+When('I mark {string} patient {int} in {string} transported in ambulance {string}', async ({ page }, color: string, n: number, area: string, unit: string) => {
+  const box = patientBox(page, color, n, area);
+  await box.getByTestId('mci-patient-transport').click();
+  await box.getByTestId('mci-patient-transport-unit').fill(unit);
+  await box.getByTestId('mci-patient-transport-confirm').click();
+});
+
+Then('the {string} column in {string} should list {int} patients', async ({ page }, color: string, area: string, count: number) => {
+  await expect(page.getByTestId(`mci-area-${area}`).getByTestId(`mci-patient-column-${color}`).getByTestId(`mci-patient-${color}`)).toHaveCount(count);
+});
+
+Then('the MCI log should mention {string}', async ({ page }, text: string) => {
+  await page.getByTestId('mci-log-toggle').click();
+  await expect(page.getByTestId('mci-log-drawer')).toContainText(text);
+});
+
+Then('the MCI summary patients should include {string}', async ({ page }, text: string) => {
+  await expect(page.getByTestId('mci-summary-patients')).toContainText(text);
 });
 
 Then('the MCI summary should list treatment location {string} with {int} transported', async ({ page }, area: string, transported: number) => {

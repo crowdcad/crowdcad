@@ -37,6 +37,11 @@ export default function MciTotalsStrip({ mci, totals }: Props) {
       <Stat label={t('Tagged')} testId="mci-total-tagged">
         <MciCountsLine counts={totals.tagged} />
       </Stat>
+      {totals.arrivedTotal > 0 && (
+        <Stat label="Walk-ins" testId="mci-total-walkins">
+          {totals.arrivedTotal}
+        </Stat>
+      )}
       <Stat label="In zones now" testId="mci-total-inzones">
         {totals.inZonesTotal}
       </Stat>

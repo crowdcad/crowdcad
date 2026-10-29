@@ -1104,6 +1104,31 @@ export function mciCsvLines(event: Pick<Event, 'mci'>, formatTimestamp: (ms: num
   return rows.sort((a, b) => a.t - b.t || a.order - b.order).map((r) => r.line);
 }
 
+/**
+ * One summary CSV row per patient who reached a treatment location, in arrival order:
+ * `MCI patient,<location>,<arrived>,"<color> <age sex complaint> from <zone> team <team>; transported <time> by <unit> to <destination>"`.
+ */
+export function mciPatientCsvLines(event: Pick<Event, 'mci' | 'calls' | 'clinics'>, formatTimestamp: (ms: number) => string): string[] {
+  const mci = event.mci;
+  if (!mci) return [];
+  const derived = deriveMci(event);
+  const zoneName = (id?: string) => mci.zones.find((z) => z.id === id)?.name;
+  const areaName = (id: string) => derived.areas.find((a) => a.area.id === id)?.name ?? id;
+  return derived.patients.map((p) => {
+    const parts = [
+      p.color,
+      mciPatientLabel(p.details) || undefined,
+      p.fromZoneId ? `from ${zoneName(p.fromZoneId) ?? p.fromZoneId}` : 'walk-in',
+      p.details.team ? `team ${p.details.team}` : undefined,
+    ].filter(Boolean);
+    const left =
+      p.transportedAt !== undefined
+        ? `; transported ${formatTimestamp(p.transportedAt)}${p.unit ? ` by ${p.unit}` : ''}${p.destination ? ` to ${p.destination}` : ''} (${Math.round((p.transportedAt - p.arrivedAt) / 60000)} min in treatment)`
+        : '; still in treatment';
+    return `MCI patient,${areaName(p.areaId)},${formatTimestamp(p.arrivedAt)},${csvQuote(parts.join(' ') + left)}`;
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Map shapes. A zone or treatment area can be drawn on the venue map. The
 // shape is an ordinary zone on the event's copy of the venue layers, so the

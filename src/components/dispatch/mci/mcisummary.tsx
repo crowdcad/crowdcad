@@ -11,11 +11,13 @@ type Props = {
   formatTimestamp: (ms: number) => string;
 };
 
-/** The post-event MCI record: periods, patients per zone by color, and patients received per treatment location. */
+/** The post-event MCI record: periods, patients per zone by color, patients received per treatment location, and each patient seen in treatment. */
 export default function MciSummary({ event, formatTimestamp }: Props) {
   const derived = useMemo(() => deriveMci(event), [event]);
   const mci = event.mci;
   if (!mci || mci.periods.length === 0) return null;
+  const zoneNames = new Map(mci.zones.map((z) => [z.id, z.name]));
+  const areaNames = new Map(derived.areas.map((a) => [a.area.id, a.name]));
 
   return (
     <div className={`grid grid-cols-1 ${GRID_WRAPPER}`} data-testid="mci-summary">
@@ -108,6 +110,54 @@ export default function MciSummary({ event, formatTimestamp }: Props) {
             </tbody>
           </table>
         </div>
+
+        {derived.patients.length > 0 && (
+          <>
+            <h3 className="mb-1 mt-5 text-sm font-semibold text-surface-faint">Patients in treatment</h3>
+            <div className="minimal-scrollbar overflow-x-auto">
+              <table className="w-full text-sm" data-testid="mci-summary-patients">
+                <thead>
+                  <tr className="text-left text-surface-faint">
+                    <th className="py-1 pr-3 font-normal">Tag</th>
+                    <th className="px-2 font-normal">Age</th>
+                    <th className="px-2 font-normal">Sex</th>
+                    <th className="px-2 font-normal">Chief complaint</th>
+                    <th className="px-2 font-normal">From</th>
+                    <th className="px-2 font-normal">Team</th>
+                    <th className="px-2 font-normal">Location</th>
+                    <th className="px-2 font-normal">Arrived</th>
+                    <th className="px-2 font-normal">Transported</th>
+                    <th className="px-2 text-right font-normal">Minutes in treatment</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {derived.patients.map((p) => (
+                    <tr key={p.id} className="border-t border-surface-liner/70">
+                      <td className="py-1 pr-3">
+                        <span className="inline-flex items-center gap-1"><MciColorDot color={p.color} />{MCI_COLOR_STYLES[p.color].label}</span>
+                      </td>
+                      <td className="px-2 tabular-nums">{p.details.age ?? ''}</td>
+                      <td className="px-2">{p.details.sex ?? ''}</td>
+                      <td className="px-2">{p.details.complaint ?? ''}</td>
+                      <td className="px-2">{p.fromZoneId ? zoneNames.get(p.fromZoneId) ?? '' : 'Walk-in'}</td>
+                      <td className="px-2">{p.details.team ?? ''}</td>
+                      <td className="px-2">{areaNames.get(p.areaId) ?? ''}</td>
+                      <td className="px-2 tabular-nums">{formatTimestamp(p.arrivedAt)}</td>
+                      <td className="px-2">
+                        {p.transportedAt !== undefined
+                          ? `${formatTimestamp(p.transportedAt)}${p.unit ? `, ${p.unit}` : ''}${p.destination ? ` to ${p.destination}` : ''}`
+                          : 'Still in treatment'}
+                      </td>
+                      <td className="px-2 text-right tabular-nums">
+                        {Math.round((((p.transportedAt ?? mci.periods[mci.periods.length - 1]?.endedAt) ?? Date.now()) - p.arrivedAt) / 60000)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
