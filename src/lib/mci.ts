@@ -1190,6 +1190,8 @@ export interface MciTransportTrip {
   /** Patients by tag color on this trip. */
   counts: MciCounts;
   total: number;
+  /** The patients on this trip that were picked by name (not by count), with their details. */
+  patients: MciPatient[];
 }
 
 /**
@@ -1198,13 +1200,18 @@ export interface MciTransportTrip {
  */
 export function mciTransportTrips(mci: MciState | undefined, areaId: string): MciTransportTrip[] {
   if (!mci) return [];
+  const live = liveEntries(mci.log);
+  const patients = new Map(replayPatients(mci, live).patients.map((p) => [p.id, p]));
   const trips = new Map<string, MciTransportTrip>();
-  for (const entry of liveEntries(mci.log)) {
+  for (const entry of live) {
     if (entry.kind !== 'transported' || entry.areaId !== areaId || !entry.color || !entry.n) continue;
     const key = `${entry.t}|${entry.unit ?? ''}|${entry.destination ?? ''}`;
-    const trip = trips.get(key) ?? { t: entry.t, unit: entry.unit ?? '', ...(entry.destination ? { destination: entry.destination } : {}), counts: emptyCounts(), total: 0 };
+    const trip =
+      trips.get(key) ?? { t: entry.t, unit: entry.unit ?? '', ...(entry.destination ? { destination: entry.destination } : {}), counts: emptyCounts(), total: 0, patients: [] };
     trip.counts[entry.color] += entry.n;
     trip.total += entry.n;
+    const patient = entry.patientId ? patients.get(entry.patientId) : undefined;
+    if (patient) trip.patients.push(patient);
     trips.set(key, trip);
   }
   return [...trips.values()].sort((a, b) => b.t - a.t);

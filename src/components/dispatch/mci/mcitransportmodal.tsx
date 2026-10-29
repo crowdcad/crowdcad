@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useId, useState } from 'react';
-import { Modal, ModalContent, ModalHeader, ModalBody, ModalFooter, Button, Input } from '@heroui/react';
-import { MCI_COLORS, sumCounts, type MciAreaStats, type MciCounts } from '@/lib/mci';
+import { Modal, ModalContent, ModalHeader, ModalBody, ModalFooter, Button, Checkbox, Input } from '@heroui/react';
+import type { MciColor } from '@/app/types';
+import { MCI_COLORS, mciPatientLabel, sumCounts, type MciAreaStats, type MciCounts } from '@/lib/mci';
 import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
 import { MCI_COLOR_STYLES, MCI_NUMBER_INPUT, MciColorDot } from './mciparts';
 
@@ -11,9 +12,14 @@ type Props = {
   area: MciAreaStats | null;
   /** Ambulance numbers already used this MCI, offered as suggestions. */
   units: string[];
+  /** Patients are tracked: pick them by name (priority order), with a count only for black (D14). */
+  trackPatients?: boolean;
   onClose: () => void;
-  onTransport: (areaId: string, counts: MciCounts, trip: { unit: string; destination?: string }) => boolean | Promise<boolean>;
+  onTransport: (areaId: string, counts: MciCounts, trip: { unit: string; destination?: string }, patientIds: string[]) => boolean | Promise<boolean>;
 };
+
+/** Colors picked by name when patients are tracked; the rest keep a count. */
+const NAMED_COLORS = new Set<MciColor>(['red', 'yellow', 'green']);
 
 const inputClassNames = {
   inputWrapper: 'rounded-xl px-3 group-data-[focus-visible=true]:ring-0 group-data-[focus-visible=true]:ring-offset-0',
@@ -21,13 +27,16 @@ const inputClassNames = {
 } as const;
 
 // Remounted by `key` for each location, so the numbers start at nothing.
-function TransportForm({ area, units, onClose, onTransport }: Omit<Props, 'area'> & { area: MciAreaStats }) {
+function TransportForm({ area, units, trackPatients = false, onClose, onTransport }: Omit<Props, 'area'> & { area: MciAreaStats }) {
   const { t } = useDispatchTerms();
   const listId = useId();
   const [unit, setUnit] = useState('');
   const [destination, setDestination] = useState('');
   const [counts, setCounts] = useState<MciCounts>({ red: 0, yellow: 0, green: 0, black: 0 });
+  const [picked, setPicked] = useState<Set<string>>(new Set());
   const [submitting, setSubmitting] = useState(false);
+  const namedPatients = trackPatients ? area.patients.filter((p) => NAMED_COLORS.has(p.color)) : [];
+  const countedColors = MCI_COLORS.filter((color) => !trackPatients || !NAMED_COLORS.has(color));
 
   // A trip cannot take more than is in the location.
   const set = (color: (typeof MCI_COLORS)[number], raw: string) => {
@@ -36,13 +45,13 @@ function TransportForm({ area, units, onClose, onTransport }: Omit<Props, 'area'
     setCounts((prev) => ({ ...prev, [color]: value }));
   };
 
-  const total = sumCounts(counts);
+  const total = sumCounts(counts) + picked.size;
   const canSubmit = !submitting && unit.trim().length > 0 && total > 0;
   const submit = async () => {
     if (!canSubmit) return;
     setSubmitting(true);
     try {
-      const ok = await onTransport(area.area.id, counts, { unit, destination });
+      const ok = await onTransport(area.area.id, counts, { unit, destination }, [...picked]);
       if (ok) onClose();
     } finally {
       setSubmitting(false);
@@ -92,11 +101,41 @@ function TransportForm({ area, units, onClose, onTransport }: Omit<Props, 'area'
           data-testid="mci-transport-destination"
         />
 
-        <div className="grid grid-cols-[1fr_auto_auto] items-center gap-x-4 gap-y-2 text-sm">
+        {trackPatients && (
+          <div className="flex flex-col gap-1" data-testid="mci-transport-patients">
+            <span className="text-xs text-surface-faint">Patients, in transport order</span>
+            {namedPatients.length === 0 && <p className="text-sm italic text-surface-faint">No red, yellow or green patients here.</p>}
+            <div className="minimal-scrollbar flex max-h-64 flex-col gap-0.5 overflow-y-auto">
+              {namedPatients.map((p) => (
+                <Checkbox
+                  key={p.id}
+                  size="sm"
+                  isSelected={picked.has(p.id)}
+                  onValueChange={(on) =>
+                    setPicked((prev) => {
+                      const next = new Set(prev);
+                      if (on) next.add(p.id);
+                      else next.delete(p.id);
+                      return next;
+                    })
+                  }
+                  classNames={{ base: 'm-0 max-w-full rounded-md px-1 py-0.5 hover:bg-surface-liner/50', label: 'flex min-w-0 items-center gap-2 text-sm normal-case tracking-normal' }}
+                  data-testid={`mci-transport-patient-${p.color}`}
+                >
+                  <span className="w-5 text-center text-xs font-semibold tabular-nums text-surface-faint">{p.rank ?? ''}</span>
+                  <MciColorDot color={p.color} />
+                  <span className={`truncate ${mciPatientLabel(p.details) ? 'text-surface-light' : 'italic text-surface-faint'}`}>{mciPatientLabel(p.details) || 'No details'}</span>
+                </Checkbox>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className={`grid grid-cols-[1fr_auto_auto] items-center gap-x-4 gap-y-2 text-sm ${countedColors.every((c) => area.inTreatment[c] <= 0) && trackPatients ? 'hidden' : ''}`}>
           <span className="text-xs text-surface-faint" />
           <span className="text-xs text-surface-faint">Here now</span>
           <span className="text-xs text-surface-faint">Transport</span>
-          {MCI_COLORS.map((color) => (
+          {countedColors.map((color) => (
             <React.Fragment key={color}>
               <span className="inline-flex items-center gap-1.5 text-surface-light">
                 <MciColorDot color={color} />
@@ -131,7 +170,7 @@ function TransportForm({ area, units, onClose, onTransport }: Omit<Props, 'area'
   );
 }
 
-export default function MciTransportModal({ area, units, onClose, onTransport }: Props) {
+export default function MciTransportModal({ area, units, trackPatients, onClose, onTransport }: Props) {
   return (
     <Modal
       isOpen={!!area}
@@ -145,7 +184,7 @@ export default function MciTransportModal({ area, units, onClose, onTransport }:
       classNames={{ base: 'mt-20 rounded-lg bg-surface-deepest text-surface-light', header: 'pb-0', footer: 'pt-0', body: 'minimal-scrollbar' }}
     >
       <ModalContent data-testid="mci-transport-modal">
-        {() => (area ? <TransportForm key={area.area.id} area={area} units={units} onClose={onClose} onTransport={onTransport} /> : null)}
+        {() => (area ? <TransportForm key={area.area.id} area={area} units={units} trackPatients={trackPatients} onClose={onClose} onTransport={onTransport} /> : null)}
       </ModalContent>
     </Modal>
   );

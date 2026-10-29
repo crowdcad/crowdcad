@@ -6,11 +6,11 @@ import React from 'react';
 import type { MciColor } from '@/app/types';
 import { MCI_COLORS, sumCounts, type MciCounts } from '@/lib/mci';
 
-export const MCI_COLOR_STYLES: Record<MciColor, { label: string; dotClass: string; textClass: string }> = {
-  red: { label: 'Red', dotClass: 'bg-red-500 border-red-300', textClass: 'text-red-400' },
-  yellow: { label: 'Yellow', dotClass: 'bg-yellow-400 border-yellow-200', textClass: 'text-yellow-300' },
-  green: { label: 'Green', dotClass: 'bg-green-500 border-green-300', textClass: 'text-green-400' },
-  black: { label: 'Black', dotClass: 'bg-neutral-900 border-neutral-500', textClass: 'text-surface-faint' },
+export const MCI_COLOR_STYLES: Record<MciColor, { label: string; dotClass: string; textClass: string; borderLeftClass: string }> = {
+  red: { label: 'Red', dotClass: 'bg-red-500 border-red-300', textClass: 'text-red-400', borderLeftClass: 'border-l-red-500' },
+  yellow: { label: 'Yellow', dotClass: 'bg-yellow-400 border-yellow-200', textClass: 'text-yellow-300', borderLeftClass: 'border-l-yellow-400' },
+  green: { label: 'Green', dotClass: 'bg-green-500 border-green-300', textClass: 'text-green-400', borderLeftClass: 'border-l-green-500' },
+  black: { label: 'Black', dotClass: 'bg-neutral-900 border-neutral-500', textClass: 'text-surface-faint', borderLeftClass: 'border-l-neutral-500' },
 };
 
 /** The Tagged pill: a solid tag color behind the - number + control, with text that reads on it. */

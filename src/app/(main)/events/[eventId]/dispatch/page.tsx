@@ -2059,7 +2059,13 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
           setEvent(prev => {
             // While this dispatcher's own MCI taps are still saving, a snapshot with a shorter log is the
             // echo of an earlier tap; keeping the local log stops the counts stepping back and forward.
-            const staleMci = mciWritesInFlight.current > 0 && prev?.mci && (eventData.mci?.log.length ?? 0) < prev.mci.log.length;
+            // Patient details and priorities change no log length, so an echo with the same length that
+            // differs from the local copy is kept back too; the saving write's own echo brings everything.
+            const incomingLog = eventData.mci?.log.length ?? 0;
+            const staleMci =
+              mciWritesInFlight.current > 0 &&
+              prev?.mci &&
+              (incomingLog < prev.mci.log.length || (incomingLog === prev.mci.log.length && !isEqual(eventData.mci?.patients, prev.mci.patients)));
             const incoming = staleMci ? { ...eventData, mci: prev.mci } : eventData;
             if (!isEqual(prev, incoming)) {
               setPostAssignments(incoming.postAssignments || {});

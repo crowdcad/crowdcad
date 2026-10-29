@@ -2,14 +2,15 @@
 
 import React, { useMemo, useState } from 'react';
 import { CornerDownLeft } from 'lucide-react';
-import { Button, Input } from '@heroui/react';
+import { Button, Checkbox, Input } from '@heroui/react';
 import type { Event, MciColor } from '@/app/types';
 import { deriveMci, mciMapLayers, mciQuickMoveArea, mciShapeOf, mciTransportTrips, mciTransportUnits, mciUnitsAt, type MciCounts } from '@/lib/mci';
 import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
 import type { MciActions } from './usemciactions';
 import MciTotalsStrip from './mcitotalsstrip';
 import MciZoneCard from './mcizonecard';
-import MciTreatmentCard from './mcitreatmentcard';
+import MciTreatmentCard, { type MciPatientHandlers } from './mcitreatmentcard';
+import MciReassignModal, { type MciReassignRequest } from './mcireassignmodal';
 import MciMoveModal from './mcimovemodal';
 import MciTransportModal from './mcitransportmodal';
 import MciDrawZoneModal, { type MciDrawTarget } from './mcidrawzonemodal';
@@ -70,6 +71,7 @@ export default function MciTab({ event, actions }: Props) {
   const [showLog, setShowLog] = useState(false);
   // Quick move destinations the dispatcher picked on a zone card, this browser only; otherwise the log decides.
   const [quickTargets, setQuickTargets] = useState<Record<string, string>>({});
+  const [reassign, setReassign] = useState<MciReassignRequest | null>(null);
 
   if (!mci) return null;
   const readOnly = !mci.active;
@@ -143,11 +145,42 @@ export default function MciTab({ event, actions }: Props) {
     if (areaId) void actions.move(zoneId, areaId, { [color]: 1 });
   };
 
+  // Patient boxes (D11). Team suggestions put the teams that worked the patient's zone first.
+  const allTeams = [...(event.staff || []), ...(event.supervisor || [])].map((u) => u.team).filter(Boolean);
+  const patientHandlers: MciPatientHandlers | undefined = mci.trackPatients
+    ? {
+        zoneNames: Object.fromEntries(mci.zones.map((z) => [z.id, z.name])),
+        teamSuggestions: (zoneId) => {
+          const first = zoneId ? mciUnitsAt(event, { kind: 'zone', id: zoneId }) : [];
+          return [...first, ...allTeams.filter((name) => !first.includes(name))];
+        },
+        unitSuggestions: transportUnits,
+        areas: areaOptions,
+        onDetails: (id, fields) => void actions.setPatientDetails(id, fields),
+        onPriority: (id, rank) => void actions.setPatientPriority(id, rank),
+        onTransportPatient: (id, trip) => actions.transportPatient(id, trip),
+        onReassign: (patient, target) => setReassign({ patient, target }),
+        onDropPatient: (id, target) => {
+          const patient = derived.patients.find((p) => p.id === id && p.transportedAt === undefined);
+          if (!patient) return;
+          // Dropped back where it was: nothing to ask.
+          if ((target.areaId ?? patient.areaId) === patient.areaId && (target.color ?? patient.color) === patient.color) return;
+          setReassign({ patient, target });
+        },
+        onArrive: (areaId, color) => void actions.arrive(areaId, color),
+      }
+    : undefined;
+
   return (
     <div className="minimal-scrollbar flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto" data-testid="mci-tab">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <MciTotalsStrip mci={mci} totals={derived.totals} />
         <div className="flex items-center gap-2">
+          {!readOnly && (
+            <Checkbox size="sm" isSelected={!!mci.trackPatients} onValueChange={(on) => void actions.setTrackPatients(on)} data-testid="mci-track-patients">
+              <span className="text-xs text-surface-light">Patient boxes</span>
+            </Checkbox>
+          )}
           <Button size="sm" variant="flat" radius="lg" onPress={() => setShowLog((v) => !v)} aria-expanded={showLog} data-testid="mci-log-toggle">
             Log
           </Button>
@@ -215,6 +248,7 @@ export default function MciTab({ event, actions }: Props) {
               mapEnabled={mapEnabled && !readOnly}
               hasShape={!!shapeOf(stats.area)}
               onDraw={(id) => setDrawChoice({ kind: 'area', id })}
+              patients={patientHandlers}
             />
           ))}
           {derived.areas.length === 0 && <p className="text-sm italic text-surface-faint">No treatment locations yet. Add one by name.</p>}
@@ -234,8 +268,15 @@ export default function MciTab({ event, actions }: Props) {
       <MciTransportModal
         area={readOnly ? null : transportArea}
         units={transportUnits}
+        trackPatients={!!mci.trackPatients}
         onClose={() => setTransportAreaId(null)}
-        onTransport={(areaId, counts, trip) => actions.transport(areaId, counts, trip)}
+        onTransport={(areaId, counts, trip, patientIds) => actions.transport(areaId, counts, trip, patientIds)}
+      />
+      <MciReassignModal
+        request={readOnly ? null : reassign}
+        areas={areaOptions}
+        onClose={() => setReassign(null)}
+        onConfirm={(patientId, target, note) => actions.reassignPatient(patientId, target, note)}
       />
     </div>
   );

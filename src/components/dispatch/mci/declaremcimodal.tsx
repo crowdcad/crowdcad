@@ -12,7 +12,7 @@ type Props = {
   isOpen: boolean;
   event: Event;
   onClose: () => void;
-  onDeclare: (input: { zones: MciZone[]; areas: MciTreatmentArea[] }) => void | Promise<void>;
+  onDeclare: (input: { zones: MciZone[]; areas: MciTreatmentArea[]; trackPatients: boolean }) => void | Promise<void>;
 };
 
 const inputClassNames = {
@@ -45,8 +45,10 @@ function DeclareMciForm({ event, onClose, onDeclare }: Omit<Props, 'isOpen'>) {
   const [zoneDraft, setZoneDraft] = useState('');
   const [areaDraft, setAreaDraft] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  // On by default (D11); a re-declare starts from the earlier choice.
+  const [trackPatients, setTrackPatients] = useState(existing?.trackPatients ?? true);
 
-  const toggle = (set: Set<string>, id: string, on: boolean) => {
+  const toggle =(set: Set<string>, id: string, on: boolean) => {
     const next = new Set(set);
     if (on) next.add(id);
     else next.delete(id);
@@ -94,7 +96,7 @@ function DeclareMciForm({ event, onClose, onDeclare }: Omit<Props, 'isOpen'>) {
         ...clinics.filter((c) => clinicIds.has(c.id)).map((c) => ({ id: c.id, name: c.name, clinicId: c.id })),
         ...addedAreas.map((name) => ({ id: `mci-area-${newMciId()}`, name })),
       ];
-      await onDeclare({ zones, areas });
+      await onDeclare({ zones, areas, trackPatients });
       onClose();
     } finally {
       setSubmitting(false);
@@ -211,6 +213,11 @@ function DeclareMciForm({ event, onClose, onDeclare }: Omit<Props, 'isOpen'>) {
             </Button>
           </div>
         </section>
+
+        <Checkbox isSelected={trackPatients} onValueChange={setTrackPatients} data-testid="mci-declare-track-patients">
+          <span className="text-surface-light">Track patients in treatment</span>
+          <span className="block text-xs text-surface-faint">A box per patient for age, sex and chief complaint. Untick for counts only.</span>
+        </Checkbox>
       </ModalBody>
       <ModalFooter className="flex justify-end gap-2">
         <Button onPress={onClose} variant="flat" radius="lg" className="bg-status-red/20 px-4 py-2 text-status-red hover:bg-status-red/30">
