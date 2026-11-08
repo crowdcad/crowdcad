@@ -6,7 +6,7 @@ import { Dropdown, DropdownItem, DropdownMenu, DropdownSection, DropdownTrigger 
 import type { MciColor } from '@/app/types';
 import { MCI_COLORS, mciPatientLabel, type MciPatient, type MciPatientField } from '@/lib/mci';
 import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
-import { MCI_COLOR_STYLES, formatClock } from './mciparts';
+import { MCI_COLOR_STYLES, NO_SPINNER, formatClock } from './mciparts';
 
 /** The drag payload type for a patient box; the value is the patient id. */
 export const MCI_PATIENT_DRAG_TYPE = 'application/x-ccad-mci-patient';
@@ -18,8 +18,8 @@ type Props = {
   /** The zone the patient came from, for the second line. */
   zoneName?: string;
   readOnly: boolean;
-  /** Team names for the Team field, the ones that worked the patient's zone first. */
-  teamSuggestions: string[];
+  /** Id of the shared <datalist> of team names for the Team field (the tab renders one per zone, not one per box). */
+  teamListId: string;
   /** Ambulance numbers used this MCI. */
   unitSuggestions: string[];
   /** Every treatment location, for the box's Move to menu. */
@@ -34,7 +34,7 @@ type Props = {
 /** A small cell input: borderless until hovered or focused, so an empty box reads as placeholders. */
 const CELL =
   'h-6 min-w-0 rounded-sm border border-transparent bg-surface-liner/30 px-1 text-xs text-surface-light placeholder:text-surface-faint outline-none hover:border-surface-liner focus:border-surface-faint focus:outline-none focus:ring-0 focus-visible:ring-0 disabled:cursor-default disabled:hover:border-transparent';
-const NUMBER_CELL = '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none text-center tabular-nums';
+const NUMBER_CELL = `${NO_SPINNER} text-center tabular-nums`;
 const ICON_BUTTON = 'flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-surface-faint hover:bg-surface-liner hover:text-surface-light';
 
 /** Moves focus to the same box's next field, or to the next box's age, for quick entry with Enter. */
@@ -174,8 +174,7 @@ function TransportRow({ units, onCancel, onConfirm }: { units: string[]; onCance
  * from, when, and the team that brought them on the second. The grip drags the box to another column or location;
  * the menu does the same without dragging; the ambulance marks them transported.
  */
-export default function MciPatientBox({ patient, zoneName, readOnly, teamSuggestions, unitSuggestions, areas, onDetails, onPriority, onTransport, onReassign }: Props) {
-  const teamListId = useId();
+export default function MciPatientBox({ patient, zoneName, readOnly, teamListId, unitSuggestions, areas, onDetails, onPriority, onTransport, onReassign }: Props) {
   const [transporting, setTransporting] = useState(false);
   // The box is draggable only while the grip is held, so text in its inputs can still be selected.
   const [dragArmed, setDragArmed] = useState(false);
@@ -332,11 +331,6 @@ export default function MciPatientBox({ patient, zoneName, readOnly, teamSuggest
           className="ml-auto h-5 w-20 text-[11px]"
           data-testid="mci-patient-team"
         />
-        <datalist id={teamListId}>
-          {teamSuggestions.map((name) => (
-            <option key={name} value={name} />
-          ))}
-        </datalist>
       </div>
 
       {transporting && !readOnly && (

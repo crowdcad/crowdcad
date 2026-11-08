@@ -14,7 +14,7 @@ import type {
   Zone,
 } from '@/app/types';
 import { getEventClinics, isClinicCallResolved } from '@/lib/clinics';
-import { deriveTeamVisualStatus } from '@/lib/statusColors';
+import { teamVisualStatusResolver } from '@/lib/statusColors';
 import { isGeoLayer } from '@/lib/geo/layers';
 
 // Mass casualty incident (MCI) mode. The log on `event.mci` is the only source
@@ -85,17 +85,22 @@ const NO_CHANGE: MciWrite = { patch: {} };
 // Derivation
 // ---------------------------------------------------------------------------
 
-/** Log entries that count: not themselves undo entries and not undone, in log order. */
-function liveEntries(log: readonly MciLogEntry[]): MciLogEntry[] {
+export function undoneIds(log: readonly MciLogEntry[]): Set<string> {
   const undone = new Set<string>();
   for (const entry of log) {
     if (entry.kind === 'undo' && entry.undoes) undone.add(entry.undoes);
   }
+  return undone;
+}
+
+/** Log entries that count: not themselves undo entries and not undone, in log order. */
+function liveEntries(log: readonly MciLogEntry[]): MciLogEntry[] {
+  const undone = undoneIds(log);
   return log.filter((entry) => entry.kind !== 'undo' && !undone.has(entry.id));
 }
 
-export function undoneIds(log: readonly MciLogEntry[]): Set<string> {
-  return new Set(log.filter((e) => e.kind === 'undo' && e.undoes).map((e) => e.undoes as string));
+function addCounts(into: MciCounts, from: MciCounts) {
+  for (const color of MCI_COLORS) into[color] += from[color];
 }
 
 export interface MciZoneStats {
@@ -156,6 +161,8 @@ export interface MciAreaStats {
   inTreatmentTotal: number;
   /** The patients here now: those with a transport priority first, in that order, then by arrival. */
   patients: MciPatient[];
+  /** Ambulance trips that left from here, newest first (see `mciTransportTrips`). */
+  trips: MciTransportTrip[];
   /** Unresolved regular clinic patients, 0 for an MCI-only area. */
   regular: number;
   isClinic: boolean;
@@ -185,14 +192,26 @@ export interface MciDerived {
   consistent: boolean;
 }
 
+/**
+ * Counts unresolved clinic patients per clinic in one pass over the calls, for every clinic area at once.
+ * Calls with no `clinicId` belong to the single or default clinic; with one clinic, every clinic call counts.
+ */
+function regularClinicCounter(event: Pick<Event, 'calls' | 'clinics'>): (clinicId: string | undefined) => number {
+  const clinics = getEventClinics(event.clinics);
+  const single = clinics.length <= 1;
+  const defaultId = clinics[0]?.id;
+  const counts = new Map<string | undefined, number>();
+  for (const call of event.calls || []) {
+    if (!call.clinic || isClinicCallResolved(call)) continue;
+    const key = single ? undefined : call.clinicId ?? defaultId;
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return (clinicId) => (clinicId ? counts.get(single ? undefined : clinicId) ?? 0 : 0);
+}
+
 /** Unresolved clinic patients at a clinic area. Calls with no `clinicId` belong to the single or default clinic. */
 export function regularClinicCount(event: Pick<Event, 'calls' | 'clinics'>, area: Pick<MciTreatmentArea, 'clinicId'>): number {
-  if (!area.clinicId) return 0;
-  const clinics = getEventClinics(event.clinics);
-  const defaultId = clinics[0]?.id;
-  return (event.calls || []).filter(
-    (call) => call.clinic && !isClinicCallResolved(call) && (clinics.length <= 1 || (call.clinicId ?? defaultId) === area.clinicId)
-  ).length;
+  return regularClinicCounter(event)(area.clinicId);
 }
 
 interface ZoneClearState {
@@ -201,10 +220,10 @@ interface ZoneClearState {
   clearedTimes: number[];
 }
 
-function zoneClearStates(mci: MciState): Map<string, ZoneClearState> {
+function zoneClearStates(mci: MciState, live: readonly MciLogEntry[] = liveEntries(mci.log)): Map<string, ZoneClearState> {
   const states = new Map<string, ZoneClearState>();
   for (const zone of mci.zones) states.set(zone.id, { cleared: false, clearedTimes: [] });
-  for (const entry of liveEntries(mci.log)) {
+  for (const entry of live) {
     if (!entry.zoneId) continue;
     const state = states.get(entry.zoneId);
     if (!state) continue;
@@ -314,7 +333,9 @@ function replayPatients(mci: MciState, live: readonly MciLogEntry[]): MciReplay 
   const queues = new Map<string, MciPatient[]>();
   for (const p of patients) {
     if (p.transportedAt !== undefined || typeof p.details.priority !== 'number') continue;
-    queues.set(p.areaId, [...(queues.get(p.areaId) ?? []), p]);
+    const queue = queues.get(p.areaId);
+    if (queue) queue.push(p);
+    else queues.set(p.areaId, [p]);
   }
   for (const queue of queues.values()) {
     queue.sort((a, b) => (a.details.priority as number) - (b.details.priority as number) || a.arrivedAt - b.arrivedAt);
@@ -334,19 +355,20 @@ function byRankThenArrival(a: MciPatient, b: MciPatient): number {
   return a.arrivedAt - b.arrivedAt;
 }
 
-export function deriveMci(event: Pick<Event, 'mci' | 'calls' | 'clinics'>): MciDerived {
-  const mci = event.mci ?? emptyMci();
-  const live = liveEntries(mci.log);
-  const clearStates = zoneClearStates(mci);
+/** Zone stats from the live entries: one pass over the log for every zone. */
+function deriveZones(mci: MciState, live: readonly MciLogEntry[]): MciZoneStats[] {
+  const taggedBy = new Map<string, MciCounts>();
+  const movedBy = new Map<string, MciCounts>();
+  for (const entry of live) {
+    if (!entry.zoneId || !entry.color || !entry.n) continue;
+    if (entry.kind === 'tagged') bump(taggedBy, entry.zoneId, entry.color, entry.n);
+    else if (entry.kind === 'moved') bump(movedBy, entry.zoneId, entry.color, entry.n);
+  }
+  const clearStates = zoneClearStates(mci, live);
 
-  const zones: MciZoneStats[] = mci.zones.map((zone) => {
-    const tagged = emptyCounts();
-    const moved = emptyCounts();
-    for (const entry of live) {
-      if (entry.zoneId !== zone.id || !entry.color || !entry.n) continue;
-      if (entry.kind === 'tagged') tagged[entry.color] += entry.n;
-      else if (entry.kind === 'moved') moved[entry.color] += entry.n;
-    }
+  return mci.zones.map((zone) => {
+    const tagged = taggedBy.get(zone.id) ?? emptyCounts();
+    const moved = movedBy.get(zone.id) ?? emptyCounts();
     const inZone = emptyCounts();
     for (const color of MCI_COLORS) inZone[color] = tagged[color] - moved[color];
     const state = clearStates.get(zone.id) ?? { cleared: false, clearedTimes: [] };
@@ -365,17 +387,58 @@ export function deriveMci(event: Pick<Event, 'mci' | 'calls' | 'clinics'>): MciD
       suggestClear: !state.cleared && taggedTotal > 0 && inZoneTotal === 0,
     };
   });
+}
+
+/** Transport entries grouped into trips per treatment location (same time and ambulance), newest first. */
+function tripsByArea(live: readonly MciLogEntry[], patients: readonly MciPatient[]): Map<string, MciTransportTrip[]> {
+  const byId = new Map(patients.map((p) => [p.id, p]));
+  const trips = new Map<string, MciTransportTrip>();
+  const byArea = new Map<string, MciTransportTrip[]>();
+  for (const entry of live) {
+    if (entry.kind !== 'transported' || !entry.areaId || !entry.color || !entry.n) continue;
+    const key = `${entry.areaId}|${entry.t}|${entry.unit ?? ''}|${entry.destination ?? ''}`;
+    let trip = trips.get(key);
+    if (!trip) {
+      trip = { t: entry.t, unit: entry.unit ?? '', ...(entry.destination ? { destination: entry.destination } : {}), counts: emptyCounts(), total: 0, patients: [] };
+      trips.set(key, trip);
+      const list = byArea.get(entry.areaId);
+      if (list) list.push(trip);
+      else byArea.set(entry.areaId, [trip]);
+    }
+    trip.counts[entry.color] += entry.n;
+    trip.total += entry.n;
+    const patient = entry.patientId ? byId.get(entry.patientId) : undefined;
+    if (patient) trip.patients.push(patient);
+  }
+  for (const list of byArea.values()) list.sort((a, b) => b.t - a.t);
+  return byArea;
+}
+
+export function deriveMci(event: Pick<Event, 'mci' | 'calls' | 'clinics'>): MciDerived {
+  const mci = event.mci ?? emptyMci();
+  const live = liveEntries(mci.log);
+  const zones = deriveZones(mci, live);
 
   const replay = replayPatients(mci, live);
-  const clinics = getEventClinics(event.clinics);
+  const trips = tripsByArea(live, replay.patients);
+  const inArea = new Map<string, MciPatient[]>();
+  for (const p of replay.patients) {
+    if (p.transportedAt !== undefined) continue;
+    const list = inArea.get(p.areaId);
+    if (list) list.push(p);
+    else inArea.set(p.areaId, [p]);
+  }
+  const clinicNames = new Map(getEventClinics(event.clinics).map((c) => [c.id, c.name]));
+  const regularAt = regularClinicCounter(event);
+
   const areas: MciAreaStats[] = mci.areas.map((area) => {
     const received = { ...(replay.received.get(area.id) ?? emptyCounts()) };
     const transported = { ...(replay.transported.get(area.id) ?? emptyCounts()) };
     const transferredOut = { ...(replay.transferredOut.get(area.id) ?? emptyCounts()) };
-    const patients = replay.patients.filter((p) => p.areaId === area.id && p.transportedAt === undefined).sort(byRankThenArrival);
+    const patients = (inArea.get(area.id) ?? []).sort(byRankThenArrival);
     const inTreatment = emptyCounts();
     for (const p of patients) inTreatment[p.color] += 1;
-    const clinicName = area.clinicId ? clinics.find((c) => c.id === area.clinicId)?.name : undefined;
+    const clinicName = area.clinicId ? clinicNames.get(area.clinicId) : undefined;
     return {
       area,
       name: clinicName ?? area.name,
@@ -388,15 +451,16 @@ export function deriveMci(event: Pick<Event, 'mci' | 'calls' | 'clinics'>): MciD
       inTreatment,
       inTreatmentTotal: sumCounts(inTreatment),
       patients,
-      regular: regularClinicCount(event, area),
+      trips: trips.get(area.id) ?? [],
+      regular: regularAt(area.clinicId),
       isClinic: !!area.clinicId,
     };
   });
 
   const tagged = emptyCounts();
-  for (const stats of zones) for (const color of MCI_COLORS) tagged[color] += stats.tagged[color];
+  for (const stats of zones) addCounts(tagged, stats.tagged);
   const transported = emptyCounts();
-  for (const stats of areas) for (const color of MCI_COLORS) transported[color] += stats.transported[color];
+  for (const stats of areas) addCounts(transported, stats.transported);
 
   return {
     zones,
@@ -600,8 +664,11 @@ export function addMciArea(event: Pick<Event, 'mci'>, area: { name: string; clin
   return { patch: { mci: { ...mci, areas: [...mci.areas, added] } } };
 }
 
-function zoneStatsOf(event: Pick<Event, 'mci' | 'calls' | 'clinics'>, zoneId: string): MciZoneStats | undefined {
-  return deriveMci(event).zones.find((z) => z.zone.id === zoneId);
+/** One zone's stats. Only the zone side of the log is replayed; treatment patients are not needed here. */
+function zoneStatsOf(event: Pick<Event, 'mci'>, zoneId: string): MciZoneStats | undefined {
+  const mci = event.mci;
+  if (!mci) return undefined;
+  return deriveZones(mci, liveEntries(mci.log)).find((z) => z.zone.id === zoneId);
 }
 
 /** Adds (or, when `delta` is negative, removes) found patients of one color. A removal is clamped to what is in the zone. Tagging into a cleared zone reopens it. */
@@ -609,6 +676,11 @@ export function tagPatch(event: Pick<Event, 'mci' | 'calls' | 'clinics'>, zoneId
   if (!event.mci?.active) return { patch: {}, error: 'inactive' };
   const stats = zoneStatsOf(event, zoneId);
   if (!stats) return { patch: {}, error: 'unknown-zone' };
+  return tagWithStats(event.mci, stats, color, delta, ctx);
+}
+
+function tagWithStats(mci: MciState, stats: MciZoneStats, color: MciColor, delta: number, ctx: MciWriteContext): MciWrite {
+  const zoneId = stats.zone.id;
   if (!Number.isInteger(delta) || delta === 0) return NO_CHANGE;
 
   let n = delta;
@@ -622,7 +694,7 @@ export function tagPatch(event: Pick<Event, 'mci' | 'calls' | 'clinics'>, zoneId
   const entries: MciLogEntry[] = [];
   if (n > 0 && stats.cleared) entries.push(makeEntry(ctx, { kind: 'zone_reopened', zoneId }));
   entries.push(makeEntry(ctx, { kind: 'tagged', zoneId, color, n }));
-  return { patch: { mci: appendMciEntries(event.mci, entries) }, ...(clamped ? { clamped } : {}) };
+  return { patch: { mci: appendMciEntries(mci, entries) }, ...(clamped ? { clamped } : {}) };
 }
 
 /** Sets the Tagged total for one color, written as a single delta entry. Never goes below what was already moved. */
@@ -631,7 +703,7 @@ export function setTaggedTotalPatch(event: Pick<Event, 'mci' | 'calls' | 'clinic
   const stats = zoneStatsOf(event, zoneId);
   if (!stats) return { patch: {}, error: 'unknown-zone' };
   if (!Number.isInteger(total) || total < 0) return { patch: {}, error: 'invalid' };
-  return tagPatch(event, zoneId, color, total - stats.tagged[color], ctx);
+  return tagWithStats(event.mci, stats, color, total - stats.tagged[color], ctx);
 }
 
 /** Moves patients from a zone to a treatment location. Each color is clamped to what is in the zone. */
@@ -893,13 +965,19 @@ export function mciPatientLabel(details: MciPatientDetails | undefined): string 
 
 /** Where a zone's quick move sends a patient: the treatment location last moved to from this zone, else the first. */
 export function mciQuickMoveArea(mci: MciState | undefined, zoneId: string): string | undefined {
-  if (!mci || mci.areas.length === 0) return undefined;
-  const live = liveEntries(mci.log);
-  for (let i = live.length - 1; i >= 0; i -= 1) {
-    const entry = live[i];
-    if (entry.kind === 'moved' && entry.zoneId === zoneId && mci.areas.some((a) => a.id === entry.areaId)) return entry.areaId;
+  return mciQuickMoveAreas(mci)(zoneId);
+}
+
+/** `mciQuickMoveArea` for every zone, with one pass over the log. */
+export function mciQuickMoveAreas(mci: MciState | undefined): (zoneId: string) => string | undefined {
+  if (!mci || mci.areas.length === 0) return () => undefined;
+  const areaIds = new Set(mci.areas.map((a) => a.id));
+  const last = new Map<string, string>();
+  for (const entry of liveEntries(mci.log)) {
+    if (entry.kind === 'moved' && entry.zoneId && entry.areaId && areaIds.has(entry.areaId)) last.set(entry.zoneId, entry.areaId);
   }
-  return mci.areas[0].id;
+  const fallback = mci.areas[0].id;
+  return (zoneId) => last.get(zoneId) ?? fallback;
 }
 
 /** Turns the patient boxes on or off. Counts and the log are unaffected. */
@@ -1026,13 +1104,25 @@ export function mciStatusPatch(
 
 /** Names of the units working at a zone or treatment location right now. */
 export function mciUnitsAt(event: Event, assignment: MciAssignment): string[] {
-  const wanted = assignment.kind === 'zone' ? 'Triage' : 'Treatment';
+  return mciUnitsByAssignment(event)(assignment);
+}
+
+/** `mciUnitsAt` for every zone and treatment location, with one pass over the units and calls. */
+export function mciUnitsByAssignment(event: Pick<Event, 'staff' | 'supervisor' | 'calls'>): (assignment: MciAssignment) => string[] {
+  const visualStatus = teamVisualStatusResolver(event);
+  const byTarget = new Map<string, string[]>();
   const units: (Staff | Supervisor)[] = [...(event.staff || []), ...(event.supervisor || [])];
-  return units
-    .filter((u) => u.mciAssignment?.kind === assignment.kind && u.mciAssignment.id === assignment.id)
+  for (const unit of units) {
+    const assigned = unit.mciAssignment;
+    if (!assigned) continue;
     // A unit sent to a normal call is on that call, whatever its stored status says.
-    .filter((u) => deriveTeamVisualStatus(u.status, event, u.team) === wanted)
-    .map((u) => u.team);
+    if (visualStatus(unit.status, unit.team) !== (assigned.kind === 'zone' ? 'Triage' : 'Treatment')) continue;
+    const key = `${assigned.kind}:${assigned.id}`;
+    const list = byTarget.get(key);
+    if (list) list.push(unit.team);
+    else byTarget.set(key, [unit.team]);
+  }
+  return (assignment) => byTarget.get(`${assignment.kind}:${assignment.id}`) ?? [];
 }
 
 export interface MciAvailability {
@@ -1043,10 +1133,11 @@ export interface MciAvailability {
 }
 
 /** The availability strip's MCI buckets: a unit on a call, on break or in the clinic counts as Unavailable. */
-export function mciAvailability(event: Event): MciAvailability {
+export function mciAvailability(event: Pick<Event, 'staff' | 'calls'>): MciAvailability {
   const result: MciAvailability = { available: 0, triage: 0, treatment: 0, unavailable: 0 };
+  const visualStatus = teamVisualStatusResolver(event);
   for (const unit of event.staff || []) {
-    const status = deriveTeamVisualStatus(unit.status, event, unit.team);
+    const status = visualStatus(unit.status, unit.team);
     if (status === 'Available') result.available += 1;
     else if (status === 'Triage') result.triage += 1;
     else if (status === 'Treatment') result.treatment += 1;
@@ -1065,8 +1156,11 @@ const csvQuote = (text: string) => `"${text.replace(/"/g, '""')}"`;
 export function mciCsvLines(event: Pick<Event, 'mci'>, formatTimestamp: (ms: number) => string): string[] {
   const mci = event.mci;
   if (!mci) return [];
-  const zoneName = (id?: string) => mci.zones.find((z) => z.id === id)?.name;
-  const areaName = (id?: string) => mci.areas.find((a) => a.id === id)?.name;
+  const zoneNames = new Map(mci.zones.map((z) => [z.id, z.name]));
+  const areaNames = new Map(mci.areas.map((a) => [a.id, a.name]));
+  const entriesById = new Map(mci.log.map((e) => [e.id, e]));
+  const zoneName = (id?: string) => (id ? zoneNames.get(id) : undefined);
+  const areaName = (id?: string) => (id ? areaNames.get(id) : undefined);
   const describe = (entry: MciLogEntry): string => {
     const area = entry.areaId ? areaName(entry.areaId) ?? entry.areaId : undefined;
     const label = mciPatientLabel(entry.patientId ? mci.patients?.[entry.patientId] : undefined);
@@ -1095,7 +1189,7 @@ export function mciCsvLines(event: Pick<Event, 'mci'>, formatTimestamp: (ms: num
   });
   mci.log.forEach((entry, i) => {
     // An undo row names the zone of the entry it reverses.
-    const target = entry.kind === 'undo' ? mci.log.find((e) => e.id === entry.undoes) : undefined;
+    const target = entry.kind === 'undo' && entry.undoes ? entriesById.get(entry.undoes) : undefined;
     const scopeEntry = target ?? entry;
     const scope = zoneName(scopeEntry.zoneId) ?? (scopeEntry.kind !== 'moved' ? areaName(scopeEntry.areaId) : undefined) ?? '-';
     const text = entry.kind === 'undo' && target ? `undo ${describe(target)}` : describe(entry);
@@ -1226,18 +1320,5 @@ export interface MciTransportTrip {
 export function mciTransportTrips(mci: MciState | undefined, areaId: string): MciTransportTrip[] {
   if (!mci) return [];
   const live = liveEntries(mci.log);
-  const patients = new Map(replayPatients(mci, live).patients.map((p) => [p.id, p]));
-  const trips = new Map<string, MciTransportTrip>();
-  for (const entry of live) {
-    if (entry.kind !== 'transported' || entry.areaId !== areaId || !entry.color || !entry.n) continue;
-    const key = `${entry.t}|${entry.unit ?? ''}|${entry.destination ?? ''}`;
-    const trip =
-      trips.get(key) ?? { t: entry.t, unit: entry.unit ?? '', ...(entry.destination ? { destination: entry.destination } : {}), counts: emptyCounts(), total: 0, patients: [] };
-    trip.counts[entry.color] += entry.n;
-    trip.total += entry.n;
-    const patient = entry.patientId ? patients.get(entry.patientId) : undefined;
-    if (patient) trip.patients.push(patient);
-    trips.set(key, trip);
-  }
-  return [...trips.values()].sort((a, b) => b.t - a.t);
+  return tripsByArea(live, replayPatients(mci, live).patients).get(areaId) ?? [];
 }

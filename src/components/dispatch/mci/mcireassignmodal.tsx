@@ -1,11 +1,11 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Modal, ModalContent, ModalHeader, ModalBody, ModalFooter, Button, Input, Select, SelectItem } from '@heroui/react';
+import { ModalHeader, ModalBody, ModalFooter, Button, Input, Select, SelectItem } from '@heroui/react';
 import type { MciColor } from '@/app/types';
 import { MCI_COLORS, mciPatientLabel, type MciPatient } from '@/lib/mci';
 import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
-import { MCI_COLOR_STYLES, MciColorDot } from './mciparts';
+import { MCI_CANCEL_BUTTON, MCI_COLOR_STYLES, MCI_INPUT_CLASSNAMES, MciColorDot, MciModal } from './mciparts';
 import type { MciReassignTarget } from './mcipatientbox';
 
 export type MciReassignRequest = { patient: MciPatient; target: MciReassignTarget };
@@ -17,11 +17,6 @@ type Props = {
   onClose: () => void;
   onConfirm: (patientId: string, target: { areaId: string; color: MciColor }, note: string) => boolean | Promise<boolean>;
 };
-
-const inputClassNames = {
-  inputWrapper: 'rounded-xl px-3 group-data-[focus-visible=true]:ring-0 group-data-[focus-visible=true]:ring-offset-0',
-  input: 'text-surface-light outline-none focus:outline-none data-[focus=true]:outline-none focus:ring-0 focus-visible:ring-0',
-} as const;
 
 // Remounted by `key` for each request, so the picks start at the drop target.
 function ReassignForm({ request, areas, onClose, onConfirm }: Omit<Props, 'request'> & { request: MciReassignRequest }) {
@@ -102,12 +97,12 @@ function ReassignForm({ request, areas, onClose, onConfirm }: Omit<Props, 'reque
               void submit();
             }
           }}
-          classNames={inputClassNames}
+          classNames={MCI_INPUT_CLASSNAMES}
           data-testid="mci-reassign-note"
         />
       </ModalBody>
       <ModalFooter className="flex justify-end gap-2">
-        <Button onPress={onClose} variant="flat" radius="lg" className="bg-status-red/20 px-4 py-2 text-status-red hover:bg-status-red/30">
+        <Button onPress={onClose} variant="flat" radius="lg" className={MCI_CANCEL_BUTTON}>
           {t('Cancel')}
         </Button>
         <Button
@@ -126,24 +121,12 @@ function ReassignForm({ request, areas, onClose, onConfirm }: Omit<Props, 'reque
 
 export default function MciReassignModal({ request, areas, onClose, onConfirm }: Props) {
   return (
-    <Modal
-      isOpen={!!request}
-      onOpenChange={(open) => {
-        if (!open) onClose();
-      }}
-      placement="top-center"
-      backdrop="opaque"
-      hideCloseButton
-      radius="lg"
-      classNames={{ base: 'mt-20 rounded-lg bg-surface-deepest text-surface-light', header: 'pb-0', footer: 'pt-0', body: 'minimal-scrollbar' }}
-    >
-      <ModalContent data-testid="mci-reassign-modal">
-        {() =>
-          request ? (
-            <ReassignForm key={`${request.patient.id}:${request.target.areaId ?? ''}:${request.target.color ?? ''}`} request={request} areas={areas} onClose={onClose} onConfirm={onConfirm} />
-          ) : null
-        }
-      </ModalContent>
-    </Modal>
+    <MciModal isOpen={!!request} onClose={onClose} testId="mci-reassign-modal">
+      {() =>
+        request ? (
+          <ReassignForm key={`${request.patient.id}:${request.target.areaId ?? ''}:${request.target.color ?? ''}`} request={request} areas={areas} onClose={onClose} onConfirm={onConfirm} />
+        ) : null
+      }
+    </MciModal>
   );
 }

@@ -3,8 +3,135 @@
 // Small pieces shared by the MCI tab's cards, the totals strip and the log drawer.
 
 import React from 'react';
+import { MapPin } from 'lucide-react';
+import { Modal, ModalContent, type ModalProps } from '@heroui/react';
 import type { MciColor } from '@/app/types';
 import { MCI_COLORS, sumCounts, type MciCounts } from '@/lib/mci';
+
+/** Hides a number input's spinner arrows. */
+export const NO_SPINNER = '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none';
+
+/** HeroUI Input classNames for the MCI dialogs and tab. The wrapper's focus ring is removed globally (globals.css). */
+export const MCI_INPUT_CLASSNAMES = {
+  inputWrapper: 'rounded-xl px-3',
+  input: 'text-surface-light outline-none focus:outline-none data-[focus=true]:outline-none focus:ring-0 focus-visible:ring-0',
+} as const;
+
+/** The red-tinted Cancel / Skip button in every MCI dialog footer. */
+export const MCI_CANCEL_BUTTON = 'bg-status-red/20 px-4 py-2 text-status-red hover:bg-status-red/30';
+
+/** The shell every MCI dialog shares. `children` renders the form, keyed by the caller so it starts fresh. */
+export function MciModal({
+  isOpen,
+  onClose,
+  testId,
+  size,
+  topClass = 'mt-20',
+  children,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  testId: string;
+  /** Wider dialogs also scroll inside. */
+  size?: ModalProps['size'];
+  topClass?: string;
+  children: () => React.ReactNode;
+}) {
+  return (
+    <Modal
+      isOpen={isOpen}
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+      placement="top-center"
+      backdrop="opaque"
+      hideCloseButton
+      radius="lg"
+      {...(size ? { size, scrollBehavior: 'inside' as const } : {})}
+      classNames={{ base: `${topClass} rounded-lg bg-surface-deepest text-surface-light`, header: 'pb-0', footer: 'pt-0', body: 'minimal-scrollbar' }}
+    >
+      <ModalContent data-testid={testId}>{children}</ModalContent>
+    </Modal>
+  );
+}
+
+/** The draw/edit-on-map pin beside a zone or treatment location name. */
+export function MciMapButton({ name, hasShape, onPress, testId }: { name: string; hasShape: boolean; onPress: () => void; testId: string }) {
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        onPress();
+      }}
+      aria-label={`${hasShape ? 'Edit' : 'Draw'} ${name} on the map`}
+      title={hasShape ? 'Edit on the map' : 'Draw on the map'}
+      className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md hover:bg-surface-liner ${hasShape ? 'text-surface-faint' : 'text-status-orange'}`}
+      data-testid={testId}
+    >
+      <MapPin className="h-3.5 w-3.5" />
+    </button>
+  );
+}
+
+/**
+ * A count per color, each capped at what is available: the Move and Transport dialogs.
+ * `verb` names the column and each input ("Move red"); empty colors can be disabled.
+ */
+export function MciCountInputs({
+  colors = MCI_COLORS,
+  available,
+  availableLabel,
+  verb,
+  counts,
+  onChange,
+  disableEmpty = false,
+  testIdPrefix,
+  className = '',
+}: {
+  colors?: readonly MciColor[];
+  available: MciCounts;
+  availableLabel: string;
+  verb: string;
+  counts: MciCounts;
+  onChange: (next: MciCounts) => void;
+  disableEmpty?: boolean;
+  testIdPrefix: string;
+  className?: string;
+}) {
+  const set = (color: MciColor, raw: string) => {
+    const n = Number.parseInt(raw, 10);
+    onChange({ ...counts, [color]: Number.isFinite(n) ? Math.max(0, Math.min(n, available[color])) : 0 });
+  };
+  return (
+    <div className={`grid grid-cols-[1fr_auto_auto] items-center gap-x-4 gap-y-2 text-sm ${className}`}>
+      <span className="text-xs text-surface-faint" />
+      <span className="text-xs text-surface-faint">{availableLabel}</span>
+      <span className="text-xs text-surface-faint">{verb}</span>
+      {colors.map((color) => (
+        <React.Fragment key={color}>
+          <span className="inline-flex items-center gap-1.5 text-surface-light">
+            <MciColorDot color={color} />
+            {MCI_COLOR_STYLES[color].label}
+          </span>
+          <span className="text-center tabular-nums text-surface-light">{available[color]}</span>
+          <input
+            type="number"
+            min={0}
+            max={available[color]}
+            inputMode="numeric"
+            disabled={disableEmpty && available[color] <= 0}
+            aria-label={`${verb} ${MCI_COLOR_STYLES[color].label.toLowerCase()}`}
+            value={counts[color]}
+            onChange={(e) => set(color, e.target.value)}
+            className={`h-8 w-16 disabled:opacity-40 ${MCI_NUMBER_INPUT}`}
+            data-testid={`${testIdPrefix}-${color}`}
+          />
+        </React.Fragment>
+      ))}
+    </div>
+  );
+}
 
 export const MCI_COLOR_STYLES: Record<MciColor, { label: string; dotClass: string; textClass: string; borderLeftClass: string }> = {
   red: { label: 'Red', dotClass: 'bg-red-500 border-red-300', textClass: 'text-red-400', borderLeftClass: 'border-l-red-500' },
@@ -48,8 +175,7 @@ export function MciCountsLine({ counts, testId }: { counts: MciCounts; testId?: 
 }
 
 /** A typed patient count: an off-colored box (against the card's own background) with no spinner arrows. */
-export const MCI_NUMBER_INPUT =
-  'rounded-md border border-surface-liner bg-surface-liner/40 text-center tabular-nums text-surface-light outline-none focus:outline-none focus:ring-0 focus-visible:ring-0 focus:border-surface-faint [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:m-0 [&::-webkit-outer-spin-button]:m-0';
+export const MCI_NUMBER_INPUT = `rounded-md border border-surface-liner bg-surface-liner/40 text-center tabular-nums text-surface-light outline-none focus:outline-none focus:ring-0 focus-visible:ring-0 focus:border-surface-faint ${NO_SPINNER} [&::-webkit-inner-spin-button]:m-0 [&::-webkit-outer-spin-button]:m-0`;
 
 /** Teams working at a zone or treatment location. */
 export function MciTeamChips({ names, emptyText }: { names: string[]; emptyText: string }) {

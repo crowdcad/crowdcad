@@ -136,22 +136,42 @@ export function getStatusColor(status?: string | null): DispatchStatusColor {
   return STATUS_COLORS[status] || DEFAULT_STATUS_COLOR;
 }
 
+const CLOSED_CALL_STATUSES = ['Resolved', 'Delivered', 'Delivered Eq', 'Refusal', 'NMM', 'Treat and Release'];
+const EQ_RUN_STATUSES = ['Retrieving Eq', 'En Route Eq', 'Assisting'];
+
 export function deriveTeamVisualStatus(status: string, event: Event, team: string): string {
   const onEqRun =
-    !!event.calls?.some(
-      c => c.equipmentTeams?.includes(team) && !['Resolved', 'Delivered', 'Delivered Eq', 'Refusal', 'NMM', 'Treat and Release'].includes(c.status)
-    ) || ['Retrieving Eq', 'En Route Eq', 'Assisting'].includes(status);
+    !!event.calls?.some(c => c.equipmentTeams?.includes(team) && !CLOSED_CALL_STATUSES.includes(c.status)) ||
+    EQ_RUN_STATUSES.includes(status);
 
   if (onEqRun) return 'En Route Eq';
   if (status === 'Returning Eq') return status;
 
-  const activeCare = !!event.calls?.some(
-    c => c.assignedTeam?.includes(team) && !['Resolved', 'Delivered', 'Delivered Eq', 'Refusal', 'NMM', 'Treat and Release'].includes(c.status)
-  );
+  const activeCare = !!event.calls?.some(c => c.assignedTeam?.includes(team) && !CLOSED_CALL_STATUSES.includes(c.status));
 
   if (activeCare) return 'En Route';
 
   return status;
+}
+
+/**
+ * `deriveTeamVisualStatus` for many units at once: the calls are scanned once
+ * up front instead of twice per unit. Use it when looping over every unit.
+ */
+export function teamVisualStatusResolver(event: Pick<Event, 'calls'>): (status: string, team: string) => string {
+  const onEqRun = new Set<string>();
+  const onCall = new Set<string>();
+  for (const call of event.calls || []) {
+    if (CLOSED_CALL_STATUSES.includes(call.status)) continue;
+    for (const team of call.equipmentTeams || []) onEqRun.add(team);
+    if (Array.isArray(call.assignedTeam)) for (const team of call.assignedTeam) onCall.add(team);
+  }
+  return (status, team) => {
+    if (onEqRun.has(team) || EQ_RUN_STATUSES.includes(status)) return 'En Route Eq';
+    if (status === 'Returning Eq') return status;
+    if (onCall.has(team)) return 'En Route';
+    return status;
+  };
 }
 
 const ROW_STATUS_PRIORITY = ['Transporting', 'On Scene', 'En Route'];

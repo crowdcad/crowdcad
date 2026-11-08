@@ -2,7 +2,8 @@
 
 import React, { useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
-import { Modal, ModalContent, ModalHeader, ModalBody, ModalFooter, Button } from '@heroui/react';
+import { ModalHeader, ModalBody, ModalFooter, Button } from '@heroui/react';
+import { MCI_CANCEL_BUTTON, MciModal } from './mciparts';
 import type { Layer, Zone } from '@/app/types';
 import { isGeoLayer } from '@/lib/geo/layers';
 import { isPointWithinRect, pixelToPercent } from '@/lib/markerUtils';
@@ -205,7 +206,7 @@ function DrawForm({ target, layers, existing, onSave, onClose }: Omit<Props, 'ta
           )}
         </div>
         <div className="flex gap-2">
-          <Button onPress={onClose} variant="flat" radius="lg" className="bg-status-red/20 px-4 py-2 text-status-red hover:bg-status-red/30" data-testid="mci-draw-skip">
+          <Button onPress={onClose} variant="flat" radius="lg" className={MCI_CANCEL_BUTTON} data-testid="mci-draw-skip">
             {existing ? t('Cancel') : 'Skip for now'}
           </Button>
           <Button radius="lg" className="bg-accent px-4 py-2 text-surface-light" isDisabled={!closed || saving} onPress={save} data-testid="mci-draw-save">
@@ -220,22 +221,8 @@ function DrawForm({ target, layers, existing, onSave, onClose }: Omit<Props, 'ta
 /** Draw a zone or treatment location on the venue map. Only offered when the venue has a map. */
 export default function MciDrawZoneModal({ target, layers, existing, onSave, onClose }: Props) {
   return (
-    <Modal
-      isOpen={!!target && layers.length > 0}
-      onOpenChange={(open) => {
-        if (!open) onClose();
-      }}
-      placement="top-center"
-      backdrop="opaque"
-      hideCloseButton
-      radius="lg"
-      size="4xl"
-      scrollBehavior="inside"
-      classNames={{ base: 'mt-10 rounded-lg bg-surface-deepest text-surface-light', header: 'pb-0', footer: 'pt-0', body: 'minimal-scrollbar' }}
-    >
-      <ModalContent data-testid="mci-draw-modal">
-        {() => (target ? <DrawForm key={`${target.kind}:${target.id}`} target={target} layers={layers} existing={existing} onSave={onSave} onClose={onClose} /> : null)}
-      </ModalContent>
-    </Modal>
+    <MciModal isOpen={!!target && layers.length > 0} onClose={onClose} testId="mci-draw-modal" size="4xl" topClass="mt-10">
+      {() => (target ? <DrawForm key={`${target.kind}:${target.id}`} target={target} layers={layers} existing={existing} onSave={onSave} onClose={onClose} /> : null)}
+    </MciModal>
   );
 }

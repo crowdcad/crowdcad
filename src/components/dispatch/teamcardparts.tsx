@@ -329,13 +329,15 @@ function EditableTeamLocation({
     setLocationInput(staff.location || '');
   }, [staff.location]);
 
+  // During an MCI on a standard event, MCI zones come first, then treatment locations, then the venue's posts.
+  // Memoized on those fields only: `event` is a new object on every snapshot, and every team card has one of these.
+  const mci = isMciActive(event) && event.mapMode !== 'tak' ? event.mci : undefined;
+  const venuePosts = event.venue?.posts;
   const postOptions = useMemo(() => {
-    const posts = (event.venue?.posts || []).map(p => (typeof p === 'string' ? p : p.name));
-    // During an MCI on a standard event, MCI zones come first, then treatment locations, then the venue's posts.
-    const mci = isMciActive(event) && event.mapMode !== 'tak' ? event.mci : undefined;
+    const posts = (venuePosts || []).map(p => (typeof p === 'string' ? p : p.name));
     const mciNames = [...(mci?.zones || []), ...(mci?.areas || [])].map(x => x.name);
     return Array.from(new Set([...mciNames, 'Clinic', ...posts]));
-  }, [event]);
+  }, [venuePosts, mci?.zones, mci?.areas]);
 
   const commitTypedValue = () => {
     const value = locationInput.trim();

@@ -1,10 +1,10 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useId, useMemo, useState } from 'react';
 import { CornerDownLeft } from 'lucide-react';
 import { Button, Checkbox, Input } from '@heroui/react';
 import type { Event, MciColor } from '@/app/types';
-import { deriveMci, mciMapLayers, mciQuickMoveArea, mciShapeOf, mciTransportTrips, mciTransportUnits, mciUnitsAt, type MciCounts } from '@/lib/mci';
+import { deriveMci, mciMapLayers, mciQuickMoveAreas, mciShapeOf, mciTransportUnits, mciUnitsByAssignment, type MciCounts } from '@/lib/mci';
 import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
 import type { MciActions } from './usemciactions';
 import MciTotalsStrip from './mcitotalsstrip';
@@ -15,16 +15,12 @@ import MciMoveModal from './mcimovemodal';
 import MciTransportModal from './mcitransportmodal';
 import MciDrawZoneModal, { type MciDrawTarget } from './mcidrawzonemodal';
 import MciLogDrawer from './mcilogdrawer';
+import { MCI_INPUT_CLASSNAMES } from './mciparts';
 
 type Props = {
   event: Event;
   actions: MciActions;
 };
-
-const inputClassNames = {
-  inputWrapper: 'rounded-xl px-3 group-data-[focus-visible=true]:ring-0 group-data-[focus-visible=true]:ring-offset-0',
-  input: 'text-surface-light outline-none focus:outline-none data-[focus=true]:outline-none focus:ring-0 focus-visible:ring-0',
-} as const;
 
 /** One-line "add by name" form, for zones and treatment areas added after declaring. */
 function AddByName({ label, testId, onAdd }: { label: string; testId: string; onAdd: (name: string) => Promise<boolean> }) {
@@ -47,7 +43,7 @@ function AddByName({ label, testId, onAdd }: { label: string; testId: string; on
         onKeyDown={(e) => {
           if (e.key === 'Enter') void submit();
         }}
-        classNames={inputClassNames}
+        classNames={MCI_INPUT_CLASSNAMES}
         endContent={<CornerDownLeft className={`h-4 w-4 shrink-0 ${name.trim() ? 'text-surface-light' : 'text-surface-faint'}`} aria-hidden />}
         data-testid={`${testId}-input`}
       />
@@ -62,7 +58,24 @@ function AddByName({ label, testId, onAdd }: { label: string; testId: string; on
 export default function MciTab({ event, actions }: Props) {
   const { t } = useDispatchTerms();
   const mci = event.mci;
-  const derived = useMemo(() => deriveMci(event), [event]);
+  // Memoized on what each helper reads, not on `event`, which is a new object on every snapshot.
+  const { staff, supervisor, calls, clinics } = event;
+  const derived = useMemo(() => deriveMci({ mci, calls, clinics }), [mci, calls, clinics]);
+  const unitsAt = useMemo(() => mciUnitsByAssignment({ staff, supervisor, calls }), [staff, supervisor, calls]);
+  const lastMoveArea = useMemo(() => mciQuickMoveAreas(mci), [mci]);
+  const transportUnits = useMemo(() => mciTransportUnits(mci), [mci]);
+  // Team suggestions for patient boxes: one shared <datalist> per zone (plus one for walk-ins), not one per box.
+  // The teams that worked the patient's zone come first.
+  const teamListBase = useId();
+  const teamLists = useMemo(() => {
+    const allTeams = [...(staff || []), ...(supervisor || [])].map((u) => u.team).filter(Boolean);
+    const lists = [{ zoneId: undefined as string | undefined, names: allTeams }];
+    for (const zone of mci?.zones ?? []) {
+      const first = unitsAt({ kind: 'zone', id: zone.id });
+      lists.push({ zoneId: zone.id, names: [...first, ...allTeams.filter((name) => !first.includes(name))] });
+    }
+    return lists.map((list, i) => ({ ...list, id: `${teamListBase}-teams-${i}` }));
+  }, [mci?.zones, staff, supervisor, unitsAt, teamListBase]);
   const [moveZoneId, setMoveZoneId] = useState<string | null>(null);
   const [transportAreaId, setTransportAreaId] = useState<string | null>(null);
   // A shape the dispatcher chose to draw or edit; otherwise the first zone or area still without one is offered.
@@ -77,7 +90,6 @@ export default function MciTab({ event, actions }: Props) {
   const readOnly = !mci.active;
   const moveZone = derived.zones.find((z) => z.zone.id === moveZoneId) ?? null;
   const transportArea = derived.areas.find((a) => a.area.id === transportAreaId) ?? null;
-  const transportUnits = mciTransportUnits(mci);
 
   // Drawing is offered only when the venue has a map.
   const mapLayers = mciMapLayers(event.venue);
@@ -138,22 +150,18 @@ export default function MciTab({ event, actions }: Props) {
   const areaOptions = derived.areas.map((a) => ({ id: a.area.id, name: a.name }));
   const quickMoveAreaOf = (zoneId: string) => {
     const picked = quickTargets[zoneId];
-    return picked && mci.areas.some((a) => a.id === picked) ? picked : mciQuickMoveArea(mci, zoneId);
+    return picked && mci.areas.some((a) => a.id === picked) ? picked : lastMoveArea(zoneId);
   };
   const handleQuickMove = (zoneId: string, color: MciColor) => {
     const areaId = quickMoveAreaOf(zoneId);
     if (areaId) void actions.move(zoneId, areaId, { [color]: 1 });
   };
 
-  // Patient boxes (D11). Team suggestions put the teams that worked the patient's zone first.
-  const allTeams = [...(event.staff || []), ...(event.supervisor || [])].map((u) => u.team).filter(Boolean);
+  // Patient boxes (D11).
   const patientHandlers: MciPatientHandlers | undefined = mci.trackPatients
     ? {
         zoneNames: Object.fromEntries(mci.zones.map((z) => [z.id, z.name])),
-        teamSuggestions: (zoneId) => {
-          const first = zoneId ? mciUnitsAt(event, { kind: 'zone', id: zoneId }) : [];
-          return [...first, ...allTeams.filter((name) => !first.includes(name))];
-        },
+        teamListId: (zoneId) => (teamLists.find((list) => list.zoneId === zoneId) ?? teamLists[0]).id,
         unitSuggestions: transportUnits,
         areas: areaOptions,
         onDetails: (id, fields) => void actions.setPatientDetails(id, fields),
@@ -211,7 +219,7 @@ export default function MciTab({ event, actions }: Props) {
             <MciZoneCard
               key={stats.zone.id}
               stats={stats}
-              teams={mciUnitsAt(event, { kind: 'zone', id: stats.zone.id })}
+              teams={unitsAt({ kind: 'zone', id: stats.zone.id })}
               readOnly={readOnly}
               onTag={handleTag}
               onSetTagged={handleSetTagged}
@@ -241,8 +249,7 @@ export default function MciTab({ event, actions }: Props) {
             <MciTreatmentCard
               key={stats.area.id}
               stats={stats}
-              teams={mciUnitsAt(event, { kind: 'area', id: stats.area.id })}
-              trips={mciTransportTrips(mci, stats.area.id)}
+              teams={unitsAt({ kind: 'area', id: stats.area.id })}
               readOnly={readOnly}
               onTransport={setTransportAreaId}
               mapEnabled={mapEnabled && !readOnly}
@@ -254,6 +261,15 @@ export default function MciTab({ event, actions }: Props) {
           {derived.areas.length === 0 && <p className="text-sm italic text-surface-faint">No treatment locations yet. Add one by name.</p>}
         </div>
       </section>
+
+      {mci.trackPatients &&
+        teamLists.map((list) => (
+          <datalist key={list.id} id={list.id}>
+            {list.names.map((name) => (
+              <option key={name} value={name} />
+            ))}
+          </datalist>
+        ))}
 
       <MciMoveModal zone={readOnly ? null : moveZone} areas={derived.areas} onClose={() => setMoveZoneId(null)} onMove={handleMove} />
       <MciDrawZoneModal

@@ -1,12 +1,13 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
-import { Modal, ModalContent, ModalHeader, ModalBody, ModalFooter, Button, Input, Checkbox } from '@heroui/react';
+import { ModalHeader, ModalBody, ModalFooter, Button, Input, Checkbox } from '@heroui/react';
 import type { Event, MciTreatmentArea, MciZone } from '@/app/types';
 import { getEventClinics } from '@/lib/clinics';
 import { getVenueZones } from '@/lib/zones';
 import { isDuplicateMciName, newMciId, regularClinicCount } from '@/lib/mci';
 import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
+import { MCI_CANCEL_BUTTON, MCI_INPUT_CLASSNAMES, MciModal } from './mciparts';
 
 type Props = {
   isOpen: boolean;
@@ -15,10 +16,7 @@ type Props = {
   onDeclare: (input: { zones: MciZone[]; areas: MciTreatmentArea[]; trackPatients: boolean }) => void | Promise<void>;
 };
 
-const inputClassNames = {
-  inputWrapper: 'rounded-2xl px-4 hover:bg-surface-deep group-data-[focus-visible=true]:ring-0 group-data-[focus-visible=true]:ring-offset-0',
-  input: 'text-surface-light outline-none focus:outline-none data-[focus=true]:outline-none focus:ring-0 focus-visible:ring-0',
-} as const;
+const inputClassNames = { ...MCI_INPUT_CLASSNAMES, inputWrapper: 'rounded-2xl px-4 hover:bg-surface-deep' } as const;
 
 // Remounted by `key` each time the dialog opens, so its picks start fresh.
 function DeclareMciForm({ event, onClose, onDeclare }: Omit<Props, 'isOpen'>) {
@@ -220,7 +218,7 @@ function DeclareMciForm({ event, onClose, onDeclare }: Omit<Props, 'isOpen'>) {
         </Checkbox>
       </ModalBody>
       <ModalFooter className="flex justify-end gap-2">
-        <Button onPress={onClose} variant="flat" radius="lg" className="bg-status-red/20 px-4 py-2 text-status-red hover:bg-status-red/30">
+        <Button onPress={onClose} variant="flat" radius="lg" className={MCI_CANCEL_BUTTON}>
           {t('Cancel')}
         </Button>
         <Button
@@ -239,22 +237,8 @@ function DeclareMciForm({ event, onClose, onDeclare }: Omit<Props, 'isOpen'>) {
 
 export default function DeclareMciModal({ isOpen, event, onClose, onDeclare }: Props) {
   return (
-    <Modal
-      isOpen={isOpen}
-      onOpenChange={(open) => {
-        if (!open) onClose();
-      }}
-      placement="top-center"
-      backdrop="opaque"
-      hideCloseButton
-      radius="lg"
-      size="xl"
-      scrollBehavior="inside"
-      classNames={{ base: 'mt-20 rounded-lg bg-surface-deepest text-surface-light', header: 'pb-0', footer: 'pt-0', body: 'minimal-scrollbar' }}
-    >
-      <ModalContent data-testid="mci-declare-modal">
-        {() => <DeclareMciForm event={event} onClose={onClose} onDeclare={onDeclare} />}
-      </ModalContent>
-    </Modal>
+    <MciModal isOpen={isOpen} onClose={onClose} testId="mci-declare-modal" size="xl">
+      {() => <DeclareMciForm event={event} onClose={onClose} onDeclare={onDeclare} />}
+    </MciModal>
   );
 }

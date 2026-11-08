@@ -1,14 +1,14 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
-import { ChevronDown, MapPin, Plus } from 'lucide-react';
+import { ChevronDown, Plus } from 'lucide-react';
 import { Button, Card, CardBody, CardHeader } from '@heroui/react';
 import type { MciColor } from '@/app/types';
-import type { MciAreaStats, MciPatient, MciPatientField, MciTransportTrip } from '@/lib/mci';
+import type { MciAreaStats, MciPatient, MciPatientField } from '@/lib/mci';
 import { MCI_COLORS, mciPatientLabel } from '@/lib/mci';
 import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
 import DispatchMotionCell from '@/components/dispatch/motioncell';
-import { MCI_COLOR_STYLES, MciColorDot, MciCountsLine, MciTeamChips, formatClock } from './mciparts';
+import { MCI_COLOR_STYLES, MciColorDot, MciCountsLine, MciMapButton, MciTeamChips, formatClock } from './mciparts';
 import MciPatientBox, { MCI_PATIENT_DRAG_TYPE, type MciReassignTarget } from './mcipatientbox';
 
 /** The colors that get a column of patient boxes. Black stays counts-only (D11). */
@@ -17,8 +17,8 @@ const PATIENT_COLUMNS: readonly MciColor[] = ['red', 'yellow', 'green'];
 /** What the patient boxes need from the tab. */
 export type MciPatientHandlers = {
   zoneNames: Record<string, string>;
-  /** Teams for a patient's Team field, those that worked `zoneId` first. */
-  teamSuggestions: (zoneId?: string) => string[];
+  /** The id of the shared <datalist> of teams for a patient's Team field, those that worked `zoneId` first. */
+  teamListId: (zoneId?: string) => string;
   unitSuggestions: string[];
   areas: { id: string; name: string }[];
   onDetails: (patientId: string, fields: Partial<Record<MciPatientField, string>>) => void;
@@ -35,8 +35,6 @@ type Props = {
   stats: MciAreaStats;
   /** Names of the teams in Treatment at this location. */
   teams: string[];
-  /** Ambulance trips that left from here, newest first. */
-  trips: MciTransportTrip[];
   readOnly: boolean;
   onTransport: (areaId: string) => void;
   /** The venue has a map and this is not a clinic (a clinic is already a pin): show the draw-on-map button. */
@@ -49,9 +47,38 @@ type Props = {
 
 const hasPatientDrag = (e: React.DragEvent) => e.dataTransfer.types.includes(MCI_PATIENT_DRAG_TYPE);
 
+/**
+ * Drop handling for a patient box: highlights while one is dragged over and hands the dropped patient's id on.
+ * `stopPropagation` keeps a drop on a column from also landing on the row around it.
+ */
+function usePatientDrop(enabled: boolean, onDropId: (id: string) => void, stopPropagation = false) {
+  const [over, setOver] = useState(false);
+  const handlers = {
+    onDragOver: (e: React.DragEvent) => {
+      if (!enabled || !hasPatientDrag(e)) return;
+      e.preventDefault();
+      if (stopPropagation) e.stopPropagation();
+      e.dataTransfer.dropEffect = 'move';
+      setOver(true);
+    },
+    onDragLeave: (e: React.DragEvent) => {
+      if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOver(false);
+    },
+    onDrop: (e: React.DragEvent) => {
+      setOver(false);
+      const id = e.dataTransfer.getData(MCI_PATIENT_DRAG_TYPE);
+      if (!enabled || !id) return;
+      e.preventDefault();
+      if (stopPropagation) e.stopPropagation();
+      onDropId(id);
+    },
+  };
+  return { over, handlers };
+}
+
 /** One color's column: a header with the count and the walk-in button, then a box per patient. A box dropped here takes this color and location. */
 function PatientColumn({ areaId, color, patients, readOnly, handlers }: { areaId: string; color: MciColor; patients: MciPatient[]; readOnly: boolean; handlers: MciPatientHandlers }) {
-  const [over, setOver] = useState(false);
+  const { over, handlers: dropHandlers } = usePatientDrop(!readOnly, (id) => handlers.onDropPatient(id, { areaId, color }), true);
   const listRef = useRef<HTMLDivElement>(null);
   // After a walk-in is added, its box (the last, having no priority) takes focus for typing.
   const focusNewest = useRef(false);
@@ -69,24 +96,7 @@ function PatientColumn({ areaId, color, patients, readOnly, handlers }: { areaId
   const style = MCI_COLOR_STYLES[color];
   return (
     <div
-      onDragOver={(e) => {
-        if (readOnly || !hasPatientDrag(e)) return;
-        e.preventDefault();
-        e.stopPropagation();
-        e.dataTransfer.dropEffect = 'move';
-        setOver(true);
-      }}
-      onDragLeave={(e) => {
-        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOver(false);
-      }}
-      onDrop={(e) => {
-        setOver(false);
-        const id = e.dataTransfer.getData(MCI_PATIENT_DRAG_TYPE);
-        if (readOnly || !id) return;
-        e.preventDefault();
-        e.stopPropagation();
-        handlers.onDropPatient(id, { areaId, color });
-      }}
+      {...dropHandlers}
       className={`flex min-w-0 flex-col gap-1.5 rounded-md p-1.5 transition-colors ${over ? 'bg-surface-liner/60 ring-1 ring-surface-faint' : 'bg-surface-liner/20'}`}
       data-testid={`mci-patient-column-${color}`}
     >
@@ -120,7 +130,7 @@ function PatientColumn({ areaId, color, patients, readOnly, handlers }: { areaId
             patient={p}
             zoneName={p.fromZoneId ? handlers.zoneNames[p.fromZoneId] : undefined}
             readOnly={readOnly}
-            teamSuggestions={handlers.teamSuggestions(p.fromZoneId)}
+            teamListId={handlers.teamListId(p.fromZoneId)}
             unitSuggestions={handlers.unitSuggestions}
             areas={handlers.areas}
             onDetails={handlers.onDetails}
@@ -140,9 +150,9 @@ function PatientColumn({ areaId, color, patients, readOnly, handlers }: { areaId
  * Transport button stay in the header; the open row adds the patient columns (when patients are tracked),
  * the received/transported counts, teams and a scrollable transport log.
  */
-export default function MciTreatmentCard({ stats, teams, trips, readOnly, onTransport, mapEnabled = false, hasShape = false, onDraw, patients }: Props) {
+export default function MciTreatmentCard({ stats, teams, readOnly, onTransport, mapEnabled = false, hasShape = false, onDraw, patients }: Props) {
   const { t } = useDispatchTerms();
-  const { name, isClinic, regular, inTreatment, inTreatmentTotal, transportedTotal, receivedTotal, transferredOutTotal } = stats;
+  const { name, isClinic, regular, trips, inTreatment, inTreatmentTotal, transportedTotal, receivedTotal, transferredOutTotal } = stats;
   const tracking = !!patients;
   // A tracked location with patients opens, so the treatment leader sees the boxes; one that gets its first patient opens too.
   const [expanded, setExpanded] = useState(() => tracking && inTreatmentTotal > 0);
@@ -151,7 +161,7 @@ export default function MciTreatmentCard({ stats, teams, trips, readOnly, onTran
     if (tracking && previousTotal.current === 0 && inTreatmentTotal > 0) setExpanded(true);
     previousTotal.current = inTreatmentTotal;
   }, [tracking, inTreatmentTotal]);
-  const [dropOver, setDropOver] = useState(false);
+  const { over: dropOver, handlers: dropHandlers } = usePatientDrop(!!patients && !readOnly, (id) => patients?.onDropPatient(id, { areaId: stats.area.id }));
   const blackHere = inTreatment.black;
 
   return (
@@ -160,22 +170,7 @@ export default function MciTreatmentCard({ stats, teams, trips, readOnly, onTran
       aria-label={`${name} treatment location`}
       data-testid={`mci-area-${name}`}
       // Dropping a box anywhere on the row outside a column moves the patient here and keeps their color.
-      onDragOver={(e: React.DragEvent) => {
-        if (!patients || readOnly || !hasPatientDrag(e)) return;
-        e.preventDefault();
-        e.dataTransfer.dropEffect = 'move';
-        setDropOver(true);
-      }}
-      onDragLeave={(e: React.DragEvent) => {
-        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDropOver(false);
-      }}
-      onDrop={(e: React.DragEvent) => {
-        setDropOver(false);
-        const id = e.dataTransfer.getData(MCI_PATIENT_DRAG_TYPE);
-        if (!patients || readOnly || !id) return;
-        e.preventDefault();
-        patients.onDropPatient(id, { areaId: stats.area.id });
-      }}
+      {...dropHandlers}
     >
       <CardHeader
         onClick={() => setExpanded((v) => !v)}
@@ -185,19 +180,7 @@ export default function MciTreatmentCard({ stats, teams, trips, readOnly, onTran
           <div className="truncate text-[15px] font-semibold text-surface-light sm:text-base">{name}</div>
           {isClinic && <span className="shrink-0 rounded-md border border-status-card-ring-blue bg-status-card-blue px-2 py-0.5 text-xs text-surface-light">Clinic</span>}
           {mapEnabled && !isClinic && onDraw && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onDraw(stats.area.id);
-              }}
-              aria-label={`${hasShape ? 'Edit' : 'Draw'} ${name} on the map`}
-              title={hasShape ? 'Edit on the map' : 'Draw on the map'}
-              className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md hover:bg-surface-liner ${hasShape ? 'text-surface-faint' : 'text-status-orange'}`}
-              data-testid={`mci-area-draw-${name}`}
-            >
-              <MapPin className="h-3.5 w-3.5" />
-            </button>
+            <MciMapButton name={name} hasShape={hasShape} onPress={() => onDraw(stats.area.id)} testId={`mci-area-draw-${name}`} />
           )}
         </div>
 

@@ -1,12 +1,12 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { ChevronDown, MapPin, Minus, Plus } from 'lucide-react';
+import { ChevronDown, Minus, Plus } from 'lucide-react';
 import { Button, Dropdown, DropdownItem, DropdownMenu, DropdownTrigger } from '@heroui/react';
 import type { MciColor } from '@/app/types';
 import { MCI_COLORS, type MciZoneStats } from '@/lib/mci';
 import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
-import { MCI_COLOR_STYLES, MCI_PILL_STYLES, MciTeamChips } from './mciparts';
+import { MCI_COLOR_STYLES, MCI_PILL_STYLES, MciMapButton, MciTeamChips, NO_SPINNER } from './mciparts';
 
 type Props = {
   stats: MciZoneStats;
@@ -70,7 +70,7 @@ function TaggedValue({ value, label, disabled, onCommit }: { value: number; labe
             setEditing(false);
           }
         }}
-        className={`${NUMBER_WELL} border-0 text-inherit outline-none focus:outline-none focus:ring-0 focus-visible:ring-0 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}
+        className={`${NUMBER_WELL} border-0 text-inherit outline-none focus:outline-none focus:ring-0 focus-visible:ring-0 ${NO_SPINNER}`}
       />
     );
   }
@@ -148,18 +148,7 @@ export default function MciZoneCard({
       <header className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
         <div className="flex min-w-0 items-center gap-1.5">
           <h3 className="truncate text-base font-bold text-surface-light">{name}</h3>
-          {mapEnabled && onDraw && (
-            <button
-              type="button"
-              onClick={() => onDraw(zone.id)}
-              aria-label={`${hasShape ? 'Edit' : 'Draw'} ${name} on the map`}
-              title={hasShape ? 'Edit on the map' : 'Draw on the map'}
-              className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md hover:bg-surface-liner ${hasShape ? 'text-surface-faint' : 'text-status-orange'}`}
-              data-testid={`mci-zone-draw-${name}`}
-            >
-              <MapPin className="h-3.5 w-3.5" />
-            </button>
-          )}
+          {mapEnabled && onDraw && <MciMapButton name={name} hasShape={hasShape} onPress={() => onDraw(zone.id)} testId={`mci-zone-draw-${name}`} />}
         </div>
 
         <div className="flex shrink-0 items-center gap-1.5">

@@ -5,18 +5,13 @@ import { Button } from '@heroui/react';
 import type { Event, MciLogEntry } from '@/app/types';
 import { MCI_LOG_DRAWER_SIZE, mciPatientLabel, mciRecentEntries } from '@/lib/mci';
 import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
-import { MCI_COLOR_STYLES } from './mciparts';
+import { MCI_COLOR_STYLES, formatClock } from './mciparts';
 
 type Props = {
   mci: NonNullable<Event['mci']>;
   readOnly: boolean;
   onUndo: (entryId: string) => void;
 };
-
-function clock(ms: number): string {
-  const d = new Date(ms);
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
-}
 
 /** "1 red (34 M chest pain)" for an entry about one patient. */
 function patientText(mci: NonNullable<Event['mci']>, entry: MciLogEntry, color: string): string {
@@ -70,7 +65,7 @@ export default function MciLogDrawer({ mci, readOnly, onUndo }: Props) {
         {rows.map(({ entry, undone }) => (
           <li key={entry.id} className="flex items-center justify-between gap-3 py-1 text-sm" data-testid="mci-log-entry">
             <span className={`min-w-0 truncate ${undone || entry.kind === 'undo' ? 'text-surface-faint' : 'text-surface-light'} ${undone ? 'line-through' : ''}`}>
-              <span className="mr-2 tabular-nums text-surface-faint">{clock(entry.t)}</span>
+              <span className="mr-2 tabular-nums text-surface-faint">{formatClock(entry.t)}</span>
               {describeMciEntry(mci, entry)}
             </span>
             {entry.kind !== 'undo' && !undone && !readOnly && (

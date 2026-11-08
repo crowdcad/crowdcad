@@ -13,8 +13,8 @@ type Props = {
 
 /** The post-event MCI record: periods, patients per zone by color, patients received per treatment location, and each patient seen in treatment. */
 export default function MciSummary({ event, formatTimestamp }: Props) {
-  const derived = useMemo(() => deriveMci(event), [event]);
-  const mci = event.mci;
+  const { mci, calls, clinics } = event;
+  const derived = useMemo(() => deriveMci({ mci, calls, clinics }), [mci, calls, clinics]);
   if (!mci || mci.periods.length === 0) return null;
   const zoneNames = new Map(mci.zones.map((z) => [z.id, z.name]));
   const areaNames = new Map(derived.areas.map((a) => [a.area.id, a.name]));

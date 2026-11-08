@@ -24,7 +24,8 @@ function CountPill({ colorClass, count, label }: { colorClass: string; count: nu
 /** The availability strip while an MCI is active: Available, Triage, Treatment and Unavailable counts. */
 export default function MciAvailabilityStrip({ event }: Props) {
   const { t } = useDispatchTerms();
-  const counts = useMemo(() => mciAvailability(event), [event]);
+  const { staff, calls } = event;
+  const counts = useMemo(() => mciAvailability({ staff, calls }), [staff, calls]);
   return (
     <div
       className="w-full flex items-center gap-4 pl-2 pr-3 py-2 border-b border-surface-liner"
