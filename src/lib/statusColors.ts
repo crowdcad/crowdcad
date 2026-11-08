@@ -16,7 +16,6 @@ const DEFAULT_STATUS_COLOR: DispatchStatusColor = {
   rowClass: '',
 };
 
-export const TEAM_CARD_ROW_HOVER_CLASS = 'hover:bg-surface-deep';
 
 /**
  * Background of the open call/clinic table row and its notes/log row. The tables sit on
@@ -25,6 +24,9 @@ export const TEAM_CARD_ROW_HOVER_CLASS = 'hover:bg-surface-deep';
  * Editable fields inside keep surface-deep (INLINE_CELL_INPUT_CLASS, TrackingTextEntry `filled`).
  */
 export const TRACKING_ROW_OPEN_CLASS = 'bg-surface-liner/60';
+
+/** Hovering a closed call/clinic row shows the open color, so clicking it does not change the color again. */
+export const TRACKING_ROW_HOVER_CLASS = 'hover:bg-surface-liner/60';
 
 export const STATUS_COLORS: Record<string, DispatchStatusColor> = {
   Available: {

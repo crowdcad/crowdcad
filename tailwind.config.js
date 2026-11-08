@@ -191,8 +191,7 @@ module.exports = {
         dark: {
           colors: {
             // Matches --surface-bg-1 (hsl(240 3% 9%)) — the same dark grey
-            // used by the dispatch call rows' hover state
-            // (TEAM_CARD_ROW_HOVER_CLASS = 'hover:bg-surface-deep').
+            // as the dispatch panels' background (bg-surface-deep).
             // HeroUI's flat/light/etc. variants read the numbered shades
             // (bg-primary-100, hover:bg-primary-50, ...), not just DEFAULT —
             // without them, those variants silently fall back to HeroUI's

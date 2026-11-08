@@ -14,7 +14,7 @@ import type { Event, Call, CallLogEntry, Clinic } from '@/app/types';
 import DispatchMotionCell from './motioncell';
 import StatusLabel, { getMenuLabel } from './statuslabel';
 import TrackingTableBase, { INLINE_CELL_INPUT_CLASS, INLINE_CELL_PLACEHOLDER, InlineCellBox, isRowToggleClick } from './trackingtablebase';
-import { TEAM_CARD_ROW_HOVER_CLASS, TRACKING_ROW_OPEN_CLASS } from '@/lib/statusColors';
+import { TRACKING_ROW_HOVER_CLASS, TRACKING_ROW_OPEN_CLASS } from '@/lib/statusColors';
 import TrackingTextEntry from '@/components/dispatch/trackingtextentry';
 import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
 import { isClinicCallResolved } from '@/lib/clinics';
@@ -246,7 +246,7 @@ export default function ClinicTrackingTable({
                   return (
                 <tr
                   key={rowRenderKey}
-                  className={`cursor-pointer min-h-3.25rem rounded-none ${openRowBg(call)} ${isOpen || statusRowClass ? '' : `${TEAM_CARD_ROW_HOVER_CLASS} transition-colors`} ${isResolvedClinicCall && !isClinicCallVisible(call) ? '[&>td]:!border-b-0 pointer-events-none' : ''} ${openClinicCallId === call.id ? '[&>td]:!border-b-0' : ''}`}
+                  className={`cursor-pointer min-h-3.25rem rounded-none ${openRowBg(call)} ${isOpen || statusRowClass ? '' : `${TRACKING_ROW_HOVER_CLASS} transition-colors`} ${isResolvedClinicCall && !isClinicCallVisible(call) ? '[&>td]:!border-b-0 pointer-events-none' : ''} ${openClinicCallId === call.id ? '[&>td]:!border-b-0' : ''}`}
                   aria-hidden={isResolvedClinicCall && !isClinicCallVisible(call)}
                   onClick={(e) => {
                     if (!isRowToggleClick(e)) return;

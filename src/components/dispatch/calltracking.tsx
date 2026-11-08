@@ -19,7 +19,7 @@ import StatusLabel, { getMenuLabel } from './statuslabel';
 import EquipmentTypeIcon, { getEquipmentStatusMenuLabel, getEquipmentStatusWord, isEquipmentIconStatus } from './equipmenttypeicon';
 import TrackingTableBase, { INLINE_CELL_INPUT_CLASS, INLINE_CELL_PLACEHOLDER, InlineCellBox } from './trackingtablebase';
 import PendingCallChip from './pendingcallchip';
-import { getStatusColor, TEAM_CARD_ROW_HOVER_CLASS, TRACKING_ROW_OPEN_CLASS } from '@/lib/statusColors';
+import { getStatusColor, TRACKING_ROW_HOVER_CLASS, TRACKING_ROW_OPEN_CLASS } from '@/lib/statusColors';
 import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
 import { getEventClinics, getTransportClinicId, RESOLVED_CALL_STATUSES, getVenueLocationOptions } from '@/lib/clinics';
 import { getEquipmentIconType } from '@/lib/equipmentIcon';
@@ -275,7 +275,7 @@ export const CallTrackingTable: React.FC<CallTrackingTableProps> = ({
                 <React.Fragment key={rowRenderKey}>
                   {(() => {
                     const isOpen = openCallId === call.id || closingCallId === call.id;
-                    const hoverClass = !isOpen ? TEAM_CARD_ROW_HOVER_CLASS : '';
+                    const hoverClass = !isOpen ? TRACKING_ROW_HOVER_CLASS : '';
                     // Open (or still collapsing): highlighted at once, no fade. Closed rows keep the hover fade.
                     const rowBg = isOpen ? TRACKING_ROW_OPEN_CLASS : `bg-transparent transition-colors ${hoverClass}`;
                     return (
