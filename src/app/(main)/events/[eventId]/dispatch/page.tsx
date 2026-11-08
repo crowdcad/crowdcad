@@ -35,6 +35,7 @@ import DebugModal from '@/components/modals/debugmodal';
 import { ShieldAlert } from 'lucide-react';
 import { Select, SelectItem, Tabs, Tab, Button, Tooltip } from "@heroui/react"
 import AvailabilitySurgeStrip from '@/components/dispatch/availabilitysurgestrip';
+import { isRowToggleClick } from '@/components/dispatch/trackingtablebase';
 import DeclareMciModal from '@/components/dispatch/mci/declaremcimodal';
 import MciAvailabilityStrip from '@/components/dispatch/mci/mciavailabilitystrip';
 import MciTab from '@/components/dispatch/mci/mcitab';
@@ -3111,8 +3112,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
   }
 
   const handleRowClick = (e: React.MouseEvent, id: string) => {
-    const target = e.target as HTMLElement;
-    if (target.closest('input, textarea, select, button, a, [contenteditable="true"]')) return;
+    if (!isRowToggleClick(e)) return;
     setOpenCallId(openCallId === id ? null : id);
   };
 

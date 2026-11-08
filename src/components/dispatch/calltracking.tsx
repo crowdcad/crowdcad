@@ -17,9 +17,9 @@ import CallTrackingDetails from '@/components/dispatch/calltrackingdetails';
 import DispatchMotionCell from './motioncell';
 import StatusLabel, { getMenuLabel } from './statuslabel';
 import EquipmentTypeIcon, { getEquipmentStatusMenuLabel, getEquipmentStatusWord, isEquipmentIconStatus } from './equipmenttypeicon';
-import TrackingTableBase from './trackingtablebase';
+import TrackingTableBase, { INLINE_CELL_INPUT_CLASS, INLINE_CELL_PLACEHOLDER, InlineCellBox } from './trackingtablebase';
 import PendingCallChip from './pendingcallchip';
-import { getStatusColor, TEAM_CARD_ROW_HOVER_CLASS } from '@/lib/statusColors';
+import { getStatusColor, TEAM_CARD_ROW_HOVER_CLASS, TRACKING_ROW_OPEN_CLASS } from '@/lib/statusColors';
 import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
 import { getEventClinics, getTransportClinicId, RESOLVED_CALL_STATUSES, getVenueLocationOptions } from '@/lib/clinics';
 import { getEquipmentIconType } from '@/lib/equipmentIcon';
@@ -276,9 +276,11 @@ export const CallTrackingTable: React.FC<CallTrackingTableProps> = ({
                   {(() => {
                     const isOpen = openCallId === call.id || closingCallId === call.id;
                     const hoverClass = !isOpen ? TEAM_CARD_ROW_HOVER_CLASS : '';
+                    // Open (or still collapsing): highlighted at once, no fade. Closed rows keep the hover fade.
+                    const rowBg = isOpen ? TRACKING_ROW_OPEN_CLASS : `bg-transparent transition-colors ${hoverClass}`;
                     return (
                   <tr
-                      className={`cursor-pointer min-h-3.25rem bg-transparent rounded-none ${hoverClass} transition-colors ${isResolvedCall && !isMotionVisible ? '[&>td]:!border-b-0 pointer-events-none' : ''} ${openCallId === call.id ? '[&>td]:!border-b-0' : ''}`}
+                      className={`cursor-pointer min-h-3.25rem ${rowBg} rounded-none ${isResolvedCall && !isMotionVisible ? '[&>td]:!border-b-0 pointer-events-none' : ''} ${openCallId === call.id ? '[&>td]:!border-b-0' : ''}`}
                     aria-hidden={isResolvedCall && !isMotionVisible}
                     onClick={(e) => handleRowClick(e, call.id)}
                   >
@@ -289,10 +291,7 @@ export const CallTrackingTable: React.FC<CallTrackingTableProps> = ({
                         </td>
                         
                         {/* Chief Complaint */}
-                        <td
-                          className="p-0"
-                          onClick={() => handleCellClick(call.id, 'chiefComplaint', call.chiefComplaint)}
-                        >
+                        <td className="p-0">
                           <DispatchMotionCell isOpen={isMotionVisible} animate={isResolvedCall} delayMs={motionDelayMs} className="px-3 py-2.5 truncate">
                             {editingCell?.callId === call.id && editingCell.field === 'chiefComplaint' ? (
                               <input
@@ -300,12 +299,6 @@ export const CallTrackingTable: React.FC<CallTrackingTableProps> = ({
                                 value={editValue}
                                 autoFocus
                                 onChange={(e) => setEditValue(e.target.value)}
-                                onFocus={(e) => {
-                                  // If this was the placeholder value, clear it on focus
-                                  if (e.target instanceof HTMLInputElement && e.target.value === '[Edit]') {
-                                    setEditValue('');
-                                  }
-                                }}
                                 onBlur={async () => {
                                   markPendingValue(call.id, 'chiefComplaint', editValue);
                                   try {
@@ -325,26 +318,18 @@ export const CallTrackingTable: React.FC<CallTrackingTableProps> = ({
                                     });
                                   }
                                 }}
-                                className="w-full bg-transparent text-surface-light px-0 py-0 border-0 outline-none focus:outline-none focus:ring-0 focus-visible:outline-none"
+                                placeholder={INLINE_CELL_PLACEHOLDER}
+                                className={INLINE_CELL_INPUT_CLASS}
                               />
                             ) : (
                               // Prefer a pending value while saving to avoid flashing the placeholder
-                              (pendingForCall.chiefComplaint !== undefined
-                                ? (pendingForCall.chiefComplaint || <span className="text-surface-light whitespace-nowrap">[Edit]</span>)
-                                : (call.chiefComplaint ? call.chiefComplaint : <span className="text-surface-light whitespace-nowrap">[Edit]</span>))
+                              <InlineCellBox onEdit={() => handleCellClick(call.id, 'chiefComplaint', call.chiefComplaint)} value={pendingForCall.chiefComplaint !== undefined ? pendingForCall.chiefComplaint : call.chiefComplaint} />
                             )}
                           </DispatchMotionCell>
                         </td>
                         
                         {/* Age/Sex */}
-                        <td
-                          className="p-0"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setEditingCell({ callId: call.id, field: 'ageSex' });
-                            setEditValue(formatAgeSex(call.age, call.gender));
-                          }}
-                        >
+                        <td className="p-0">
                           <DispatchMotionCell isOpen={isMotionVisible} animate={isResolvedCall} delayMs={motionDelayMs} className="px-3 py-2.5">
                             {editingCell?.callId === call.id && editingCell.field === 'ageSex' ? (
                               <input
@@ -358,12 +343,6 @@ export const CallTrackingTable: React.FC<CallTrackingTableProps> = ({
                                     await handleAgeSexBlur(call.id);
                                   } catch {}
                                 }}
-                                onFocus={(e) => {
-                                  // Clear [Edit] placeholder on focus
-                                  if (e.target.value === '[Edit]') {
-                                    setEditValue('');
-                                  }
-                                }}
                                 onKeyDown={(e) => {
                                   if (e.key === 'Enter') {
                                     (e.target as HTMLInputElement).blur();
@@ -375,24 +354,23 @@ export const CallTrackingTable: React.FC<CallTrackingTableProps> = ({
                                     });
                                   }
                                 }}
-                               className="w-full bg-transparent text-surface-light px-0 py-0 border-0 outline-none focus:outline-none focus:ring-0 focus-visible:outline-none"
+                                placeholder={INLINE_CELL_PLACEHOLDER}
+                                className={INLINE_CELL_INPUT_CLASS}
                               />
                             ) : (
-                              <span className="truncate">
-                                {(() => {
-                                  if (pendingForCall.ageSex !== undefined) {
-                                    return pendingForCall.ageSex || <span className="text-surface-light whitespace-nowrap">[Edit]</span>;
-                                  }
-                                  const formatted = formatAgeSex(call.age, call.gender);
-                                  return formatted || <span className="text-surface-light whitespace-nowrap">[Edit]</span>;
-                                })()}
-                              </span>
+                              <InlineCellBox
+                                onEdit={() => {
+                                  setEditingCell({ callId: call.id, field: 'ageSex' });
+                                  setEditValue(formatAgeSex(call.age, call.gender));
+                                }}
+                                value={pendingForCall.ageSex !== undefined ? pendingForCall.ageSex : formatAgeSex(call.age, call.gender)}
+                              />
                             )}
                           </DispatchMotionCell>
                         </td>
                         
                         {/* Location */}
-                        <td className="p-0" onClick={() => handleCellClick(call.id, 'location', call.location)}>
+                        <td className="p-0">
                           <DispatchMotionCell isOpen={isMotionVisible} animate={isResolvedCall} delayMs={motionDelayMs} className="px-3 py-2.5 truncate">
                             {editingCell?.callId === call.id && editingCell.field === 'location' ? (
                               <>
@@ -414,7 +392,8 @@ export const CallTrackingTable: React.FC<CallTrackingTableProps> = ({
                                       (e.target as HTMLInputElement).blur();
                                     }
                                   }}
-                                  className="w-full bg-transparent text-surface-light px-0 py-0 border-0 outline-none focus:outline-none focus:ring-0 focus-visible:outline-none"
+                                  placeholder={INLINE_CELL_PLACEHOLDER}
+                                  className={INLINE_CELL_INPUT_CLASS}
                                 />
                                 {/* Native datalist: suggests existing venue locations while still accepting free text. */}
                                 <datalist id={`location-options-${call.id}`}>
@@ -424,7 +403,7 @@ export const CallTrackingTable: React.FC<CallTrackingTableProps> = ({
                                 </datalist>
                               </>
                             ) : (
-                              call.location || <span className="text-surface-light whitespace-nowrap">[Edit]</span>
+                              <InlineCellBox onEdit={() => handleCellClick(call.id, 'location', call.location)} value={call.location} />
                             )}
                           </DispatchMotionCell>
                         </td>
@@ -865,7 +844,7 @@ export const CallTrackingTable: React.FC<CallTrackingTableProps> = ({
                   {isMotionVisible && (openCallId === call.id || closingCallId === call.id) && (
                     <CallTrackingDetails
                       key={`${call.id}-details`}
-                      rowClassName=""
+                      rowClassName={TRACKING_ROW_OPEN_CLASS}
                       callDisplayNumber={callDisplayNumberMap.get(call.id)}
                       isOpen={openCallId === call.id}
                       notesText={notesTexts[call.id] ?? (call.notes || '')}

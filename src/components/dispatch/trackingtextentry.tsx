@@ -9,6 +9,8 @@ import { cn } from '@/lib/utils';
 type TrackingTextEntryProps = Omit<React.ComponentProps<typeof Textarea>, 'key'> & {
   mode: 'note' | 'log';
   maxRows: number;
+  /** Fill the box with surface-deep, for a field inside a highlighted (open) table row. */
+  filled?: boolean;
 };
 
 // The box is drawn by its border only and shows whatever it sits on. A solid
@@ -22,9 +24,15 @@ type TrackingTextEntryProps = Omit<React.ComponentProps<typeof Textarea>, 'key'>
 // so tailwind-merge replaces them instead of stacking; the focus ring is
 // removed globally ([data-slot="input-wrapper"] in globals.css), and
 // disableAnimation drops the wrapper's background transition.
+// `filled` is for the open call/clinic table row, which takes a lighter background
+// (TRACKING_ROW_OPEN_CLASS) while its editable fields keep the table's own color.
+const FILL_EMPTY = 'bg-transparent data-[hover=true]:bg-transparent group-data-[focus=true]:bg-transparent';
+const FILL_SURFACE = 'bg-surface-deep data-[hover=true]:bg-surface-deep group-data-[focus=true]:bg-surface-deep';
+
 export default function TrackingTextEntry({
   mode,
   maxRows,
+  filled = false,
   className,
   classNames,
   variant,
@@ -45,7 +53,8 @@ export default function TrackingTextEntry({
           classNames?.input
         ),
         inputWrapper: cn(
-          'bg-transparent data-[hover=true]:bg-transparent group-data-[focus=true]:bg-transparent shadow-none border border-surface-liner !py-1 !pr-1',
+          filled ? FILL_SURFACE : FILL_EMPTY,
+          'shadow-none border border-surface-liner !py-1 !pr-1',
           classNames?.inputWrapper
         ),
       }}

@@ -36,6 +36,14 @@ html[data-ui='condensed'] {
   --ui-label-tracking: 0.08em;
 }
 
+/* Toasts: the toast takes rounded-2xl (--ui-radius), but react-toastify rounds its
+   progress bar's bottom corners with its own variable (6px by default), which left
+   a rounded bar under a sharp condensed toast. html[data-ui] outranks the
+   library's own :root default whichever stylesheet loads last. */
+html[data-ui] {
+  --toastify-toast-bd-radius: var(--ui-radius);
+}
+
 /* :where() keeps these at zero specificity, so any Tailwind class on the
    element (normal-case, tracking-*, ...) still wins. */
 :where(h1, h2, h3, h4, h5, h6) {

@@ -57,6 +57,7 @@ export default function CallTrackingDetails({
               <div className="font-semibold mb-1">{t('Notes')}</div>
               <TrackingTextEntry
                 mode="note"
+                filled
                 value={notesText}
                 onChange={(e) => onNotesChange(e.target.value)}
                 onBlur={onNotesBlur}
@@ -73,6 +74,7 @@ export default function CallTrackingDetails({
               <strong>{t('Log for Call')} #{callDisplayNumber}:</strong>
               <TrackingTextEntry
                 mode="log"
+                filled
                 value={logText}
                 onChange={(e) => onLogChange(e.target.value)}
                 onBlur={onLogBlur}
