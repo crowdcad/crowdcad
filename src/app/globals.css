@@ -207,7 +207,6 @@
   .dispatch-expand-fade {
     transition: opacity 260ms cubic-bezier(0.16, 1, 0.3, 1), transform 260ms cubic-bezier(0.16, 1, 0.3, 1);
     transition-delay: var(--dispatch-expand-delay, 0ms);
-    will-change: opacity, transform;
   }
 }
 

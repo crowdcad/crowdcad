@@ -6,7 +6,7 @@
 
 import React, { useMemo } from 'react';
 import type { EquipmentArrival } from '@/lib/equipmentArrivals';
-import type { Event, Staff, Supervisor, EquipmentItem } from '@/app/types';
+import type { Event, MciAssignment, Staff, Supervisor, EquipmentItem } from '@/app/types';
 import TeamWidget from '@/components/dispatch/teamwidget';
 import EquipmentCard from '@/components/dispatch/equipmentcard';
 import { sortTeams, type TeamSortMode } from '@/lib/teamSort';
@@ -32,7 +32,7 @@ function EmptyListText({ children }: { children: React.ReactNode }) {
 
 export type TeamListProps = SharedTeamListProps & {
   sortMode: TeamSortMode;
-  onStatusChange: (staff: Staff, newStatus: string, clinicId?: string) => void;
+  onStatusChange: (staff: Staff, newStatus: string, clinicId?: string, mciAssignment?: MciAssignment) => void;
   onLocationChange: (staff: Staff, newLocation: string) => void;
   onEditTeam: (staff: Staff) => void;
   onDeleteTeam: (team: string) => void;
@@ -68,7 +68,7 @@ export function TeamList({
 }
 
 export type SupervisorListProps = SharedTeamListProps & {
-  onStatusChange: (supervisor: Staff, newStatus: string) => void;
+  onStatusChange: (supervisor: Staff, newStatus: string, clinicId?: string, mciAssignment?: MciAssignment) => void;
   onLocationChange: (supervisor: Staff, newLocation: string) => void;
   onEditSupervisor: (supervisor: Supervisor) => void;
   onDeleteSupervisor: (team: string) => void;
@@ -84,6 +84,7 @@ function supervisorAsStaff(supervisor: Supervisor): Staff {
     members: [supervisor.member],
     log: supervisor.log,
     originalPost: supervisor.originalPost,
+    mciAssignment: supervisor.mciAssignment,
   };
 }
 

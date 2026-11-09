@@ -6,6 +6,7 @@ import type {
   DispatchZone,
   Equipment,
   EventEquipment,
+  MciState,
   PostAssignment,
   Post,
   Staff,
@@ -59,6 +60,7 @@ export interface LiteEventDraft {
   calls: Call[];
   clinics?: Clinic[];
   dispatchZones?: DispatchZone[];
+  mci?: MciState;
   status: 'draft' | 'active';
   createdAt: string;
   updatedAt: string;

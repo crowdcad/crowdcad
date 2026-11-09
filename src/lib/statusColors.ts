@@ -16,7 +16,17 @@ const DEFAULT_STATUS_COLOR: DispatchStatusColor = {
   rowClass: '',
 };
 
-export const TEAM_CARD_ROW_HOVER_CLASS = 'hover:bg-surface-deep';
+
+/**
+ * Background of the open call/clinic table row and its notes/log row. The tables sit on
+ * surface-deep (the color an open team card takes), so the open row needs its own step:
+ * a translucent border-gray lifts it in dark mode and dims it slightly in light mode.
+ * Editable fields inside keep surface-deep (INLINE_CELL_INPUT_CLASS, TrackingTextEntry `filled`).
+ */
+export const TRACKING_ROW_OPEN_CLASS = 'bg-surface-liner/60';
+
+/** Hovering a closed call/clinic row shows the open color, so clicking it does not change the color again. */
+export const TRACKING_ROW_HOVER_CLASS = 'hover:bg-surface-liner/60';
 
 export const STATUS_COLORS: Record<string, DispatchStatusColor> = {
   Available: {
@@ -64,6 +74,22 @@ export const STATUS_COLORS: Record<string, DispatchStatusColor> = {
     chipClass: 'border border-status-card-ring-blue bg-status-card-blue',
     rowClass: '',
   },
+  // MCI mode: Triage reads as on call, Treatment as clinic, Unavailable as the default gray.
+  Triage: {
+    borderClass: 'border-status-card-ring-red',
+    fillClass: 'bg-status-card-red',
+    textClass: 'text-status-red',
+    chipClass: 'border border-status-card-ring-red bg-status-card-red',
+    rowClass: '',
+  },
+  Treatment: {
+    borderClass: 'border-status-card-ring-blue',
+    fillClass: 'bg-status-card-blue',
+    textClass: 'text-status-blue',
+    chipClass: 'border border-status-card-ring-blue bg-status-card-blue',
+    rowClass: '',
+  },
+  Unavailable: DEFAULT_STATUS_COLOR,
   'Retrieving Eq': {
     borderClass: 'border-status-card-ring-yellow',
     fillClass: 'bg-status-card-yellow',
@@ -120,22 +146,42 @@ export function getStatusColor(status?: string | null): DispatchStatusColor {
   return STATUS_COLORS[status] || DEFAULT_STATUS_COLOR;
 }
 
+const CLOSED_CALL_STATUSES = ['Resolved', 'Delivered', 'Delivered Eq', 'Refusal', 'NMM', 'Treat and Release'];
+const EQ_RUN_STATUSES = ['Retrieving Eq', 'En Route Eq', 'Assisting'];
+
 export function deriveTeamVisualStatus(status: string, event: Event, team: string): string {
   const onEqRun =
-    !!event.calls?.some(
-      c => c.equipmentTeams?.includes(team) && !['Resolved', 'Delivered', 'Delivered Eq', 'Refusal', 'NMM', 'Treat and Release'].includes(c.status)
-    ) || ['Retrieving Eq', 'En Route Eq', 'Assisting'].includes(status);
+    !!event.calls?.some(c => c.equipmentTeams?.includes(team) && !CLOSED_CALL_STATUSES.includes(c.status)) ||
+    EQ_RUN_STATUSES.includes(status);
 
   if (onEqRun) return 'En Route Eq';
   if (status === 'Returning Eq') return status;
 
-  const activeCare = !!event.calls?.some(
-    c => c.assignedTeam?.includes(team) && !['Resolved', 'Delivered', 'Delivered Eq', 'Refusal', 'NMM', 'Treat and Release'].includes(c.status)
-  );
+  const activeCare = !!event.calls?.some(c => c.assignedTeam?.includes(team) && !CLOSED_CALL_STATUSES.includes(c.status));
 
   if (activeCare) return 'En Route';
 
   return status;
+}
+
+/**
+ * `deriveTeamVisualStatus` for many units at once: the calls are scanned once
+ * up front instead of twice per unit. Use it when looping over every unit.
+ */
+export function teamVisualStatusResolver(event: Pick<Event, 'calls'>): (status: string, team: string) => string {
+  const onEqRun = new Set<string>();
+  const onCall = new Set<string>();
+  for (const call of event.calls || []) {
+    if (CLOSED_CALL_STATUSES.includes(call.status)) continue;
+    for (const team of call.equipmentTeams || []) onEqRun.add(team);
+    if (Array.isArray(call.assignedTeam)) for (const team of call.assignedTeam) onCall.add(team);
+  }
+  return (status, team) => {
+    if (onEqRun.has(team) || EQ_RUN_STATUSES.includes(status)) return 'En Route Eq';
+    if (status === 'Returning Eq') return status;
+    if (onCall.has(team)) return 'En Route';
+    return status;
+  };
 }
 
 const ROW_STATUS_PRIORITY = ['Transporting', 'On Scene', 'En Route'];

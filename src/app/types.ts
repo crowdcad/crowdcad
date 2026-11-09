@@ -124,6 +124,94 @@ export interface Event {
   manualSurgeStartedAt?: number;
   /** Every surge period this event has had, oldest first. The last entry's `endedAt` is unset while a surge is currently active (mirrors `manualSurgeActive`/`manualSurgeStartedAt`). */
   surgeLog?: SurgePeriod[];
+
+  /** Mass casualty incident (MCI) mode. Unset on events that never declared one. See src/lib/mci.ts. */
+  mci?: MciState;
+}
+
+export type MciColor = 'red' | 'yellow' | 'green' | 'black';
+
+/** A zone patients are found in. Zones hold counts only; patient details live in treatment locations (`MciState.patients`). */
+export interface MciZone {
+  id: string; // stable; the venue zone's id when created from one
+  name: string;
+  venueZoneId?: string;
+  /** Set while the zone is cleared, unset when reopened. Kept in step with the log by appendMciEntries. */
+  clearedAt?: number;
+}
+
+/** A place patients are moved to: an event clinic or an MCI-only treatment area. */
+export interface MciTreatmentArea {
+  id: string;
+  name: string;
+  /** Set when this area is an existing event clinic. */
+  clinicId?: string;
+  /** The map zone drawn for this area, in the event venue's layers. */
+  venueZoneId?: string;
+}
+
+export type MciLogKind = 'tagged' | 'moved' | 'arrived' | 'reassigned' | 'transported' | 'zone_cleared' | 'zone_reopened' | 'undo';
+
+export interface MciLogEntry {
+  id: string;
+  /** Epoch ms at entry time. */
+  t: number;
+  kind: MciLogKind;
+  color?: MciColor;
+  /** Signed for 'tagged', positive for 'moved', 'arrived' and 'transported', 1 for 'reassigned'. */
+  n?: number;
+  zoneId?: string;
+  /** Destination for 'moved' and 'arrived'; where the patient was for 'reassigned'; the treatment location the patients left for 'transported'. */
+  areaId?: string;
+  /** The one patient a 'reassigned' or per-patient 'transported' entry is about (see `mciPatientId` in src/lib/mci.ts). */
+  patientId?: string;
+  /** New tag color, for 'reassigned'. */
+  toColor?: MciColor;
+  /** New treatment location, for 'reassigned'. */
+  toAreaId?: string;
+  /** Optional free text, for 'reassigned'. */
+  note?: string;
+  /** Ambulance number as typed, for 'transported'. A unit label, never patient data. */
+  unit?: string;
+  /** Where the ambulance took them (free text, optional), for 'transported'. */
+  destination?: string;
+  /** The entry an 'undo' reverses. */
+  undoes?: string;
+  /** Auth uid when signed in. */
+  by?: string;
+}
+
+/** Where a unit in Triage (a zone) or Treatment (a treatment area) is working. */
+export interface MciAssignment {
+  kind: 'zone' | 'area';
+  id: string;
+}
+
+export interface MciState {
+  active: boolean;
+  periods: { startedAt: number; endedAt?: number }[];
+  zones: MciZone[];
+  areas: MciTreatmentArea[];
+  /** The only source of counts. Entries are appended, never edited or removed. */
+  log: MciLogEntry[];
+  /** Show a box per patient in each treatment location. Only changes what is shown: patients always come from the log. */
+  trackPatients?: boolean;
+  /** What the treatment leader typed about each patient, keyed by patient id. Never names or tag numbers. */
+  patients?: Record<string, MciPatientDetails>;
+}
+
+/** Details typed for one patient in a treatment location. Every field is optional. */
+export interface MciPatientDetails {
+  /** As typed, up to 5 characters ("34", "6mo"). */
+  age?: string;
+  /** One capital letter. */
+  sex?: string;
+  /** Chief complaint, a word or two. */
+  complaint?: string;
+  /** The team that brought the patient in. */
+  team?: string;
+  /** Transport order in the patient's treatment location. Shown as a rank, so a transport moves everyone after it up one. */
+  priority?: number;
 }
 
 export interface SurgePeriod {
@@ -148,6 +236,8 @@ export interface Staff {
   originalPost?: string;
   /** Epoch ms when the unit entered its current status/location — drives its timer. Stamped by the dispatch page on every status or location change. */
   statusSince?: number;
+  /** Where this unit is working during an MCI (status Triage or Treatment). Cleared on Available, Unavailable and stand down. */
+  mciAssignment?: MciAssignment;
 }
 
 export interface Supervisor {
@@ -161,6 +251,8 @@ export interface Supervisor {
   originalPost?: string;
   /** Epoch ms when the unit entered its current status/location — drives its timer. Stamped by the dispatch page on every status or location change. */
   statusSince?: number;
+  /** Where this unit is working during an MCI (status Triage or Treatment). Cleared on Available, Unavailable and stand down. */
+  mciAssignment?: MciAssignment;
 }
 
 export type PostAssignment = {

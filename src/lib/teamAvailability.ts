@@ -1,5 +1,5 @@
 import type { Event } from '@/app/types';
-import { deriveTeamVisualStatus } from '@/lib/statusColors';
+import { teamVisualStatusResolver } from '@/lib/statusColors';
 
 export const DEFAULT_SURGE_LIMIT_PERCENT = 70;
 export const DEFAULT_PENDING_TRANSPORT_SURGE_THRESHOLD = 3;
@@ -34,8 +34,9 @@ export function getTeamAvailabilitySummary(event: Event): TeamAvailabilitySummar
   let onBreakOrClinic = 0;
   let onCalls = 0;
 
+  const resolveStatus = teamVisualStatusResolver(event);
   for (const member of staff) {
-    const visualStatus = deriveTeamVisualStatus(member.status, event, member.team);
+    const visualStatus = resolveStatus(member.status, member.team);
     if (ON_CALL_STATUSES.has(visualStatus)) {
       onCalls += 1;
     } else if (BREAK_OR_CLINIC_STATUSES.has(visualStatus)) {

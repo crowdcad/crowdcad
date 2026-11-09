@@ -68,6 +68,7 @@ export function normalizeLiteDraftToEvent(draft: LiteEventDraft): Event {
     unassignedCallSurgeSeconds: draft.unassignedCallSurgeSeconds,
     clinics: draft.clinics || [],
     dispatchZones: draft.dispatchZones || [],
+    mci: draft.mci,
   };
 }
 
@@ -99,6 +100,7 @@ export function toLiteDraftFromEvent(nextEvent: Event, previousDraft: LiteEventD
     unassignedCallSurgeSeconds: nextEvent.unassignedCallSurgeSeconds ?? previousDraft.unassignedCallSurgeSeconds,
     clinics: nextEvent.clinics ?? previousDraft.clinics,
     dispatchZones: nextEvent.dispatchZones ?? previousDraft.dispatchZones,
+    mci: nextEvent.mci ?? previousDraft.mci,
     createdAt:
       typeof nextEvent.createdAt === 'string' ? nextEvent.createdAt : previousDraft.createdAt,
     updatedAt: new Date().toISOString(),

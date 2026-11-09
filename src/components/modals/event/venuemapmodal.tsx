@@ -28,7 +28,7 @@ function StatusTimer({ since }: { since: number }) {
   const minutes = Math.floor(elapsed / 60);
   const seconds = elapsed % 60;
   return (
-    <span className="ui-timer">
+    <span className="ui-timer !top-0">
       {minutes.toString().padStart(2, '0')}:{seconds.toString().padStart(2, '0')}
     </span>
   );

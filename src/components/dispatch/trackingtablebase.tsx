@@ -13,6 +13,55 @@ interface TrackingTableBaseProps {
   className?: string;
 }
 
+// The editable text cells (chief complaint, A/S, location) are a box the height of a team chip (h-8),
+// with the table's own surface-deep fill, so inside an open (highlighted) row they read as fields. The
+// box looks the same before and while editing; the negative margin keeps its text in line with the header.
+const INLINE_CELL_BOX = 'h-8 w-[calc(100%+1rem)] -mx-2 px-2 rounded-sm bg-surface-deep text-surface-light';
+
+/**
+ * What an empty editable cell shows, muted like an input placeholder. It used to be "[Edit]", but the
+ * box now says the cell is editable, and bracket glyphs hang below the baseline (3px at 15px in
+ * Rajdhani, the condensed font), so they looked dropped next to the lowercase letters.
+ */
+export const INLINE_CELL_PLACEHOLDER = 'Edit';
+
+/** The input an editable text cell turns into when clicked; give it `placeholder={INLINE_CELL_PLACEHOLDER}`. */
+export const INLINE_CELL_INPUT_CLASS = `${INLINE_CELL_BOX} border-0 outline-none placeholder:text-surface-faint focus:outline-none focus:ring-0 focus-visible:outline-none`;
+
+/**
+ * An editable text cell before it is clicked. Clicking the box itself starts editing and leaves the row
+ * as it is; the cell's padding around it still opens and closes the row like the rest of the row.
+ */
+export function InlineCellBox({ value, onEdit }: { value: string | null | undefined; onEdit: () => void }) {
+  return (
+    <div
+      className={`${INLINE_CELL_BOX} flex cursor-text items-center`}
+      onClick={(e) => {
+        e.stopPropagation();
+        onEdit();
+      }}
+    >
+      {value ? <span className="truncate">{value}</span> : <span className="text-surface-faint">{INLINE_CELL_PLACEHOLDER}</span>}
+    </div>
+  );
+}
+
+const ROW_CONTROLS = 'input, textarea, select, button, a, [contenteditable="true"], [role="button"], [role="menuitem"]';
+
+/**
+ * Whether a click on a call/clinic table row should open or close it: anywhere in the row except a text
+ * field or a control. Clicks from menus are ignored too: menus render in a portal outside the row, but
+ * React still bubbles their clicks up through it (picking "Add Team" used to open the row). Controls are
+ * only looked for inside the row, since an element around the table can carry one of those roles.
+ */
+export function isRowToggleClick(e: React.MouseEvent): boolean {
+  const row = e.currentTarget as HTMLElement;
+  const target = e.target as HTMLElement;
+  if (!row.contains(target)) return false;
+  const control = target.closest(ROW_CONTROLS);
+  return !control || !row.contains(control);
+}
+
 // Header cells carry px-3 (0.75rem each side). Uppercase + letter-spacing in the condensed
 // UI style runs wider than a "0", hence the per-character allowance.
 const HEADER_PADDING_REM = 1.5;
