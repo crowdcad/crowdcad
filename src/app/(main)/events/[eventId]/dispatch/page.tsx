@@ -39,6 +39,7 @@ import AvailabilitySurgeStrip from '@/components/dispatch/availabilitysurgestrip
 import { isRowToggleClick } from '@/components/dispatch/trackingtablebase';
 import DeclareMciModal from '@/components/dispatch/mci/declaremcimodal';
 import RoleLoginsModal from '@/components/dispatch/mci/roleloginsmodal';
+import LogisticsTab from '@/components/dispatch/mci/logisticstab';
 import { ROLE_LOGINS_SUPPORTED } from '@/lib/roleAccountStore';
 import MciAvailabilityStrip from '@/components/dispatch/mci/mciavailabilitystrip';
 import MciTab from '@/components/dispatch/mci/mcitab';
@@ -3830,6 +3831,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
   const rightTabLabel =
     selectedRightTab === 'map' ? t('Map')
     : selectedRightTab === 'mci' ? t('MCI')
+    : selectedRightTab === 'logistics' ? t('Logistics')
     : clinics.find((c) => c.id === selectedRightTab)?.name ?? t('Calls');
   const desktopLeftPane = (
     <div className="h-full rounded-xl flex flex-col">
@@ -3902,6 +3904,15 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
                 {t('MCI')}{isMciActive(event) ? '' : ' (ended)'}
               </PanelTab>
             )}
+            {hasMci(event) && (
+              <PanelTab active={selectedRightTab === 'logistics'} onSelect={() => setSelectedRightTab('logistics')} data-testid="logistics-tab-button">
+                {t('Logistics')}
+                {(() => {
+                  const coming = (event.mci?.logistics?.incoming ?? []).filter((x) => x.state === 'incoming').length;
+                  return coming ? ` (${coming} incoming)` : '';
+                })()}
+              </PanelTab>
+            )}
             <PanelTab active={selectedRightTab === 'calls'} onSelect={() => setSelectedRightTab('calls')}>
               {dispatchZones.length > 0 ? callZoneFilterLabel : t('Calls')} ({getActiveCallsForZoneSelection(callZoneFilter).length})
             </PanelTab>
@@ -3953,6 +3964,18 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
         {selectedRightTab === 'mci' && !isMobile && event.mci && (
           <div className="relative z-10 -mt-px mx-1.5 rounded-lg bg-surface-deep px-2.5 pb-2 pt-1 flex flex-col flex-1 min-h-0">
             <MciTab event={event} actions={mciActions} onOpenRoleLogins={roleLoginsAvailable ? () => setShowRoleLogins(true) : undefined} />
+          </div>
+        )}
+
+        {selectedRightTab === 'logistics' && !isMobile && event.mci && (
+          <div className="relative z-10 -mt-px mx-1.5 rounded-lg bg-surface-deep px-2.5 py-2 flex flex-col flex-1 min-h-0">
+            <LogisticsTab
+              event={event}
+              updateEvent={updateEvent}
+              onIssueEquipment={(name, unit) => void saveEquipmentChange((fleet, current, t) => moveEquipment(fleet, current, name, unit, t))}
+              onReturnEquipment={(name) => void saveEquipmentChange((fleet, current, t) => returnEquipment(fleet, current, name, t, 'dispatcher'))}
+              onAddEquipment={handleAddNewEquipment}
+            />
           </div>
         )}
 
