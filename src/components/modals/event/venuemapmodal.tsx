@@ -730,6 +730,8 @@ export interface VenueMapWithPostsProps {
   onAddCallForTeam?: (teamName: string) => void;
   /** Show posts in team and supervisor cards. Off when the event has no posting schedule. */
   showPosts?: boolean;
+  /** Draw the posts' own pins (the Map tab's Layers menu can hide them; units at posts are still placed). */
+  showPostPins?: boolean;
   /** Optional add-on layer (see MapOverlay). */
   overlay?: MapOverlay;
 }
@@ -764,6 +766,7 @@ export function VenueMapWithPosts({
   onAddCallAtPost,
   onAddCallForTeam,
   showPosts = true,
+  showPostPins = true,
   overlay,
 }: VenueMapWithPostsProps) {
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
@@ -967,7 +970,7 @@ export function VenueMapWithPosts({
         </div>
         {shouldRenderMarkers && (
           <>
-            {posts.map((post, i) => (
+            {showPostPins && posts.map((post, i) => (
               <PostMarker
                 key={i}
                 post={post}

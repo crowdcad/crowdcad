@@ -16,6 +16,9 @@ import { layerAlignment } from '@/lib/geo/layers';
 import { latLonToPercent } from '@/lib/geo/affine';
 import type { UnitPosition } from '@/lib/unitTracking';
 import { equipmentHolderUnit } from '@/lib/equipmentPlacement';
+import { PREF, usePref } from '@/lib/geo/prefs';
+import { cleanHidden, setLayerShown, type MapLayerKind } from '@/lib/mapLayers';
+import MapLayersMenu from './maplayersmenu';
 
 // The live map for geo layers (P8, D64), loaded only when a venue has one.
 const GeoVenueMap = dynamic(() => import('./GeoVenueMap'), { ssr: false });
@@ -133,6 +136,20 @@ export default function VenueMapTab({
   const safeCurrentLayer = Math.min(currentLayer, Math.max(0, layers.length - 1));
   const currentLayerData = layers[safeCurrentLayer];
 
+  // What this viewer has hidden with the Layers menu (#136), kept in this browser.
+  const [storedHidden, setStoredHidden] = usePref<MapLayerKind[]>(PREF.dispatchMapHidden, []);
+  const hidden = cleanHidden(storedHidden);
+  const isHidden = (kind: MapLayerKind) => hidden.includes(kind);
+  /** "View on map" for something whose layer is hidden turns that layer back on. */
+  const reveal = (kind: MapLayerKind) => {
+    if (isHidden(kind)) setStoredHidden(setLayerShown(hidden, kind, true));
+  };
+  const hideZones = isHidden('zones');
+  const shownLayers = useMemo(() => (hideZones ? layers.map((l) => ({ ...l, zones: [] })) : layers), [layers, hideZones]);
+  const shownStaff = isHidden('teams') ? [] : staff;
+  const shownSupervisor = isHidden('supervisors') ? [] : supervisor;
+  const shownEquipment = isHidden('equipment') ? [] : equipment;
+
   // The attention arrow on a search result fades on its own rather than
   // sticking around until something else clears it.
   useEffect(() => {
@@ -165,6 +182,7 @@ export default function VenueMapTab({
   useEffect(() => {
     if (!focusTeamRequest) return;
     const team = staff.find((s) => s.team === focusTeamRequest.teamName);
+    reveal('teams');
     focusUnit(focusTeamRequest.teamName, team?.location);
     setSelectedTeamName(focusTeamRequest.teamName);
     resetZoom();
@@ -176,6 +194,7 @@ export default function VenueMapTab({
   useEffect(() => {
     if (!focusSupervisorRequest) return;
     const sup = supervisor.find((s) => s.team === focusSupervisorRequest.supervisorName);
+    reveal('supervisors');
     focusUnit(focusSupervisorRequest.supervisorName, sup?.location);
     setSelectedSupervisorName(focusSupervisorRequest.supervisorName);
     resetZoom();
@@ -187,6 +206,7 @@ export default function VenueMapTab({
   useEffect(() => {
     if (!focusEquipmentRequest) return;
     const equip = equipment.find((e) => e.name === focusEquipmentRequest.equipmentName);
+    reveal('equipment');
     // Its own tracker, else wherever the unit holding it is, else the post it is at.
     const tag = equip && overlay?.unitTracking?.equipmentPositions?.[equip.name];
     const holder = equip && equipmentHolderUnit(equip, [...staff, ...supervisor]);
@@ -312,6 +332,7 @@ export default function VenueMapTab({
         )}
 
         <div className="ml-auto flex min-w-0 items-center gap-2">
+          <MapLayersMenu hidden={hidden} onChange={setStoredHidden} />
           {currentLayerData && isGeoLayer(currentLayerData) ? (
             <GeoLayerMapControls layer={currentLayerData} />
           ) : (
@@ -357,11 +378,11 @@ export default function VenueMapTab({
         <div className="relative min-h-0 flex-1 overflow-hidden rounded-lg">
           <GeoVenueMap
             className="absolute inset-0"
-            layer={currentLayerData}
+            layer={shownLayers[safeCurrentLayer]!}
             layerIndex={safeCurrentLayer}
-            staff={staff}
-            supervisor={supervisor}
-            equipment={equipment}
+            staff={shownStaff}
+            supervisor={shownSupervisor}
+            equipment={shownEquipment}
             teamTimers={teamTimers}
             calls={calls}
             clinics={clinics}
@@ -372,6 +393,7 @@ export default function VenueMapTab({
             onAddCallAtPost={onAddCallAtPost}
             onAddCallForTeam={onAddCallForTeam}
             showPosts={showPosts}
+            showPostPins={!isHidden('posts')}
             focus={geoFocus}
             overlay={overlay}
           />
@@ -379,11 +401,11 @@ export default function VenueMapTab({
       ) : (
       <div className="relative min-h-0 flex-1 overflow-hidden rounded-lg" style={MAP_CHECKER_BG}>
         <VenueMapWithPosts
-          layers={layers}
+          layers={shownLayers}
           currentLayer={safeCurrentLayer}
-          staff={staff}
-          supervisor={supervisor}
-          equipment={equipment}
+          staff={shownStaff}
+          supervisor={shownSupervisor}
+          equipment={shownEquipment}
           teamTimers={teamTimers}
           calls={calls}
           clinics={clinics}
@@ -405,7 +427,8 @@ export default function VenueMapTab({
           selectedEquipmentName={selectedEquipmentName}
           onAddCallAtPost={onAddCallAtPost}
           onAddCallForTeam={onAddCallForTeam}
-            showPosts={showPosts}
+          showPosts={showPosts}
+          showPostPins={!isHidden('posts')}
           overlay={overlay}
         />
         <MapZoomControls onZoomIn={() => zoomIn(0.25)} onZoomOut={() => zoomOut(0.25)} onReset={resetZoom} />
