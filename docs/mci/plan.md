@@ -29,6 +29,7 @@ Types are in `src/app/types.ts`: `MciState` on `Event.mci`, and `mciAssignment` 
 - The log is the only source of counts. Pure functions in `src/lib/mci.ts` derive every number.
 - Every write goes through `updateEvent` in its functional form, computed from the event the transaction read.
 - Undo appends a compensating entry. Nothing is edited or removed.
+- On Firebase cloud events the MCI state lives in `events/{eventId}/mci/state`, not `event.mci` (D18); the dispatch page merges it back in.
 - PocketBase has `mci` as a `json` field on `events` (`scripts/setup-pocketbase.js` and a migration under `tests/e2e/pb_migrations/`). Lite mode carries it through `liteEventAdapters.ts`. Firestore needs no rule change because `mci` is not a protected field.
 
 ## Touchpoints

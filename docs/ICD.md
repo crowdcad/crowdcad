@@ -250,7 +250,7 @@ Equipment custody (optional, on event equipment; written by `src/lib/equipmentCu
 
 **`InteractionSession`**: `sessionId`, `eventId`, `startTime` (epoch ms), `endTime?` (epoch ms), `mouseClicks: {timestamp:number}[]`, `keyStrokes: {timestamp:number}[]`.
 
-### 3.8 MCI role logins (Firebase only)
+### 3.8 MCI role logins and MCI documents (Firebase only)
 
 Role logins (#142, `src/lib/roleAccounts.ts`) are email/password accounts whose email is `<username>@role.crowdcad.org`. They have no PocketBase collections yet.
 
@@ -258,6 +258,8 @@ Role logins (#142, `src/lib/roleAccounts.ts`) are email/password accounts whose 
 |---|---|---|---|
 | `events/{eventId}/roleAccounts/{uid}` | `uid`, `eventId`, `eventName`, `role` (`incident_command`, `triage`, `treatment`, `transport`, `logistics`), `username`, `label?`, `disabled`, `disabledAt?`, `createdBy`, `createdAt` | Anyone who may dispatch the event (directly or through `/api/role-accounts`); only `disabled`, `disabledAt` and `label` change after creation | The same people, and the login itself |
 | `roleAccountIndex/{uid}` | `eventId`, `role` | As above | The login itself |
+| `events/{eventId}/mci/state` | An `MciState` (§3.7), the source of truth for the event's MCI on Firebase (#143); `events.mci` is only read for older events without it | Anyone who may dispatch the event, in the same transaction as the rest of the write | The same people, and the event's active role logins |
+| `events/{eventId}/mci/units` | `units[]` (`id?`, `name`, `kind`: `team` or `supervisor`, `status`, `mciAssignment?`, `equipment[]`: names held), `updatedAt` | As above, whenever a write changes what it shows | As above |
 
 ## 4. Fields present in the app's TypeScript types but not in this PocketBase schema
 

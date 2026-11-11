@@ -331,6 +331,16 @@ service cloud.firestore {
       allow delete: if canReadEventData(eventId);
     }
 
+    // MCI state outside the event document (#143, src/lib/mciDoc.ts): `state`
+    // (what event.mci used to hold) and `units` (a summary of the units for
+    // role views). Dispatchers read and write both; an active role login for
+    // the event reads them. What each role may write comes with role views (#144).
+    match /events/{eventId}/mci/{docId} {
+      allow read: if canReadEventData(eventId) || isActiveRoleAccountFor(eventId);
+      allow create, update: if canReadEventData(eventId) && docId in ['state', 'units'];
+      allow delete: if canReadEventData(eventId);
+    }
+
     // Which event a role login belongs to, read by the login itself after signing in.
     match /roleAccountIndex/{uid} {
       allow read: if request.auth != null && request.auth.uid == uid;
