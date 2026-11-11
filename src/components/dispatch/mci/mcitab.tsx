@@ -20,6 +20,8 @@ import { MCI_INPUT_CLASSNAMES } from './mciparts';
 type Props = {
   event: Event;
   actions: MciActions;
+  /** Opens the role logins dialog (#142); omitted where role logins aren't available (Lite, PocketBase). */
+  onOpenRoleLogins?: () => void;
 };
 
 /** One-line "add by name" form, for zones and treatment areas added after declaring. */
@@ -55,7 +57,7 @@ function AddByName({ label, testId, onAdd }: { label: string; testId: string; on
  * The MCI tab. Every number comes from `deriveMci` (the log is the source of
  * truth). After stand down it stays, read-only, so the record can be reviewed.
  */
-export default function MciTab({ event, actions }: Props) {
+export default function MciTab({ event, actions, onOpenRoleLogins }: Props) {
   const { t } = useDispatchTerms();
   const mci = event.mci;
   // Memoized on what each helper reads, not on `event`, which is a new object on every snapshot.
@@ -188,6 +190,11 @@ export default function MciTab({ event, actions }: Props) {
             <Checkbox size="sm" isSelected={!!mci.trackPatients} onValueChange={(on) => void actions.setTrackPatients(on)} data-testid="mci-track-patients">
               <span className="text-xs text-surface-light">Patient boxes</span>
             </Checkbox>
+          )}
+          {!readOnly && onOpenRoleLogins && (
+            <Button size="sm" variant="flat" radius="lg" onPress={onOpenRoleLogins} data-testid="mci-role-logins">
+              Role logins
+            </Button>
           )}
           <Button size="sm" variant="flat" radius="lg" onPress={() => setShowLog((v) => !v)} aria-expanded={showLog} data-testid="mci-log-toggle">
             Log

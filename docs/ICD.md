@@ -250,6 +250,15 @@ Equipment custody (optional, on event equipment; written by `src/lib/equipmentCu
 
 **`InteractionSession`**: `sessionId`, `eventId`, `startTime` (epoch ms), `endTime?` (epoch ms), `mouseClicks: {timestamp:number}[]`, `keyStrokes: {timestamp:number}[]`.
 
+### 3.8 MCI role logins (Firebase only)
+
+Role logins (#142, `src/lib/roleAccounts.ts`) are email/password accounts whose email is `<username>@role.crowdcad.org`. They have no PocketBase collections yet.
+
+| Path | Fields | Written by | Read by |
+|---|---|---|---|
+| `events/{eventId}/roleAccounts/{uid}` | `uid`, `eventId`, `eventName`, `role` (`incident_command`, `triage`, `treatment`, `transport`, `logistics`), `username`, `label?`, `disabled`, `disabledAt?`, `createdBy`, `createdAt` | Anyone who may dispatch the event (directly or through `/api/role-accounts`); only `disabled`, `disabledAt` and `label` change after creation | The same people, and the login itself |
+| `roleAccountIndex/{uid}` | `eventId`, `role` | As above | The login itself |
+
 ## 4. Fields present in the app's TypeScript types but not in this PocketBase schema
 
 `src/app/types.ts`'s `Event` interface also declares `createdAt`, `postingStart`/`postingEnd`, `scheduleStart`/`scheduleEnd`, `startTime`/`endTime` and `start`/`end`. None of these appear in the `events` collection's actual field list (`scripts/setup-pocketbase.js`, `tests/e2e/pb_migrations/…created_events.js`). CrowdCAD supports both a Firebase and a PocketBase backend behind a common interface, and these fields appear to be write-only leftovers for the Firebase path: since PocketBase silently drops unknown fields on create/update (§2.2), sending them to a PocketBase-backed deployment has no effect. They are neither persisted nor returned. Do not rely on them being present in PocketBase `events` records.

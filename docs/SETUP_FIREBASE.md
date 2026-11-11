@@ -166,6 +166,8 @@ firebase deploy --only hosting,firestore:rules,firestore:indexes --project YOUR_
 
 Any other Node host that runs `npm run build` and `npm start` (or the `Dockerfile`) also works. Add the deployed domain to Authorized domains.
 
+**MCI role logins** are accounts the app creates for whoever takes a role. With email/password sign-up turned off in Firebase Authentication (recommended for a public site), only the server can create them: on Firebase Hosting the app's function uses its own service account automatically; on any other host, set `GOOGLE_APPLICATION_CREDENTIALS` to a service account key with the Firebase Authentication Admin and Cloud Datastore User roles. Without either, role logins work only while sign-up is on.
+
 For CI deploys, store the `NEXT_PUBLIC_FIREBASE_*` values and a deploy credential as CI secrets. Prefer Workload Identity Federation or a least-privilege service account over a long-lived `firebase login:ci` token.
 
 ## Compliance

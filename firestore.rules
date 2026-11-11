@@ -9,7 +9,7 @@ service cloud.firestore {
     // - `members/{uid}` subcollection documents (optional future model).
     match /organizations/{orgId} {
       allow read: if isOrgMember(orgId);
-      allow create: if request.auth != null && request.resource.data.get('members', null) is list && request.resource.data.members.hasAny([request.auth.uid]);
+      allow create: if signedIn() && request.resource.data.get('members', null) is list && request.resource.data.members.hasAny([request.auth.uid]);
       allow update, delete: if isOrgMember(orgId);
 
       // Allow reading membership subdocs if member
@@ -37,7 +37,7 @@ service cloud.firestore {
     // Administrator Access).
     match /venues/{venueId} {
       allow read: if isVenueVisibleToUser();
-      allow create: if request.auth != null && request.resource.data.get('userId', null) == request.auth.uid;
+      allow create: if signedIn() && request.resource.data.get('userId', null) == request.auth.uid;
       allow update, delete: if isVenueOwner() || isRequestingUserAdmin();
     }
 
@@ -76,7 +76,7 @@ service cloud.firestore {
     // event documents: `!isBridge()` on every operation here.
     match /events/{eventId} {
       allow read: if isEventVisibleToUser() && !isBridge();
-      allow create: if request.auth != null && request.resource.data.get('userId', null) == request.auth.uid && !isBridge();
+      allow create: if signedIn() && request.resource.data.get('userId', null) == request.auth.uid && !isBridge();
       allow update: if (isEventOwnerOrOrgMember() || isRequestingUserAdmin() ||
         ((isEventSharedWithRequester() || isEventOrgShow()) && isEventProtectedFieldsUnchanged())) && !isBridge();
       allow delete: if (isEventOwnerOrOrgMember() || isRequestingUserAdmin()) && !isBridge();
@@ -86,9 +86,9 @@ service cloud.firestore {
     // account-deletion flow. (No prior rule existed for this collection —
     // added now since admin-initiated deletes need it to actually work.)
     match /dispatchLogs/{logId} {
-      allow read, update, delete: if request.auth != null &&
+      allow read, update, delete: if signedIn() &&
         (resource.data.get('userId', null) == request.auth.uid || isRequestingUserAdmin());
-      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      allow create: if signedIn() && request.resource.data.userId == request.auth.uid;
     }
 
     // Users: allow users to read/write their own profile; admins may also
@@ -103,16 +103,16 @@ service cloud.firestore {
     // `isRequestingUserAdmin()` unlocks everywhere else in this file. Only an
     // existing admin may set `isAdmin` on anyone (self included).
     match /users/{userId} {
-      allow read: if request.auth != null &&
+      allow read: if signedIn() &&
         (request.auth.uid == userId || isRequestingUserAdmin());
-      allow create: if request.auth != null && request.auth.uid == userId &&
+      allow create: if signedIn() && request.auth.uid == userId &&
         request.resource.data.get('isAdmin', false) == false;
-      allow update: if request.auth != null &&
+      allow update: if signedIn() &&
         (
           isRequestingUserAdmin() ||
           (request.auth.uid == userId && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['isAdmin']))
         );
-      allow delete: if request.auth != null &&
+      allow delete: if signedIn() &&
         (request.auth.uid == userId || isRequestingUserAdmin());
     }
 
@@ -120,7 +120,7 @@ service cloud.firestore {
     // offered when adding team members). Readable by any authenticated user
     // since it's needed during event creation; writable only by admins.
     match /settings/{settingId} {
-      allow read: if request.auth != null;
+      allow read: if signedIn();
       allow write: if isRequestingUserAdmin();
     }
 
@@ -130,10 +130,10 @@ service cloud.firestore {
     // default-deny the preset list read failed (custom presets vanished from
     // the UI) and creating one was rejected.
     match /dispatchVocabularyPresets/{presetId} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null &&
+      allow read: if signedIn();
+      allow create: if signedIn() &&
         request.resource.data.createdBy == request.auth.uid;
-      allow update, delete: if request.auth != null &&
+      allow update, delete: if signedIn() &&
         (resource.data.createdBy == request.auth.uid || isRequestingUserAdmin());
     }
 
@@ -150,7 +150,7 @@ service cloud.firestore {
     // `Map.get(key, default)` (safe) or the `in` operator (safe presence
     // check) instead of bare dot access.
     function isRequestingUserAdmin() {
-      return request.auth != null &&
+      return signedIn() &&
         exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('isAdmin', false) == true;
     }
@@ -158,7 +158,7 @@ service cloud.firestore {
     // Fallback deny
     function isOrgMember(orgId) {
       // Check members array
-      return request.auth != null && (
+      return signedIn() && (
         exists(/databases/$(database)/documents/organizations/$(orgId)) &&
         (
           get(/databases/$(database)/documents/organizations/$(orgId)).data.get('members', []) is list &&
@@ -196,7 +196,7 @@ service cloud.firestore {
     // `sharedWith array-contains email` (shared), `isOrgVenue/isOrgEvent ==
     // true` (org-wide), `orgId == X`, and admin.
     function isVenueVisibleToUser() {
-      return request.auth != null && (
+      return signedIn() && (
         isVenueOwner() ||
         isVenueSharedWithRequester() ||
         resource.data.get('isOrgVenue', false) == true ||
@@ -206,7 +206,7 @@ service cloud.firestore {
     }
 
     function isEventVisibleToUser() {
-      return request.auth != null && (
+      return signedIn() && (
         isEventOwnerOrOrgMember() ||
         isEventSharedWithRequester() ||
         isEventOrgShow() ||
@@ -216,18 +216,18 @@ service cloud.firestore {
 
     // Same check as isEventSharedWithRequester below.
     function isVenueSharedWithRequester() {
-      return request.auth != null &&
+      return signedIn() &&
         ('email' in request.auth.token) && request.auth.token.email is string &&
         'sharedWith' in resource.data &&
         request.auth.token.email.lower() in resource.data.sharedWith;
     }
 
     function isVenueOwner() {
-      return request.auth != null && resource.data.get('userId', null) == request.auth.uid;
+      return signedIn() && resource.data.get('userId', null) == request.auth.uid;
     }
 
     function isEventOwnerOrOrgMember() {
-      return request.auth != null &&
+      return signedIn() &&
         (resource.data.get('userId', null) == request.auth.uid ||
           ('orgId' in resource.data && resource.data.orgId is string && isOrgMember(resource.data.orgId)));
     }
@@ -241,7 +241,7 @@ service cloud.firestore {
     // `sharedWith array-contains email` list query safe against this form
     // (confirmed against the emulator, where the hasAny form denied it).
     function isEventSharedWithRequester() {
-      return request.auth != null &&
+      return signedIn() &&
         ('email' in request.auth.token) && request.auth.token.email is string &&
         'sharedWith' in resource.data &&
         request.auth.token.email.lower() in resource.data.sharedWith;
@@ -251,7 +251,7 @@ service cloud.firestore {
     // this instance (there's no per-organization scoping today — see the
     // orgId comments above), mirroring how isOrgVenue already works.
     function isEventOrgShow() {
-      return request.auth != null && resource.data.get('isOrgEvent', false) == true;
+      return signedIn() && resource.data.get('isOrgEvent', false) == true;
     }
 
     // The event fields a non-owner, non-admin writer (a shared user, or an
@@ -283,7 +283,7 @@ service cloud.firestore {
     match /bridgeAccounts/{bridgeUid} {
       // Written as `'allowedUsers' in ... && uid in ...` so Firestore can
       // prove the event-creation query (allowedUsers array-contains uid).
-      allow read: if request.auth != null && (
+      allow read: if signedIn() && (
         request.auth.uid == bridgeUid ||
         ('allowedUsers' in resource.data && request.auth.uid in resource.data.allowedUsers) ||
         isRequestingUserAdmin()
@@ -311,11 +311,32 @@ service cloud.firestore {
 
       // Heartbeat, written by the bridge itself.
       match /status/{docId} {
-        allow read: if request.auth != null &&
+        allow read: if signedIn() &&
           (request.auth.uid == bridgeUid || isRequestingUserAdmin() || isAllowedBridgeUser(bridgeUid));
-        allow write: if docId == 'current' && request.auth != null &&
+        allow write: if docId == 'current' && signedIn() &&
           request.auth.uid == bridgeUid && isBridge();
       }
+    }
+
+    // MCI role logins (#142). Managed by anyone who may dispatch the event;
+    // a login may read its own record (to see whether it is still active).
+    // The server route /api/role-accounts writes these with the Admin SDK;
+    // the browser writes them where it can create accounts itself.
+    match /events/{eventId}/roleAccounts/{uid} {
+      allow read: if canReadEventData(eventId) || (isRoleAccount() && request.auth.uid == uid);
+      allow create: if canReadEventData(eventId) && isValidRoleAccount(eventId, uid, request.resource.data) &&
+        request.resource.data.get('createdBy', null) == request.auth.uid;
+      allow update: if canReadEventData(eventId) && isValidRoleAccount(eventId, uid, request.resource.data) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['disabled', 'disabledAt', 'label']);
+      allow delete: if canReadEventData(eventId);
+    }
+
+    // Which event a role login belongs to, read by the login itself after signing in.
+    match /roleAccountIndex/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow create: if canReadEventData(request.resource.data.get('eventId', '')) &&
+        request.resource.data.get('role', null) in ['incident_command', 'triage', 'treatment', 'transport', 'logistics'];
+      allow delete: if canReadEventData(resource.data.get('eventId', ''));
     }
 
     match /events/{eventId}/takConfig/{docId} {
@@ -397,13 +418,48 @@ service cloud.firestore {
       allow write: if docId == 'current' && isLinkedBridge(eventId);
     }
 
+    // Signed in with a normal account: not an MCI role login (below). Every
+    // rule that lets "anyone signed in" do something uses this, so role
+    // logins only get what the roleAccounts rules give them.
+    function signedIn() {
+      return request.auth != null && !isRoleAccount();
+    }
+
+    // MCI role logins (#142, src/lib/roleAccounts.ts): accounts made for one
+    // event and one role, with an email of <username>@role.crowdcad.org.
+    // Matching the domain only ever removes access, so a self-made account
+    // with such an email gains nothing; access comes only from an active
+    // record at events/{eventId}/roleAccounts/{uid} that a dispatcher made.
+    function isRoleAccount() {
+      return request.auth != null &&
+        request.auth.token.get('email', '') is string &&
+        request.auth.token.get('email', '').lower().matches('^[a-z0-9-]+@role[.]crowdcad[.]org$');
+    }
+
+    function roleAccountPath(eventId) {
+      return /databases/$(database)/documents/events/$(eventId)/roleAccounts/$(request.auth.uid);
+    }
+
+    // A role login for this event that hasn't been disabled, on an event that hasn't ended.
+    function isActiveRoleAccountFor(eventId) {
+      return isRoleAccount() && exists(roleAccountPath(eventId)) &&
+        get(roleAccountPath(eventId)).data.get('disabled', false) == false &&
+        eventDoc(eventId).get('ended', false) == false;
+    }
+
+    function isValidRoleAccount(eventId, uid, d) {
+      return d.get('uid', null) == uid && d.get('eventId', null) == eventId &&
+        d.get('role', null) in ['incident_command', 'triage', 'treatment', 'transport', 'logistics'] &&
+        d.get('username', null) is string && d.get('disabled', null) is bool;
+    }
+
     function isBridge() {
       return request.auth != null &&
         exists(/databases/$(database)/documents/bridgeAccounts/$(request.auth.uid));
     }
 
     function isAllowedBridgeUser(bridgeUid) {
-      return request.auth != null && !isBridge() &&
+      return signedIn() && !isBridge() &&
         exists(/databases/$(database)/documents/bridgeAccounts/$(bridgeUid)) &&
         request.auth.uid in get(/databases/$(database)/documents/bridgeAccounts/$(bridgeUid)).data.get('allowedUsers', []);
     }
@@ -421,14 +477,14 @@ service cloud.firestore {
     }
 
     function isEventOwner(eventId) {
-      return request.auth != null && eventDoc(eventId).get('userId', null) == request.auth.uid;
+      return signedIn() && eventDoc(eventId).get('userId', null) == request.auth.uid;
     }
 
     // Same access paths as isEventVisibleToUser, which is also everyone who
     // may dispatch the event.
     function canReadEventData(eventId) {
       let d = eventDoc(eventId);
-      return request.auth != null && !isBridge() && (
+      return signedIn() && !isBridge() && (
         d.get('userId', null) == request.auth.uid ||
         ('orgId' in d && d.orgId is string && isOrgMember(d.orgId)) ||
         (('email' in request.auth.token) && request.auth.token.email is string &&
