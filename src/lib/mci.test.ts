@@ -401,13 +401,17 @@ describe('declare and stand down', () => {
     expect(zone(e, 'za').taggedTotal).toBe(2);
   });
 
-  it('leaves Location alone on stand down for a TAK event', () => {
+  it('on stand down, leaves a tracked unit\'s Location alone and returns an untracked one to its post (TAK event)', () => {
     let e = activeEvent({
       mapMode: 'tak',
-      staff: [unit({ status: 'Triage', location: 'Near Gate A', originalPost: 'Gate A', mciAssignment: { kind: 'zone', id: 'za' } })],
+      staff: [
+        unit({ team: 'Tracked', status: 'Triage', location: 'Near Gate A', originalPost: 'Gate A', mciAssignment: { kind: 'zone', id: 'za' } }),
+        unit({ team: 'Untracked', status: 'Triage', location: 'Zone A', originalPost: 'Gate B', mciAssignment: { kind: 'zone', id: 'za' } }),
+      ],
     });
-    e = { ...e, ...standDownMci(e, 9000) } as Event;
+    e = { ...e, ...standDownMci(e, 9000, new Set(['Tracked'])) } as Event;
     expect(e.staff[0]).toMatchObject({ status: 'Available', location: 'Near Gate A' });
+    expect(e.staff[1]).toMatchObject({ status: 'Available', location: 'Gate B' });
   });
 });
 
@@ -423,14 +427,15 @@ describe('teams', () => {
       patch: { mciAssignment: { kind: 'zone', id: 'za' }, location: 'Zone A' },
       logMessage: 'Post changed to Zone A (MCI)',
     });
-    expect(mciAssignmentPatch({ ...e, mapMode: 'standard' }, { kind: 'area', id: 'ar1' }).patch.location).toBe('Overflow');
+    expect(mciAssignmentPatch(e, { kind: 'area', id: 'ar1' }).patch.location).toBe('Overflow');
   });
 
-  it('never changes Location when mapMode is tak', () => {
+  it('never changes a tracked unit\'s Location, and sets an untracked one\'s even on a TAK event', () => {
     const e = activeEvent({ mapMode: 'tak' });
-    const out = mciAssignmentPatch(e, { kind: 'area', id: 'c1' });
+    const out = mciAssignmentPatch(e, { kind: 'area', id: 'c1' }, true);
     expect(out.patch).toEqual({ mciAssignment: { kind: 'area', id: 'c1' } });
     expect('location' in out.patch).toBe(false);
+    expect(mciAssignmentPatch(e, { kind: 'zone', id: 'za' }).patch.location).toBe('Zone A');
   });
 
   it('clears the assignment, and ignores one whose target is gone', () => {
@@ -450,7 +455,7 @@ describe('teams', () => {
     expect(mciStatusPatch(e, { mciAssignment: zoneA }, 'Unavailable').patch).toEqual({ mciAssignment: undefined });
     // A call's status leaves the assignment alone.
     expect(mciStatusPatch(e, { mciAssignment: zoneA }, 'En Route').patch).toEqual({});
-    expect('location' in mciStatusPatch({ ...e, mapMode: 'tak' }, {}, 'Triage', zoneA).patch).toBe(false);
+    expect('location' in mciStatusPatch(e, {}, 'Triage', zoneA, true).patch).toBe(false);
   });
 
   it('lists the units at a zone and buckets availability', () => {

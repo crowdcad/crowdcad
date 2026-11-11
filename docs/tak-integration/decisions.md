@@ -381,7 +381,7 @@ The same end-to-end scenario runs against the Firebase emulator and a local Pock
 - **Elsewhere.** (Superseded by D66: markers follow live positions, so labels are no longer mapped back to posts.)
 - **Map controls.** The basemap choice and image opacity moved from the TAK panel and the map's corner into the Map tab's top bar, styled like the location search, and opacity is a percentage field instead of a slider. "Match light/dark mode" is now "System".
 
-### D66. On TAK events, Location is where a unit is, not its post
+### D66. On TAK events, Location is where a unit is, not its post (per unit since D70)
 - **Requested** 2026-10-09 by the maintainer, refining D65.
 - **Tracked, whatever the status.** Every unit with a fresh TAK position (a linked device heard from in the last 2 minutes) has its Location written from that position, on a call or in the clinic too. Only Location changes: status is never set from location, and the call's location is never affected. The log reads "Location changed to …". The unit's timer follows status, not these writes.
 - **Nothing else moves Location.** On a TAK event, call assignment, status changes, auto-detach and schedule changes keep a unit's Location as it was (`keepTrackedLocations` in the dispatch page's single write path). A schedule change changes the unit's post (`originalPost` and the posting schedule) and logs "Post changed to …". A manual edit still works for a unit that isn't connected.
@@ -407,3 +407,10 @@ The same end-to-end scenario runs against the Firebase emulator and a local Pock
 - **Requested** 2026-10-12 by the maintainer (phase 5 of the equipment plan).
 - **How.** A device link's `teamId` may be `equipment:<EventEquipment.id>`. Team ids are opaque to the bridge and the rules only require a string, so no rules, bridge or contract shape changes; the prefix keeps it apart from `Staff`/`Supervisor` ids. Links are made in the TAK panel (equipment appears as "Name (equipment)") or automatically by a unique callsign match, like teams.
 - **Effect.** A tracked item is drawn at its tracker (faded when stale), not with its holder, and its "view on map" goes there. Its custody still follows statuses. The bridge keeps history for it like a team, shown by the item's name on the summary.
+
+### D70. Live tracking is per unit, not per event (amends D66)
+- **Requested** 2026-11-11 by the maintainer (#134): on a TAK event, units without a tracker were treated as tracked, so posting refreshes, Available and MCI assignments never moved them, and their Location was typed by hand or left blank.
+- **Per unit.** D66 applies only to *tracked* units: on a TAK event, those with a fresh position (a linked device heard from in the last 2 minutes; `trackedUnitNames` in `src/lib/unitTracking.ts`). Every other unit behaves exactly as on a standard event: posting refreshes and status changes move it to its post, Clinic sets In Clinic, MCI assignments set its Location, and stand down returns it to its post.
+- **Losing the signal.** A unit whose device goes stale, or is unlinked, keeps its last label and becomes a normal unit; the next status change or posting refresh moves it as usual. The 2-minute stale threshold is the grace period, so a brief drop changes nothing.
+- **Markers.** A unit with a position (fresh or stale) is drawn there; a unit with none is drawn at its post, as on a standard event. Equipment held by an untracked unit follows it to its post. "View on map" goes to the live position, else the post.
+- **Where.** `keepTrackedLocations` takes the tracked set; `standDownMci`, `mciAssignmentPatch` and `mciStatusPatch` take whether the unit is tracked; the team card's status control and the dispatch page's location handlers check the unit, not the event.

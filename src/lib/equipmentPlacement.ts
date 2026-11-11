@@ -6,9 +6,9 @@ import type { UnitTracking } from '@/lib/unitTracking';
  * (UnitTracking.equipmentPositions) it is drawn there. Otherwise it is drawn
  * with its holder (src/lib/equipmentCustody.ts):
  * - at a post or clinic: that post's pin;
- * - with a unit: beside the unit's marker, which is its live position on a
- *   tracking event (faded while stale, hidden with no position), or the post
- *   its Location names otherwise.
+ * - with a unit: beside the unit's marker, which is its live position when it
+ *   has one (faded while stale), or the post its Location names otherwise
+ *   (also on a tracking event, for a unit with no device, D66).
  */
 export type EquipmentAnchor =
   | { kind: 'post'; post: string }
@@ -33,9 +33,7 @@ export function equipmentAnchor(equip: Equipment, units: UnitLike[], tracking?: 
   if (tag) return { kind: 'point', lat: tag.lat, lon: tag.lon, faded: tag.stale };
   const unit = equipmentHolderUnit(equip, units);
   if (!unit) return equip.location ? { kind: 'post', post: equip.location } : null;
-  if (tracking) {
-    const p = tracking.positions[unit.team];
-    return p ? { kind: 'point', lat: p.lat, lon: p.lon, faded: p.stale } : null;
-  }
+  const p = tracking?.positions[unit.team];
+  if (p) return { kind: 'point', lat: p.lat, lon: p.lon, faded: p.stale };
   return unit.location ? { kind: 'post', post: unit.location } : null;
 }

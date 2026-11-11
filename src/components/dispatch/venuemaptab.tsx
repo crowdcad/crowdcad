@@ -204,15 +204,11 @@ export default function VenueMapTab({
   }, [focusEquipmentRequest?.requestId]);
 
   /** Switches to the layer holding a placed post and, on a live map, flies to it. */
-  /** A team or supervisor: its live position on a TAK event (D66), else the post its Location names. */
+  /** A team or supervisor: its live position when it has one (D66), else the post its Location names. */
   function focusUnit(name: string, location: string | undefined) {
-    const tracking = overlay?.unitTracking;
-    if (!tracking) {
-      if (location) focusLocation(location);
-      return;
-    }
-    const p = tracking.positions[name];
+    const p = overlay?.unitTracking?.positions[name];
     if (p) focusPosition(p);
+    else if (location) focusLocation(location);
   }
 
   /** Shows a live position: the current layer if it can, else a live-map layer, else an image layer covering it. */

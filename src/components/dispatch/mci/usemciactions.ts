@@ -59,6 +59,8 @@ export interface MciLocalState {
   setLocal: (update: (current: Event | undefined) => Event | undefined) => void;
   /** Counts MCI writes still saving; the page ignores a stale server snapshot of the log while it is above 0. */
   inFlight: MutableRefObject<number>;
+  /** Units with live tracking right now (D66): stand down leaves their Location alone. */
+  trackedUnits?: () => ReadonlySet<string>;
 }
 
 /**
@@ -76,6 +78,7 @@ export function useMciActions(updateEvent: UpdateEvent, uid: string | undefined,
   const queue = useRef<Promise<unknown>>(Promise.resolve());
   const setLocal = local?.setLocal;
   const inFlight = local?.inFlight;
+  const trackedUnits = local?.trackedUnits;
 
   const save = useCallback(
     async (
@@ -139,7 +142,7 @@ export function useMciActions(updateEvent: UpdateEvent, uid: string | undefined,
         await updateEvent((current) => declareMci(current, input, Date.now()));
       },
       standDown: async () => {
-        await updateEvent((current) => (current.mci?.active ? standDownMci(current, Date.now()) : {}));
+        await updateEvent((current) => (current.mci?.active ? standDownMci(current, Date.now(), trackedUnits?.()) : {}));
       },
       addZone: async (name) => {
         const out = await run((current, ctx) => addMciZone(current, { name }, ctx));
@@ -198,6 +201,6 @@ export function useMciActions(updateEvent: UpdateEvent, uid: string | undefined,
         await run((current, ctx) => undoPatch(current, entryId, ctx));
       },
     }),
-    [run, updateEvent]
+    [run, updateEvent, trackedUnits]
   );
 }

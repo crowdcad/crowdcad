@@ -1009,8 +1009,8 @@ export function VenueMapWithPosts({
                 />
               );
             })}
-            {overlay?.unitTracking ? (() => {
-              // Live tracking: each unit at its own position, or not at all (D66).
+            {overlay?.unitTracking && (() => {
+              // Live tracking: a unit with a position is drawn there (D66); every other unit at its post, below.
               const tracking = overlay.unitTracking;
               const layer = layers[currentLayer];
               const alignment = layer ? tracking.alignments[layer.id] ?? layerAlignment(layer) : undefined;
@@ -1061,13 +1061,15 @@ export function VenueMapWithPosts({
                   })}
                 </>
               );
-            })() : (() => {
+            })()}
+            {(() => {
               // Teams sharing the exact same post (e.g. several teams
               // attached to the same call, all still logged at that post)
               // get staggered further right one at a time instead of
               // stacking on top of each other — see TeamMarker's staggerStep.
               const postOccupancy: { [postName: string]: number } = {};
-              return staff.map((team) => {
+              // On a tracking event, units with no device are drawn at their post as on a standard event (D66).
+              return staff.filter((team) => !overlay?.unitTracking?.positions[team.team]).map((team) => {
                 const postObj = posts.find(p => (typeof p === "string" ? p : p.name) === team.location);
                 if (!postObj || typeof postObj === "string") return null;
 
@@ -1092,7 +1094,7 @@ export function VenueMapWithPosts({
                 );
               });
             })()}
-            {!overlay?.unitTracking && supervisor.map((sup) => {
+            {supervisor.filter((sup) => !overlay?.unitTracking?.positions[sup.team]).map((sup) => {
               const postObj = posts.find(p => (typeof p === "string" ? p : p.name) === sup.location);
               if (!postObj || typeof postObj === "string") return null;
 

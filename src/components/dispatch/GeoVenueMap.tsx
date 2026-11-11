@@ -71,7 +71,7 @@ export default function GeoVenueMap({
   }
   const tracking = overlay?.unitTracking;
   pins.push(...geoEquipmentPins(layer, equipment, selectedEquipmentName, placed, [...staff, ...supervisor], tracking));
-  // Live tracking: each unit at its own position, or not at all (D66).
+  // Live tracking: a unit with a position is drawn there (D66); every other unit at its post, below.
   if (tracking) {
     for (const team of staff) {
       const p = tracking.positions[team.team];
@@ -120,9 +120,10 @@ export default function GeoVenueMap({
       });
     }
   }
-  // Teams sharing a post are staggered, as on the image map.
+  // Teams sharing a post are staggered, as on the image map. On a tracking event,
+  // units with no device are drawn at their post as on a standard event (D66).
   const occupancy: Record<string, number> = {};
-  for (const team of tracking ? [] : staff) {
+  for (const team of staff.filter((t) => !tracking?.positions[t.team])) {
     const p = team.location ? placed.get(team.location) : undefined;
     if (!p) continue;
     const staggerIndex = occupancy[team.location] ?? 0;
@@ -148,7 +149,7 @@ export default function GeoVenueMap({
       ),
     });
   }
-  for (const sup of tracking ? [] : supervisor) {
+  for (const sup of supervisor.filter((s) => !tracking?.positions[s.team])) {
     const p = sup.location ? placed.get(sup.location) : undefined;
     if (!p) continue;
     pins.push({
