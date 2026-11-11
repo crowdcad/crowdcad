@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { isRoleLoginEmail, signInEmailFor } from '@/lib/roleAccounts';
 import { authService } from '@/lib/services';
 import {
   Modal,
@@ -74,7 +75,8 @@ export default function LoginModal({
       setSubmitting(true);
 
       if (mode === 'login') {
-        await authService.signIn(email, password);
+        // A role username ("treat-7k2q") signs in as its role login (#142).
+        await authService.signIn(signInEmailFor(email), password);
       } else {
         await authService.signUp(email, password);
       }
@@ -85,7 +87,9 @@ export default function LoginModal({
       onClose();
 
       const redirectPath = sessionStorage.getItem('redirectPath');
-      if (redirectPath) {
+      if (mode === 'login' && isRoleLoginEmail(signInEmailFor(email))) {
+        router.push('/role');
+      } else if (redirectPath) {
         sessionStorage.removeItem('redirectPath');
         router.push(redirectPath);
       } else {
@@ -194,12 +198,15 @@ export default function LoginModal({
               <ModalBody>
                 <Input
                   label="Email Address"
+                  description={mode === 'login' ? 'Or the role username you were given' : undefined}
                   labelPlacement="inside"
                   variant="flat"
                   color="default"
                   size="lg"
                   radius="lg"
-                  type="email"
+                  type={mode === 'login' ? 'text' : 'email'}
+                  autoComplete={mode === 'login' ? 'username' : 'email'}
+                  autoCapitalize="none"
                   classNames={inputClassNames}
                   value={email}
                   onValueChange={setEmail}

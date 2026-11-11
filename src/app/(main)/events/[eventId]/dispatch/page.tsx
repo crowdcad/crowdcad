@@ -37,6 +37,8 @@ import { Select, SelectItem, Tabs, Tab, Button, Tooltip } from "@heroui/react"
 import AvailabilitySurgeStrip from '@/components/dispatch/availabilitysurgestrip';
 import { isRowToggleClick } from '@/components/dispatch/trackingtablebase';
 import DeclareMciModal from '@/components/dispatch/mci/declaremcimodal';
+import RoleLoginsModal from '@/components/dispatch/mci/roleloginsmodal';
+import { ROLE_LOGINS_SUPPORTED } from '@/lib/roleAccountStore';
 import MciAvailabilityStrip from '@/components/dispatch/mci/mciavailabilitystrip';
 import MciTab from '@/components/dispatch/mci/mcitab';
 import MciToggleButton from '@/components/dispatch/mci/mcitogglebutton';
@@ -432,6 +434,8 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
   const mciWritesInFlight = useRef(0);
   const mciActions = useMciActions(updateEvent, authUser?.uid, { setLocal: setEvent, inFlight: mciWritesInFlight, trackedUnits: () => trackedUnitsRef.current });
   const [showDeclareMci, setShowDeclareMci] = useState(false);
+  // MCI role logins (#142): cloud events on Firebase only (Lite has no accounts).
+  const [showRoleLogins, setShowRoleLogins] = useState(false);
 
   const handlePostAssignment = useCallback(async (time: string, post: string, team: string) => {
     await updateEvent((currentEvent) => {
@@ -3764,6 +3768,8 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
   );
 
 
+  const roleLoginsAvailable = ROLE_LOGINS_SUPPORTED && !isLiteMode && !!user;
+
   // The desktop board's two sides, shared by the split layout and the full-screen (focus) view (#138).
   const rightTabLabel =
     selectedRightTab === 'map' ? t('Map')
@@ -3890,7 +3896,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
 
         {selectedRightTab === 'mci' && !isMobile && event.mci && (
           <div className="relative z-10 -mt-px mx-1.5 rounded-lg bg-surface-deep px-2.5 pb-2 pt-1 flex flex-col flex-1 min-h-0">
-            <MciTab event={event} actions={mciActions} />
+            <MciTab event={event} actions={mciActions} onOpenRoleLogins={roleLoginsAvailable ? () => setShowRoleLogins(true) : undefined} />
           </div>
         )}
 
@@ -4101,8 +4107,13 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
           await mciActions.declare(input);
           mciTabOpenedRef.current = true;
           setSelectedRightTab('mci');
+          // Offer role logins straight away, so the people arriving can be sent theirs.
+          if (roleLoginsAvailable) setShowRoleLogins(true);
         }}
       />
+      {roleLoginsAvailable && user && eventId && (
+        <RoleLoginsModal isOpen={showRoleLogins} onClose={() => setShowRoleLogins(false)} event={event} eventId={eventId} uid={user.uid} />
+      )}
       <TransportUnitModal
         isOpen={showTransportUnitModal}
         onClose={() => {

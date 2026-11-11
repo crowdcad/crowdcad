@@ -18,6 +18,12 @@ When('I declare an MCI with zones {string} and {string} and the default clinic',
   // The event's clinic is ticked by default.
   await dialog.getByTestId('mci-declare-confirm').click();
   await expect(page.getByTestId('mci-tab')).toBeVisible({ timeout: NAV_TIMEOUT });
+  // Declaring offers role logins (#142) on Firebase; these scenarios don't need them.
+  const roleLogins = page.getByTestId('role-logins-modal');
+  if (await roleLogins.waitFor({ state: 'visible', timeout: 3_000 }).then(() => true, () => false)) {
+    await roleLogins.getByTestId('role-login-close').click();
+    await expect(roleLogins).not.toBeVisible();
+  }
 });
 
 When('I tag {int} {string} patients in zone {string}', async ({ page }, count: number, color: string, zone: string) => {
