@@ -3,8 +3,9 @@
 import { lazy, Suspense, useEffect, useState, useMemo } from 'react';
 import { formatEventDate } from '@/lib/eventDate';
 import { useParams } from 'next/navigation';
-import { dbService } from '@/lib/services';
-import { Event, Call, TeamLogEntry, CallLogEntry, InteractionSession } from '@/app/types';
+import { dbService, isPocketbaseBackend } from '@/lib/services';
+import { MCI_DOC_STATE, mciDocCollection, withMciDoc } from '@/lib/mciDoc';
+import { Event, Call, TeamLogEntry, CallLogEntry, InteractionSession, MciState } from '@/app/types';
 import dynamic from 'next/dynamic';
 import { Button } from '@heroui/react';
 import { getScheduleWindow, teamStatusBreakdown, teamAvailabilitySeries, getSurgeIntervals } from '@/lib/analyticsUtils';
@@ -42,7 +43,12 @@ export default function SummaryPage() {
     const fetchData = async () => {
       if (!eventId) return;
       const eventDoc = await dbService.getDocument<Event>('events', eventId);
-      setEvent(eventDoc.exists ? eventDoc.data : null);
+      if (!eventDoc.exists || !eventDoc.data) return setEvent(null);
+      // On Firebase an MCI's state is in its own document (#143); older events keep it inline.
+      const mciDoc = isPocketbaseBackend
+        ? null
+        : await dbService.getDocument<MciState>(mciDocCollection(eventId), MCI_DOC_STATE).catch(() => null);
+      setEvent(withMciDoc(eventDoc.data, mciDoc?.exists ? mciDoc.data : null));
     };
     fetchData();
   }, [eventId]);

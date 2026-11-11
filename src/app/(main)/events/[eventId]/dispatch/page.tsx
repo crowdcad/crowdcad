@@ -12,8 +12,9 @@ import AddEquipmentModal from "@/components/modals/event/addequipmentmodal";
 import EndEventModal from "@/components/modals/event/endeventmodal";
 import TransportUnitModal from "@/components/modals/event/transportunitmodal";
 import React from 'react';
-import { dbService, ServiceError } from '@/lib/services';
-import { PostAssignment, Event, Staff, Supervisor, Call, EquipmentStatus, CallLogEntry, TeamLogEntry, EquipmentItem, EventEquipment, ClinicOutcome, Clinic, Layer, DispatchZone, MciAssignment } from '@/app/types';
+import { dbService, isPocketbaseBackend, ServiceError } from '@/lib/services';
+import { MCI_DOC_STATE, MCI_DOC_UNITS, mciDocCollection, splitMciWrite, withMciDoc, type MciUnitsDoc } from '@/lib/mciDoc';
+import { PostAssignment, Event, Staff, Supervisor, Call, EquipmentStatus, CallLogEntry, TeamLogEntry, EquipmentItem, EventEquipment, ClinicOutcome, Clinic, Layer, DispatchZone, MciAssignment, MciState } from '@/app/types';
 import { toast, Slide, ToastContainer } from 'react-toastify';
 import { useRouter } from 'next/navigation';
 import isEqual from 'lodash.isequal';
@@ -153,6 +154,11 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
   const { eventId } = use(params);
   const { isLiteMode: layoutLiteMode } = useLiteMode();
   const isLiteMode = layoutLiteMode;
+  // Cloud events on Firebase keep MCI state in its own document (#143, src/lib/mciDoc.ts); Lite and PocketBase keep it inline.
+  const mciDocMode = !isLiteMode && !isPocketbaseBackend;
+  // The latest MCI state document: undefined until its first snapshot, null when there is none (an older event or no MCI yet).
+  const mciDocRef = useRef<MciState | null | undefined>(undefined);
+  const [mciDocStatus, setMciDocStatus] = useState<'unknown' | 'missing' | 'present'>('unknown');
   const { user: authUser, ready: authReady } = useAuth();
   const user = isLiteMode ? null : authUser;
   const ready = isLiteMode ? true : authReady;
@@ -404,8 +410,10 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
       await dbService.runTransaction(async (tx) => {
         const snap = await tx.get<Event>('events', eventId);
         if (!snap.exists || !snap.data) throw new Error("Event does not exist");
+        // MCI state lives in its own document (#143); read it in the same transaction and merge it in.
+        const mciSnap = mciDocMode ? await tx.get<MciState>(mciDocCollection(eventId), MCI_DOC_STATE) : null;
 
-        const currentEvent = snap.data;
+        const currentEvent = mciDocMode ? withMciDoc(snap.data, mciSnap?.exists ? mciSnap.data : null) : snap.data;
 
         if (!options?.bypassEndedCheck && isEventEnded(currentEvent)) {
           throw new Error('EVENT_ENDED');
@@ -418,7 +426,15 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
           updates = updateInput;
         }
 
-        tx.update('events', eventId, removeUndefinedDeep(stampStatusSince(currentEvent, keepTrackedLocations(currentEvent, updates, trackedUnitsRef.current, options?.locationEdits))));
+        const cleaned = removeUndefinedDeep(stampStatusSince(currentEvent, keepTrackedLocations(currentEvent, updates, trackedUnitsRef.current, options?.locationEdits)));
+        if (!mciDocMode) {
+          tx.update('events', eventId, cleaned);
+          return;
+        }
+        const split = splitMciWrite(currentEvent, cleaned);
+        if (Object.keys(split.event).length) tx.update('events', eventId, split.event);
+        if (split.mci) tx.set(mciDocCollection(eventId), MCI_DOC_STATE, split.mci);
+        if (split.units) tx.set<MciUnitsDoc>(mciDocCollection(eventId), MCI_DOC_UNITS, { units: split.units, updatedAt: Date.now() });
       });
     } catch (error) {
       if (error instanceof Error && error.message === 'EVENT_ENDED') {
@@ -428,10 +444,25 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
       console.error("Update failed:", error);
       toast.error("Failed to save changes. Please try again.");
     }
-  }, [eventId, isLiteMode]);
+  }, [mciDocMode, eventId, isLiteMode]);
 
   // MCI mode (src/lib/mci.ts): every write goes through updateEvent's functional form.
   const mciWritesInFlight = useRef(0);
+  /**
+   * The MCI state to show for an incoming snapshot. While this dispatcher's own MCI taps are still
+   * saving, a snapshot with a shorter log is the echo of an earlier tap; keeping the local log stops the
+   * counts stepping back and forward. Patient details and priorities change no log length, so an echo
+   * with the same length that differs from the local copy is kept back too; the saving write's own echo
+   * brings everything.
+   */
+  const freshMci = (prev: Event | undefined, incoming: MciState | undefined): MciState | undefined => {
+    const incomingLog = incoming?.log.length ?? 0;
+    const stale =
+      mciWritesInFlight.current > 0 &&
+      prev?.mci &&
+      (incomingLog < prev.mci.log.length || (incomingLog === prev.mci.log.length && !isEqual(incoming?.patients, prev.mci.patients)));
+    return stale ? prev!.mci : incoming;
+  };
   const mciActions = useMciActions(updateEvent, authUser?.uid, { setLocal: setEvent, inFlight: mciWritesInFlight, trackedUnits: () => trackedUnitsRef.current });
   const [showDeclareMci, setShowDeclareMci] = useState(false);
   // MCI role logins (#142): cloud events on Firebase only (Lite has no accounts).
@@ -2103,16 +2134,8 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
             return;
           }
           setEvent(prev => {
-            // While this dispatcher's own MCI taps are still saving, a snapshot with a shorter log is the
-            // echo of an earlier tap; keeping the local log stops the counts stepping back and forward.
-            // Patient details and priorities change no log length, so an echo with the same length that
-            // differs from the local copy is kept back too; the saving write's own echo brings everything.
-            const incomingLog = eventData.mci?.log.length ?? 0;
-            const staleMci =
-              mciWritesInFlight.current > 0 &&
-              prev?.mci &&
-              (incomingLog < prev.mci.log.length || (incomingLog === prev.mci.log.length && !isEqual(eventData.mci?.patients, prev.mci.patients)));
-            const incoming = staleMci ? { ...eventData, mci: prev.mci } : eventData;
+            const merged = mciDocMode ? withMciDoc(eventData, mciDocRef.current) : eventData;
+            const incoming = { ...merged, mci: freshMci(prev, merged.mci) };
             if (!isEqual(prev, incoming)) {
               setPostAssignments(incoming.postAssignments || {});
               return incoming;
@@ -2134,7 +2157,40 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
       },
     );
     return () => unsubscribe();
-  }, [eventId, user, router, isAdmin, isLiteMode]);
+  }, [eventId, user, router, isAdmin, isLiteMode, mciDocMode]);
+
+  // The MCI state document (#143): merged into the event as it changes.
+  useEffect(() => {
+    if (!mciDocMode || !eventId || !user) return;
+    mciDocRef.current = undefined;
+    setMciDocStatus('unknown');
+    return dbService.subscribeToDocument<MciState>(
+      mciDocCollection(eventId),
+      MCI_DOC_STATE,
+      (snap) => {
+        const doc = snap.exists && snap.data ? snap.data : null;
+        mciDocRef.current = doc;
+        setMciDocStatus(doc ? 'present' : 'missing');
+        if (!doc) return;
+        setEvent((prev) => {
+          if (!prev) return prev;
+          const mci = freshMci(prev, doc);
+          return isEqual(prev.mci, mci) ? prev : { ...prev, mci };
+        });
+      },
+      (error) => console.error('Error fetching MCI state:', error),
+    );
+  }, [mciDocMode, eventId, user]);
+
+  // An event from before #143 with its MCI inline: copy it to the MCI documents once, so role logins can read it.
+  const mciCopiedRef = useRef(false);
+  useEffect(() => {
+    if (!mciDocMode || !eventId || mciDocStatus !== 'missing' || !event?.mci || mciCopiedRef.current) return;
+    mciCopiedRef.current = true;
+    void updateEvent((current) => (current.mci ? { mci: current.mci } : {}), { bypassEndedCheck: true }).catch(() => {
+      mciCopiedRef.current = false;
+    });
+  }, [mciDocMode, eventId, mciDocStatus, event?.mci, updateEvent]);
 
   // Lazily backfill/refresh event.clinics from the venue's clinic-flagged posts
   // (additive — never removes an entry, so existing calls' clinicId never orphans).

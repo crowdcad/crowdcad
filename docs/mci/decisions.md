@@ -77,6 +77,12 @@ Related: [plan.md](plan.md), [../tak-integration/decisions.md](../tak-integratio
 ### D15. Walk-ins are added at a treatment location
 - **What.** Each column has an add button for a patient who never went through a zone. It writes an `arrived` entry. Walk-ins count in treatment and in the totals but never in a zone's Tagged.
 
+### D18. MCI state has its own document on cloud events (#143)
+- **Why.** Role logins must never read the event document (every call, team and note is in it), and Firestore can't hide part of a document. During an MCI it also stops MCI taps contending with every other dispatch write.
+- **What.** On Firebase cloud events, `events/{eventId}/mci/state` holds what `event.mci` held, and `events/{eventId}/mci/units` a summary of the units for role views (name, kind, status, MCI assignment, equipment held). The dispatch page merges `state` back into its event, so everything that reads `event.mci` is unchanged. Its single write path reads both documents in one transaction and sends the `mci` part to `state`, writing `units` in the same transaction when what it shows changes (`src/lib/mciDoc.ts`). Dispatchers read and write both; an active role login reads them.
+- **Older events.** An event with `mci` inline keeps it readable; the dispatch page copies it to `state` and `units` the first time it opens. The inline copy is left in place and ignored once `state` exists. The summary page reads `state`, falling back to inline.
+- **Not changed.** Lite and PocketBase events keep `mci` inline.
+
 ### D17. Role logins are real accounts, made per event and role (#140, #142)
 - **What.** Declaring an MCI offers a login per role (Incident Command, Triage, Treatment, Transport, Logistics), handed out as a one-tap link (`/r/<username>#<password>`) or a username and password typed into the normal sign-in box or at `/role`. The dispatcher can make more, replace one (the old one stops working) or disable one from the MCI tab's **Role logins** button. The password is shown once.
 - **How.** Each login is an email/password account `<username>@role.crowdcad.org`, with its record at `events/{eventId}/roleAccounts/{uid}` and `roleAccountIndex/{uid}` telling the login its event. The Firestore rules treat any account with that email domain as a role login: `signedIn()` (every "anyone signed in" rule) excludes it, so it can read only its own records until role views add more (#143, #144). Claiming the domain only ever removes access. A disabled record, or an ended event, stops it at once.
