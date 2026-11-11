@@ -57,4 +57,6 @@ export const PREF = {
   underlayBasemap: 'underlayBasemap',
   /** Opacity of the event map image over a basemap, 0.2 to 1. */
   imageOpacity: 'imageOpacity',
+  /** Kinds of markers hidden on the dispatch Map tab (src/lib/mapLayers.ts). */
+  dispatchMapHidden: 'dispatchMapHidden',
 } as const;

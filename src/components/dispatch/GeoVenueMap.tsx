@@ -31,6 +31,8 @@ export interface GeoVenueMapProps {
   onAddCallForTeam?: (teamName: string) => void;
   /** Show posts in team and supervisor cards. Off when the event has no posting schedule. */
   showPosts?: boolean;
+  /** Draw the posts' own pins (the Map tab's Layers menu can hide them; units at posts are still placed). */
+  showPostPins?: boolean;
   focus?: { key: number; lat: number; lng: number } | null;
   overlay?: MapOverlay;
   className?: string;
@@ -52,6 +54,7 @@ export default function GeoVenueMap({
   onAddCallAtPost,
   onAddCallForTeam,
   showPosts = true,
+  showPostPins = true,
   focus,
   overlay,
   className,
@@ -59,7 +62,7 @@ export default function GeoVenueMap({
   const placed = placedPosts(layer);
 
   const pins: GeoPin[] = [];
-  for (const [name, { post, at }] of placed) {
+  for (const [name, { post, at }] of showPostPins ? placed : []) {
     pins.push({
       key: `post:${name}`,
       lat: at.lat,

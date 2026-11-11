@@ -89,6 +89,8 @@ import {
   changedFleet,
 } from '@/lib/equipmentCustody';
 import { trackedUnitNames, type UnitTracking } from '@/lib/unitTracking';
+import { FOCUS_PARAM, focusSearch, parseFocus, type FocusPane } from '@/lib/dispatchFocus';
+import FocusControls from '@/components/dispatch/focuscontrols';
 import { stampStatusSince, deriveStatusSinceFromLogs } from '@/lib/teamStatusSince';
 import { newTeamId } from '@/lib/teamId';
 import { supervisorMemberString } from '@/lib/teamDraft';
@@ -1905,10 +1907,39 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
   const [selectedRightTab, setSelectedRightTab] = useState<string>('calls');
   // An active MCI opens its tab once, including for a dispatcher who loads the page mid-MCI or whose colleague declared it.
   const mciTabOpenedRef = useRef(false);
+  // Full-screen (focus) view of one side of the board (#138), kept in the URL as ?focus=<tab>.
+  const [focusedPane, setFocusedPane] = useState<FocusPane | null>(null);
+  const focusUrlReady = useRef(false);
+  useEffect(() => {
+    const focus = parseFocus(new URLSearchParams(window.location.search).get(FOCUS_PARAM));
+    if (focus) {
+      setFocusedPane(focus.pane);
+      if (focus.pane === 'left') setSelectedLeftTab(focus.tab);
+      else setSelectedRightTab(focus.tab);
+      // A URL that opens a tab full screen wins over the MCI tab opening itself.
+      mciTabOpenedRef.current = true;
+    }
+    focusUrlReady.current = true;
+  }, []);
+  useEffect(() => {
+    if (!focusUrlReady.current) return;
+    const tab = focusedPane === 'left' ? selectedLeftTab : focusedPane === 'right' ? selectedRightTab : null;
+    const search = focusSearch(window.location.search, tab);
+    if (search !== window.location.search) window.history.replaceState(window.history.state, '', `${window.location.pathname}${search}${window.location.hash}`);
+  }, [focusedPane, selectedLeftTab, selectedRightTab]);
+  const toggleFocus = (pane: FocusPane) => setFocusedPane((current) => (current === pane ? null : pane));
+  const openFocusWindow = (tab: string) => {
+    window.open(`${window.location.pathname}${focusSearch(window.location.search, tab)}`, '_blank', 'noopener');
+  };
+  // Shows a right-side tab; leaves full-screen Teams/Supervisors/Equipment so it is visible.
+  const showRightTab = (tab: string) => {
+    setSelectedRightTab(tab);
+    setFocusedPane((current) => (current === 'left' ? null : current));
+  };
   useEffect(() => {
     if (mciTabOpenedRef.current || !isMciActive(event)) return;
     mciTabOpenedRef.current = true;
-    setSelectedRightTab('mci');
+    showRightTab('mci');
   }, [event]);
   // Which dispatch zone(s) the Calls tab is scoped to — the 'all' sentinel
   // means unfiltered ("All Calls"); it's mutually exclusive with any zone
@@ -1927,19 +1958,19 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
   const [mapTeamFocusRequest, setMapTeamFocusRequest] = useState<TeamFocusRequest | null>(null);
   const viewTeamOnMap = (teamName: string) => {
     setMapTeamFocusRequest({ teamName, requestId: Date.now() });
-    setSelectedRightTab('map');
+    showRightTab('map');
   };
   // Same as mapTeamFocusRequest/viewTeamOnMap, for a supervisor card's "view on map" button.
   const [mapSupervisorFocusRequest, setMapSupervisorFocusRequest] = useState<SupervisorFocusRequest | null>(null);
   const viewSupervisorOnMap = (supervisorName: string) => {
     setMapSupervisorFocusRequest({ supervisorName, requestId: Date.now() });
-    setSelectedRightTab('map');
+    showRightTab('map');
   };
   // Same as mapTeamFocusRequest/viewTeamOnMap, for an equipment card's "view on map" button.
   const [mapEquipmentFocusRequest, setMapEquipmentFocusRequest] = useState<EquipmentFocusRequest | null>(null);
   const viewEquipmentOnMap = (equipmentName: string) => {
     setMapEquipmentFocusRequest({ equipmentName, requestId: Date.now() });
-    setSelectedRightTab('map');
+    showRightTab('map');
   };
 
   // Matches the lg breakpoint used by the desktop/mobile CSS split below —
@@ -1962,9 +1993,14 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
       if (e.altKey && e.key.toLowerCase() === 'm') {
         e.preventDefault();
         setSelectedRightTab('map');
+        setFocusedPane((current) => (current === 'left' ? null : current));
       }
       if (e.key === 'Escape') {
         setShowQuickCallForm(false);
+        // Leaves full screen, unless Escape is closing a dialog or leaving a field.
+        const active = document.activeElement;
+        const inField = !!active && ['INPUT', 'TEXTAREA', 'SELECT'].includes(active.tagName);
+        if (!inField && !document.querySelector('[role="dialog"]')) setFocusedPane(null);
       }
       // Bare Tab cycles the left sidebar tabs, unless focus is in a control
       // that should get normal tab navigation.
@@ -3727,6 +3763,305 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     />
   );
 
+
+  // The desktop board's two sides, shared by the split layout and the full-screen (focus) view (#138).
+  const rightTabLabel =
+    selectedRightTab === 'map' ? t('Map')
+    : selectedRightTab === 'mci' ? t('MCI')
+    : clinics.find((c) => c.id === selectedRightTab)?.name ?? t('Calls');
+  const desktopLeftPane = (
+    <div className="h-full rounded-xl flex flex-col">
+      {/* Header with Select and Action Buttons */}
+      <div className="flex w-full justify-between items-center pt-2 pb-2 border-b border-surface-liner shrink-0">
+        <Select
+          selectedKeys={[selectedLeftTab]}
+          onSelectionChange={(keys) => {
+            const selected = Array.from(keys)[0] as string;
+            setSelectedLeftTab(selected);
+          }}
+          aria-label="Select section"
+          className="w-auto min-w-[180px]"
+          classNames={{
+            trigger: "bg-surface-deep border border-surface-liner rounded-full hover:bg-surface-liner h-10 min-h-10",
+            value: "text-surface-light",
+            popoverContent: "bg-surface-deep border-surface-liner",
+          }}
+        >
+          <SelectItem key="teams">{t('Teams')}</SelectItem>
+          <SelectItem key="supervisors">{t('Supervisors')}</SelectItem>
+          <SelectItem key="equipment">{t('Equipment')}</SelectItem>
+        </Select>
+
+        <div className="flex items-center gap-1.5">
+          {renderTeamActions(selectedLeftTab as LeftPanelTab)}
+          <FocusControls
+            focused={focusedPane === 'left'}
+            onToggle={() => toggleFocus('left')}
+            size="md"
+            onOpenWindow={() => openFocusWindow(selectedLeftTab)}
+            label={t(selectedLeftTab === 'teams' ? 'Teams' : selectedLeftTab === 'supervisors' ? 'Supervisors' : 'Equipment')}
+          />
+        </div>
+      </div>
+
+      {event && <div className="shrink-0">{isMciActive(event) ? <MciAvailabilityStrip event={event} /> : <AvailabilitySurgeStrip event={event} />}</div>}
+
+      {/* Content with ScrollShadow */}
+      <div className="flex-1 min-h-0 overflow-auto scrollbar-hide">
+        <div className="p-0 pb-16">
+
+          {/* TEAMS CONTENT */}
+          {selectedLeftTab === 'teams' && (
+            <TeamList {...teamListProps} emptyText={t('No teams available')} />
+          )}
+
+          {/* SUPERVISORS CONTENT */}
+          {selectedLeftTab === 'supervisors' && (
+            <SupervisorList {...supervisorListProps} emptyText="No supervisors assigned" />
+          )}
+
+          {/* EQUIPMENT CONTENT */}
+          {selectedLeftTab === 'equipment' && (
+            <EquipmentList {...equipmentListProps} emptyText={t('No equipment configured')} />
+          )}
+
+        </div>
+      </div>
+    </div>
+  );
+
+  const desktopRightPane = (
+    <div className="h-full flex flex-col overflow-hidden pt-2 pb-2">
+      <div className="w-full flex flex-col flex-1 min-h-0">
+        <div className="relative z-0 mx-1.5 pb-0 flex items-start justify-between gap-1 h-10 shrink-0">
+          <div className="flex items-end gap-1 min-w-0">
+            {hasMci(event) && (
+              <PanelTab active={selectedRightTab === 'mci'} onSelect={() => setSelectedRightTab('mci')} data-testid="mci-tab-button">
+                {t('MCI')}{isMciActive(event) ? '' : ' (ended)'}
+              </PanelTab>
+            )}
+            <PanelTab active={selectedRightTab === 'calls'} onSelect={() => setSelectedRightTab('calls')}>
+              {dispatchZones.length > 0 ? callZoneFilterLabel : t('Calls')} ({getActiveCallsForZoneSelection(callZoneFilter).length})
+            </PanelTab>
+
+            {clinics.map((clinic) => (
+              <PanelTab
+                key={clinic.id}
+                active={selectedRightTab === clinic.id}
+                onSelect={() => setSelectedRightTab(clinic.id)}
+              >
+                {clinic.name} ({getClinicCalls(clinic.id).filter(c => !c.outcome).length})
+              </PanelTab>
+            ))}
+
+            {hasVenueMapImage && (
+              <Tooltip content={`${t('Map')} (Alt+M)`} placement="top">
+                <PanelTab
+                  active={selectedRightTab === 'map'}
+                  onSelect={() => setSelectedRightTab('map')}
+                  aria-label={t('Map')}
+                >
+                  <MapIcon className="h-4 w-4" />
+                </PanelTab>
+              </Tooltip>
+            )}
+          </div>
+
+          <div className="flex items-start gap-1.5 shrink-0">
+            <MciToggleButton
+              active={isMciActive(event)}
+              startedAt={event.mci?.periods[event.mci.periods.length - 1]?.startedAt}
+              onDeclare={() => setShowDeclareMci(true)}
+              onOpenTab={() => showRightTab('mci')}
+            />
+            <SurgeToggleButton
+              active={!!event.manualSurgeActive}
+              startedAt={event.manualSurgeStartedAt}
+              onToggle={handleToggleSurge}
+            />
+            <FocusControls
+              focused={focusedPane === 'right'}
+              onToggle={() => toggleFocus('right')}
+              onOpenWindow={() => openFocusWindow(selectedRightTab)}
+              label={rightTabLabel}
+            />
+          </div>
+        </div>
+
+        {selectedRightTab === 'mci' && !isMobile && event.mci && (
+          <div className="relative z-10 -mt-px mx-1.5 rounded-lg bg-surface-deep px-2.5 pb-2 pt-1 flex flex-col flex-1 min-h-0">
+            <MciTab event={event} actions={mciActions} />
+          </div>
+        )}
+
+        {selectedRightTab === 'calls' && !isMobile && (() => {
+          const zoneCounts = getInsightCountsForZoneSelection(callZoneFilter);
+          const isAllCalls = callZoneFilter.has('all');
+          return (
+          <div className="relative z-10 -mt-px mx-1.5 rounded-lg bg-surface-deep px-2.5 py-2 flex flex-col flex-1 min-h-0">
+            <div className="shrink-0 flex flex-col gap-2 pb-1">
+              <div className="flex items-center justify-between py-1">
+                <TrackingInsightsRow
+                  items={[
+                    { key: 'total', label: t('Total Calls Logged'), count: zoneCounts.total },
+                    { key: 'active', label: t('Active'), count: zoneCounts.active },
+                    { key: 'pending', label: t('Pending'), count: zoneCounts.pending, colorClass: 'text-surface-light' },
+                    { key: 'onScene', label: t('On Scene'), count: zoneCounts.onScene, colorClass: 'text-status-red' },
+                    { key: 'transporting', label: t('Transporting'), count: zoneCounts.transporting, colorClass: 'text-status-red' },
+                  ]}
+                />
+                <div className="flex items-center gap-1.5">
+                  {dispatchZones.length > 1 && (
+                    <CallZoneFilterButton
+                      label={callZoneFilterLabel}
+                      zones={dispatchZones}
+                      selection={callZoneFilter}
+                      onSelectionChange={applyCallZoneSelectionChange}
+                    />
+                  )}
+                  <CallSortButton sortMode={callSortMode} onSortModeChange={setCallSortMode} />
+                  <Tooltip content={`${t('Add Call')} (Ctrl+Enter)`} placement="top">
+                    <div>
+                      <Button
+                        size="sm"
+                        variant="flat"
+                        className="rounded-full bg-surface-deep border border-surface-liner hover:bg-surface-liner"
+                        aria-label={t('Add Call')}
+                        data-testid="add-call-button"
+                        onPress={() => openAddCallModal()}
+                      >
+                        {t('Add Call')}
+                      </Button>
+                    </div>
+                  </Tooltip>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex-1 min-h-0">
+              <CallTrackingTable
+                event={event}
+                filterCalls={isAllCalls ? undefined : (call) => getCallZoneIds(call, venueLayers).some(id => callZoneFilter.has(id))}
+                callDisplayNumberMap={callDisplayNumberMap}
+                showResolvedCalls={showResolvedCalls}
+                setShowResolvedCalls={setShowResolvedCalls}
+                openCallId={openCallId}
+                setOpenCallId={setOpenCallId}
+                editingCell={editingCell}
+                setEditingCell={setEditingCell}
+                editValue={editValue}
+                setEditValue={setEditValue}
+                teamStatusMap={teamStatusMap}
+                updateEvent={updateEvent}
+                handleCellClick={handleCellClick}
+                handleCellBlur={handleCellBlur}
+                handleAgeSexBlur={handleAgeSexBlur}
+                handleRowClick={handleRowClick}
+                handleMarkDuplicate={handleMarkDuplicate}
+                handleTogglePriorityFromMenu={handleTogglePriorityFromMenu}
+                handleTogglePin={handleTogglePin}
+                sortMode={callSortMode}
+                handleDeleteCall={handleDeleteCall}
+                handleTeamStatusChange={handleTeamStatusChange}
+                onTransportToAmbulance={openCallTransportUnitModal}
+                handleRemoveTeamFromCall={handleRemoveTeamFromCall}
+                handleAddTeamToCall={handleAddTeamToCall}
+                handleRevertDetachment={handleRevertDetachment}
+                formatAgeSex={formatAgeSex}
+              />
+            </div>
+          </div>
+          );
+        })()}
+
+        {clinics.map((clinic) => selectedRightTab === clinic.id && !isMobile && (
+          <div key={clinic.id} className="relative z-10 -mt-px mx-1.5 rounded-lg bg-surface-deep px-2.5 py-2 flex flex-col flex-1 min-h-0">
+            <div className="shrink-0 flex flex-col gap-2 pb-1">
+              <div className="flex items-center justify-between py-1">
+                {(() => {
+                  const clinicCounts = getClinicInsightCounts(clinic.id);
+                  return (
+                    <TrackingInsightsRow
+                      items={[
+                        { key: 'total', label: t('Total Patients'), count: clinicCounts.totalPatients },
+                        { key: 'inClinic', label: t('In Clinic'), count: clinicCounts.totalInClinic, colorClass: 'text-status-blue' },
+                        { key: 'transported', label: t('Transported'), count: clinicCounts.totalTransported, colorClass: 'text-status-green' },
+                        { key: 'pendingTransport', label: t('Pending Transport'), count: clinicCounts.totalPendingTransport, colorClass: 'text-status-orange' },
+                      ]}
+                    />
+                  );
+                })()}
+                <Tooltip content={t('Add Patient')} placement="top">
+                  <div>
+                    <Button
+                      size="sm"
+                      variant="flat"
+                      className="rounded-full bg-surface-deep border border-surface-liner hover:bg-surface-liner"
+                      aria-label={t('Add Patient')}
+                      onPress={() => setShowQuickClinicCallForm(true)}
+                    >
+                      {t('Add Patient')}
+                    </Button>
+                  </div>
+                </Tooltip>
+              </div>
+            </div>
+
+            <div className="flex-1 min-h-0">
+              <ClinicTrackingTable
+                event={event}
+                clinicId={clinic.id}
+                clinics={clinics}
+                callDisplayNumberMap={callDisplayNumberMap}
+                showResolvedClinicCalls={showResolvedClinicCalls}
+                setShowResolvedClinicCalls={setShowResolvedClinicCalls}
+                openClinicCallId={openClinicCallId}
+                setOpenClinicCallId={setOpenClinicCallId}
+                editingCell={editingCell}
+                setEditingCell={setEditingCell}
+                editValue={editValue}
+                setEditValue={setEditValue}
+                updateEvent={updateEvent}
+                handleCellClick={handleCellClick}
+                handleCellBlur={handleCellBlur}
+                handleAgeSexBlur={handleAgeSexBlur}
+                onOutcomeChange={handleClinicOutcomeChange}
+                onRevertOutcome={handleRevertClinicOutcome}
+                handleTogglePin={handleTogglePin}
+                getCallRowClass={getCallRowClass}
+                formatAgeSex={formatAgeSex}
+              />
+            </div>
+          </div>
+        ))}
+
+        {selectedRightTab === 'map' && !isMobile && hasVenueMapImage && (
+          <div className="relative z-10 -mt-px mx-1.5 rounded-lg bg-surface-deep px-2.5 py-2 flex flex-col flex-1 min-h-0">
+            <VenueMapTab
+              layers={venueLayers}
+              staff={event.staff || []}
+              supervisor={event.supervisor || []}
+              equipment={event.eventEquipment || []}
+              teamTimers={teamTimers}
+              calls={event.calls || []}
+              clinics={clinics}
+              showPosts={hasPostingSchedule(event)}
+              onAddCallAtPost={(location) => openAddCallModal({ location })}
+              onAddCallForTeam={(assignedTeam) => openAddCallModal({ assignedTeam })}
+              focusTeamRequest={mapTeamFocusRequest}
+              focusSupervisorRequest={mapSupervisorFocusRequest}
+              focusEquipmentRequest={mapEquipmentFocusRequest}
+              onTeamFocusHandled={() => setMapTeamFocusRequest(null)}
+              onSupervisorFocusHandled={() => setMapSupervisorFocusRequest(null)}
+              onEquipmentFocusHandled={() => setMapEquipmentFocusRequest(null)}
+              overlay={takOverlay}
+            />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
   return (
     <DispatchVocabularyProvider terms={vocabularyTerms}>
       {takAgent}
@@ -3867,7 +4202,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
             </Button>
           </div>
         )}
-        <div className="max-w-[1750px] mx-auto px-2 sm:px-4 h-full">
+        <div className={`${focusedPane ? 'max-w-none' : 'max-w-[1750px]'} mx-auto px-2 sm:px-4 h-full`}>
 
           {isAdmin && (
             <button 
@@ -3881,290 +4216,27 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
           
           {/* Desktop Layout - Left Sidebar with Select, Right Side with Calls & Clinic */}
           <div className="hidden lg:block h-full">
+            {focusedPane ? (
+              // Full screen (#138): one side fills the board, still with its own tabs.
+              <div className="h-full" data-testid={`dispatch-focus-${focusedPane}`}>
+                {focusedPane === 'left' ? desktopLeftPane : desktopRightPane}
+              </div>
+            ) : (
             <ResizablePanelGroup direction="horizontal" className="gap-2 h-full">
               
               {/* LEFT SIDEBAR - Select for Teams/Supervisors/Equipment */}
               <ResizablePanel defaultSize={25} minSize={20} maxSize={37}>
-                <div className="h-full rounded-xl flex flex-col">
-                  {/* Header with Select and Action Buttons */}
-                  <div className="flex w-full justify-between items-center pt-2 pb-2 border-b border-surface-liner shrink-0">
-                    <Select
-                      selectedKeys={[selectedLeftTab]}
-                      onSelectionChange={(keys) => {
-                        const selected = Array.from(keys)[0] as string;
-                        setSelectedLeftTab(selected);
-                      }}
-                      aria-label="Select section"
-                      className="w-auto min-w-[180px]"
-                      classNames={{
-                        trigger: "bg-surface-deep border border-surface-liner rounded-full hover:bg-surface-liner h-10 min-h-10",
-                        value: "text-surface-light",
-                        popoverContent: "bg-surface-deep border-surface-liner",
-                      }}
-                    >
-                      <SelectItem key="teams">{t('Teams')}</SelectItem>
-                      <SelectItem key="supervisors">{t('Supervisors')}</SelectItem>
-                      <SelectItem key="equipment">{t('Equipment')}</SelectItem>
-                    </Select>
-
-                    {renderTeamActions(selectedLeftTab as LeftPanelTab)}
-                  </div>
-
-                  {event && <div className="shrink-0">{isMciActive(event) ? <MciAvailabilityStrip event={event} /> : <AvailabilitySurgeStrip event={event} />}</div>}
-
-                  {/* Content with ScrollShadow */}
-                  <div className="flex-1 min-h-0 overflow-auto scrollbar-hide">
-                    <div className="p-0 pb-16">
-
-                      {/* TEAMS CONTENT */}
-                      {selectedLeftTab === 'teams' && (
-                        <TeamList {...teamListProps} emptyText={t('No teams available')} />
-                      )}
-
-                      {/* SUPERVISORS CONTENT */}
-                      {selectedLeftTab === 'supervisors' && (
-                        <SupervisorList {...supervisorListProps} emptyText="No supervisors assigned" />
-                      )}
-
-                      {/* EQUIPMENT CONTENT */}
-                      {selectedLeftTab === 'equipment' && (
-                        <EquipmentList {...equipmentListProps} emptyText={t('No equipment configured')} />
-                      )}
-
-                    </div>
-                  </div>
-                </div>
+                {desktopLeftPane}
               </ResizablePanel>
 
               <ResizableHandle withHandle />
 
               {/* RIGHT SIDE - Calls and Clinic Tabs */}
               <ResizablePanel defaultSize={75} minSize={50}>
-                <div className="h-full flex flex-col overflow-hidden pt-2 pb-2">
-                  <div className="w-full flex flex-col flex-1 min-h-0">
-                    <div className="relative z-0 mx-1.5 pb-0 flex items-start justify-between gap-1 h-10 shrink-0">
-                      <div className="flex items-end gap-1 min-w-0">
-                        {hasMci(event) && (
-                          <PanelTab active={selectedRightTab === 'mci'} onSelect={() => setSelectedRightTab('mci')} data-testid="mci-tab-button">
-                            {t('MCI')}{isMciActive(event) ? '' : ' (ended)'}
-                          </PanelTab>
-                        )}
-                        <PanelTab active={selectedRightTab === 'calls'} onSelect={() => setSelectedRightTab('calls')}>
-                          {dispatchZones.length > 0 ? callZoneFilterLabel : t('Calls')} ({getActiveCallsForZoneSelection(callZoneFilter).length})
-                        </PanelTab>
-
-                        {clinics.map((clinic) => (
-                          <PanelTab
-                            key={clinic.id}
-                            active={selectedRightTab === clinic.id}
-                            onSelect={() => setSelectedRightTab(clinic.id)}
-                          >
-                            {clinic.name} ({getClinicCalls(clinic.id).filter(c => !c.outcome).length})
-                          </PanelTab>
-                        ))}
-
-                        {hasVenueMapImage && (
-                          <Tooltip content={`${t('Map')} (Alt+M)`} placement="top">
-                            <PanelTab
-                              active={selectedRightTab === 'map'}
-                              onSelect={() => setSelectedRightTab('map')}
-                              aria-label={t('Map')}
-                            >
-                              <MapIcon className="h-4 w-4" />
-                            </PanelTab>
-                          </Tooltip>
-                        )}
-                      </div>
-
-                      <div className="flex items-start gap-1.5 shrink-0">
-                        <MciToggleButton
-                          active={isMciActive(event)}
-                          startedAt={event.mci?.periods[event.mci.periods.length - 1]?.startedAt}
-                          onDeclare={() => setShowDeclareMci(true)}
-                          onOpenTab={() => setSelectedRightTab('mci')}
-                        />
-                        <SurgeToggleButton
-                          active={!!event.manualSurgeActive}
-                          startedAt={event.manualSurgeStartedAt}
-                          onToggle={handleToggleSurge}
-                        />
-                      </div>
-                    </div>
-
-                    {selectedRightTab === 'mci' && !isMobile && event.mci && (
-                      <div className="relative z-10 -mt-px mx-1.5 rounded-lg bg-surface-deep px-2.5 pb-2 pt-1 flex flex-col flex-1 min-h-0">
-                        <MciTab event={event} actions={mciActions} />
-                      </div>
-                    )}
-
-                    {selectedRightTab === 'calls' && !isMobile && (() => {
-                      const zoneCounts = getInsightCountsForZoneSelection(callZoneFilter);
-                      const isAllCalls = callZoneFilter.has('all');
-                      return (
-                      <div className="relative z-10 -mt-px mx-1.5 rounded-lg bg-surface-deep px-2.5 py-2 flex flex-col flex-1 min-h-0">
-                        <div className="shrink-0 flex flex-col gap-2 pb-1">
-                          <div className="flex items-center justify-between py-1">
-                            <TrackingInsightsRow
-                              items={[
-                                { key: 'total', label: t('Total Calls Logged'), count: zoneCounts.total },
-                                { key: 'active', label: t('Active'), count: zoneCounts.active },
-                                { key: 'pending', label: t('Pending'), count: zoneCounts.pending, colorClass: 'text-surface-light' },
-                                { key: 'onScene', label: t('On Scene'), count: zoneCounts.onScene, colorClass: 'text-status-red' },
-                                { key: 'transporting', label: t('Transporting'), count: zoneCounts.transporting, colorClass: 'text-status-red' },
-                              ]}
-                            />
-                            <div className="flex items-center gap-1.5">
-                              {dispatchZones.length > 1 && (
-                                <CallZoneFilterButton
-                                  label={callZoneFilterLabel}
-                                  zones={dispatchZones}
-                                  selection={callZoneFilter}
-                                  onSelectionChange={applyCallZoneSelectionChange}
-                                />
-                              )}
-                              <CallSortButton sortMode={callSortMode} onSortModeChange={setCallSortMode} />
-                              <Tooltip content={`${t('Add Call')} (Ctrl+Enter)`} placement="top">
-                                <div>
-                                  <Button
-                                    size="sm"
-                                    variant="flat"
-                                    className="rounded-full bg-surface-deep border border-surface-liner hover:bg-surface-liner"
-                                    aria-label={t('Add Call')}
-                                    data-testid="add-call-button"
-                                    onPress={() => openAddCallModal()}
-                                  >
-                                    {t('Add Call')}
-                                  </Button>
-                                </div>
-                              </Tooltip>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="flex-1 min-h-0">
-                          <CallTrackingTable
-                            event={event}
-                            filterCalls={isAllCalls ? undefined : (call) => getCallZoneIds(call, venueLayers).some(id => callZoneFilter.has(id))}
-                            callDisplayNumberMap={callDisplayNumberMap}
-                            showResolvedCalls={showResolvedCalls}
-                            setShowResolvedCalls={setShowResolvedCalls}
-                            openCallId={openCallId}
-                            setOpenCallId={setOpenCallId}
-                            editingCell={editingCell}
-                            setEditingCell={setEditingCell}
-                            editValue={editValue}
-                            setEditValue={setEditValue}
-                            teamStatusMap={teamStatusMap}
-                            updateEvent={updateEvent}
-                            handleCellClick={handleCellClick}
-                            handleCellBlur={handleCellBlur}
-                            handleAgeSexBlur={handleAgeSexBlur}
-                            handleRowClick={handleRowClick}
-                            handleMarkDuplicate={handleMarkDuplicate}
-                            handleTogglePriorityFromMenu={handleTogglePriorityFromMenu}
-                            handleTogglePin={handleTogglePin}
-                            sortMode={callSortMode}
-                            handleDeleteCall={handleDeleteCall}
-                            handleTeamStatusChange={handleTeamStatusChange}
-                            onTransportToAmbulance={openCallTransportUnitModal}
-                            handleRemoveTeamFromCall={handleRemoveTeamFromCall}
-                            handleAddTeamToCall={handleAddTeamToCall}
-                            handleRevertDetachment={handleRevertDetachment}
-                            formatAgeSex={formatAgeSex}
-                          />
-                        </div>
-                      </div>
-                      );
-                    })()}
-
-                    {clinics.map((clinic) => selectedRightTab === clinic.id && !isMobile && (
-                      <div key={clinic.id} className="relative z-10 -mt-px mx-1.5 rounded-lg bg-surface-deep px-2.5 py-2 flex flex-col flex-1 min-h-0">
-                        <div className="shrink-0 flex flex-col gap-2 pb-1">
-                          <div className="flex items-center justify-between py-1">
-                            {(() => {
-                              const clinicCounts = getClinicInsightCounts(clinic.id);
-                              return (
-                                <TrackingInsightsRow
-                                  items={[
-                                    { key: 'total', label: t('Total Patients'), count: clinicCounts.totalPatients },
-                                    { key: 'inClinic', label: t('In Clinic'), count: clinicCounts.totalInClinic, colorClass: 'text-status-blue' },
-                                    { key: 'transported', label: t('Transported'), count: clinicCounts.totalTransported, colorClass: 'text-status-green' },
-                                    { key: 'pendingTransport', label: t('Pending Transport'), count: clinicCounts.totalPendingTransport, colorClass: 'text-status-orange' },
-                                  ]}
-                                />
-                              );
-                            })()}
-                            <Tooltip content={t('Add Patient')} placement="top">
-                              <div>
-                                <Button
-                                  size="sm"
-                                  variant="flat"
-                                  className="rounded-full bg-surface-deep border border-surface-liner hover:bg-surface-liner"
-                                  aria-label={t('Add Patient')}
-                                  onPress={() => setShowQuickClinicCallForm(true)}
-                                >
-                                  {t('Add Patient')}
-                                </Button>
-                              </div>
-                            </Tooltip>
-                          </div>
-                        </div>
-
-                        <div className="flex-1 min-h-0">
-                          <ClinicTrackingTable
-                            event={event}
-                            clinicId={clinic.id}
-                            clinics={clinics}
-                            callDisplayNumberMap={callDisplayNumberMap}
-                            showResolvedClinicCalls={showResolvedClinicCalls}
-                            setShowResolvedClinicCalls={setShowResolvedClinicCalls}
-                            openClinicCallId={openClinicCallId}
-                            setOpenClinicCallId={setOpenClinicCallId}
-                            editingCell={editingCell}
-                            setEditingCell={setEditingCell}
-                            editValue={editValue}
-                            setEditValue={setEditValue}
-                            updateEvent={updateEvent}
-                            handleCellClick={handleCellClick}
-                            handleCellBlur={handleCellBlur}
-                            handleAgeSexBlur={handleAgeSexBlur}
-                            onOutcomeChange={handleClinicOutcomeChange}
-                            onRevertOutcome={handleRevertClinicOutcome}
-                            handleTogglePin={handleTogglePin}
-                            getCallRowClass={getCallRowClass}
-                            formatAgeSex={formatAgeSex}
-                          />
-                        </div>
-                      </div>
-                    ))}
-
-                    {selectedRightTab === 'map' && !isMobile && hasVenueMapImage && (
-                      <div className="relative z-10 -mt-px mx-1.5 rounded-lg bg-surface-deep px-2.5 py-2 flex flex-col flex-1 min-h-0">
-                        <VenueMapTab
-                          layers={venueLayers}
-                          staff={event.staff || []}
-                          supervisor={event.supervisor || []}
-                          equipment={event.eventEquipment || []}
-                          teamTimers={teamTimers}
-                          calls={event.calls || []}
-                          clinics={clinics}
-                          showPosts={hasPostingSchedule(event)}
-                          onAddCallAtPost={(location) => openAddCallModal({ location })}
-                          onAddCallForTeam={(assignedTeam) => openAddCallModal({ assignedTeam })}
-                          focusTeamRequest={mapTeamFocusRequest}
-                          focusSupervisorRequest={mapSupervisorFocusRequest}
-                          focusEquipmentRequest={mapEquipmentFocusRequest}
-                          onTeamFocusHandled={() => setMapTeamFocusRequest(null)}
-                          onSupervisorFocusHandled={() => setMapSupervisorFocusRequest(null)}
-                          onEquipmentFocusHandled={() => setMapEquipmentFocusRequest(null)}
-                          overlay={takOverlay}
-                        />
-                      </div>
-                    )}
-                  </div>
-                </div>
+                {desktopRightPane}
               </ResizablePanel>
             </ResizablePanelGroup>
+            )}
           </div>
 
           {/* Mobile/Tablet Layout - Bottom Tabs */}
