@@ -279,7 +279,7 @@ export default function EventCreation() {
   };
 
   const handleAddSamUnit = () => {
-    if (!samName.trim() || !samCert) return;
+    if (!samName.trim()) return;
     setEventData(prev => ({
       ...prev,
       supervisor: [...(prev.supervisor || []), newSupervisor(samName, samMemberName, samCert)]

@@ -28,6 +28,12 @@ export function teamDraftFromStaff(team: Staff): TeamDraft {
   };
 }
 
+/** A supervisor's stored member string: "Name [CERT]", or just "Name" when no certification is given. */
+export function supervisorMemberString(name: string, cert: string): string {
+  const c = cert.trim();
+  return c ? `${name.trim()} [${c}]` : name.trim();
+}
+
 /** A new supervisor unit, roaming and on break; the member defaults to the unit's own name. */
 export function newSupervisor(name: string, memberName: string, cert: string): Supervisor {
   return {
@@ -35,6 +41,6 @@ export function newSupervisor(name: string, memberName: string, cert: string): S
     team: name.trim(),
     location: 'Roaming',
     status: 'On Break',
-    member: `${memberName.trim() || name.trim()} [${cert}]`,
+    member: supervisorMemberString(memberName.trim() || name.trim(), cert),
   };
 }
