@@ -4,19 +4,29 @@ import type { LatLon, MapAlignment } from '@/lib/geo/types';
 import { distanceM, POST_RADIUS_M } from './historyStats';
 
 /**
- * Live location labels (D65): a team's Location filled from its TAK position
- * as the nearest post's name, with words for how close it is. Only posts with
+ * Live location labels (D65, D71): a team's Location filled from its TAK
+ * position as a post's name, with words for how close it is. Only posts with
  * coordinates are used; nothing is reverse geocoded.
  *
- * - within POST_RADIUS_M (25 m): "Gate A"
- * - within NEAR_M (100 m): "Near Gate A"
+ * - inside a post's capture radius (CAPTURE_M): "Gate A"
+ * - within NEAR_M: "Near Gate A"
  * - farther: "250 m from Gate A" (rounded to 50 m; "1.2 km" past 1 km)
  *
- * Hysteresis keeps the label steady while a team stands near a boundary:
- * the current post is kept until another is SWITCH_MARGIN_M closer, each
- * distance band is left only BAND_MARGIN_M past its edge, a far distance
- * changes only when it moves by more than DISTANCE_STEP_M, and any new label
- * must hold for DWELL_MS before it is used.
+ * Capture and anchoring keep the label on one post instead of flickering
+ * between two (D71):
+ * - a team is *at* a post once inside its capture radius, and stays at it
+ *   until EXIT_MARGIN_M past that radius;
+ * - after leaving, it stays anchored to the last post ("Near Gate A") until
+ *   it is inside another post's radius, or another post is ANCHOR_SWITCH_M
+ *   closer, or it is past NEAR_M;
+ * - a far distance changes only when it moves by more than DISTANCE_STEP_M.
+ *
+ * A new label must hold for a dwell time before it is used: DWELL_AT_MS for
+ * arriving at a post (a confident change), DWELL_MS for anything else.
+ *
+ * Every open dispatch page runs this; each seeds it from the label already
+ * stored on the unit (`stored` in step), so pages agree on where a team was
+ * and never overwrite each other back and forth.
  */
 
 export interface NamedPoint extends LatLon {
@@ -25,11 +35,14 @@ export interface NamedPoint extends LatLon {
 
 export type Band = 'at' | 'near' | 'away';
 
+export const CAPTURE_M = POST_RADIUS_M;
+export const EXIT_MARGIN_M = 8;
 export const NEAR_M = 100;
+export const ANCHOR_SWITCH_M = 25;
 export const SWITCH_MARGIN_M = 10;
-export const BAND_MARGIN_M = 8;
 export const DISTANCE_STEP_M = 50;
-export const DWELL_MS = 20_000;
+export const DWELL_AT_MS = 5_000;
+export const DWELL_MS = 15_000;
 
 export interface Placement {
   post: string;
@@ -40,9 +53,9 @@ export interface Placement {
 }
 
 export interface TrackState {
-  /** The label in use (null until the first one has held for DWELL_MS). */
+  /** The label in use (null until the first one has held for its dwell time). */
   current: Placement | null;
-  /** A different label waiting out DWELL_MS. */
+  /** A different label waiting out its dwell time. */
   pending: { placement: Placement; since: number } | null;
 }
 
@@ -81,49 +94,85 @@ export function placementLabel(post: string, band: Band, shownM: number): string
   return `${formatDistance(shownM)} from ${post}`;
 }
 
-/** Band for a distance, leaving the previous band only past its edge plus a margin. */
-export function bandFor(d: number, previous?: Band): Band {
-  const atEdge = previous === 'at' ? POST_RADIUS_M + BAND_MARGIN_M : POST_RADIUS_M;
-  if (d <= atEdge) return 'at';
-  const nearEdge = previous === 'at' || previous === 'near' ? NEAR_M + BAND_MARGIN_M : NEAR_M;
-  return d <= nearEdge ? 'near' : 'away';
+/**
+ * The placement a stored label names, if it is one of these labels for a
+ * known post ("Gate A", "Near Gate A", "250 m from Gate A"); else null (a
+ * label typed by hand, or a post that no longer exists).
+ */
+export function parsePlacement(label: string | undefined, posts: NamedPoint[]): Placement | null {
+  if (!label) return null;
+  const names = new Set(posts.map((p) => p.name));
+  if (names.has(label)) return { post: label, band: 'at', shownM: 0, label };
+  if (label.startsWith('Near ') && names.has(label.slice(5))) return { post: label.slice(5), band: 'near', shownM: 0, label };
+  const far = /^(\d+(?:\.\d+)?) (m|km) from (.+)$/.exec(label);
+  if (far && names.has(far[3]!)) {
+    const shownM = Math.round(Number(far[1]) * (far[2] === 'km' ? 1000 : 1));
+    return { post: far[3]!, band: 'away', shownM, label };
+  }
+  return null;
 }
 
-/** The placement for a position, given the one in use (for stickiness). Null with no posts. */
+function make(post: string, band: Band, shownM = 0): Placement {
+  return { post, band, shownM, label: placementLabel(post, band, shownM) };
+}
+
+/** The placement for a position, given the one in use (for capture and anchoring). Null with no posts. */
 export function place(position: LatLon, posts: NamedPoint[], previous: Placement | null): Placement | null {
   if (!posts.length) return null;
-  let nearest: { post: NamedPoint; d: number } | null = null;
-  for (const post of posts) {
-    const d = distanceM(position, post);
-    if (!nearest || d < nearest.d) nearest = { post, d };
+  const withD = posts.map((post) => ({ post, d: distanceM(position, post) }));
+  let nearest = withD[0]!;
+  for (const x of withD) if (x.d < nearest.d) nearest = x;
+  const prev = previous ? withD.find((x) => x.post.name === previous.post) : undefined;
+
+  // At a post: stay until clearly past its capture radius.
+  if (prev && previous!.band === 'at' && prev.d <= CAPTURE_M + EXIT_MARGIN_M) return make(prev.post.name, 'at');
+  // Inside a post's capture radius: at it (the nearest, if radii overlap).
+  if (nearest.d <= CAPTURE_M) return make(nearest.post.name, 'at');
+
+  // Between posts: stay anchored to the last post while near it, unless another is clearly closer.
+  if (prev && previous!.band !== 'away' && prev.d <= NEAR_M + EXIT_MARGIN_M && nearest.d + ANCHOR_SWITCH_M > prev.d) {
+    return make(prev.post.name, 'near');
   }
-  let chosen = nearest!;
-  // Keep the current post unless another is clearly closer.
-  const kept = previous && posts.find((p) => p.name === previous.post);
-  if (kept && kept.name !== chosen.post.name) {
-    const dKept = distanceM(position, kept);
-    if (dKept <= chosen.d + SWITCH_MARGIN_M) chosen = { post: kept, d: dKept };
+  if (nearest.d <= NEAR_M) return make(nearest.post.name, 'near');
+
+  // Far away: words the distance from the nearest post, keeping the previous post unless another is clearly closer.
+  let chosen = nearest;
+  if (prev && prev.post.name !== nearest.post.name && prev.d <= nearest.d + SWITCH_MARGIN_M) chosen = prev;
+  let shownM = roundedDistance(chosen.d);
+  // Keep the shown distance until the team has really moved.
+  if (previous?.band === 'away' && previous.post === chosen.post.name && Math.abs(chosen.d - previous.shownM) <= DISTANCE_STEP_M * 0.8) {
+    shownM = previous.shownM;
   }
-  const samePost = previous?.post === chosen.post.name;
-  const band = bandFor(chosen.d, samePost ? previous!.band : undefined);
-  let shownM = 0;
-  if (band === 'away') {
-    shownM = roundedDistance(chosen.d);
-    // Keep the shown distance until the team has really moved.
-    if (samePost && previous!.band === 'away' && Math.abs(chosen.d - previous!.shownM) <= DISTANCE_STEP_M * 0.8) shownM = previous!.shownM;
-  }
-  return { post: chosen.post.name, band, shownM, label: placementLabel(chosen.post.name, band, shownM) };
+  return make(chosen.post.name, 'away', shownM);
 }
 
-/** Advances a team's state with a new position (or none, to let a pending label mature). */
-export function step(state: TrackState, position: LatLon | null, posts: NamedPoint[], now: number): TrackState {
+/** How long a new placement must hold before it is used. */
+export function dwellFor(placement: Placement): number {
+  return placement.band === 'at' ? DWELL_AT_MS : DWELL_MS;
+}
+
+/**
+ * Advances a team's state with a new position (or none, to let a pending
+ * label mature). `stored` is the label already on the unit, parsed with
+ * parsePlacement: when it differs from this page's own, this page adopts it,
+ * so every page builds on the same history.
+ */
+export function step(state: TrackState, position: LatLon | null, posts: NamedPoint[], now: number, stored: Placement | null = null): TrackState {
+  if (stored && stored.label !== state.current?.label) {
+    state = { current: stored, pending: state.pending && state.pending.placement.label !== stored.label ? state.pending : null };
+  }
   const candidate = position ? place(position, posts, state.current) : state.pending?.placement ?? null;
   if (!candidate) return state;
   if (state.current && candidate.label === state.current.label) {
-    // Same label: keep the in-use placement but take its refined distance band.
+    // Same label: keep the in-use placement but take its refined state.
     return { current: candidate, pending: null };
   }
   const since = state.pending && state.pending.placement.label === candidate.label ? state.pending.since : now;
-  if (now - since >= DWELL_MS) return { current: candidate, pending: null };
+  if (now - since >= dwellFor(candidate)) return { current: candidate, pending: null };
   return { current: state.current, pending: { placement: candidate, since } };
+}
+
+/** When the pending label (if any) will have held long enough, for scheduling the next check. */
+export function maturesAt(state: TrackState): number | null {
+  return state.pending ? state.pending.since + dwellFor(state.pending.placement) : null;
 }

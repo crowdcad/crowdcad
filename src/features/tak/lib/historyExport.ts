@@ -50,8 +50,9 @@ export function heatCsv(cells: HeatCell[], cellM: number): string {
 /** Heat-map cells as GeoJSON squares, with `seconds` on each. */
 export function heatGeoJson(cells: HeatCell[], cellM: number): string {
   const features = cells.map((c) => {
-    const dLat = cellM / 2 / 111_195;
-    const dLon = cellM / 2 / (111_195 * Math.cos((c.lat * Math.PI) / 180));
+    // Half the cell, from the grid's own size so squares tile exactly (cellM as a fallback).
+    const dLat = (c.dLat ?? cellM / 111_195) / 2;
+    const dLon = (c.dLon ?? cellM / (111_195 * Math.cos((c.lat * Math.PI) / 180))) / 2;
     const r = (n: number) => Number(n.toFixed(7));
     const ring = [
       [c.lon - dLon, c.lat - dLat],

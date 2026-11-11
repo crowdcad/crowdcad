@@ -166,12 +166,15 @@ export function TeamStatusSelect({
   model,
   onStatusChange,
   onLocationChange,
+  locationTracked = false,
 }: {
   staff: Staff;
   event: Event;
   model: TeamStatusModel;
   onStatusChange: TeamCardProps['onStatusChange'];
   onLocationChange: TeamCardProps['onLocationChange'];
+  /** The team's Location comes from live tracking (D66). */
+  locationTracked?: boolean;
 }) {
   const { t } = useDispatchTerms();
   const { statusOptions, teamEquipmentNames, teamEquipmentIconType, statusTone, clinics, mciActive } = model;
@@ -248,8 +251,8 @@ export function TeamStatusSelect({
           setMciPickerStatus(val as 'Triage' | 'Treatment');
           return;
         }
-        // On a live-tracking event Location is where the team is, so a status change never moves it (D66).
-        if (val === 'Available' && event.mapMode !== 'tak') {
+        // A tracked team's Location is where it is, so a status change never moves it (D66).
+        if (val === 'Available' && !locationTracked) {
           const targetLocation =
             staff.originalPost ||
             event.pendingAssignments?.[staff.team]?.post ||
@@ -329,9 +332,9 @@ function EditableTeamLocation({
     setLocationInput(staff.location || '');
   }, [staff.location]);
 
-  // During an MCI on a standard event, MCI zones come first, then treatment locations, then the venue's posts.
+  // During an MCI, MCI zones come first, then treatment locations, then the venue's posts (a tracked unit's field is locked anyway).
   // Memoized on those fields only: `event` is a new object on every snapshot, and every team card has one of these.
-  const mci = isMciActive(event) && event.mapMode !== 'tak' ? event.mci : undefined;
+  const mci = isMciActive(event) ? event.mci : undefined;
   const venuePosts = event.venue?.posts;
   const postOptions = useMemo(() => {
     const posts = (venuePosts || []).map(p => (typeof p === 'string' ? p : p.name));
@@ -403,11 +406,11 @@ export function TeamControlsRow(props: {
   onLocationChange: TeamCardProps['onLocationChange'];
   locationTracked?: boolean;
 }) {
-  const { locationTracked, ...statusProps } = props;
+  const { locationTracked } = props;
   return (
     <div className="flex items-center gap-3">
       <div onClick={stopPropagation} onKeyDown={stopPropagation} className="min-w-0 flex-[1]">
-        <TeamStatusSelect {...statusProps} />
+        <TeamStatusSelect {...props} />
       </div>
       <div onClick={stopPropagation} onKeyDown={stopPropagation} className="min-w-0 flex-[1.5]">
         <TeamLocationInput staff={props.staff} event={props.event} onLocationChange={props.onLocationChange} tracked={locationTracked} />

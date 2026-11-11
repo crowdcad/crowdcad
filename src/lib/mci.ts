@@ -609,16 +609,14 @@ function hhmm(ms: number): string {
 /**
  * Closes the period, clears every unit's MCI assignment and returns units in
  * Triage, Treatment or Unavailable to Available. The data stays on the event.
- * On a standard event a unit whose Location was set by its assignment goes back
- * to its post; on a TAK event Location is never touched (D66).
+ * A unit whose Location was set by its assignment goes back to its post; a
+ * unit with live tracking (`tracked`, D66) keeps its tracked Location.
  */
-export function standDownMci(event: Event, now: number): Partial<Event> {
+export function standDownMci(event: Event, now: number, tracked: ReadonlySet<string> = new Set()): Partial<Event> {
   const base = event.mci ?? emptyMci();
   const periods = base.periods.map((period, i) =>
     i === base.periods.length - 1 && period.endedAt === undefined ? { ...period, endedAt: now } : period
   );
-  const tak = event.mapMode === 'tak';
-
   const reset = <T extends Staff | Supervisor>(unit: T): T => {
     const wasMci = MCI_STATUS_SET.has(unit.status);
     if (!wasMci && !unit.mciAssignment) return unit;
@@ -628,7 +626,7 @@ export function standDownMci(event: Event, now: number): Partial<Event> {
     next.status = 'Available';
     const targetName = assigned ? mciAssignmentName(base, assigned) : undefined;
     const restore = unit.originalPost || event.pendingAssignments?.[unit.team]?.post;
-    if (!tak && restore && targetName && unit.location === targetName) next.location = restore;
+    if (!tracked.has(unit.team) && restore && targetName && unit.location === targetName) next.location = restore;
     next.log = [...(unit.log || []), { timestamp: now, message: `${hhmm(now)} - status changed to Available (MCI stand down)` }];
     return next;
   };
@@ -1065,17 +1063,19 @@ export interface MciAssignmentPatch {
 
 /**
  * What picking (or clearing) an assignment does to a unit. Status comes from
- * the assignment the dispatcher picks, never from a location (D66, D68), and on
- * a TAK event Location is where the unit is, so MCI code never writes it (D66).
+ * the assignment the dispatcher picks, never from a location (D66, D68). The
+ * unit's Location becomes the assignment, unless the unit has live tracking
+ * (`tracked`): its Location is then where it is, so MCI code never writes it (D66).
  */
 export function mciAssignmentPatch(
-  event: Pick<Event, 'mci' | 'mapMode'>,
-  assignment: MciAssignment | null
+  event: Pick<Event, 'mci'>,
+  assignment: MciAssignment | null,
+  tracked = false
 ): MciAssignmentPatch {
   if (!assignment) return { patch: { mciAssignment: undefined } };
   const name = mciAssignmentName(event.mci, assignment);
   if (!name) return { patch: { mciAssignment: undefined } };
-  if (event.mapMode === 'tak') {
+  if (tracked) {
     return { patch: { mciAssignment: assignment }, logMessage: `MCI assignment set to ${name}` };
   }
   return { patch: { mciAssignment: assignment, location: name }, logMessage: `Post changed to ${name} (MCI)` };
@@ -1088,15 +1088,16 @@ export function mciAssignmentPatch(
  * En Route, an equipment run) leaves it alone.
  */
 export function mciStatusPatch(
-  event: Pick<Event, 'mci' | 'mapMode'>,
+  event: Pick<Event, 'mci'>,
   unit: Pick<Staff, 'mciAssignment'>,
   newStatus: string,
-  assignment?: MciAssignment
+  assignment?: MciAssignment,
+  tracked = false
 ): MciAssignmentPatch {
   const kind = mciAssignmentKindFor(newStatus);
   if (kind) {
     const chosen = assignment?.kind === kind ? assignment : unit.mciAssignment?.kind === kind ? unit.mciAssignment : null;
-    return chosen ? mciAssignmentPatch(event, chosen) : { patch: {} };
+    return chosen ? mciAssignmentPatch(event, chosen, tracked) : { patch: {} };
   }
   if (newStatus === 'Available' || newStatus === 'Unavailable') return mciAssignmentPatch(event, null);
   return { patch: {} };

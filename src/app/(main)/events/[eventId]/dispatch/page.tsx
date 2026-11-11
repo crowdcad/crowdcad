@@ -88,7 +88,7 @@ import {
   type CustodyActor,
   changedFleet,
 } from '@/lib/equipmentCustody';
-import type { UnitTracking } from '@/lib/unitTracking';
+import { trackedUnitNames, type UnitTracking } from '@/lib/unitTracking';
 import { stampStatusSince, deriveStatusSinceFromLogs } from '@/lib/teamStatusSince';
 import { newTeamId } from '@/lib/teamId';
 import { supervisorMemberString } from '@/lib/teamDraft';
@@ -139,6 +139,10 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
   const [postAssignments, setPostAssignments] = useState<PostAssignment>({});
   // Live unit positions on a TAK event, reported by the TAK module's agent (D66).
   const [unitTracking, setUnitTracking] = useState<UnitTracking | null>(null);
+  // Units with live tracking right now (a fresh position on a TAK event). Only their Location is
+  // tracked; every other unit behaves as on a standard event (D66). A ref so writes read the latest.
+  const trackedUnitsRef = useRef<Set<string>>(new Set());
+  trackedUnitsRef.current = trackedUnitNames(event?.mapMode, unitTracking);
   // const handleBulkPostAssignment = (newAssignments: PostAssignment) => {
   //   setPostAssignments(newAssignments);
   // };
@@ -350,7 +354,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     updateInput: Partial<Event> | ((current: Event) => Partial<Event>),
     options?: {
       bypassEndedCheck?: boolean;
-      /** Units whose Location this write may change on a live-tracking event (a manual edit); see keepTrackedLocations. */
+      /** Tracked units whose Location this write may change (a manual edit); see keepTrackedLocations. */
       locationEdits?: string[];
     }
   ) => {
@@ -372,7 +376,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
 
         const updates = stampStatusSince(
           currentEvent,
-          keepTrackedLocations(currentEvent, typeof updateInput === 'function' ? updateInput(currentEvent) : updateInput, options?.locationEdits)
+          keepTrackedLocations(currentEvent, typeof updateInput === 'function' ? updateInput(currentEvent) : updateInput, trackedUnitsRef.current, options?.locationEdits)
         );
 
         const nextEvent = {
@@ -410,7 +414,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
           updates = updateInput;
         }
 
-        tx.update('events', eventId, removeUndefinedDeep(stampStatusSince(currentEvent, keepTrackedLocations(currentEvent, updates, options?.locationEdits))));
+        tx.update('events', eventId, removeUndefinedDeep(stampStatusSince(currentEvent, keepTrackedLocations(currentEvent, updates, trackedUnitsRef.current, options?.locationEdits))));
       });
     } catch (error) {
       if (error instanceof Error && error.message === 'EVENT_ENDED') {
@@ -424,7 +428,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
 
   // MCI mode (src/lib/mci.ts): every write goes through updateEvent's functional form.
   const mciWritesInFlight = useRef(0);
-  const mciActions = useMciActions(updateEvent, authUser?.uid, { setLocal: setEvent, inFlight: mciWritesInFlight });
+  const mciActions = useMciActions(updateEvent, authUser?.uid, { setLocal: setEvent, inFlight: mciWritesInFlight, trackedUnits: () => trackedUnitsRef.current });
   const [showDeclareMci, setShowDeclareMci] = useState(false);
 
   const handlePostAssignment = useCallback(async (time: string, post: string, team: string) => {
@@ -1010,7 +1014,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     const hhmm = now.getHours().toString().padStart(2, '0') + now.getMinutes().toString().padStart(2, '0');
     const logMessage = `${hhmm} - status changed to ${newStatus}${activeCall ? ` at ${activeCall.location}` : ''}`;
 
-    const mciPatch = event && isMciActive(event) ? mciStatusPatch(event, supervisor, newStatus, mciAssignment) : null;
+    const mciPatch = event && isMciActive(event) ? mciStatusPatch(event, supervisor, newStatus, mciAssignment, trackedUnitsRef.current.has(supervisor.team)) : null;
     const updatedSupervisors = event?.supervisor.map(s =>
       s.team === supervisor.team
         ? {
@@ -1037,8 +1041,8 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
   }, [event, updateEvent, postAssignments]);
 
   const handleSupervisorLocationChange = useCallback(async (supervisor: Staff, newLocation: string) => {
-    // On a live-tracking event Location is where the unit is, never its post, and never sets a status (D66).
-    const tracked = event?.mapMode === 'tak';
+    // A tracked unit's Location is where it is, never its post, and never sets a status (D66).
+    const tracked = trackedUnitsRef.current.has(supervisor.team);
     const updatedSupervisors = event?.supervisor.map(s =>
       s.team === supervisor.team
         ? {
@@ -2428,7 +2432,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
         
         const teamLogEntry: TeamLogEntry = { timestamp: now.getTime(), message: logMessage };
         // Picking Triage or Treatment sets the unit's zone or treatment location; Available and Unavailable clear it.
-        const mciPatch = isMciActive(currentEvent) ? mciStatusPatch(currentEvent, s, newStatus, mciAssignment) : null;
+        const mciPatch = isMciActive(currentEvent) ? mciStatusPatch(currentEvent, s, newStatus, mciAssignment, trackedUnitsRef.current.has(s.team)) : null;
         const mciLogEntry: TeamLogEntry[] = mciPatch?.logMessage ? [{ timestamp: now.getTime(), message: `${hhmm} - ${mciPatch.logMessage}` }] : [];
 
         return {
@@ -2488,8 +2492,8 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
   }, [updateEvent, event?.calls]);
 
   const handleLocationChange = useCallback(async (staff: Staff, newLocation: string) => {
-    // On a live-tracking event Location is where the team is, never its post, and never sets a status (D66).
-    const tracked = event?.mapMode === 'tak';
+    // A tracked team's Location is where it is, never its post, and never sets a status (D66).
+    const tracked = trackedUnitsRef.current.has(staff.team);
     const updatedStaff = event?.staff.map(t =>
       t.team === staff.team
         ? addTeamLog(
@@ -3217,7 +3221,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     process.env.NEXT_PUBLIC_TAK === 'on' && TakEventPanel && TakBasemapUnderlay && TakBasemapToolbar &&
     event.mapMode === 'tak' && !isLiteMode && user && eventId
       ? {
-          // Team and supervisor markers sit at their live positions only (D66).
+          // Units with a live position are drawn there; every other unit at its post (D66).
           unitTracking: unitTracking ?? { positions: {}, alignments: {} },
           underlay: (ctx) => (
             <Suspense fallback={null}>

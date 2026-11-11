@@ -22,7 +22,11 @@ export interface HistorySegment {
   startedAt: number;
   endedAt: number | null;
   windows: HistoryWindowDoc[];
-  grid: { cellM: number; originLat: number; originLon: number; cells: Record<string, number>; overflowSecs?: number };
+  /**
+   * `lattice` (contract 0.8.0, D72): the origin is snapped to the event-wide heat grid and cells use its size
+   * (heatGrid), so they land exactly on event cells. Older segments start at their first fix.
+   */
+  grid: { cellM: number; originLat: number; originLon: number; cells: Record<string, number>; overflowSecs?: number; lattice?: boolean };
 }
 
 export interface PostLocation {
@@ -101,30 +105,88 @@ export function teamHistoryStats(segments: HistorySegment[], posts: PostLocation
 }
 
 export interface HeatCell {
+  /** The cell's center. */
   lat: number;
   lon: number;
   secs: number;
+  /** The cell's height and width in degrees: cells tile exactly, edge to edge. Always set by heatCells. */
+  dLat?: number;
+  dLon?: number;
+}
+
+/** A heat grid's cell size in degrees. */
+export interface HeatGrid {
+  latStep: number;
+  lonStep: number;
+}
+
+const M_PER_DEG_LAT = (R * Math.PI) / 180;
+
+/**
+ * The event-wide heat grid (D72): a fixed lattice anchored at 0,0, so cells
+ * from every segment line up. The longitude step uses the whole-degree
+ * latitude nearest `refLat`, which every segment of an event shares; the
+ * bridge snaps each segment's origin to the same lattice.
+ */
+export function heatGrid(cellM: number, refLat: number): HeatGrid {
+  const ref = Math.round(refLat);
+  return { latStep: cellM / M_PER_DEG_LAT, lonStep: cellM / (M_PER_DEG_LAT * Math.cos((ref * Math.PI) / 180)) };
+}
+
+/** Overlap fractions this small (under 0.1% of a cell, millimetres) are rounding slivers, not real overlap. */
+const SLIVER = 1e-3;
+
+/** The target cells a source span [a0, a1) covers on a lattice of `step`, with the fraction of the span in each. */
+function spans(a0: number, a1: number, step: number): [number, number][] {
+  const out: [number, number][] = [];
+  const first = Math.floor(a0 / step + 1e-9);
+  const last = Math.ceil(a1 / step - 1e-9) - 1;
+  for (let i = first; i <= last; i++) {
+    const f = (Math.min(a1, (i + 1) * step) - Math.max(a0, i * step)) / (a1 - a0);
+    if (f > SLIVER) out.push([i, f]);
+  }
+  const total = out.reduce((n, [, f]) => n + f, 0);
+  return out.map(([i, f]) => [i, f / total]);
 }
 
 /**
- * All segments' grid cells as positions (cell centers) with seconds, merged
- * across segments that land on the same spot (rounded to ~1 m).
+ * Every segment's grid cells re-binned onto one event-wide grid (heatGrid):
+ * each segment's grid starts at its own first fix, so its cells are split
+ * over the event cells they overlap, by area. Seconds are kept. Cells from
+ * a bridge that snaps its origins (D72) land exactly on event cells.
  */
 export function heatCells(segments: HistorySegment[]): HeatCell[] {
-  const merged = new Map<string, HeatCell>();
+  const first = segments.find((s) => Object.keys(s.grid.cells).length);
+  if (!first) return [];
+  const cellM = first.grid.cellM;
+  const grid = heatGrid(cellM, first.grid.originLat);
+  const merged = new Map<string, { ix: number; iy: number; secs: number }>();
   for (const seg of segments) {
-    const { cellM, originLat, originLon, cells } = seg.grid;
-    const mPerDegLat = (R * Math.PI) / 180;
-    const mPerDegLon = mPerDegLat * Math.cos((originLat * Math.PI) / 180);
+    const { cellM: segCellM, originLat, originLon, cells, lattice } = seg.grid;
+    // The segment's own cell size: the event lattice's (D72), or for older segments, metres at its first fix.
+    const own = lattice ? heatGrid(segCellM, originLat) : null;
+    const sLat = own?.latStep ?? segCellM / M_PER_DEG_LAT;
+    const sLon = own?.lonStep ?? segCellM / (M_PER_DEG_LAT * Math.cos((originLat * Math.PI) / 180));
     for (const [key, secs] of Object.entries(cells)) {
       const [ix, iy] = key.split(',').map(Number) as [number, number];
-      const lat = originLat + ((iy + 0.5) * cellM) / mPerDegLat;
-      const lon = originLon + ((ix + 0.5) * cellM) / mPerDegLon;
-      const k = `${lat.toFixed(5)},${lon.toFixed(5)}`;
-      const existing = merged.get(k);
-      if (existing) existing.secs += secs;
-      else merged.set(k, { lat, lon, secs });
+      const lat0 = originLat + iy * sLat;
+      const lon0 = originLon + ix * sLon;
+      for (const [ty, fy] of spans(lat0, lat0 + sLat, grid.latStep)) {
+        for (const [tx, fx] of spans(lon0, lon0 + sLon, grid.lonStep)) {
+          const k = `${tx},${ty}`;
+          const add = secs * fy * fx;
+          const existing = merged.get(k);
+          if (existing) existing.secs += add;
+          else merged.set(k, { ix: tx, iy: ty, secs: add });
+        }
+      }
     }
   }
-  return [...merged.values()];
+  return [...merged.values()].map(({ ix, iy, secs }) => ({
+    lat: (iy + 0.5) * grid.latStep,
+    lon: (ix + 0.5) * grid.lonStep,
+    secs: Math.round(secs * 10) / 10,
+    dLat: grid.latStep,
+    dLon: grid.lonStep,
+  }));
 }

@@ -14,11 +14,14 @@ describe('equipmentAnchor', () => {
     expect(equipmentAnchor(eq('Team 1'), units)).toEqual({ kind: 'post', post: 'Gate A' });
   });
 
+  it('follows an untracked unit to its post on a tracking event', () => {
+    const tracking = { positions: {}, alignments: {} };
+    expect(equipmentAnchor(eq('Team 1'), units, tracking)).toEqual(equipmentAnchor(eq('Team 1'), units));
+  });
+
   it('follows the unit carrying it: its live position with tracking', () => {
     const tracking = { positions: { 'Team 1': { lat: 1, lon: 2, stale: true } }, alignments: {} };
     expect(equipmentAnchor(eq('Team 1'), units, tracking)).toEqual({ kind: 'point', lat: 1, lon: 2, faded: true });
-    // No position yet: not drawn, like the unit itself.
-    expect(equipmentAnchor(eq('Team 1'), units, { positions: {}, alignments: {} })).toBeNull();
   });
 
   it('uses the equipment tracker over its holder', () => {

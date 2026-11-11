@@ -39,3 +39,16 @@ export function isUnitConnected(tracking: UnitTracking | null | undefined, unitN
   const p = tracking?.positions[unitName];
   return !!p && !p.stale;
 }
+
+/**
+ * Units whose Location comes from live tracking right now (D66): on a
+ * tracking event, those with a fresh position. Every other unit, including
+ * one on a tracking event with no device linked, or whose device has gone
+ * stale, behaves exactly as on a standard event.
+ */
+export function trackedUnitNames(mapMode: string | undefined, tracking: UnitTracking | null | undefined): Set<string> {
+  const out = new Set<string>();
+  if (mapMode !== 'tak' || !tracking) return out;
+  for (const [name, p] of Object.entries(tracking.positions)) if (!p.stale) out.add(name);
+  return out;
+}

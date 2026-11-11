@@ -10,7 +10,7 @@ import { isStale, proposeAutoLinks, teamIdsOnCall, teamPositions } from '../lib/
 import { ensureTeamIds, takTargets, takTeams } from '../lib/teamIds';
 import { alignmentFor } from '../data/alignmentStore';
 import { saveAutoLocations, type AutoLocationChange } from '../data/autoLocationStore';
-import { EMPTY_TRACK, postPoints, step, type TrackState } from '../lib/autoLocation';
+import { EMPTY_TRACK, parsePlacement, postPoints, step, type TrackState } from '../lib/autoLocation';
 import { getEventVenueLayers } from '@/lib/zones';
 
 /**
@@ -19,8 +19,8 @@ import { getEventVenueLayers } from '@/lib/zones';
  * - gives teams created before team ids existed an id (TAK events only);
  * - auto-links devices (remembered mapping first, then a unique callsign);
  * - fills every connected unit's Location from its position, whatever its
- *   status: the nearest post, in words when not at it, steadied by
- *   hysteresis (D65, D66);
+ *   status: the post it is at, or near, in words, steadied by capture and
+ *   anchoring (D65, D66, D71);
  * - reports live positions to the dispatch page (`onTracking`), which draws
  *   team markers there and locks connected units' Location (D66);
  * - in Detailed history mode, publishes which teams are on a call, as opaque
@@ -72,14 +72,16 @@ export default function TakEventAgent({ eventId, event, uid, onTracking }: TakEv
     }
   }, [active, tak.live, tak.links, targets, mappings, eventId, uid]);
 
-  // Live location labels (D65, D66). Every open dispatch page computes the
-  // same labels from the same positions; the write is a no-op once one has landed.
+  // Live location labels (D65, D66, D71). Every open dispatch page computes
+  // labels from the same positions, each starting from the label stored on
+  // the unit, so they agree; the write is a no-op once one has landed.
   const tracks = useRef(new Map<string, TrackState>());
   const inFlight = useRef(new Set<string>());
   const [tick, setTick] = useState(0);
   useEffect(() => {
     if (!active) return;
-    const t = setInterval(() => setTick((n) => n + 1), 5_000);
+    // Once a second, so a pending label is used as soon as its dwell time is up.
+    const t = setInterval(() => setTick((n) => n + 1), 1_000);
     return () => clearInterval(t);
   }, [active]);
   const layers = useMemo(() => getEventVenueLayers(event), [event]);
@@ -104,7 +106,9 @@ export default function TakEventAgent({ eventId, event, uid, onTracking }: TakEv
       const fix = byTeam.get(unit.id);
       const connected = !!fix && !isStale(fix, now);
       const prev = tracks.current.get(unit.id) ?? EMPTY_TRACK;
-      const next = step(prev, connected ? { lat: fix!.lat, lon: fix!.lon } : null, posts, now);
+      // The stored label is shared by every page: start from it, so pages never undo each other's writes.
+      const stored = connected ? parsePlacement(unit.location, posts) : null;
+      const next = step(prev, connected ? { lat: fix!.lat, lon: fix!.lon } : null, posts, now, stored);
       tracks.current.set(unit.id, next);
       const label = next.current?.label;
       // A connected unit's Location is kept at its label: it can't be edited meanwhile, and no other write moves it.

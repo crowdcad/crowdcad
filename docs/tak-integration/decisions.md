@@ -381,7 +381,7 @@ The same end-to-end scenario runs against the Firebase emulator and a local Pock
 - **Elsewhere.** (Superseded by D66: markers follow live positions, so labels are no longer mapped back to posts.)
 - **Map controls.** The basemap choice and image opacity moved from the TAK panel and the map's corner into the Map tab's top bar, styled like the location search, and opacity is a percentage field instead of a slider. "Match light/dark mode" is now "System".
 
-### D66. On TAK events, Location is where a unit is, not its post
+### D66. On TAK events, Location is where a unit is, not its post (per unit since D70)
 - **Requested** 2026-10-09 by the maintainer, refining D65.
 - **Tracked, whatever the status.** Every unit with a fresh TAK position (a linked device heard from in the last 2 minutes) has its Location written from that position, on a call or in the clinic too. Only Location changes: status is never set from location, and the call's location is never affected. The log reads "Location changed to …". The unit's timer follows status, not these writes.
 - **Nothing else moves Location.** On a TAK event, call assignment, status changes, auto-detach and schedule changes keep a unit's Location as it was (`keepTrackedLocations` in the dispatch page's single write path). A schedule change changes the unit's post (`originalPost` and the posting schedule) and logs "Post changed to …". A manual edit still works for a unit that isn't connected.
@@ -407,3 +407,22 @@ The same end-to-end scenario runs against the Firebase emulator and a local Pock
 - **Requested** 2026-10-12 by the maintainer (phase 5 of the equipment plan).
 - **How.** A device link's `teamId` may be `equipment:<EventEquipment.id>`. Team ids are opaque to the bridge and the rules only require a string, so no rules, bridge or contract shape changes; the prefix keeps it apart from `Staff`/`Supervisor` ids. Links are made in the TAK panel (equipment appears as "Name (equipment)") or automatically by a unique callsign match, like teams.
 - **Effect.** A tracked item is drawn at its tracker (faded when stale), not with its holder, and its "view on map" goes there. Its custody still follows statuses. The bridge keeps history for it like a team, shown by the item's name on the summary.
+
+### D70. Live tracking is per unit, not per event (amends D66)
+- **Requested** 2026-11-11 by the maintainer (#134): on a TAK event, units without a tracker were treated as tracked, so posting refreshes, Available and MCI assignments never moved them, and their Location was typed by hand or left blank.
+- **Per unit.** D66 applies only to *tracked* units: on a TAK event, those with a fresh position (a linked device heard from in the last 2 minutes; `trackedUnitNames` in `src/lib/unitTracking.ts`). Every other unit behaves exactly as on a standard event: posting refreshes and status changes move it to its post, Clinic sets In Clinic, MCI assignments set its Location, and stand down returns it to its post.
+- **Losing the signal.** A unit whose device goes stale, or is unlinked, keeps its last label and becomes a normal unit; the next status change or posting refresh moves it as usual. The 2-minute stale threshold is the grace period, so a brief drop changes nothing.
+- **Markers.** A unit with a position (fresh or stale) is drawn there; a unit with none is drawn at its post, as on a standard event. Equipment held by an untracked unit follows it to its post. "View on map" goes to the live position, else the post.
+- **Where.** `keepTrackedLocations` takes the tracked set; `standDownMci`, `mciAssignmentPatch` and `mciStatusPatch` take whether the unit is tracked; the team card's status control and the dispatch page's location handlers check the unit, not the event.
+
+### D71. Location labels: shared state, capture and anchoring (amends D65)
+- **Requested** 2026-11-11 by the maintainer (#135): the label lagged the map and flickered between two posts.
+- **Why it flickered.** Every open dispatch page computed labels with its own in-memory history and wrote whenever the stored label differed from its own. Two pages that disagreed (different dwell timing, different previous post) overwrote each other back and forth. Each page now starts from the label stored on the unit (`parsePlacement`), so all pages build on the same history; a simulated walk with two pages, one lagging and sampling half as often, never returns to a replaced label (`autoLocation.test.ts`).
+- **Capture and anchoring instead of nearest post.** A team is *at* a post once inside its capture radius (25 m) and stays until 8 m past it. After leaving, it stays "Near" the last post until it is inside another post's radius, another post is 25 m closer, or it is past 100 m. Between two posts it no longer flips because one is a few metres closer.
+- **Lag.** A new label held for 20 s and was checked every 5 s. Arriving at a post now holds 5 s, other changes 15 s, and pending labels are checked every second.
+- **Not done.** A single-writer lease (it needs a new rules-protected document; shared state removed the back-and-forth without it), per-post capture radius or priority, and an admin debug overlay. Revisit after real-device testing.
+
+### D72. One heat-map grid per event
+- **Reported** 2026-11-11 (#137): the summary heat map sometimes drew a clean grid and sometimes overlapping squares.
+- **Cause.** The bridge anchored each history segment's grid at that segment's first fix. With one segment the grid was clean; with several (a relinked device, two devices) cells were offset by up to a cell and overlapped.
+- **Fix.** An event-wide lattice anchored at 0,0 (`heatGrid` in core, `heatLattice` in the bridge): `cellM` metres, with the longitude step at the nearest whole-degree latitude. The bridge snaps each segment's origin and cells to it and sets `grid.lattice` (contract 0.8.0). Core re-bins every other segment onto the same lattice by area, keeping total seconds, so older events are fixed too. Cells carry their size in degrees and are drawn from their own corners, rounded to whole pixels, so neighbours share edges exactly.
