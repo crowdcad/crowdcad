@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { heatCells, MIN_GAP_MS, teamHistoryStats, type HistorySegment, type HistoryWindowDoc } from './historyStats';
+import { heatCells, heatGrid, MIN_GAP_MS, teamHistoryStats, type HeatCell, type HistorySegment, type HistoryWindowDoc } from './historyStats';
 
 const base = { lat: 45.0012, lon: -100.0021 };
 const M = 1 / 111_195; // degrees of latitude per meter
@@ -58,13 +58,47 @@ describe('teamHistoryStats', () => {
 });
 
 describe('heatCells', () => {
-  it('turns grid cells into positions and merges overlapping segments', () => {
-    const a = seg('t1', [], { '0,0': 60, '0,1': 30 });
-    const b = seg('t2', [], { '0,0': 40 });
-    const cells = heatCells([a, b]).sort((x, y) => x.lat - y.lat);
+  const total = (cells: { secs: number }[]) => cells.reduce((n, c) => n + c.secs, 0);
+  /** Whether any two cells' squares overlap (they may only share edges). */
+  const overlapping = (cells: HeatCell[]) =>
+    cells.some((a, i) =>
+      cells.some((b, j) => j > i && Math.abs(a.lat - b.lat) < a.dLat! * 0.999 && Math.abs(a.lon - b.lon) < a.dLon! * 0.999),
+    );
+  /** A segment whose grid starts at an arbitrary first fix. */
+  const segAt = (teamId: string, originLat: number, originLon: number, cells: Record<string, number>, lattice = false): HistorySegment => ({
+    ...seg(teamId, [], cells),
+    grid: { cellM: 5, originLat, originLon, cells, ...(lattice ? { lattice } : {}) },
+  });
+
+  it('merges segments on the event lattice exactly and keeps every second', () => {
+    const g = heatGrid(5, base.lat);
+    // Snapped origins, as the bridge writes them (D72): two cells apart.
+    const lat = g.latStep * Math.floor(base.lat / g.latStep);
+    const lon = g.lonStep * Math.floor(base.lon / g.lonStep);
+    const cells = heatCells([
+      segAt('t1', lat, lon, { '0,0': 60, '0,1': 30 }, true),
+      segAt('t2', lat + 2 * g.latStep, lon, { '0,-2': 40 }, true),
+    ]);
     expect(cells).toHaveLength(2);
-    expect(cells[0]!.secs).toBe(100);
-    expect((cells[0]!.lat - base.lat) / M).toBeCloseTo(2.5, 1); // cell center, 2.5 m north
-    expect((cells[1]!.lat - base.lat) / M).toBeCloseTo(7.5, 1);
+    expect(cells.map((c) => c.secs).sort((a, b) => b - a)).toEqual([100, 30]);
+  });
+
+  it('puts segments with different origins on one grid: no overlapping squares, seconds kept (#137)', () => {
+    const a = segAt('t1', base.lat, base.lon, { '0,0': 60, '1,0': 30, '0,1': 10 });
+    // A relinked device: a new segment whose grid starts 2.1 m north and 3.3 m east of the first.
+    const b = segAt('t2', base.lat + 2.1 * M, base.lon + 3.3 * M / Math.cos((base.lat * Math.PI) / 180), { '0,0': 40, '-1,0': 20 });
+    const cells = heatCells([a, b]);
+    expect(overlapping(cells)).toBe(false);
+    expect(total(cells)).toBeCloseTo(160, 0);
+    // Every cell sits on the event grid.
+    const g = heatGrid(5, base.lat);
+    for (const c of cells) {
+      expect(c.lat / g.latStep - 0.5).toBeCloseTo(Math.round(c.lat / g.latStep - 0.5), 6);
+      expect(c.lon / g.lonStep - 0.5).toBeCloseTo(Math.round(c.lon / g.lonStep - 0.5), 6);
+    }
+  });
+
+  it('is empty with no cells', () => {
+    expect(heatCells([seg('t1', [])])).toEqual([]);
   });
 });

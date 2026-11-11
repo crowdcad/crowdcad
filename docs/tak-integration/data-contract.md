@@ -1,6 +1,6 @@
 # TAK integration: data contract
 
-**Contract version: 0.7.0 (draft).** TAK support is in development and is an optional add-on. Nothing here is released, and the contract may change until 1.0.0.
+**Contract version: 0.8.0 (draft).** TAK support is in development and is an optional add-on. Nothing here is released, and the contract may change until 1.0.0.
 
 This document defines every record the TAK integration adds, who writes each one, and what the access rules enforce. It covers both backends: Firebase (the default) and PocketBase (opt-in with `NEXT_PUBLIC_BACKEND=pocketbase`). The bridge reaches both through one adapter interface, so behavior is the same on either.
 
@@ -95,7 +95,8 @@ interface TakHistorySegment {
   }>;
   grid: {
     cellM: 5;                 // nominal cell size in meters
-    originLat: number; originLon: number; // grid origin (first fix of the segment)
+    originLat: number; originLon: number; // grid origin: snapped to the event-wide lattice when `lattice` is set (0.8.0), else the segment's first fix
+    lattice?: true;           // 0.8.0: origin and cell size follow the event-wide heat lattice (below)
     cells: Record<string, number>;        // "ix,iy" -> seconds spent in the cell (at most 5,000 cells)
     overflowSecs: number;                 // seconds that fell outside the cell cap
   };
@@ -195,6 +196,8 @@ PocketBase collections are flat, so each one carries `event` and/or `bridge` as 
 - **Optional:** operators can enable a Firestore TTL policy on `takLive.receivedAt` as a backstop. PocketBase has no TTL; it relies on the bridge.
 
 ## Changelog
+
+- 0.8.0 (2026-11-11): additive (D72). History segments may set `grid.lattice: true`: the origin is snapped to an event-wide heat lattice anchored at 0,0, with `latStep = cellM / (R·π/180)` degrees and `lonStep = latStep / cos(round(originLat)°)`, with R = 6,371,008.8 m, and cells use those steps, so every segment's cells line up. Core re-bins older segments (origin at the first fix) onto the same lattice by area, so mixed history still draws as one grid.
 
 - 0.7.0 (2026-10-12): additive, no shape or rules change. A device link's `teamId` may be `equipment:<EventEquipment.id>`, linking a tracker to a piece of equipment (D69). Equipment custody (D67) is core data on `eventEquipment`, described in `docs/ICD.md`; the bridge never reads it.
 

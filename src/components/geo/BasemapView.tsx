@@ -42,6 +42,9 @@ export interface HeatPoint {
   lat: number;
   lon: number;
   secs: number;
+  /** Cell height and width in degrees; with them, cells are drawn edge to edge. */
+  dLat?: number;
+  dLon?: number;
 }
 
 /** A polygon or line in real coordinates, drawn above the image (zones, drawn areas, a shape being drawn). */
@@ -305,7 +308,16 @@ export default function BasemapView({
       const p = map.project([c.lon, c.lat]);
       if (p.x < -size || p.y < -size || p.x > w + size || p.y > h + size) continue;
       ctx.fillStyle = heatColor(Math.sqrt(c.secs / max));
-      ctx.fillRect(p.x - size / 2, p.y - size / 2, size, size);
+      if (c.dLat && c.dLon && size > 2) {
+        // From the cell's own corners, rounded to whole pixels: neighbours share edges exactly, no gaps or overlaps.
+        const sw = map.project([c.lon - c.dLon / 2, c.lat - c.dLat / 2]);
+        const ne = map.project([c.lon + c.dLon / 2, c.lat + c.dLat / 2]);
+        const x0 = Math.round(Math.min(sw.x, ne.x));
+        const y0 = Math.round(Math.min(sw.y, ne.y));
+        ctx.fillRect(x0, y0, Math.round(Math.max(sw.x, ne.x)) - x0, Math.round(Math.max(sw.y, ne.y)) - y0);
+      } else {
+        ctx.fillRect(p.x - size / 2, p.y - size / 2, size, size);
+      }
     }
     ctx.globalAlpha = 1;
   };

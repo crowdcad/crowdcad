@@ -421,3 +421,8 @@ The same end-to-end scenario runs against the Firebase emulator and a local Pock
 - **Capture and anchoring instead of nearest post.** A team is *at* a post once inside its capture radius (25 m) and stays until 8 m past it. After leaving, it stays "Near" the last post until it is inside another post's radius, another post is 25 m closer, or it is past 100 m. Between two posts it no longer flips because one is a few metres closer.
 - **Lag.** A new label held for 20 s and was checked every 5 s. Arriving at a post now holds 5 s, other changes 15 s, and pending labels are checked every second.
 - **Not done.** A single-writer lease (it needs a new rules-protected document; shared state removed the back-and-forth without it), per-post capture radius or priority, and an admin debug overlay. Revisit after real-device testing.
+
+### D72. One heat-map grid per event
+- **Reported** 2026-11-11 (#137): the summary heat map sometimes drew a clean grid and sometimes overlapping squares.
+- **Cause.** The bridge anchored each history segment's grid at that segment's first fix. With one segment the grid was clean; with several (a relinked device, two devices) cells were offset by up to a cell and overlapped.
+- **Fix.** An event-wide lattice anchored at 0,0 (`heatGrid` in core, `heatLattice` in the bridge): `cellM` metres, with the longitude step at the nearest whole-degree latitude. The bridge snaps each segment's origin and cells to it and sets `grid.lattice` (contract 0.8.0). Core re-bins every other segment onto the same lattice by area, keeping total seconds, so older events are fixed too. Cells carry their size in degrees and are drawn from their own corners, rounded to whole pixels, so neighbours share edges exactly.
