@@ -480,7 +480,7 @@ function LiteCreateContent() {
   const [samCert, setSamCert] = useState('');
 
   const handleAddSamUnit = () => {
-    if (!samName.trim() || !samCert) return;
+    if (!samName.trim()) return;
     updateDraft((current) => ({ ...current, supervisor: [...current.supervisor, newSupervisor(samName, samMemberName, samCert)] }));
     setSamName('');
     setSamMemberName('');

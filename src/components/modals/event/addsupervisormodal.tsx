@@ -68,7 +68,7 @@ export default function AddSupervisorModal({
   const title = titleOverride ?? (mode === "edit" ? t("Edit Supervisor") : t("Add New Supervisor"));
   const submitLabel = submitLabelOverride ?? (mode === "edit" ? t("Save Changes") : t("Create Supervisor"));
 
-  const canSubmit = teamName.trim().length > 0 && (memberCert?.trim().length ?? 0) > 0;
+  const canSubmit = teamName.trim().length > 0;
 
   return (
     <Modal
@@ -126,7 +126,7 @@ export default function AddSupervisorModal({
               />
 
               <Select
-                label={t("Certification")}
+                label={t("Certification (optional)")}
                 labelPlacement="inside"
                 variant="flat"
                 size="lg"
@@ -138,7 +138,6 @@ export default function AddSupervisorModal({
                   setMemberCert(val ?? "");
                 }}
                 aria-label="Certification"
-                isRequired
               >
                 {roles.map((role) => (
                   <SelectItem key={role.name} aria-label={role.fullName} textValue={role.fullName}>

@@ -11,6 +11,7 @@ import AreaModeToggleButton from '@/components/venue-management/AreaModeToggleBu
 import PendingMarkerDialog from '@/components/venue-management/PendingMarkerDialog';
 import PendingZoneDialog from '@/components/venue-management/PendingZoneDialog';
 import { MIN_AREA_POINTS } from './AreaVertex';
+import { usePolygonDraft } from '@/hooks/usePolygonDraft';
 import TutorialTip from '@/components/ui/TutorialTip';
 import GeoLayerMap from './GeoLayerMap';
 
@@ -51,7 +52,9 @@ export default function GeoLocationsEditor({
   const [markerIsClinic, setMarkerIsClinic] = useState(false);
   const markerInputRef = useRef<HTMLInputElement | null>(null);
 
-  const [pendingZone, setPendingZone] = useState<{ coords: LatLng[]; isDrawing: boolean } | null>(null);
+  // The area being drawn (undo, redo and point removal via usePolygonDraft); completing it opens the naming dialog.
+  const draft = usePolygonDraft<LatLng>(undefined, mode === 'area');
+  const pendingZone = draft.points.length ? { coords: draft.points, isDrawing: !draft.closed } : null;
   const [zoneName, setZoneName] = useState('');
   const [zoneColor, setZoneColor] = useState('');
   const [zoneIsDispatch, setZoneIsDispatch] = useState(false);
@@ -63,7 +66,7 @@ export default function GeoLocationsEditor({
     setMarkerIsClinic(false);
   };
   const cancelZone = () => {
-    setPendingZone(null);
+    draft.reset();
     setZoneName('');
     setZoneColor('');
     setZoneIsDispatch(false);
@@ -72,28 +75,27 @@ export default function GeoLocationsEditor({
   useEffect(() => {
     if (pendingMarker) markerInputRef.current?.focus();
   }, [pendingMarker]);
+  const naming = !!pendingZone && !pendingZone.isDrawing;
   useEffect(() => {
-    if (pendingZone && !pendingZone.isDrawing) zoneInputRef.current?.focus();
-  }, [pendingZone]);
+    if (naming) zoneInputRef.current?.focus();
+  }, [naming]);
 
   // Escape cancels an area being drawn; only the open circle completes one.
+  const drawing = !!pendingZone;
   useEffect(() => {
-    if (!pendingZone) return;
+    if (!drawing) return;
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') cancelZone();
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [pendingZone]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- cancelZone only resets state
+  }, [drawing]);
 
   const handleMapClick = (p: LatLng) => {
     if (mode === 'area') {
-      if (!pendingZone) {
-        setZoneColor(getNextZoneColor(layer.zones || []));
-        setPendingZone({ coords: [p], isDrawing: true });
-      } else if (pendingZone.isDrawing) {
-        setPendingZone({ ...pendingZone, coords: [...pendingZone.coords, p] });
-      }
+      if (!pendingZone) setZoneColor(getNextZoneColor(layer.zones || []));
+      if (!draft.closed) draft.add(p);
       return;
     }
     if (mode === 'marker' && !pendingMarker) setPendingMarker(p);
@@ -152,9 +154,10 @@ export default function GeoLocationsEditor({
           ? "Click on the map to place the area's first point."
           : !pendingZone.isDrawing
             ? ''
-            : count >= MIN_AREA_POINTS
-              ? `${count} points placed. Click the open circle at the first point to complete the area.`
-              : `${count} point${count === 1 ? '' : 's'} placed. Add at least ${MIN_AREA_POINTS - count} more, then click the open circle to complete the area.`
+            : (count >= MIN_AREA_POINTS
+                ? `${count} points placed. Click the open circle at the first point to complete the area.`
+                : `${count} point${count === 1 ? '' : 's'} placed. Add at least ${MIN_AREA_POINTS - count} more, then click the open circle to complete the area.`) +
+              ' Ctrl+Z undoes; click a point and press Delete to remove it.'
         : 'Drag a location to move it.';
 
   const tutorialTip = !tutorial
@@ -201,7 +204,7 @@ export default function GeoLocationsEditor({
           onPostMove={onMovePost}
           draftZone={
             pendingZone
-              ? { coords: pendingZone.coords, color: zoneColor || '#3eb1fd', closed: !pendingZone.isDrawing, onClose: () => setPendingZone((z) => (z ? { ...z, isDrawing: false } : z)) }
+              ? { coords: pendingZone.coords, color: zoneColor || '#3eb1fd', closed: !pendingZone.isDrawing, onClose: draft.close, selected: draft.selected, onSelect: draft.select }
               : null
           }
           extraPins={

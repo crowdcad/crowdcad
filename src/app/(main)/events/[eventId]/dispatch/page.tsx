@@ -91,6 +91,7 @@ import {
 import type { UnitTracking } from '@/lib/unitTracking';
 import { stampStatusSince, deriveStatusSinceFromLogs } from '@/lib/teamStatusSince';
 import { newTeamId } from '@/lib/teamId';
+import { supervisorMemberString } from '@/lib/teamDraft';
 import { isGeoLayer } from '@/lib/geo/layers';
 import { isPlacedPost } from '@/lib/geo/positions';
 
@@ -678,8 +679,8 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     // name is optional
     const name = memberName.trim();
 
-    if (!callSign || !cert) {
-      alert('Supervisor Call Sign and Certification are required.');
+    if (!callSign) {
+      alert('Supervisor Call Sign is required.');
       return;
     }
 
@@ -689,8 +690,8 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
       return;
     }
 
-    // Build the single-line member string (name may be empty)
-    const memberString = `${name || 'Supervisor'} [${cert}]`;
+    // Build the single-line member string (name and certification may be empty)
+    const memberString = supervisorMemberString(name || 'Supervisor', cert);
 
     const now = new Date();
     const hhmm = now.getHours().toString().padStart(2, '0') + now.getMinutes().toString().padStart(2, '0');
@@ -730,7 +731,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     const cert = match ? match[2].trim() : '';
 
     setMemberName(name);     // optional
-    setMemberCert(cert);     // required
+    setMemberCert(cert);     // optional
 
     // keep team fields for teams untouched
     setEditSupervisorOriginalName(supervisor.team);
@@ -744,8 +745,8 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     const cert = memberCert.trim();
     const name = memberName.trim(); // optional
 
-    if (!newCallSign || !cert) {
-      alert('Supervisor Call Sign and Certification are required.');
+    if (!newCallSign) {
+      alert('Supervisor Call Sign is required.');
       return;
     }
 
@@ -758,7 +759,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
       return;
     }
 
-    const memberString = `${name || 'Supervisor'} [${cert}]`;
+    const memberString = supervisorMemberString(name || 'Supervisor', cert);
 
     const now = new Date();
     const hhmm = now.getHours().toString().padStart(2, '0') + now.getMinutes().toString().padStart(2, '0');

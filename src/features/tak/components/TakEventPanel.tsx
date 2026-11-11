@@ -2,7 +2,8 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { Button, Select, SelectItem, Switch } from '@heroui/react';
-import { ChevronDown, ChevronUp, Link2Off, Radio } from 'lucide-react';
+import { ChevronUp, Link2Off, Radio } from 'lucide-react';
+import DispatchMotionCell from '@/components/dispatch/motioncell';
 import type { Event, Layer } from '@/app/types';
 import { refreshAlignments, useTakEvent } from '../data/hub';
 import { PREF, usePref } from '@/lib/geo/prefs';
@@ -161,11 +162,12 @@ export default function TakEventPanel({ eventId, event, uid, isOwner, layers }: 
           </span>
         )}
         {unassigned.length > 0 && <span className="rounded-full bg-status-yellow/20 px-1.5 text-status-yellow">{unassigned.length} unassigned</span>}
-        {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5" />}
+        <ChevronUp className={`h-3.5 w-3.5 transition-transform duration-300 ${open ? 'rotate-180' : ''}`} aria-hidden />
       </button>
 
-      {open && (
-        <div className="minimal-scrollbar mt-2 max-h-[60vh] space-y-3 overflow-y-auto overflow-x-hidden rounded-lg border border-surface-liner bg-surface-deepest/95 p-3 text-sm shadow-lg">
+      {/* Opens and closes with the team cards' expand animation (DispatchMotionCell); kept mounted so it can animate out. */}
+      <DispatchMotionCell isOpen={open} animate>
+        <div inert={!open} className="minimal-scrollbar mt-2 max-h-[60vh] space-y-3 overflow-y-auto overflow-x-hidden rounded-lg border border-surface-liner bg-surface-deepest/95 p-3 text-sm shadow-lg">
           <section>
             <p>
               {!bridgeUid
@@ -298,7 +300,7 @@ export default function TakEventPanel({ eventId, event, uid, isOwner, layers }: 
 
           {(error || tak.error) && <p className="text-status-red">{error || tak.error}</p>}
         </div>
-      )}
+      </DispatchMotionCell>
 
     </div>
     </>
