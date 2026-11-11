@@ -33,6 +33,7 @@ import VenueMapZones from '@/components/venue-management/VenueMapZones';
 import MarkerPlacementInstruction from '@/components/venue-management/MarkerPlacementInstruction';
 import VenueMapMarker from '@/components/venue-management/VenueMapMarker';
 import AreaVertex, { MIN_AREA_POINTS } from '@/components/geo/AreaVertex';
+import { usePolygonDraft } from '@/hooks/usePolygonDraft';
 import MapZoomControls from '@/components/ui/map-zoom-controls';
 import MapPanSurface from '@/components/ui/map-pan-surface';
 import { VenueMapWithPosts } from '@/components/modals/event/venuemapmodal';
@@ -117,14 +118,25 @@ export default function VenueManagementPageClient() {
 
   // Zone currently being drawn — points accumulate on each map click while
   // isDrawing is true; closing the loop flips isDrawing false and opens the
-  // naming dialog, mirroring pendingMarker's place-then-name flow.
-  const [pendingZone, setPendingZone] = useState<{
+  // naming dialog, mirroring pendingMarker's place-then-name flow. The points
+  // live in usePolygonDraft (Ctrl+Z / Ctrl+Shift+Z, click a point then Delete);
+  // pendingZone is derived from it in the shape the rest of this page reads.
+  const [zoneDraftMeta, setZoneDraftMeta] = useState<{ layerIdx: number; geo: boolean } | null>(null);
+  const zoneDraft = usePolygonDraft<{ x: number; y: number } | LatLng>(undefined, isAddAreaMode);
+  const { reset: resetZoneDraft } = zoneDraft;
+  const pendingZone = useMemo<{
     points: { x: number; y: number }[];
     /** Set when the zone is drawn on the live map (a geo layer): its vertices in coordinates. */
     coords?: LatLng[];
     layerIdx: number;
     isDrawing: boolean;
-  } | null>(null);
+  } | null>(() => {
+    if (!zoneDraftMeta || !zoneDraft.points.length) return null;
+    const { layerIdx, geo } = zoneDraftMeta;
+    return geo
+      ? { points: [], coords: zoneDraft.points as LatLng[], layerIdx, isDrawing: !zoneDraft.closed }
+      : { points: zoneDraft.points as { x: number; y: number }[], layerIdx, isDrawing: !zoneDraft.closed };
+  }, [zoneDraftMeta, zoneDraft.points, zoneDraft.closed]);
   const [zoneNameInput, setZoneNameInput] = useState('');
   const [zoneColorInput, setZoneColorInput] = useState('');
   const [zoneIsDispatchZoneInput, setZoneIsDispatchZoneInput] = useState(false);
@@ -259,7 +271,8 @@ export default function VenueManagementPageClient() {
     if (!pendingZone) return;
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        setPendingZone(null);
+        resetZoneDraft();
+        setZoneDraftMeta(null);
         setZoneNameInput('');
         setZoneColorInput('');
         setZoneIsDispatchZoneInput(false);
@@ -267,7 +280,7 @@ export default function VenueManagementPageClient() {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [pendingZone]);
+  }, [pendingZone, resetZoneDraft]);
 
   // Load venue data if editing
   useEffect(() => {
@@ -441,21 +454,19 @@ export default function VenueManagementPageClient() {
       // Assigned now, not at closing, so the in-progress dots can render in
       // this zone's actual color instead of a placeholder.
       setZoneColorInput(getNextZoneColor(venueData.layers[currentLayer]?.zones || []));
-      setPendingZone({ points: [{ x, y }], layerIdx: currentLayer, isDrawing: true });
+      setZoneDraftMeta({ layerIdx: currentLayer, geo: false });
+      zoneDraft.reset([{ x, y }]);
       return;
     }
 
     if (!pendingZone.isDrawing) return;
 
-    setPendingZone({ ...pendingZone, points: [...pendingZone.points, { x, y }] });
+    zoneDraft.add({ x, y });
   };
 
   // Clicking the first point's open circle (AreaVertex) completes the area
   // and opens the naming dialog; the only way to complete one.
-  const completePendingZone = () =>
-    setPendingZone((prev) =>
-      prev && prev.isDrawing && (prev.coords ?? prev.points).length >= MIN_AREA_POINTS ? { ...prev, isDrawing: false } : prev,
-    );
+  const completePendingZone = () => zoneDraft.close();
 
   // Confirm the pending zone's name/color/dispatch-zone flag
   const confirmZoneName = () => {
@@ -488,7 +499,8 @@ export default function VenueManagementPageClient() {
       return { ...prev, layers: newLayers };
     });
 
-    setPendingZone(null);
+    resetZoneDraft();
+    setZoneDraftMeta(null);
     setZoneNameInput('');
     setZoneColorInput('');
     setZoneIsDispatchZoneInput(false);
@@ -496,7 +508,8 @@ export default function VenueManagementPageClient() {
 
   // Cancel area drawing/naming without saving anything
   const cancelZoneDrawing = () => {
-    setPendingZone(null);
+    resetZoneDraft();
+    setZoneDraftMeta(null);
     setZoneNameInput('');
     setZoneColorInput('');
     setZoneIsDispatchZoneInput(false);
@@ -1229,6 +1242,8 @@ export default function VenueManagementPageClient() {
                           color={zoneColorInput || '#3b82f6'}
                           first={i === 0}
                           onClose={i === 0 && pendingZone.points.length >= MIN_AREA_POINTS ? completePendingZone : undefined}
+                          onSelect={() => zoneDraft.select(i)}
+                          selected={zoneDraft.selected === i}
                         />
                       </div>
                     ))}
@@ -1284,10 +1299,10 @@ export default function VenueManagementPageClient() {
           <MarkerPlacementInstruction message="Click on the map to place the area's first point." />
         )}
         {isAddAreaMode && pendingZone?.isDrawing && pendingZone.points.length < 3 && (
-          <MarkerPlacementInstruction message={`${pendingZone.points.length} point${pendingZone.points.length === 1 ? '' : 's'} placed. Add at least ${MIN_AREA_POINTS - pendingZone.points.length} more, then click the open circle to complete the area.`} />
+          <MarkerPlacementInstruction message={`${pendingZone.points.length} point${pendingZone.points.length === 1 ? '' : 's'} placed. Add at least ${MIN_AREA_POINTS - pendingZone.points.length} more, then click the open circle to complete the area. Ctrl+Z undoes; click a point and press Delete to remove it.`} />
         )}
         {isAddAreaMode && pendingZone?.isDrawing && pendingZone.points.length >= MIN_AREA_POINTS && (
-          <MarkerPlacementInstruction message={`${pendingZone.points.length} points placed. Click the open circle at the first point to complete the area.`} />
+          <MarkerPlacementInstruction message={`${pendingZone.points.length} points placed. Click the open circle at the first point to complete the area. Ctrl+Z undoes; click a point and press Delete to remove it.`} />
         )}
       </div>
   );
@@ -1364,9 +1379,10 @@ export default function VenueManagementPageClient() {
     if (isAddAreaMode) {
       if (!pendingZone) {
         setZoneColorInput(getNextZoneColor(venueData.layers[currentLayer]?.zones || []));
-        setPendingZone({ points: [], coords: [p], layerIdx: currentLayer, isDrawing: true });
+        setZoneDraftMeta({ layerIdx: currentLayer, geo: true });
+        zoneDraft.reset([p]);
       } else if (pendingZone.isDrawing) {
-        setPendingZone({ ...pendingZone, coords: [...(pendingZone.coords ?? []), p] });
+        zoneDraft.add(p);
       }
       return;
     }
@@ -1425,8 +1441,8 @@ export default function VenueManagementPageClient() {
             : isAddAreaMode
               ? geoDrawing
                 ? geoDrawing.coords!.length >= MIN_AREA_POINTS
-                  ? `${geoDrawing.coords!.length} points placed. Click the open circle at the first point to complete the area.`
-                  : `${geoDrawing.coords!.length} point${geoDrawing.coords!.length === 1 ? '' : 's'} placed. Add at least ${MIN_AREA_POINTS - geoDrawing.coords!.length} more, then click the open circle to complete the area.`
+                  ? `${geoDrawing.coords!.length} points placed. Click the open circle at the first point to complete the area. Ctrl+Z undoes; click a point and press Delete to remove it.`
+                  : `${geoDrawing.coords!.length} point${geoDrawing.coords!.length === 1 ? '' : 's'} placed. Add at least ${MIN_AREA_POINTS - geoDrawing.coords!.length} more, then click the open circle to complete the area. Ctrl+Z undoes; click a point and press Delete to remove it.`
                 : pendingZone
                   ? ''
                   : 'Click on the map to place the area\'s first point.'
@@ -1442,7 +1458,7 @@ export default function VenueManagementPageClient() {
           onPostMove={moveGeoPost}
           draftZone={
             pendingZone?.coords && pendingZone.layerIdx === currentLayer
-              ? { coords: pendingZone.coords, color: zoneColorInput || '#3eb1fd', closed: !pendingZone.isDrawing, onClose: completePendingZone }
+              ? { coords: pendingZone.coords, color: zoneColorInput || '#3eb1fd', closed: !pendingZone.isDrawing, onClose: completePendingZone, selected: zoneDraft.selected, onSelect: zoneDraft.select }
               : null
           }
         />

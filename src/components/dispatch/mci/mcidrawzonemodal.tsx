@@ -11,6 +11,7 @@ import type { LatLng } from '@/lib/geo/positions';
 import { mciShapeId, type MciShape } from '@/lib/mci';
 import VenueMapZones from '@/components/venue-management/VenueMapZones';
 import AreaVertex, { MIN_AREA_POINTS } from '@/components/geo/AreaVertex';
+import { usePolygonDraft } from '@/hooks/usePolygonDraft';
 import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
 
 // The live map is loaded only when a venue has one.
@@ -44,9 +45,9 @@ function DrawForm({ target, layers, existing, onSave, onClose }: Omit<Props, 'ta
   const color = existing?.zone.color ?? (target.kind === 'zone' ? ZONE_COLOR : AREA_COLOR);
   const startLayer = Math.max(0, existing ? layers.findIndex((l) => l.id === existing.layer.id) : 0);
   const [layerIdx, setLayerIdx] = useState(startLayer);
-  const [points, setPoints] = useState<{ x: number; y: number }[]>([]);
-  const [coords, setCoords] = useState<LatLng[]>([]);
-  const [closed, setClosed] = useState(false);
+  // Image points or live-map coordinates, by the layer's kind; undo, redo and point removal via usePolygonDraft.
+  const draft = usePolygonDraft<{ x: number; y: number } | LatLng>();
+  const closed = draft.closed;
   const [saving, setSaving] = useState(false);
   const imgRef = useRef<HTMLImageElement | null>(null);
 
@@ -55,28 +56,21 @@ function DrawForm({ target, layers, existing, onSave, onClose }: Omit<Props, 'ta
   const geo = isGeoLayer(layer);
   // The shape being replaced is not drawn beneath the new one.
   const shownLayer: Layer = { ...layer, zones: (layer.zones || []).filter((z) => z.id !== shapeId) };
-  const count = geo ? coords.length : points.length;
+  const points = geo ? [] : (draft.points as { x: number; y: number }[]);
+  const coords = geo ? (draft.points as LatLng[]) : [];
+  const count = draft.points.length;
 
-  const reset = () => {
-    setPoints([]);
-    setCoords([]);
-    setClosed(false);
-  };
-  const undoPoint = () => {
-    if (closed) return;
-    setPoints((p) => p.slice(0, -1));
-    setCoords((c) => c.slice(0, -1));
-  };
-  const complete = () => setClosed((was) => was || count >= MIN_AREA_POINTS);
+  const reset = () => draft.reset();
+  const complete = draft.close;
 
   const handleImageClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (closed || !imgRef.current) return;
     const rect = imgRef.current.getBoundingClientRect();
     if (!isPointWithinRect(e.clientX, e.clientY, rect)) return;
-    setPoints((p) => [...p, pixelToPercent(e.clientX, e.clientY, rect)]);
+    draft.add(pixelToPercent(e.clientX, e.clientY, rect));
   };
   const handleGeoClick = (p: LatLng) => {
-    if (!closed) setCoords((c) => [...c, p]);
+    if (!closed) draft.add(p);
   };
 
   const save = async () => {
@@ -97,6 +91,7 @@ function DrawForm({ target, layers, existing, onSave, onClose }: Omit<Props, 'ta
       : count < MIN_AREA_POINTS
         ? `${count} point${count === 1 ? '' : 's'} placed. Add at least ${MIN_AREA_POINTS - count} more.`
         : `${count} points placed. Click the open circle at the first point, or press Finish.`;
+  const shortcutHint = count > 0 && !closed ? ' Ctrl+Z undoes; click a point and press Delete to remove it.' : '';
 
   return (
     <>
@@ -131,6 +126,7 @@ function DrawForm({ target, layers, existing, onSave, onClose }: Omit<Props, 'ta
 
         <p className="text-sm text-surface-faint" data-testid="mci-draw-hint">
           {hint}
+          {shortcutHint}
         </p>
 
         {geo ? (
@@ -141,7 +137,7 @@ function DrawForm({ target, layers, existing, onSave, onClose }: Omit<Props, 'ta
               onMapClick={closed ? undefined : handleGeoClick}
               cursor={closed ? 'grab' : 'crosshair'}
               showPosts
-              draftZone={coords.length ? { coords, color, closed, onClose: complete } : null}
+              draftZone={coords.length ? { coords, color, closed, onClose: complete, selected: draft.selected, onSelect: draft.select } : null}
             />
           </div>
         ) : (
@@ -181,7 +177,13 @@ function DrawForm({ target, layers, existing, onSave, onClose }: Omit<Props, 'ta
                     {!closed &&
                       points.map((p, i) => (
                         <div key={i} style={{ position: 'absolute', left: `${p.x}%`, top: `${p.y}%`, transform: 'translate(-50%, -50%)', zIndex: i === 0 ? 1 : undefined }}>
-                          <AreaVertex color={color} first={i === 0} onClose={i === 0 && points.length >= MIN_AREA_POINTS ? complete : undefined} />
+                          <AreaVertex
+                            color={color}
+                            first={i === 0}
+                            onClose={i === 0 && points.length >= MIN_AREA_POINTS ? complete : undefined}
+                            onSelect={() => draft.select(i)}
+                            selected={draft.selected === i}
+                          />
                         </div>
                       ))}
                   </div>
@@ -193,9 +195,14 @@ function DrawForm({ target, layers, existing, onSave, onClose }: Omit<Props, 'ta
       </ModalBody>
       <ModalFooter className="flex flex-wrap justify-between gap-2">
         <div className="flex gap-2">
-          <Button size="sm" variant="flat" radius="lg" onPress={undoPoint} isDisabled={closed || count === 0} data-testid="mci-draw-undo">
-            Undo point
+          <Button size="sm" variant="flat" radius="lg" onPress={draft.undo} isDisabled={!draft.canUndo} data-testid="mci-draw-undo" title="Undo (Ctrl+Z)">
+            Undo
           </Button>
+          {draft.selected !== null && !closed && (
+            <Button size="sm" variant="flat" radius="lg" onPress={() => draft.remove()} data-testid="mci-draw-delete-point">
+              Delete point
+            </Button>
+          )}
           <Button size="sm" variant="flat" radius="lg" onPress={reset} isDisabled={count === 0} data-testid="mci-draw-reset">
             Start over
           </Button>

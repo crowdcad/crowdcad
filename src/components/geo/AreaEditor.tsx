@@ -2,7 +2,8 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { Button } from '@heroui/react';
-import { Trash2, Undo2 } from 'lucide-react';
+import { Redo2, Trash2, Undo2, X } from 'lucide-react';
+import { usePolygonDraft } from '@/hooks/usePolygonDraft';
 import { areaBounds } from '@/lib/geo/layers';
 import { DEFAULT_BASEMAP_ID, validChoice } from '@/lib/geo/basemaps';
 import { PREF, usePref } from '@/lib/geo/prefs';
@@ -18,7 +19,8 @@ import TutorialTip from '@/components/ui/TutorialTip';
  * Draws a venue layer's area of interest on the live map (P8, D64): the
  * Map step's alternative to an image. Click points around the area, then the
  * first point's open circle to complete it (AreaVertex). Only a completed
- * area is reported and saved with the venue.
+ * area is reported and saved with the venue. Ctrl+Z / Ctrl+Shift+Z undo and
+ * redo, and clicking a point selects it for Delete (usePolygonDraft).
  */
 export default function AreaEditor({
   area,
@@ -35,8 +37,8 @@ export default function AreaEditor({
   tutorial?: boolean;
   className?: string;
 }) {
-  const [points, setPoints] = useState<{ lat: number; lng: number }[]>(area?.polygon ?? []);
-  const [closed, setClosed] = useState(() => (area?.polygon.length ?? 0) >= MIN_AREA_POINTS);
+  const draft = usePolygonDraft<{ lat: number; lng: number }>({ points: area?.polygon ?? [], closed: (area?.polygon.length ?? 0) >= MIN_AREA_POINTS });
+  const { points, closed, selected } = draft;
   const [basemapId, setBasemapId] = usePref<string>(PREF.alignBasemap, DEFAULT_BASEMAP_ID);
   const [view, setView] = useState<BasemapViewRequest | undefined>(() =>
     area && area.polygon.length >= 3 ? { key: 1, bounds: areaBounds(area) } : undefined,
@@ -59,15 +61,6 @@ export default function AreaEditor({
     changeRef.current(closed && points.length >= MIN_AREA_POINTS ? { polygon: points } : null);
   }, [points, closed]);
 
-  // Undo reopens a completed area before it removes points.
-  const undo = () => {
-    if (closed) setClosed(false);
-    else setPoints((p) => p.slice(0, -1));
-  };
-  const clear = () => {
-    setClosed(false);
-    setPoints([]);
-  };
   const remaining = Math.max(0, MIN_AREA_POINTS - points.length);
   return (
     <div className={`flex flex-col gap-3 text-surface-light ${className ?? ''}`}>
@@ -120,13 +113,26 @@ export default function AreaEditor({
               to complete the area.
             </>
           )}
-          <HelpTip text="Find the place with the search box, then click points around the area your event covers, in order, and click the first point's open circle to complete it. The event's map is centered on this area, and you can place posts and draw zones anywhere on it." />
+          <HelpTip text="Find the place with the search box, then click points around the area your event covers, in order, and click the first point's open circle to complete it. Ctrl+Z undoes and Ctrl+Shift+Z redoes. Click a point to select it, then press Delete to remove it. The event's map is centered on this area, and you can place posts and draw zones anywhere on it." />
         </p>
         <div className="flex items-center gap-2">
-          <Button size="sm" variant="flat" startContent={<Undo2 className="h-4 w-4" />} isDisabled={!points.length} onPress={undo}>
-            {closed ? 'Reopen area' : 'Undo last point'}
+          {selected !== null && (
+            <Button size="sm" variant="flat" startContent={<X className="h-4 w-4" />} onPress={() => draft.remove()}>
+              Delete point
+            </Button>
+          )}
+          <Button size="sm" variant="flat" startContent={<Undo2 className="h-4 w-4" />} isDisabled={!draft.canUndo} onPress={draft.undo} title="Undo (Ctrl+Z)">
+            Undo
           </Button>
-          <Button size="sm" variant="light" startContent={<Trash2 className="h-4 w-4" />} isDisabled={!points.length} onPress={clear}>
+          <Button size="sm" variant="flat" isIconOnly aria-label="Redo" isDisabled={!draft.canRedo} onPress={draft.redo} title="Redo (Ctrl+Shift+Z)">
+            <Redo2 className="h-4 w-4" />
+          </Button>
+          {closed && (
+            <Button size="sm" variant="light" onPress={draft.reopen}>
+              Reopen area
+            </Button>
+          )}
+          <Button size="sm" variant="light" startContent={<Trash2 className="h-4 w-4" />} isDisabled={!points.length} onPress={draft.clear}>
             Clear
           </Button>
         </div>
@@ -139,10 +145,11 @@ export default function AreaEditor({
       <BasemapView
         className={`rounded-lg border border-surface-liner ${heightClassName}`}
         basemapId={validChoice(basemapId, DEFAULT_BASEMAP_ID)}
-        onMapClick={closed ? undefined : (p) => setPoints((prev) => [...prev, { lat: p.lat, lng: p.lon }])}
+        onMapClick={closed ? undefined : (p) => draft.add({ lat: p.lat, lng: p.lon })}
         cursor={closed ? 'grab' : 'crosshair'}
         shapes={areaDraftShapes('area', points, '#3eb1fd', closed, 0.15)}
-        pins={closed ? [] : areaVertexPins(points, '#3eb1fd', () => setClosed(true))}
+        // Points stay shown once complete, so one can still be selected and removed.
+        pins={areaVertexPins(points, '#3eb1fd', closed ? undefined : draft.close, { selected, onSelect: draft.select })}
         view={view}
         onCenterChange={(c) => (centerRef.current = c)}
       />

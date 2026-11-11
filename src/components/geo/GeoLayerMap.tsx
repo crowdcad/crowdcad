@@ -46,8 +46,8 @@ export interface GeoLayerMapProps {
   /** Makes posts draggable. */
   onPostMove?: (postIdx: number, p: LatLng) => void;
   onPostClick?: (postIdx: number) => void;
-  /** A zone being drawn (AreaVertex points; `onClose` completes it), or completed and awaiting a name. */
-  draftZone?: { coords: LatLng[]; color: string; closed?: boolean; onClose?: () => void } | null;
+  /** A zone being drawn (AreaVertex points; `onClose` completes it, `onSelect` selects a point), or completed and awaiting a name. */
+  draftZone?: { coords: LatLng[]; color: string; closed?: boolean; onClose?: () => void; selected?: number | null; onSelect?: (index: number) => void } | null;
   /** More pins (team and equipment markers on the dispatch map). */
   extraPins?: GeoPin[];
   /** Name of a post to call out. */
@@ -156,7 +156,13 @@ export default function GeoLayerMap({
       pins={[
         ...postPins,
         ...(extraPins ?? []),
-        ...(draftZone && !draftZone.closed ? areaVertexPins(draftZone.coords, draftZone.color, draftZone.onClose) : []),
+        ...(draftZone && !draftZone.closed ? areaVertexPins(
+              draftZone.coords,
+              draftZone.color,
+              draftZone.onClose,
+              draftZone.onSelect ? { selected: draftZone.selected ?? null, onSelect: draftZone.onSelect } : undefined,
+            )
+          : []),
       ]}
       view={focusView && (!view || focusView.key > view.req.key) ? focusView : view?.req}
     >
