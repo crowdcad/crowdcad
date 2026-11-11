@@ -77,6 +77,11 @@ Related: [plan.md](plan.md), [../tak-integration/decisions.md](../tak-integratio
 ### D15. Walk-ins are added at a treatment location
 - **What.** Each column has an add button for a patient who never went through a zone. It writes an `arrived` entry. Walk-ins count in treatment and in the totals but never in a zone's Tagged.
 
+### D19. A Logistics tab beside the MCI tab (#139)
+- **What.** While an event has an MCI, a **Logistics** tab (read-only after stand down) has two halves. **Equipment**: every item, grouped by the team holding it, with **Issue to / Give to** a team and **Return**, plus **Add equipment**; items not issued are listed below. **Incoming staff**: teams reported on their way, each with an ETA (a typed time, or Pending, En route or Attempted contact) and notes, sorted soonest first with overdue times highlighted. **Arrived** turns the row into a team on the board (Available, logged); **Cancel** drops it. The tab label counts teams still incoming.
+- **Equipment reuses custody** (the maintainer's choice): issuing is the dispatcher's manual move to a unit, so the item shows on the team card, on the map and, as an icon with the item's name on hover, next to the team on each of its calls.
+- **Data.** `mci.logistics.incoming` (in the MCI state document on Firebase, D18). Arrived and cancelled rows are kept for the summary's CSV export.
+
 ### D18. MCI state has its own document on cloud events (#143)
 - **Why.** Role logins must never read the event document (every call, team and note is in it), and Firestore can't hide part of a document. During an MCI it also stops MCI taps contending with every other dispatch write.
 - **What.** On Firebase cloud events, `events/{eventId}/mci/state` holds what `event.mci` held, and `events/{eventId}/mci/units` a summary of the units for role views (name, kind, status, MCI assignment, equipment held). The dispatch page merges `state` back into its event, so everything that reads `event.mci` is unchanged. Its single write path reads both documents in one transaction and sends the `mci` part to `state`, writing `units` in the same transaction when what it shows changes (`src/lib/mciDoc.ts`). Dispatchers read and write both; an active role login reads them.

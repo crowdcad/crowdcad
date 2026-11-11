@@ -26,6 +26,7 @@ import { getEquipmentIconType } from '@/lib/equipmentIcon';
 import { withPendingSuffix } from '@/lib/callTiming';
 import { sortActiveCalls, type CallSortMode } from '@/lib/callSort';
 import CallIndicatorIcons from './callindicatoricons';
+import HeldEquipmentIcons from './heldequipmenticons';
 import AddEquipmentSubmenu from './addequipmentmenu';
 
 import {
@@ -457,6 +458,7 @@ export const CallTrackingTable: React.FC<CallTrackingTableProps> = ({
                                 >
                                   <div className="flex items-center gap-2" data-testid={`team-chip-${team}`}>
                                     <span>{team}</span>
+                                    {!isEquipmentOnlyTeam && <HeldEquipmentIcons event={event} unit={team} />}
                                     {openMenuToken === `team-clinic-pick:${call.id}:${team}` ? (
                                       <Dropdown
                                         motionProps={dropdownMotionProps}

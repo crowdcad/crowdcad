@@ -198,6 +198,30 @@ export interface MciState {
   trackPatients?: boolean;
   /** What the treatment leader typed about each patient, keyed by patient id. Never names or tag numbers. */
   patients?: Record<string, MciPatientDetails>;
+  /** The Logistics tab (#139): staff reported on their way. Equipment issued to teams is ordinary event equipment. */
+  logistics?: MciLogistics;
+}
+
+/** The Logistics tab's own records (src/lib/mciLogistics.ts). */
+export interface MciLogistics {
+  incoming: IncomingTeam[];
+}
+
+/** When an incoming team is expected: a clock time (HH:MM), or what is known so far. */
+export type IncomingEta = { kind: 'time'; time: string } | { kind: 'pending' } | { kind: 'en_route' } | { kind: 'attempted' };
+
+/** A team reported on its way. Arrived and cancelled ones stay, for the summary. */
+export interface IncomingTeam {
+  id: string;
+  name: string;
+  /** Stored like Staff.members: "Name [CERT]". */
+  members: string[];
+  eta: IncomingEta;
+  notes: string;
+  reportedAt: number;
+  state: 'incoming' | 'arrived' | 'cancelled';
+  /** When it arrived (became a team) or was cancelled. */
+  closedAt?: number;
 }
 
 /** Details typed for one patient in a treatment location. Every field is optional. */

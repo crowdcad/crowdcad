@@ -12,6 +12,7 @@ import { getScheduleWindow, teamStatusBreakdown, teamAvailabilitySeries, getSurg
 import { getZoneCallSummaries } from '@/lib/zones';
 import { formatLogTimestampForCsv } from '@/lib/csvFormat';
 import { hasMci, mciCsvLines, mciPatientCsvLines, mciSeries } from '@/lib/mci';
+import { logisticsCsvLines } from '@/lib/mciLogistics';
 import MciSummary from '@/components/dispatch/mci/mcisummary';
 import { GRID_WRAPPER, GRID_CELL } from './summaryGrid';
 import EquipmentTimeline from './EquipmentTimeline';
@@ -156,6 +157,7 @@ export default function SummaryPage() {
     // MCI log, in time order, then one row per patient in treatment
     csvRows.push(...mciCsvLines(event, formatTimestamp));
     csvRows.push(...mciPatientCsvLines(event, formatTimestamp));
+    csvRows.push(...logisticsCsvLines(event, formatTimestamp));
 
     // Zone Summary
     zoneCallSummaries.forEach((zone) => {
