@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import type { MciColor, MciState } from '@/app/types';
 import { deriveMci, emptyCounts, MCI_COLORS, mciPatientLabel, type MciCounts, type MciPatient, type MciPatientField } from '@/lib/mci';
 import type { MciUnit } from '@/lib/mciDoc';
+import type { RoleAction } from '@/lib/mciRoleActions';
 import { MCI_COLOR_STYLES, MCI_PILL_STYLES } from '@/components/dispatch/mci/mciparts';
 import { describeMciEntry } from '@/components/dispatch/mci/mcilogdrawer';
 import {
@@ -255,7 +256,7 @@ function PatientSheet({
       if (await actions.send({ type: 'addPatient', areaId, color: form.color, fields })) onClose();
       return;
     }
-    const steps = [];
+    const steps: RoleAction[] = [];
     if (['age', 'sex', 'complaint', 'team'].some((k) => (d[k as MciPatientField] ?? '') !== (fields[k as MciPatientField] ?? ''))) {
       steps.push({ type: 'patientDetails' as const, patientId: patient.id, fields });
     }
