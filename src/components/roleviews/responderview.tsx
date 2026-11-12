@@ -249,6 +249,8 @@ function PatientSheet({
   });
   const set = (patch: Partial<PatientFormState>) => setForm((f) => ({ ...f, ...patch }));
   const teamChoices = useMemo(() => [...new Set([unit, ...units.filter((u) => u.kind === 'team').map((u) => u.name), 'Walk-in'])], [unit, units]);
+  // A team that isn't on the board (another agency, a bystander group): typed in.
+  const [otherTeam, setOtherTeam] = useState(() => !!d.team && !teamChoices.includes(d.team));
   const fields: Partial<Record<MciPatientField, string>> = { age: form.age, sex: form.sex, complaint: form.complaint, team: form.team };
 
   const save = async () => {
@@ -279,11 +281,42 @@ function PatientSheet({
       <span className={ROLE_LABEL}>Brought in by</span>
       <div className="flex flex-wrap gap-1.5">
         {teamChoices.map((t) => (
-          <button key={t} type="button" className={`h-10 border px-3 text-base font-semibold ${chipState(form.team === t)}`} onClick={() => set({ team: t })}>
+          <button
+            key={t}
+            type="button"
+            className={`h-10 border px-3 text-base font-semibold ${chipState(!otherTeam && form.team === t)}`}
+            onClick={() => {
+              setOtherTeam(false);
+              set({ team: t });
+            }}
+          >
             {t}
           </button>
         ))}
+        <button
+          type="button"
+          className={`h-10 border px-3 text-base font-semibold ${chipState(otherTeam)}`}
+          onClick={() => {
+            setOtherTeam(true);
+            if (teamChoices.includes(form.team)) set({ team: '' });
+          }}
+          data-testid="role-patient-team-other"
+        >
+          Other
+        </button>
       </div>
+      {otherTeam && (
+        <input
+          className="h-12 border border-surface-liner bg-surface-deepest px-3 text-lg text-surface-light"
+          placeholder="Team or agency"
+          aria-label="Brought in by (other)"
+          maxLength={40}
+          autoFocus
+          value={form.team}
+          onChange={(e) => set({ team: e.target.value })}
+          data-testid="role-patient-team-input"
+        />
+      )}
       <div className="grid grid-cols-[5.5rem_minmax(0,1fr)] gap-2">
         <label className={`${ROLE_LABEL} flex flex-col gap-1`}>
           Age

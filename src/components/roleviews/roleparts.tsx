@@ -156,17 +156,34 @@ const MAP_ICON = (
 );
 
 /** The round floating Map button on every role view. */
-export function MapFab({ onPress, bottomClass = 'bottom-24' }: { onPress: () => void; bottomClass?: string }) {
+/** A round floating button, the shape of the Map button (#154). */
+function RoundFab({ onPress, label, icon, text, bottomClass, testId }: { onPress: () => void; label: string; icon: React.ReactNode; text: string; bottomClass: string; testId: string }) {
   return (
     <button
       type="button"
       onClick={onPress}
-      aria-label="Open map"
+      aria-label={label}
       className={`fixed right-4 ${bottomClass} z-30 flex h-14 w-14 flex-col items-center justify-center rounded-circle border border-accent bg-surface-deep text-[11px] font-bold text-accent shadow-[0_4px_14px_rgba(0,0,0,0.5)]`}
-      data-testid="role-map-button"
+      data-testid={testId}
     >
-      {MAP_ICON}
-      MAP
+      {icon}
+      {text}
     </button>
   );
+}
+
+export function MapFab({ onPress, bottomClass = 'bottom-24' }: { onPress: () => void; bottomClass?: string }) {
+  return <RoundFab onPress={onPress} label="Open map" icon={MAP_ICON} text="MAP" bottomClass={bottomClass} testId="role-map-button" />;
+}
+
+const BACK_ICON = (
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M19 12H5" />
+    <path d="m12 19-7-7 7-7" />
+  </svg>
+);
+
+/** Closes the map: in the Map button's place, so it toggles back to the view. */
+export function MapBackFab({ onPress, bottomClass = 'bottom-24' }: { onPress: () => void; bottomClass?: string }) {
+  return <RoundFab onPress={onPress} label="Back from map" icon={BACK_ICON} text="BACK" bottomClass={bottomClass} testId="role-map-back" />;
 }

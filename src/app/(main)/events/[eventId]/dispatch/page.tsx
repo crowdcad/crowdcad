@@ -3866,13 +3866,15 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
 
         <div className="flex items-center gap-1.5">
           {renderTeamActions(selectedLeftTab as LeftPanelTab)}
-          <FocusControls
-            focused={focusedPane === 'left'}
-            onToggle={() => toggleFocus('left')}
-            size="md"
-            onOpenWindow={() => openFocusWindow(selectedLeftTab)}
-            label={t(selectedLeftTab === 'teams' ? 'Teams' : selectedLeftTab === 'supervisors' ? 'Supervisors' : 'Equipment')}
-          />
+          {/* No full-screen button on this side; only a way out if a ?focus= link opened it full screen. */}
+          {focusedPane === 'left' && (
+            <FocusControls
+              focused
+              onToggle={() => toggleFocus('left')}
+              size="md"
+              label={t(selectedLeftTab === 'teams' ? 'Teams' : selectedLeftTab === 'supervisors' ? 'Supervisors' : 'Equipment')}
+            />
+          )}
         </div>
       </div>
 

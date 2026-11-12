@@ -6,7 +6,7 @@ import type { MciUnit } from '@/lib/mciDoc';
 import type { UnitTracking } from '@/lib/unitTracking';
 import { authService } from '@/lib/services';
 import VenueMapTab from '@/components/dispatch/venuemaptab';
-import { MapFab } from './roleparts';
+import { MapBackFab, MapFab } from './roleparts';
 
 const TakRolePositions =
   process.env.NEXT_PUBLIC_TAK === 'on' ? lazy(() => import('@/features/tak').then((m) => ({ default: m.TakRolePositions }))) : null;
@@ -15,7 +15,8 @@ const TakRolePositions =
  * The frame of every MCI role view (#144): a header with just the title and
  * Sign out, the content, and the round Map button, which opens the event map
  * with zones, tarps, posts and teams, and a clear "You" when the unit has a
- * tracker (#154).
+ * tracker (#154). On the map, a round Back button in the same place returns
+ * to the view.
  */
 export default function RoleShell({
   title,
@@ -77,24 +78,14 @@ export default function RoleShell({
         </Suspense>
       )}
       {mapOpen && (
-        <div className="fixed inset-0 z-50 flex flex-col bg-surface-deepest" data-testid="role-map">
-          <div className="flex items-center justify-between border-b border-surface-liner bg-surface-deep px-4 py-2.5">
-            <span className="text-2xl font-bold">Map</span>
-            <button type="button" onClick={() => setMapOpen(false)} aria-label="Close map" className="flex h-12 w-12 items-center justify-center border border-surface-liner bg-surface-deepest text-xl">
-              ✕
-            </button>
-          </div>
-          {unitName &&
-            (youTracked ? (
-              <div className="flex items-center gap-2.5 border-b border-accent/40 bg-accent/10 px-4 py-2.5 text-base" data-testid="role-map-you">
-                <span className="h-3.5 w-3.5 rounded-circle border-2 border-white bg-accent" aria-hidden />
-                You ({unitName}) are on the map{me?.stale ? ', last seen a while ago' : ''}, from your team&apos;s tracker.
-              </div>
-            ) : (
-              <div className="border-b border-status-yellow/40 bg-status-yellow/10 px-4 py-2.5 text-base text-status-yellow" data-testid="role-map-untracked">
-                {unitName} has no tracker, so you aren&apos;t shown. Zones, tarps and teams are.
-              </div>
-            ))}
+        // Below the site navbar (sticky, z-300), which would otherwise cover the top of the map.
+        <div className="fixed inset-x-0 bottom-0 top-14 z-40 flex flex-col bg-surface-deepest" data-testid="role-map">
+          {youTracked && (
+            <div className="flex items-center gap-2.5 border-b border-accent/40 bg-accent/10 px-4 py-2.5 text-base" data-testid="role-map-you">
+              <span className="h-3.5 w-3.5 rounded-circle border-2 border-white bg-accent" aria-hidden />
+              You ({unitName}) are on the map{me?.stale ? ', last seen a while ago' : ''}, from your team&apos;s tracker.
+            </div>
+          )}
           <div className="flex min-h-0 flex-1 flex-col p-2">
             <VenueMapTab
               layers={layers}
@@ -110,6 +101,7 @@ export default function RoleShell({
               overlay={{ unitTracking: tracking }}
             />
           </div>
+          <MapBackFab bottomClass={mapBottomClass} onPress={() => setMapOpen(false)} />
         </div>
       )}
     </div>

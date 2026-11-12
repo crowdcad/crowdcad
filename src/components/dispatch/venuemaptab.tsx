@@ -332,7 +332,6 @@ export default function VenueMapTab({
         )}
 
         <div className="ml-auto flex min-w-0 items-center gap-2">
-          <MapLayersMenu hidden={hidden} onChange={setStoredHidden} />
           {currentLayerData && isGeoLayer(currentLayerData) ? (
             <GeoLayerMapControls layer={currentLayerData} />
           ) : (
@@ -397,6 +396,10 @@ export default function VenueMapTab({
             focus={geoFocus}
             overlay={overlay}
           />
+          {/* Beside MapLibre's own +/- (10px margin, 29px wide). */}
+          <div className="absolute right-[45px] top-[10px] z-10">
+            <MapLayersMenu hidden={hidden} onChange={setStoredHidden} variant="maplibre" />
+          </div>
         </div>
       ) : (
       <div className="relative min-h-0 flex-1 overflow-hidden rounded-lg" style={MAP_CHECKER_BG}>
@@ -431,7 +434,9 @@ export default function VenueMapTab({
           showPostPins={!isHidden('posts')}
           overlay={overlay}
         />
-        <MapZoomControls onZoomIn={() => zoomIn(0.25)} onZoomOut={() => zoomOut(0.25)} onReset={resetZoom} />
+        <MapZoomControls onZoomIn={() => zoomIn(0.25)} onZoomOut={() => zoomOut(0.25)} onReset={resetZoom}>
+          <MapLayersMenu hidden={hidden} onChange={setStoredHidden} />
+        </MapZoomControls>
       </div>
       )}
     </div>

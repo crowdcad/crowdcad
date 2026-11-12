@@ -7,37 +7,40 @@ import { MAP_LAYER_KINDS, MAP_LAYER_LABELS, setLayerShown, type MapLayerKind } f
 import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
 
 /**
- * The Map tab's "Layers" menu (#136): checkboxes to show or hide zones,
- * locations, teams, supervisors and equipment. A badge counts what is
- * hidden, so nobody wonders where the markers went.
+ * The map's layers button (#136): checkboxes to show or hide zones,
+ * locations, teams, supervisors and equipment. It sits on the map beside the
+ * zoom buttons and takes their look: a round icon button on an image layer
+ * (`zoom`, next to MapZoomControls), or a square MapLibre-style control on a
+ * real-map layer (`maplibre`, beside MapLibre's own +/-).
  */
 export default function MapLayersMenu({
   hidden,
   onChange,
+  variant = 'zoom',
 }: {
   hidden: readonly MapLayerKind[];
   onChange: (hidden: MapLayerKind[]) => void;
+  variant?: 'zoom' | 'maplibre';
 }) {
   const { t } = useDispatchTerms();
   return (
     <Popover placement="bottom-end">
       <PopoverTrigger>
-        <Button
-          size="sm"
-          radius="full"
-          variant="flat"
-          className="relative shrink-0 bg-surface-deep border border-surface-liner text-surface-light"
-          startContent={<Layers className="h-4 w-4" />}
-          aria-label={hidden.length ? `Map layers (${hidden.length} hidden)` : 'Map layers'}
-          data-testid="map-layers-button"
-        >
-          {t('Layers')}
-          {hidden.length > 0 && (
-            <span className="ml-0.5 rounded-full bg-status-orange/25 px-1.5 text-xs text-status-orange" data-testid="map-layers-hidden-count">
-              {hidden.length} hidden
-            </span>
-          )}
-        </Button>
+        {variant === 'zoom' ? (
+          <Button isIconOnly size="sm" radius="full" variant="flat" className="bg-surface-deepest/95" aria-label="Map layers" title="Map layers" data-testid="map-layers-button">
+            <Layers className="h-4 w-4" />
+          </Button>
+        ) : (
+          <button
+            type="button"
+            aria-label="Map layers"
+            title="Map layers"
+            data-testid="map-layers-button"
+            className="flex h-[29px] w-[29px] items-center justify-center rounded-[4px] bg-white/[0.92] text-[#1f2328] shadow-[0_0_0_2px_rgba(0,0,0,0.1)] hover:bg-[#f2f2f2] dark:bg-[rgb(24_26_31/0.92)] dark:text-[#e6e8eb] dark:shadow-[0_0_0_1px_rgb(255_255_255/0.12)] dark:hover:bg-[rgb(40_42_47/0.92)]"
+          >
+            <Layers className="h-4 w-4" />
+          </button>
+        )}
       </PopoverTrigger>
       <PopoverContent className="bg-surface-deepest border border-surface-liner p-3 text-surface-light">
         <div className="flex min-w-[180px] flex-col gap-2" data-testid="map-layers-menu">
