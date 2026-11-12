@@ -1446,9 +1446,10 @@ export function patientCarePatch(
     said.push(name);
   }
   if (!said.length) return NO_CHANGE;
-  const label = mciPatientLabel(next);
   const withCare: MciState = { ...mci, patients: withDetails(mci.patients ?? {}, patientId, next) };
-  const entry = makeEntry(ctx, { kind: 'noted', patientId, areaId: patient.areaId, note: tidy(`Patient${label ? ` (${label})` : ''}: ${said.join('; ')}`, MAX_NOTED_LENGTH) });
+  // No age, sex or complaint in the text: the log is in the state document, which every role reads (#156).
+  // The log shows who it was from `patientId`, for those who may see patient details.
+  const entry = makeEntry(ctx, { kind: 'noted', patientId, areaId: patient.areaId, note: tidy(`Patient: ${said.join('; ')}`, MAX_NOTED_LENGTH) });
   return { patch: { mci: appendMciEntries(withCare, [entry]) } };
 }
 

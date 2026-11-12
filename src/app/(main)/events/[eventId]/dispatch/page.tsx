@@ -13,7 +13,7 @@ import EndEventModal from "@/components/modals/event/endeventmodal";
 import TransportUnitModal from "@/components/modals/event/transportunitmodal";
 import React from 'react';
 import { dbService, isPocketbaseBackend, ServiceError } from '@/lib/services';
-import { MCI_DOC_MAP, MCI_DOC_STATE, MCI_DOC_UNITS, mciDocCollection, splitMciWrite, withMciDoc, type MciUnitsDoc } from '@/lib/mciDoc';
+import { MCI_DOC_MAP, MCI_DOC_PATIENTS, MCI_DOC_STATE, MCI_DOC_UNITS, mciDocCollection, mergeMciPatients, splitMciWrite, withMciDoc, type MciPatientsDoc, type MciUnitsDoc } from '@/lib/mciDoc';
 import { PostAssignment, Event, Staff, Supervisor, Call, EquipmentStatus, CallLogEntry, TeamLogEntry, EquipmentItem, EventEquipment, ClinicOutcome, Clinic, Layer, DispatchZone, MciAssignment, MciState } from '@/app/types';
 import { toast, Slide, ToastContainer } from 'react-toastify';
 import { useRouter } from 'next/navigation';
@@ -159,7 +159,10 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
   const mciDocMode = !isLiteMode && !isPocketbaseBackend;
   // The latest MCI state document: undefined until its first snapshot, null when there is none (an older event or no MCI yet).
   const mciDocRef = useRef<MciState | null | undefined>(undefined);
-  const [mciDocStatus, setMciDocStatus] = useState<'unknown' | 'missing' | 'present'>('unknown');
+  // Patient details, in their own document (#156); merged into the state above.
+  const mciPatientsRef = useRef<MciPatientsDoc | null>(null);
+  // 'inline-patients': a state document from before #156 still holding patient details.
+  const [mciDocStatus, setMciDocStatus] = useState<'unknown' | 'missing' | 'present' | 'inline-patients'>('unknown');
   const { user: authUser, ready: authReady } = useAuth();
   const user = isLiteMode ? null : authUser;
   const ready = isLiteMode ? true : authReady;
@@ -413,8 +416,11 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
         if (!snap.exists || !snap.data) throw new Error("Event does not exist");
         // MCI state lives in its own document (#143); read it in the same transaction and merge it in.
         const mciSnap = mciDocMode ? await tx.get<MciState>(mciDocCollection(eventId), MCI_DOC_STATE) : null;
+        const patientsSnap = mciDocMode ? await tx.get<MciPatientsDoc>(mciDocCollection(eventId), MCI_DOC_PATIENTS) : null;
 
-        const currentEvent = mciDocMode ? withMciDoc(snap.data, mciSnap?.exists ? mciSnap.data : null) : snap.data;
+        const currentEvent = mciDocMode
+          ? withMciDoc(snap.data, mciSnap?.exists ? mciSnap.data : null, patientsSnap?.exists ? patientsSnap.data : null)
+          : snap.data;
 
         if (!options?.bypassEndedCheck && isEventEnded(currentEvent)) {
           throw new Error('EVENT_ENDED');
@@ -432,7 +438,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
           tx.update('events', eventId, cleaned);
           return;
         }
-        const split = splitMciWrite(currentEvent, cleaned);
+        const split = splitMciWrite(currentEvent, cleaned, { patientsStored: !!patientsSnap?.exists });
         // Role views read the event's map from mci/map (#154): refresh it whenever the MCI is written and the map changed.
         let mapLayers: Layer[] | null = null;
         if (split.mci) {
@@ -443,6 +449,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
         if (Object.keys(split.event).length) tx.update('events', eventId, split.event);
         if (mapLayers) tx.set(mciDocCollection(eventId), MCI_DOC_MAP, { layers: removeUndefinedDeep(mapLayers), updatedAt: Date.now() });
         if (split.mci) tx.set(mciDocCollection(eventId), MCI_DOC_STATE, split.mci);
+        if (split.patients) tx.set<MciPatientsDoc>(mciDocCollection(eventId), MCI_DOC_PATIENTS, { patients: split.patients, updatedAt: Date.now() });
         if (split.units) tx.set<MciUnitsDoc>(mciDocCollection(eventId), MCI_DOC_UNITS, { units: split.units, updatedAt: Date.now() });
       });
     } catch (error) {
@@ -2143,7 +2150,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
             return;
           }
           setEvent(prev => {
-            const merged = mciDocMode ? withMciDoc(eventData, mciDocRef.current) : eventData;
+            const merged = mciDocMode ? withMciDoc(eventData, mciDocRef.current, mciPatientsRef.current) : eventData;
             const incoming = { ...merged, mci: freshMci(prev, merged.mci) };
             if (!isEqual(prev, incoming)) {
               setPostAssignments(incoming.postAssignments || {});
@@ -2179,11 +2186,11 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
       (snap) => {
         const doc = snap.exists && snap.data ? snap.data : null;
         mciDocRef.current = doc;
-        setMciDocStatus(doc ? 'present' : 'missing');
+        setMciDocStatus(!doc ? 'missing' : doc.patients !== undefined ? 'inline-patients' : 'present');
         if (!doc) return;
         setEvent((prev) => {
           if (!prev) return prev;
-          const mci = freshMci(prev, doc);
+          const mci = freshMci(prev, mergeMciPatients(doc, mciPatientsRef.current));
           return isEqual(prev.mci, mci) ? prev : { ...prev, mci };
         });
       },
@@ -2191,15 +2198,37 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     );
   }, [mciDocMode, eventId, user]);
 
+  useEffect(() => {
+    if (!mciDocMode || !eventId || !user) return;
+    mciPatientsRef.current = null;
+    return dbService.subscribeToDocument<MciPatientsDoc>(
+      mciDocCollection(eventId),
+      MCI_DOC_PATIENTS,
+      (snap) => {
+        mciPatientsRef.current = snap.exists && snap.data ? snap.data : null;
+        const state = mciDocRef.current;
+        if (!state) return;
+        setEvent((prev) => {
+          if (!prev) return prev;
+          const mci = freshMci(prev, mergeMciPatients(state, mciPatientsRef.current));
+          return isEqual(prev.mci, mci) ? prev : { ...prev, mci };
+        });
+      },
+      (error) => console.error('Error fetching MCI patients:', error),
+    );
+  }, [mciDocMode, eventId, user]);
+
   // An event from before #143 with its MCI inline: copy it to the MCI documents once, so role logins can read it.
+  // Likewise a state document from before #156 with patient details in it: rewrite it once, which moves them to mci/patients.
   const mciCopiedRef = useRef(false);
   useEffect(() => {
-    if (!mciDocMode || !eventId || mciDocStatus !== 'missing' || !event?.mci || mciCopiedRef.current) return;
+    if (!mciDocMode || !eventId || !event?.mci || mciCopiedRef.current) return;
+    if (mciDocStatus !== 'missing' && !(mciDocStatus === 'inline-patients' && !isEventEnded(event))) return;
     mciCopiedRef.current = true;
     void updateEvent((current) => (current.mci ? { mci: current.mci } : {}), { bypassEndedCheck: true }).catch(() => {
       mciCopiedRef.current = false;
     });
-  }, [mciDocMode, eventId, mciDocStatus, event?.mci, updateEvent]);
+  }, [mciDocMode, eventId, mciDocStatus, event, updateEvent]);
 
   // Lazily backfill/refresh event.clinics from the venue's clinic-flagged posts
   // (additive — never removes an entry, so existing calls' clinicId never orphans).

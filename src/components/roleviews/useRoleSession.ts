@@ -1,14 +1,15 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { Layer, MciState } from '@/app/types';
 import { dbService } from '@/lib/services';
-import { isRoleLoginEmail, type RoleAccount, type RoleAccountIndex } from '@/lib/roleAccounts';
-import { MCI_DOC_MAP, MCI_DOC_STATE, MCI_DOC_UNITS, mciDocCollection, type MciUnit, type MciUnitsDoc } from '@/lib/mciDoc';
+import { isEventRole, isRoleLoginEmail, roleReadsPatients, type RoleAccount, type RoleAccountIndex } from '@/lib/roleAccounts';
+import { MCI_DOC_MAP, MCI_DOC_PATIENTS, MCI_DOC_STATE, MCI_DOC_UNITS, mciDocCollection, mergeMciPatients, type MciPatientsDoc, type MciUnit, type MciUnitsDoc } from '@/lib/mciDoc';
 
 /**
  * Everything an MCI role view reads (#144), live: the login's own record, the
- * MCI state, the unit summary and the map layers. Role logins can read only
+ * MCI state, the unit summary and the map layers, plus patient details for
+ * the roles that see them (not Logistics, #156). Role logins can read only
  * these documents (firestore.rules), never the event itself.
  */
 export interface RoleSession {
@@ -22,22 +23,26 @@ export interface RoleSession {
 
 const EMPTY: RoleSession = { status: 'loading', account: null, eventId: null, mci: null, units: [], layers: [] };
 
+/** The state and patient details as they arrive, merged into `mci` for the views. */
+type RawSession = RoleSession & { patients: MciPatientsDoc | null };
+const EMPTY_RAW: RawSession = { ...EMPTY, patients: null };
+
 export function useRoleSession(user: { uid: string; email?: string | null } | null, ready: boolean): RoleSession {
-  const [session, setSession] = useState<RoleSession>(EMPTY);
+  const [session, setSession] = useState<RawSession>(EMPTY_RAW);
   const uid = user?.uid;
   const isRole = !!user && isRoleLoginEmail(user.email);
 
   useEffect(() => {
     if (!ready) return;
-    if (!uid) return setSession({ ...EMPTY, status: 'signed-out' });
-    if (!isRole) return setSession({ ...EMPTY, status: 'not-role' });
+    if (!uid) return setSession({ ...EMPTY_RAW, status: 'signed-out' });
+    if (!isRole) return setSession({ ...EMPTY_RAW, status: 'not-role' });
     let cancelled = false;
     const unsubs: (() => void)[] = [];
     void dbService
       .getDocument<RoleAccountIndex>('roleAccountIndex', uid)
       .then((index) => {
         if (cancelled) return;
-        if (!index.exists || !index.data) return setSession({ ...EMPTY, status: 'missing' });
+        if (!index.exists || !index.data) return setSession({ ...EMPTY_RAW, status: 'missing' });
         const eventId = index.data.eventId;
         const col = mciDocCollection(eventId);
         setSession((s) => ({ ...s, eventId }));
@@ -53,13 +58,23 @@ export function useRoleSession(user: { uid: string; email?: string | null } | nu
           dbService.subscribeToDocument<MciUnitsDoc>(col, MCI_DOC_UNITS, (snap) => setSession((s) => ({ ...s, units: snap.data?.units ?? [] })), () => {}),
           dbService.subscribeToDocument<{ layers: Layer[] }>(col, MCI_DOC_MAP, (snap) => setSession((s) => ({ ...s, layers: snap.data?.layers ?? [] })), () => {}),
         );
+        // Patient details only for the roles that see them; the rules refuse the rest.
+        if (isEventRole(index.data.role) && roleReadsPatients(index.data.role)) {
+          unsubs.push(
+            dbService.subscribeToDocument<MciPatientsDoc>(col, MCI_DOC_PATIENTS, (snap) => setSession((s) => ({ ...s, patients: snap.exists ? snap.data : null })), () => {}),
+          );
+        }
       })
-      .catch(() => !cancelled && setSession({ ...EMPTY, status: 'missing' }));
+      .catch(() => !cancelled && setSession({ ...EMPTY_RAW, status: 'missing' }));
     return () => {
       cancelled = true;
       unsubs.forEach((u) => u());
     };
   }, [uid, isRole, ready]);
 
-  return session;
+  // A state document from before #156 may still carry details inline until its next write.
+  return useMemo(() => {
+    const { patients, ...rest } = session;
+    return { ...rest, mci: rest.mci ? mergeMciPatients(rest.mci, patients) : null };
+  }, [session]);
 }

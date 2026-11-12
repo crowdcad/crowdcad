@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import type { Event, MciState } from '@/app/types';
 import { isRoleLoginEmail, type RoleAccount, type RoleAccountIndex } from '@/lib/roleAccounts';
 import { applyRoleAction, roleActionAllowed, type RoleAction } from '@/lib/mciRoleActions';
-import { MCI_DOC_STATE, MCI_DOC_UNITS, mciDocCollection, splitMciWrite, withMciDoc, type MciUnitsDoc } from '@/lib/mciDoc';
+import { MCI_DOC_PATIENTS, MCI_DOC_STATE, MCI_DOC_UNITS, mciDocCollection, splitMciWrite, withMciDoc, type MciPatientsDoc, type MciUnitsDoc } from '@/lib/mciDoc';
 import { getAdmin, isCredentialError } from '@/lib/server/firebaseAdmin';
 
 /**
@@ -38,16 +38,22 @@ export async function POST(req: Request) {
     const result = await a.db.runTransaction(async (tx) => {
       const eventRef = a.db.doc(`events/${eventId}`);
       const stateRef = a.db.doc(`${mciDocCollection(eventId)}/${MCI_DOC_STATE}`);
-      const [eventSnap, stateSnap] = await Promise.all([tx.get(eventRef), tx.get(stateRef)]);
+      const patientsRef = a.db.doc(`${mciDocCollection(eventId)}/${MCI_DOC_PATIENTS}`);
+      const [eventSnap, stateSnap, patientsSnap] = await Promise.all([tx.get(eventRef), tx.get(stateRef), tx.get(patientsRef)]);
       const event = eventSnap.data() as Event | undefined;
       if (!event) return { error: 'The event no longer exists.' };
       if (event.ended) return { error: 'The event has ended.' };
-      const merged = withMciDoc({ ...event, id: eventId }, stateSnap.exists ? (stateSnap.data() as MciState) : null);
+      const merged = withMciDoc(
+        { ...event, id: eventId },
+        stateSnap.exists ? (stateSnap.data() as MciState) : null,
+        patientsSnap.exists ? (patientsSnap.data() as MciPatientsDoc) : null,
+      );
       const out = applyRoleAction(merged, action, { uid: decoded.uid, role: account.role, unitName: account.unitName ?? '', unitId: account.unitId }, Date.now());
       if (out.error) return { error: out.error };
-      const split = splitMciWrite(merged, out.patch);
+      const split = splitMciWrite(merged, out.patch, { patientsStored: patientsSnap.exists });
       if (Object.keys(split.event).length) tx.update(eventRef, split.event as { [key: string]: Partial<unknown> });
       if (split.mci) tx.set(stateRef, split.mci);
+      if (split.patients) tx.set(patientsRef, { patients: split.patients, updatedAt: Date.now() } satisfies MciPatientsDoc);
       if (split.units) tx.set(a.db.doc(`${mciDocCollection(eventId)}/${MCI_DOC_UNITS}`), { units: split.units, updatedAt: Date.now() } satisfies MciUnitsDoc);
       return { ok: true };
     });

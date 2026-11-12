@@ -7,6 +7,7 @@ import {
   newRoleUsername,
   roleLoginLink,
   roleLoginMessage,
+  roleReadsPatients,
   signInEmailFor,
 } from './roleAccounts';
 
@@ -47,5 +48,10 @@ describe('role logins', () => {
     expect(roleLoginMessage('https://crowdcad.org', 'Spring Show', 'responder', 'treat-7k2q', 'pw')).toContain(
       'Or sign in at crowdcad.org with username treat-7k2q and password pw',
     );
+  });
+
+  it('shows patient details to every role but Logistics', () => {
+    expect(['responder', 'triage', 'treatment', 'transport', 'incident_command'].every((r) => roleReadsPatients(r as never))).toBe(true);
+    expect(roleReadsPatients('logistics')).toBe(false);
   });
 });

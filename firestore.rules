@@ -333,12 +333,15 @@ service cloud.firestore {
 
     // MCI state outside the event document (#143, src/lib/mciDoc.ts): `state`
     // (what event.mci used to hold), `units` (a summary of the units for
-    // role views) and `map` (the event's map layers, for role views, #154).
-    // Role logins never write here: their changes go through /api/mci-role. Dispatchers read and write both; an active role login for
-    // the event reads them. What each role may write comes with role views (#144).
+    // role views), `map` (the event's map layers, for role views, #154) and
+    // `patients` (patient details, #156). Dispatchers read and write them; an
+    // active role login for the event reads them, except `patients` for a
+    // role that doesn't see patients (Logistics). Role logins never write
+    // here: their changes go through /api/mci-role.
     match /events/{eventId}/mci/{docId} {
-      allow read: if canReadEventData(eventId) || isActiveRoleAccountFor(eventId);
-      allow create, update: if canReadEventData(eventId) && docId in ['state', 'units', 'map'];
+      allow read: if canReadEventData(eventId) ||
+        (isActiveRoleAccountFor(eventId) && (docId != 'patients' || roleReadsPatients(eventId)));
+      allow create, update: if canReadEventData(eventId) && docId in ['state', 'units', 'map', 'patients'];
       allow delete: if canReadEventData(eventId);
     }
 
@@ -457,6 +460,11 @@ service cloud.firestore {
       return isRoleAccount() && exists(roleAccountPath(eventId)) &&
         get(roleAccountPath(eventId)).data.get('disabled', false) == false &&
         eventDoc(eventId).get('ended', false) == false;
+    }
+
+    // Keep in step with roleReadsPatients in src/lib/roleAccounts.ts.
+    function roleReadsPatients(eventId) {
+      return get(roleAccountPath(eventId)).data.get('role', '') != 'logistics';
     }
 
     function isValidRoleAccount(eventId, uid, d) {

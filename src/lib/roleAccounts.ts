@@ -39,6 +39,15 @@ export function effectiveRole(role: EventRole): (typeof EVENT_ROLES)[number] {
   return role === 'triage' || role === 'treatment' ? 'responder' : role;
 }
 
+/**
+ * Whether a role sees patient details (age, sex, complaint, notes,
+ * interventions; the mci/patients document, #156). Logistics doesn't. Keep in
+ * step with `roleReadsPatients` in firestore.rules.
+ */
+export function roleReadsPatients(role: EventRole): boolean {
+  return effectiveRole(role) !== 'logistics';
+}
+
 /** A login's record, at events/{eventId}/roleAccounts/{uid}. */
 export interface RoleAccount {
   uid: string;
