@@ -1,4 +1,5 @@
-import type { Event, MciAssignment, MciState } from '@/app/types';
+import isEqual from 'lodash.isequal';
+import type { Event, MciAssignment, MciPatientDetails, MciState } from '@/app/types';
 
 /**
  * MCI state outside the event document (#143). On cloud events (Firebase),
@@ -14,11 +15,22 @@ import type { Event, MciAssignment, MciState } from '@/app/types';
  * Events from before this keep `mci` inline until their first MCI write or
  * the dispatch page copies it across. Lite and PocketBase events keep it inline.
  *
+ * Patient details (age, sex, complaint, notes, interventions, transport
+ * order: `MciState.patients`) live apart, in events/{eventId}/mci/patients
+ * (MciPatientsDoc), so a role that doesn't treat or move patients
+ * (Logistics) never reads them (#156). The state document never carries
+ * them once written; one from before this keeps them inline until its next
+ * write, which moves them.
+ *
  * Pure helpers here; reads and writes are in the dispatch page and mciDocStore.ts.
  */
 
 export const MCI_DOC_STATE = 'state';
 export const MCI_DOC_UNITS = 'units';
+/** The event's map layers (venue layers with MCI shapes), for role views, which can't read the event (#154). */
+export const MCI_DOC_MAP = 'map';
+/** Patient details, read only by dispatchers and the roles that see patients (#156). */
+export const MCI_DOC_PATIENTS = 'patients';
 export const mciDocCollection = (eventId: string) => `events/${eventId}/mci`;
 
 /** What a role view needs to know about one unit during an MCI. */
@@ -38,9 +50,25 @@ export interface MciUnitsDoc {
   updatedAt: number;
 }
 
-/** The event with its MCI state from the state document; inline `mci` (older events) when there is none. */
-export function withMciDoc(event: Event, doc: MciState | null | undefined): Event {
-  return doc ? { ...event, mci: doc } : event;
+export interface MciPatientsDoc {
+  patients: Record<string, MciPatientDetails>;
+  updatedAt: number;
+}
+
+/** The MCI state with its patient details: from the patients document, else (older state documents) inline. */
+export function mergeMciPatients(state: MciState, doc: MciPatientsDoc | null | undefined): MciState {
+  if (!doc) return state;
+  const rest = { ...state };
+  delete rest.patients;
+  return Object.keys(doc.patients ?? {}).length ? { ...rest, patients: doc.patients } : rest;
+}
+
+/**
+ * The event with its MCI state from the state document (and patient details
+ * from the patients document); inline `mci` (older events) when there is none.
+ */
+export function withMciDoc(event: Event, doc: MciState | null | undefined, patients?: MciPatientsDoc | null): Event {
+  return doc ? { ...event, mci: mergeMciPatients(doc, patients) } : event;
 }
 
 /** The unit summary for role views. */
@@ -69,7 +97,10 @@ function sameUnits(a: MciUnit[], b: MciUnit[]): boolean {
  * Splits a write to an event (already guarded and cleaned) into what goes to
  * the event document and what goes to the MCI documents:
  * - `event`: every field but `mci`;
- * - `mci`: the new MCI state, when the write sets one;
+ * - `mci`: the new MCI state without patient details, when the write sets one;
+ * - `patients`: the patient details, when the write sets an MCI state and they
+ *   changed, or the patients document doesn't exist yet (`patientsStored` false:
+ *   a new MCI, or an older state document carrying them inline);
  * - `units`: the new unit summary, when the event has an MCI and the write
  *   changes what the summary shows.
  * `current` is the event as read, with its MCI state merged in.
@@ -77,7 +108,8 @@ function sameUnits(a: MciUnit[], b: MciUnit[]): boolean {
 export function splitMciWrite(
   current: Event,
   updates: Partial<Event>,
-): { event: Partial<Event>; mci?: MciState; units?: MciUnit[] } {
+  { patientsStored = true }: { patientsStored?: boolean } = {},
+): { event: Partial<Event>; mci?: MciState; patients?: Record<string, MciPatientDetails>; units?: MciUnit[] } {
   const { mci, ...event } = updates;
   const next = { ...current, ...updates } as Event;
   const nextMci = mci ?? current.mci;
@@ -88,5 +120,13 @@ export function splitMciWrite(
     // A new MCI state (declare, stand down, a migrated event) always writes the summary, so it exists.
     if (mci !== undefined || !sameUnits(after, mciUnitsFor(current))) units = after;
   }
-  return { event, ...(mci !== undefined ? { mci } : {}), ...(units ? { units } : {}) };
+  let state: MciState | undefined;
+  let patients: Record<string, MciPatientDetails> | undefined;
+  if (mci !== undefined) {
+    const { patients: nextPatients, ...rest } = mci;
+    state = rest;
+    const after = nextPatients ?? {};
+    if (!patientsStored || !isEqual(after, current.mci?.patients ?? {})) patients = after;
+  }
+  return { event, ...(state ? { mci: state } : {}), ...(patients ? { patients } : {}), ...(units ? { units } : {}) };
 }

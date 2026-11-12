@@ -110,7 +110,7 @@ export default function MciTab({ event, actions, onOpenRoleLogins }: Props) {
     const zone = mci.zones.find((z) => !shapeOf(z) && !wasSkipped('zone', z.id));
     if (zone) return { kind: 'zone', id: zone.id, name: zone.name, venueZoneId: zone.venueZoneId };
     const area = mci.areas.find((a) => !a.clinicId && !shapeOf(a) && !wasSkipped('area', a.id));
-    return area ? { kind: 'area', id: area.id, name: area.name, venueZoneId: area.venueZoneId } : null;
+    return area ? { kind: 'area', id: area.id, name: area.name, venueZoneId: area.venueZoneId, color: area.color } : null;
   })();
   const chosenItem = drawChoice ? (drawChoice.kind === 'zone' ? mci.zones : mci.areas).find((x) => x.id === drawChoice.id) : undefined;
   const drawTarget: MciDrawTarget | null =
@@ -220,8 +220,8 @@ export default function MciTab({ event, actions, onOpenRoleLogins }: Props) {
           <h2 className="text-base font-bold text-surface-light">{t('Zones')}</h2>
           {!readOnly && <AddByName label={t('Add zone')} testId="mci-add-zone" onAdd={actions.addZone} />}
         </div>
-        {/* Cards share the row and grow to fill it, at most 4 across; below 14rem each a new row starts. */}
-        <div className="grid grid-cols-[repeat(auto-fit,minmax(max(14rem,calc((100%-2.25rem)/4)),1fr))] gap-3">
+        {/* Each card is at most a third of the row (auto-fill keeps the empty columns, so one zone doesn't stretch); below 14rem each a new row starts. */}
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,max(14rem,calc((100%-1.5rem)/3))),1fr))] gap-3">
           {derived.zones.map((stats) => (
             <MciZoneCard
               key={stats.zone.id}

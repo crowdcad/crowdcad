@@ -16,6 +16,8 @@ import {
   etaLabel,
   isOverdue,
   normalizeEtaTime,
+  isOpenIncoming,
+  closeRequest,
   sortIncoming,
   updateIncoming,
   type LogisticsResult,
@@ -140,13 +142,19 @@ function SavedField({ value, onSave, label, placeholder, disabled, className, te
 }
 
 function IncomingRow({ team, now, readOnly, run }: { team: IncomingTeam; now: Date; readOnly: boolean; run: (build: (e: Event) => LogisticsResult) => void }) {
-  const overdue = isOverdue(team.eta, now);
+  const reported = team.state === 'reported';
+  const overdue = !reported && isOverdue(team.eta, now);
   const testId = `incoming-${team.name}`;
   return (
     <div
-      className={`flex flex-col gap-2 rounded-lg border p-2.5 ${overdue ? 'border-status-red/60 bg-status-red/10' : 'border-surface-liner'}`}
+      className={`flex flex-col gap-2 rounded-lg border p-2.5 ${reported ? 'border-status-green/70 bg-status-green/10' : overdue ? 'border-status-red/60 bg-status-red/10' : 'border-surface-liner'}`}
       data-testid={testId}
     >
+      {reported && (
+        <span className="text-sm font-semibold text-status-green" data-testid={`${testId}-reported`}>
+          {team.reportedBy ?? 'Logistics'} reports they have arrived. Confirm to add them to the board.
+        </span>
+      )}
       <div className="flex flex-wrap items-center gap-2">
         <span className="min-w-[6rem] font-semibold">{team.name}</span>
         <EtaEditor eta={team.eta} disabled={readOnly} testId={testId} onChange={(eta) => run((e) => updateIncoming(e, team.id, { eta }))} />
@@ -154,7 +162,7 @@ function IncomingRow({ team, now, readOnly, run }: { team: IncomingTeam; now: Da
         {!readOnly && (
           <div className="ml-auto flex gap-1.5">
             <Button size="sm" radius="lg" className="bg-status-green/25 text-status-green" onPress={() => run((e) => arriveIncoming(e, team.id, Date.now()))} data-testid={`${testId}-arrived`}>
-              Arrived
+              {reported ? 'Confirm arrival' : 'Arrived'}
             </Button>
             <Button size="sm" radius="lg" variant="flat" onPress={() => run((e) => cancelIncoming(e, team.id, Date.now()))} data-testid={`${testId}-cancel`}>
               Cancel
@@ -255,8 +263,9 @@ export default function LogisticsTab({
   };
 
   const incoming = event.mci?.logistics?.incoming ?? [];
-  const open = sortIncoming(incoming.filter((x) => x.state === 'incoming'), now);
-  const closed = incoming.filter((x) => x.state !== 'incoming');
+  const openRequests = (event.mci?.logistics?.requests ?? []).filter((r) => r.state === 'open');
+  const open = sortIncoming(incoming.filter(isOpenIncoming), now);
+  const closed = incoming.filter((x) => !isOpenIncoming(x));
 
   const units = useMemo(() => [...(event.staff ?? []).map((s) => s.team), ...(event.supervisor ?? []).map((s) => s.team)], [event.staff, event.supervisor]);
   const { issued, notIssued } = useMemo(() => {
@@ -281,6 +290,23 @@ export default function LogisticsTab({
             </Button>
           )}
         </div>
+        {openRequests.map((r) => (
+          <div key={r.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-accent/60 bg-accent/10 px-2.5 py-2" data-testid={`logistics-request-${r.item}`}>
+            <span className="text-sm">
+              <b>{r.byUnit ?? 'Logistics'}</b> asks for <b>{r.item}</b> for <b>{r.unit}</b>
+            </span>
+            {!readOnly && (
+              <div className="ml-auto flex gap-1.5">
+                <Button size="sm" radius="lg" className="bg-status-green/25 text-status-green" onPress={() => run((e) => closeRequest(e, r.id, 'done', Date.now()))}>
+                  Done
+                </Button>
+                <Button size="sm" radius="lg" variant="flat" onPress={() => run((e) => closeRequest(e, r.id, 'dismissed', Date.now()))}>
+                  Dismiss
+                </Button>
+              </div>
+            )}
+          </div>
+        ))}
         {issued.length === 0 && <p className="text-sm text-surface-faint">Nothing issued to a team yet.</p>}
         {issued.map(([unit, items]) => (
           <div key={unit} className="rounded-lg border border-surface-liner px-2.5 py-1" data-testid={`logistics-unit-${unit}`}>

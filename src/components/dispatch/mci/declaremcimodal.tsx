@@ -2,12 +2,12 @@
 
 import React, { useMemo, useState } from 'react';
 import { ModalHeader, ModalBody, ModalFooter, Button, Input, Checkbox } from '@heroui/react';
-import type { Event, MciTreatmentArea, MciZone } from '@/app/types';
+import type { Event, MciColor, MciTreatmentArea, MciZone } from '@/app/types';
 import { getEventClinics } from '@/lib/clinics';
 import { getVenueZones } from '@/lib/zones';
-import { isDuplicateMciName, newMciId, regularClinicCount } from '@/lib/mci';
+import { isDuplicateMciName, MCI_COLORS, mciTarpName as tarpName, newMciId, regularClinicCount } from '@/lib/mci';
 import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
-import { MCI_CANCEL_BUTTON, MCI_INPUT_CLASSNAMES, MciModal } from './mciparts';
+import { MCI_CANCEL_BUTTON, MCI_INPUT_CLASSNAMES, MciColorDot, MciModal } from './mciparts';
 
 type Props = {
   isOpen: boolean;
@@ -40,6 +40,9 @@ function DeclareMciForm({ event, onClose, onDeclare }: Omit<Props, 'isOpen'>) {
   const [clinicIds, setClinicIds] = useState<Set<string>>(() => new Set(clinics.map((c) => c.id)));
   const [addedZones, setAddedZones] = useState<string[]>([]);
   const [addedAreas, setAddedAreas] = useState<string[]>([]);
+  // Triage tarps (#154): one treatment zone per tag color, on by default unless an earlier period already has them.
+  const tarpColors = useMemo(() => MCI_COLORS.filter((c) => !existing?.areas.some((a) => a.color === c)), [existing?.areas]);
+  const [tarps, setTarps] = useState<Set<MciColor>>(() => new Set(tarpColors));
   const [zoneDraft, setZoneDraft] = useState('');
   const [areaDraft, setAreaDraft] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -62,6 +65,7 @@ function DeclareMciForm({ event, onClose, onDeclare }: Omit<Props, 'isOpen'>) {
     ...(existing?.areas || []).map((a) => ({ name: a.name })),
     ...clinics.filter((c) => clinicIds.has(c.id)).map((c) => ({ name: c.name })),
     ...addedAreas.map((name) => ({ name })),
+    ...tarpColors.filter((c) => tarps.has(c)).map((c) => ({ name: tarpName(c) })),
   ];
   const zoneDraftTaken = isDuplicateMciName(pickedZoneNames, zoneDraft);
   const areaDraftTaken = isDuplicateMciName(pickedAreaNames, areaDraft);
@@ -93,6 +97,7 @@ function DeclareMciForm({ event, onClose, onDeclare }: Omit<Props, 'isOpen'>) {
       const areas: MciTreatmentArea[] = [
         ...clinics.filter((c) => clinicIds.has(c.id)).map((c) => ({ id: c.id, name: c.name, clinicId: c.id })),
         ...addedAreas.map((name) => ({ id: `mci-area-${newMciId()}`, name })),
+        ...tarpColors.filter((c) => tarps.has(c)).map((c) => ({ id: `mci-area-${newMciId()}`, name: tarpName(c), color: c })),
       ];
       await onDeclare({ zones, areas, trackPatients });
       onClose();
@@ -163,6 +168,19 @@ function DeclareMciForm({ event, onClose, onDeclare }: Omit<Props, 'isOpen'>) {
 
         <section aria-label={t('Treatment locations')} className="flex flex-col gap-2">
           <h3 className="text-sm font-bold text-surface-light">{t('Treatment locations')}</h3>
+          {tarpColors.length > 0 && (
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1" data-testid="mci-declare-tarps">
+              <span className="text-xs text-surface-faint">Tarps (one treatment zone per color, drawn on the map later):</span>
+              {tarpColors.map((c) => (
+                <Checkbox key={c} size="sm" isSelected={tarps.has(c)} onValueChange={(on) => setTarps((prev) => toggle(prev, c, on) as Set<MciColor>)} data-testid={`mci-declare-tarp-${c}`}>
+                  <span className="inline-flex items-center gap-1.5 text-surface-light">
+                    <MciColorDot color={c} />
+                    {tarpName(c)}
+                  </span>
+                </Checkbox>
+              ))}
+            </div>
+          )}
           {clinics.map((clinic) => {
             const regular = regularClinicCount(event, { clinicId: clinic.id });
             return (

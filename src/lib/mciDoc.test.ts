@@ -9,9 +9,18 @@ const event = (over: Partial<Event> = {}) => ({ staff: [team()], supervisor: [],
 describe('withMciDoc', () => {
   it('prefers the state document and falls back to inline mci', () => {
     const doc = mci({ trackPatients: true });
-    expect(withMciDoc(event({ mci: mci() }), doc).mci).toBe(doc);
+    expect(withMciDoc(event({ mci: mci() }), doc).mci).toEqual(doc);
     const inline = mci();
     expect(withMciDoc(event({ mci: inline }), null).mci).toBe(inline);
+  });
+
+  it('takes patient details from the patients document, else from an older state document', () => {
+    const details = { p1: { age: '34', complaint: 'ankle' } };
+    expect(withMciDoc(event(), mci(), { patients: details, updatedAt: 1 }).mci?.patients).toEqual(details);
+    // The patients document wins over details left inline.
+    expect(withMciDoc(event(), mci({ patients: { old: { age: '9' } } }), { patients: details, updatedAt: 1 }).mci?.patients).toEqual(details);
+    expect(withMciDoc(event(), mci({ patients: details }), null).mci?.patients).toEqual(details);
+    expect(withMciDoc(event(), mci(), { patients: {}, updatedAt: 1 }).mci).not.toHaveProperty('patients');
   });
 });
 
@@ -34,8 +43,23 @@ describe('splitMciWrite', () => {
     const next = mci({ trackPatients: true });
     const out = splitMciWrite(event({ mci: mci() }), { mci: next, notes: 'x' } as Partial<Event>);
     expect(out.event).toEqual({ notes: 'x' });
-    expect(out.mci).toBe(next);
+    expect(out.mci).toEqual(next);
     expect(out.units).toEqual(mciUnitsFor(event()));
+  });
+
+  it('keeps patient details out of the state document and writes them only when they change', () => {
+    const details = { p1: { age: '34' } };
+    const current = event({ mci: mci({ patients: details }) });
+    const same = splitMciWrite(current, { mci: mci({ patients: details, trackPatients: true }) });
+    expect(same.mci).not.toHaveProperty('patients');
+    expect(same.patients).toBeUndefined();
+    const changed = splitMciWrite(current, { mci: mci({ patients: { p1: { age: '35' } } }) });
+    expect(changed.patients).toEqual({ p1: { age: '35' } });
+    // No patients document yet (a new MCI, or details still inline in an older state document): write it.
+    expect(splitMciWrite(current, { mci: mci({ patients: details }) }, { patientsStored: false }).patients).toEqual(details);
+    expect(splitMciWrite(event(), { mci: mci() }, { patientsStored: false }).patients).toEqual({});
+    // No MCI write, no patients write.
+    expect(splitMciWrite(current, { calls: [] } as Partial<Event>, { patientsStored: false }).patients).toBeUndefined();
   });
 
   it('writes the unit summary only when an MCI exists and the units changed', () => {

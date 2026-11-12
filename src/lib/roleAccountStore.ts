@@ -57,10 +57,13 @@ export async function createRoleLogin(input: {
   eventName: string;
   role: EventRole;
   label?: string;
+  /** The team or supervisor the login belongs to (#152). */
+  unitName?: string;
+  unitId?: string;
   createdBy: string;
 }): Promise<RoleLoginCredentials> {
   if (!ROLE_LOGINS_SUPPORTED) throw new Error('Role logins need the Firebase backend for now.');
-  const res = await callApi({ action: 'create', eventId: input.eventId, role: input.role, label: input.label ?? '' });
+  const res = await callApi({ action: 'create', eventId: input.eventId, role: input.role, label: input.label ?? '', unitName: input.unitName ?? '', unitId: input.unitId ?? '' });
   if (res?.ok) return (await res.json()) as RoleLoginCredentials;
   if (!serverUnavailable(res)) throw await errorFrom(res!);
 
@@ -74,6 +77,8 @@ export async function createRoleLogin(input: {
     eventName: input.eventName,
     role: input.role,
     username,
+    ...(input.unitName ? { unitName: input.unitName } : {}),
+    ...(input.unitId ? { unitId: input.unitId } : {}),
     ...(input.label ? { label: input.label } : {}),
     disabled: false,
     createdBy: input.createdBy,

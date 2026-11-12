@@ -4,11 +4,11 @@ import React, { useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { ModalHeader, ModalBody, ModalFooter, Button } from '@heroui/react';
 import { MCI_CANCEL_BUTTON, MciModal } from './mciparts';
-import type { Layer, Zone } from '@/app/types';
+import type { Layer, MciColor, Zone } from '@/app/types';
 import { isGeoLayer } from '@/lib/geo/layers';
 import { isPointWithinRect, pixelToPercent } from '@/lib/markerUtils';
 import type { LatLng } from '@/lib/geo/positions';
-import { mciShapeId, type MciShape } from '@/lib/mci';
+import { MCI_TARP_HEX, mciShapeId, type MciShape } from '@/lib/mci';
 import VenueMapZones from '@/components/venue-management/VenueMapZones';
 import AreaVertex, { MIN_AREA_POINTS } from '@/components/geo/AreaVertex';
 import { usePolygonDraft } from '@/hooks/usePolygonDraft';
@@ -22,6 +22,8 @@ export interface MciDrawTarget {
   id: string;
   name: string;
   venueZoneId?: string;
+  /** A tarp's tag color (#154): drawn in that color. */
+  color?: MciColor;
 }
 
 type Props = {
@@ -42,7 +44,7 @@ const AREA_COLOR = '#3b82f6';
 function DrawForm({ target, layers, existing, onSave, onClose }: Omit<Props, 'target'> & { target: MciDrawTarget }) {
   const { t } = useDispatchTerms();
   const shapeId = mciShapeId(target);
-  const color = existing?.zone.color ?? (target.kind === 'zone' ? ZONE_COLOR : AREA_COLOR);
+  const color = target.color ? MCI_TARP_HEX[target.color] : existing?.zone.color ?? (target.kind === 'zone' ? ZONE_COLOR : AREA_COLOR);
   const startLayer = Math.max(0, existing ? layers.findIndex((l) => l.id === existing.layer.id) : 0);
   const [layerIdx, setLayerIdx] = useState(startLayer);
   // Image points or live-map coordinates, by the layer's kind; undo, redo and point removal via usePolygonDraft.

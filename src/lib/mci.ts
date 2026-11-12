@@ -67,6 +67,11 @@ export interface MciWriteContext {
   now: number;
   /** Auth uid when signed in. */
   by?: string;
+  /** The unit and role of a role login making the change (#152); stamped on every entry. */
+  byUnit?: string;
+  byRole?: string;
+  /** One id shared by the entries of one submission. */
+  batch?: string;
   /** Overrides id generation (tests). */
   newId?: () => string;
 }
@@ -524,8 +529,16 @@ export function mciSeries(mci: MciState | undefined): MciSeriesPoint[] {
 // functional form so they see the transaction's event, never React state.
 // ---------------------------------------------------------------------------
 
-function makeEntry(ctx: MciWriteContext, entry: Omit<MciLogEntry, 'id' | 't' | 'by'>): MciLogEntry {
-  return { id: (ctx.newId ?? newMciId)(), t: ctx.now, ...(ctx.by ? { by: ctx.by } : {}), ...entry };
+function makeEntry(ctx: MciWriteContext, entry: Omit<MciLogEntry, 'id' | 't' | 'by' | 'byUnit' | 'byRole' | 'batch'>): MciLogEntry {
+  return {
+    id: (ctx.newId ?? newMciId)(),
+    t: ctx.now,
+    ...(ctx.by ? { by: ctx.by } : {}),
+    ...(ctx.byUnit ? { byUnit: ctx.byUnit } : {}),
+    ...(ctx.byRole ? { byRole: ctx.byRole } : {}),
+    ...(ctx.batch ? { batch: ctx.batch } : {}),
+    ...entry,
+  };
 }
 
 /** Appends entries and keeps each zone's `clearedAt` in step with the log. */
@@ -1194,7 +1207,9 @@ export function mciCsvLines(event: Pick<Event, 'mci'>, formatTimestamp: (ms: num
     const scopeEntry = target ?? entry;
     const scope = zoneName(scopeEntry.zoneId) ?? (scopeEntry.kind !== 'moved' ? areaName(scopeEntry.areaId) : undefined) ?? '-';
     const text = entry.kind === 'undo' && target ? `undo ${describe(target)}` : describe(entry);
-    rows.push({ t: entry.t, order: i, line: `MCI,${scope},${formatTimestamp(entry.t)},${csvQuote(text)}` });
+    // Who made the change, for a role login (#152): "[Alpha, responder]".
+    const who = entry.byUnit ? ` [${entry.byUnit}${entry.byRole ? `, ${entry.byRole}` : ''}]` : '';
+    rows.push({ t: entry.t, order: i, line: `MCI,${scope},${formatTimestamp(entry.t)},${csvQuote(text + who)}` });
   });
   return rows.sort((a, b) => a.t - b.t || a.order - b.order).map((r) => r.line);
 }
@@ -1283,7 +1298,8 @@ export function mciShapePatch(event: Pick<Event, 'venue' | 'mci'>, target: { kin
   const zone: Zone = {
     id: shapeId,
     name: item.name,
-    color: previous?.color ?? (target.kind === 'zone' ? MCI_ZONE_COLOR : MCI_AREA_COLOR),
+    // A tarp is drawn in its tag color (#154).
+    color: 'color' in item && item.color ? MCI_TARP_HEX[item.color] : previous?.color ?? (target.kind === 'zone' ? MCI_ZONE_COLOR : MCI_AREA_COLOR),
     points: shape.points,
     ...(shape.coords ? { coords: shape.coords } : {}),
     ...(previous?.isDispatchZone ? { isDispatchZone: true } : {}),
@@ -1323,3 +1339,135 @@ export function mciTransportTrips(mci: MciState | undefined, areaId: string): Mc
   const live = liveEntries(mci.log);
   return tripsByArea(live, replayPatients(mci, live).patients).get(areaId) ?? [];
 }
+
+
+// ---------------------------------------------------------------------------
+// Role views (#144, #152, #153): batched counts, patients with details and care, notes
+// ---------------------------------------------------------------------------
+
+const MAX_PATIENT_NOTES_LENGTH = 600;
+const MAX_INTERVENTION_LENGTH = 40;
+const MAX_NOTED_LENGTH = 160;
+
+/** Applies one write's patch to an event, for chaining helpers. */
+function withPatch<E extends Pick<Event, 'mci'>>(event: E, write: MciWrite): E {
+  return { ...event, ...write.patch } as E;
+}
+
+/**
+ * One submission of tag changes for a zone: a signed delta per color, written
+ * as one entry per color sharing a batch id, so the log shows the submission
+ * as one change by one unit. Removing more than is in the zone is clamped.
+ */
+export function tagBatchPatch(
+  event: Pick<Event, 'mci' | 'calls' | 'clinics'>,
+  zoneId: string,
+  deltas: Partial<MciCounts>,
+  ctx: MciWriteContext
+): MciWrite {
+  if (!event.mci?.active) return { patch: {}, error: 'inactive' };
+  if (!event.mci.zones.some((z) => z.id === zoneId)) return { patch: {}, error: 'unknown-zone' };
+  const batchCtx: MciWriteContext = { ...ctx, batch: ctx.batch ?? (ctx.newId ?? newMciId)() };
+  let current = event;
+  let clamped = false;
+  let changed = false;
+  for (const color of MCI_COLORS) {
+    const delta = deltas[color] ?? 0;
+    if (!delta) continue;
+    const w = tagPatch(current, zoneId, color, delta, batchCtx);
+    if (w.error) return w;
+    if (w.clamped) clamped = true;
+    if (w.patch.mci) {
+      current = withPatch(current, w);
+      changed = true;
+    }
+  }
+  if (!changed) return NO_CHANGE;
+  return { patch: { mci: current.mci }, ...(clamped ? { clamped } : {}) };
+}
+
+/** A new patient at a treatment location, with what is known about them, in one change. Returns the patient's id. */
+export function addPatientPatch(
+  event: Pick<Event, 'mci' | 'calls' | 'clinics'>,
+  areaId: string,
+  color: MciColor,
+  fields: Partial<Record<MciPatientField, string>>,
+  ctx: MciWriteContext
+): MciWrite & { patientId?: string } {
+  const entryId = (ctx.newId ?? newMciId)();
+  const arrived = arrivePatch(event, areaId, color, 1, { ...ctx, newId: () => entryId });
+  if (arrived.error) return arrived;
+  const patientId = mciPatientId(entryId, 0);
+  const detailed = setPatientDetailsPatch(withPatch(event, arrived), patientId, fields);
+  return { patch: detailed.patch.mci ? detailed.patch : arrived.patch, patientId };
+}
+
+/** An attributed entry that moves no count: a unit's assignment, a patient update, a logistics change. */
+export function notedPatch(
+  event: Pick<Event, 'mci'>,
+  note: string,
+  where: { zoneId?: string; areaId?: string; patientId?: string },
+  ctx: MciWriteContext
+): MciWrite {
+  if (!event.mci?.active) return { patch: {}, error: 'inactive' };
+  const text = tidy(note, MAX_NOTED_LENGTH);
+  if (!text) return { patch: {}, error: 'invalid' };
+  return { patch: { mci: appendMciEntries(event.mci, [makeEntry(ctx, { kind: 'noted', note: text, ...where })]) } };
+}
+
+/**
+ * Treatment notes and interventions for a patient (#153). An intervention is
+ * timed and attributed; notes replace the previous notes. Logged as a 'noted' entry.
+ */
+export function patientCarePatch(
+  event: Pick<Event, 'mci' | 'calls' | 'clinics'>,
+  patientId: string,
+  care: { notes?: string; intervention?: string },
+  ctx: MciWriteContext
+): MciWrite {
+  const mci = event.mci;
+  if (!mci?.active) return { patch: {}, error: 'inactive' };
+  const patient = deriveMci(event).patients.find((p) => p.id === patientId);
+  if (!patient) return { patch: {}, error: 'unknown-patient' };
+  const current = mci.patients?.[patientId] ?? {};
+  const next: MciPatientDetails = { ...current };
+  const said: string[] = [];
+  if (care.notes !== undefined) {
+    const notes = care.notes.trim().slice(0, MAX_PATIENT_NOTES_LENGTH);
+    if (notes !== (current.notes ?? '')) {
+      if (notes) next.notes = notes;
+      else delete next.notes;
+      said.push('notes updated');
+    }
+  }
+  const name = care.intervention ? tidy(care.intervention, MAX_INTERVENTION_LENGTH) : '';
+  if (name) {
+    next.interventions = [...(current.interventions ?? []), { t: ctx.now, name, ...(ctx.byUnit ? { byUnit: ctx.byUnit } : {}) }];
+    said.push(name);
+  }
+  if (!said.length) return NO_CHANGE;
+  const withCare: MciState = { ...mci, patients: withDetails(mci.patients ?? {}, patientId, next) };
+  // No age, sex or complaint in the text: the log is in the state document, which every role reads (#156).
+  // The log shows who it was from `patientId`, for those who may see patient details.
+  const entry = makeEntry(ctx, { kind: 'noted', patientId, areaId: patient.areaId, note: tidy(`Patient: ${said.join('; ')}`, MAX_NOTED_LENGTH) });
+  return { patch: { mci: appendMciEntries(withCare, [entry]) } };
+}
+
+/** Moves a patient one place sooner or later in their location's transport order; one without a place joins at the end. */
+export function nudgePriorityPatch(event: Pick<Event, 'mci' | 'calls' | 'clinics'>, patientId: string, direction: 'sooner' | 'later'): MciWrite {
+  const derived = deriveMci(event);
+  const patient = derived.patients.find((p) => p.id === patientId && p.transportedAt === undefined);
+  if (!patient) return { patch: {}, error: 'unknown-patient' };
+  const ranked = derived.patients.filter((p) => p.areaId === patient.areaId && p.transportedAt === undefined && p.rank !== undefined).length;
+  const rank = patient.rank === undefined ? ranked + 1 : Math.max(1, patient.rank + (direction === 'sooner' ? -1 : 1));
+  if (patient.rank !== undefined && rank > ranked) return NO_CHANGE;
+  return setPatientPriorityPatch(event, patientId, rank);
+}
+
+/** A triage tarp's treatment zone name: "Red treatment" (#154). */
+export function mciTarpName(color: MciColor): string {
+  return `${color.charAt(0).toUpperCase()}${color.slice(1)} treatment`;
+}
+
+/** The map color of a tarp's shape, by tag color (#154). */
+export const MCI_TARP_HEX: Record<MciColor, string> = { red: '#dc2626', yellow: '#facc15', green: '#16a34a', black: '#262626' };
