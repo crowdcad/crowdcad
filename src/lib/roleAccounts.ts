@@ -19,16 +19,25 @@ import { randomString } from './randomString';
 
 export const ROLE_EMAIL_DOMAIN = 'role.crowdcad.org';
 
-export const EVENT_ROLES = ['incident_command', 'triage', 'treatment', 'transport', 'logistics'] as const;
-export type EventRole = (typeof EVENT_ROLES)[number];
+/** The roles offered (#144): Responder covers triage and treatment, since people move between them. */
+export const EVENT_ROLES = ['responder', 'transport', 'logistics', 'incident_command'] as const;
+/** Earlier separate roles, still accepted on existing logins and treated as Responder. */
+const LEGACY_ROLES = ['triage', 'treatment'] as const;
+export type EventRole = (typeof EVENT_ROLES)[number] | (typeof LEGACY_ROLES)[number];
 
 export const EVENT_ROLE_INFO: Record<EventRole, { label: string; prefix: string }> = {
-  incident_command: { label: 'Incident Command', prefix: 'ic' },
-  triage: { label: 'Triage', prefix: 'tri' },
-  treatment: { label: 'Treatment', prefix: 'treat' },
+  responder: { label: 'Responder', prefix: 'resp' },
   transport: { label: 'Transport', prefix: 'trans' },
   logistics: { label: 'Logistics', prefix: 'log' },
+  incident_command: { label: 'Incident Command', prefix: 'ic' },
+  triage: { label: 'Responder', prefix: 'tri' },
+  treatment: { label: 'Responder', prefix: 'treat' },
 };
+
+/** The role a login acts as: legacy Triage and Treatment logins act as Responder. */
+export function effectiveRole(role: EventRole): (typeof EVENT_ROLES)[number] {
+  return role === 'triage' || role === 'treatment' ? 'responder' : role;
+}
 
 /** A login's record, at events/{eventId}/roleAccounts/{uid}. */
 export interface RoleAccount {
@@ -38,6 +47,10 @@ export interface RoleAccount {
   eventName: string;
   role: EventRole;
   username: string;
+  /** The team or supervisor the login belongs to (#152): everything it submits is logged under this name. */
+  unitName?: string;
+  /** That unit's Staff.id / Supervisor.id, when it has one. */
+  unitId?: string;
   /** Optional note, e.g. who it was given to. */
   label?: string;
   disabled: boolean;
@@ -63,7 +76,7 @@ const USERNAME_SUFFIX_ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789';
 const PASSWORD_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
 
 export function isEventRole(value: unknown): value is EventRole {
-  return typeof value === 'string' && (EVENT_ROLES as readonly string[]).includes(value);
+  return typeof value === 'string' && ([...EVENT_ROLES, ...LEGACY_ROLES] as readonly string[]).includes(value);
 }
 
 /** A new username for a role, e.g. "treat-7k2q". */
@@ -103,9 +116,9 @@ export function roleLoginLink(origin: string, username: string, password: string
 }
 
 /** Text to paste into a message for whoever takes the role. */
-export function roleLoginMessage(origin: string, eventName: string, role: EventRole, username: string, password: string): string {
+export function roleLoginMessage(origin: string, eventName: string, role: EventRole, username: string, password: string, unitName?: string): string {
   return [
-    `CrowdCAD ${EVENT_ROLE_INFO[role].label} login for ${eventName}`,
+    `CrowdCAD ${EVENT_ROLE_INFO[role].label} login${unitName ? ` for ${unitName}` : ''} at ${eventName}`,
     `Tap to sign in: ${roleLoginLink(origin, username, password)}`,
     `Or sign in at ${origin.replace(/^https?:\/\//, '').replace(/\/$/, '')} with username ${username} and password ${password}`,
   ].join('\n');

@@ -110,7 +110,7 @@ export default function MciTab({ event, actions, onOpenRoleLogins }: Props) {
     const zone = mci.zones.find((z) => !shapeOf(z) && !wasSkipped('zone', z.id));
     if (zone) return { kind: 'zone', id: zone.id, name: zone.name, venueZoneId: zone.venueZoneId };
     const area = mci.areas.find((a) => !a.clinicId && !shapeOf(a) && !wasSkipped('area', a.id));
-    return area ? { kind: 'area', id: area.id, name: area.name, venueZoneId: area.venueZoneId } : null;
+    return area ? { kind: 'area', id: area.id, name: area.name, venueZoneId: area.venueZoneId, color: area.color } : null;
   })();
   const chosenItem = drawChoice ? (drawChoice.kind === 'zone' ? mci.zones : mci.areas).find((x) => x.id === drawChoice.id) : undefined;
   const drawTarget: MciDrawTarget | null =

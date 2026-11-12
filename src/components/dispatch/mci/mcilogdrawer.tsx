@@ -46,6 +46,8 @@ export function describeMciEntry(mci: NonNullable<Event['mci']>, entry: MciLogEn
       return `${zone}: marked clear`;
     case 'zone_reopened':
       return `${zone}: reopened`;
+    case 'noted':
+      return entry.note ?? '';
     case 'undo': {
       const target = mci.log.find((e) => e.id === entry.undoes);
       return `Undid: ${target ? describeMciEntry(mci, target) : 'an earlier entry'}`;
@@ -67,6 +69,7 @@ export default function MciLogDrawer({ mci, readOnly, onUndo }: Props) {
             <span className={`min-w-0 truncate ${undone || entry.kind === 'undo' ? 'text-surface-faint' : 'text-surface-light'} ${undone ? 'line-through' : ''}`}>
               <span className="mr-2 tabular-nums text-surface-faint">{formatClock(entry.t)}</span>
               {describeMciEntry(mci, entry)}
+              {entry.byUnit && <span className="ml-1 text-surface-faint" data-testid="mci-log-by">· {entry.byUnit}</span>}
             </span>
             {entry.kind !== 'undo' && !undone && !readOnly && (
               <Button size="sm" variant="flat" radius="lg" onPress={() => onUndo(entry.id)} data-testid="mci-log-undo">

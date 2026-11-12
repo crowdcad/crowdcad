@@ -13,7 +13,7 @@ import EndEventModal from "@/components/modals/event/endeventmodal";
 import TransportUnitModal from "@/components/modals/event/transportunitmodal";
 import React from 'react';
 import { dbService, isPocketbaseBackend, ServiceError } from '@/lib/services';
-import { MCI_DOC_STATE, MCI_DOC_UNITS, mciDocCollection, splitMciWrite, withMciDoc, type MciUnitsDoc } from '@/lib/mciDoc';
+import { MCI_DOC_MAP, MCI_DOC_STATE, MCI_DOC_UNITS, mciDocCollection, splitMciWrite, withMciDoc, type MciUnitsDoc } from '@/lib/mciDoc';
 import { PostAssignment, Event, Staff, Supervisor, Call, EquipmentStatus, CallLogEntry, TeamLogEntry, EquipmentItem, EventEquipment, ClinicOutcome, Clinic, Layer, DispatchZone, MciAssignment, MciState } from '@/app/types';
 import { toast, Slide, ToastContainer } from 'react-toastify';
 import { useRouter } from 'next/navigation';
@@ -433,7 +433,15 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
           return;
         }
         const split = splitMciWrite(currentEvent, cleaned);
+        // Role views read the event's map from mci/map (#154): refresh it whenever the MCI is written and the map changed.
+        let mapLayers: Layer[] | null = null;
+        if (split.mci) {
+          const layers = getEventVenueLayers({ ...currentEvent, ...cleaned } as Event);
+          const mapSnap = await tx.get<{ layers: Layer[] }>(mciDocCollection(eventId), MCI_DOC_MAP);
+          if (!mapSnap.exists || JSON.stringify(mapSnap.data?.layers ?? null) !== JSON.stringify(layers)) mapLayers = layers;
+        }
         if (Object.keys(split.event).length) tx.update('events', eventId, split.event);
+        if (mapLayers) tx.set(mciDocCollection(eventId), MCI_DOC_MAP, { layers: removeUndefinedDeep(mapLayers), updatedAt: Date.now() });
         if (split.mci) tx.set(mciDocCollection(eventId), MCI_DOC_STATE, split.mci);
         if (split.units) tx.set<MciUnitsDoc>(mciDocCollection(eventId), MCI_DOC_UNITS, { units: split.units, updatedAt: Date.now() });
       });
@@ -3908,8 +3916,12 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
               <PanelTab active={selectedRightTab === 'logistics'} onSelect={() => setSelectedRightTab('logistics')} data-testid="logistics-tab-button">
                 {t('Logistics')}
                 {(() => {
-                  const coming = (event.mci?.logistics?.incoming ?? []).filter((x) => x.state === 'incoming').length;
-                  return coming ? ` (${coming} incoming)` : '';
+                  const list = event.mci?.logistics?.incoming ?? [];
+                  const coming = list.filter((x) => x.state === 'incoming').length;
+                  // Arrivals and equipment requests from the Logistics role wait here for the dispatcher (option a).
+                  const toConfirm = list.filter((x) => x.state === 'reported').length + (event.mci?.logistics?.requests ?? []).filter((r) => r.state === 'open').length;
+                  const parts = [coming ? `${coming} incoming` : '', toConfirm ? `${toConfirm} to confirm` : ''].filter(Boolean);
+                  return parts.length ? ` (${parts.join(', ')})` : '';
                 })()}
               </PanelTab>
             )}

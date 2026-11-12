@@ -9,6 +9,7 @@ import {
   type RoleAccount,
   type RoleAccountIndex,
 } from '@/lib/roleAccounts';
+import { getAdmin, isCredentialError, type Admin } from '@/lib/server/firebaseAdmin';
 
 /**
  * Creates, disables and re-enables MCI role logins (#142) with the Firebase
@@ -24,34 +25,7 @@ import {
  */
 export const runtime = 'nodejs';
 
-type Admin = {
-  auth: import('firebase-admin/auth').Auth;
-  db: import('firebase-admin/firestore').Firestore;
-};
-
-let admin: Promise<Admin> | null = null;
-function getAdmin(): Promise<Admin> {
-  admin ??= (async () => {
-    const { getApps, initializeApp } = await import('firebase-admin/app');
-    const { getAuth } = await import('firebase-admin/auth');
-    const { getFirestore } = await import('firebase-admin/firestore');
-    const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
-    const app = getApps()[0] ?? initializeApp(projectId ? { projectId } : undefined);
-    return { auth: getAuth(app), db: getFirestore(app) };
-  })();
-  return admin;
-}
-
 const json = (body: unknown, status = 200) => NextResponse.json(body, { status });
-
-/** An Admin SDK failure that means "no usable credentials here" rather than a real refusal. */
-function isCredentialError(err: unknown): boolean {
-  const e = err as { code?: string; message?: string };
-  return (
-    (e.code ?? '').startsWith('app/') ||
-    /credential|could not load the default|metadata\.google\.internal|unable to detect a project id/i.test(e.message ?? '')
-  );
-}
 
 /** Mirrors firestore.rules' canReadEventData: everyone who may dispatch the event. */
 async function canManageEvent(a: Admin, event: Record<string, unknown>, uid: string, email: string | undefined): Promise<boolean> {
@@ -99,6 +73,8 @@ export async function POST(req: Request) {
       const role = body.role;
       if (!isEventRole(role)) return json({ error: 'Unknown role.' }, 400);
       const label = typeof body.label === 'string' ? body.label.trim().slice(0, 80) : '';
+      const unitName = typeof body.unitName === 'string' ? body.unitName.trim().slice(0, 80) : '';
+      const unitId = typeof body.unitId === 'string' ? body.unitId.trim().slice(0, 80) : '';
       const password = newRolePassword();
       for (let attempt = 0; attempt < 5; attempt++) {
         const username = newRoleUsername(role);
@@ -107,7 +83,7 @@ export async function POST(req: Request) {
           const user = await a.auth.createUser({
             email: roleLoginEmail(username),
             password,
-            displayName: `${EVENT_ROLE_INFO[role].label} (${String(event.name ?? 'event')})`.slice(0, 120),
+            displayName: `${unitName || EVENT_ROLE_INFO[role].label} (${String(event.name ?? 'event')})`.slice(0, 120),
           });
           uid = user.uid;
         } catch (err) {
@@ -120,6 +96,8 @@ export async function POST(req: Request) {
           eventName: String(event.name ?? ''),
           role,
           username,
+          ...(unitName ? { unitName } : {}),
+          ...(unitId ? { unitId } : {}),
           ...(label ? { label } : {}),
           disabled: false,
           createdBy: decoded.uid,

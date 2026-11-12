@@ -26,17 +26,18 @@ When('I declare an MCI and keep the role logins open', async ({ page }) => {
   await expect(page.getByTestId('role-logins-modal')).toBeVisible({ timeout: NAV_TIMEOUT });
 });
 
-When('I create a role login for the default role', async ({ page }) => {
+When('I create the role logins as assigned', async ({ page }) => {
   const modal = page.getByTestId('role-logins-modal');
-  await modal.getByTestId('role-login-create').click();
-  await expect(modal.getByTestId('role-login-fresh-treatment')).toBeVisible({ timeout: NAV_TIMEOUT });
+  // Teams default to Responder.
+  await modal.getByTestId('role-login-create-assigned').click();
 });
 
-Then('the new role login should be shown with its password', async ({ page }) => {
-  const card = page.getByTestId('role-login-fresh-treatment');
+Then('a new role login for {string} should be shown with its password', async ({ page }, unit: string) => {
+  const card = page.getByTestId(`role-login-fresh-${unit}`);
+  await expect(card).toBeVisible({ timeout: NAV_TIMEOUT });
   const username = (await card.getByTestId('role-login-username').innerText()).trim();
   const password = (await card.getByTestId('role-login-password').innerText()).trim();
-  expect(username).toMatch(/^treat-[a-z0-9]{4}$/);
+  expect(username).toMatch(/^resp-[a-z0-9]{4}$/);
   expect(password).toHaveLength(10);
   fresh = { username, password };
   await expect(page.getByTestId(`role-login-row-${username}`)).toContainText('Active');
@@ -52,10 +53,30 @@ When('the new role login signs in on another device', async ({ page, browser }) 
   await expect(otherPage).toHaveURL(/\/role$/, { timeout: NAV_TIMEOUT });
 });
 
-Then('the other device should show the {string} role', async ({}, role: string) => {
+Then('the other device should show the Responder view for {string}', async ({}, unit: string) => {
   if (!other) throw new Error('No other device');
-  await expect(other.page.getByTestId('role-landing')).toContainText(role, { timeout: NAV_TIMEOUT });
-  await expect(other.page.getByTestId('role-active')).toBeVisible();
+  await expect(other.page.getByTestId('role-view-responder')).toBeVisible({ timeout: NAV_TIMEOUT });
+  await expect(other.page.getByTestId('role-title')).toHaveText(unit);
+});
+
+When('the other device picks zone {string} and submits {int} {string} after confirming', async ({}, zone: string, count: number, color: string) => {
+  if (!other) throw new Error('No other device');
+  const p = other.page;
+  await p.getByTestId(`role-zone-${zone}`).click();
+  const plus = p.getByTestId(`role-stepper-${color}`).getByRole('button', { name: /^Add one/ });
+  for (let i = 0; i < count; i++) await plus.click();
+  await expect(p.getByTestId('role-draft')).toBeVisible();
+  await p.getByTestId('role-submit-counts').click();
+  await expect(p.getByTestId('role-confirm')).toContainText(zone);
+  await p.getByTestId('role-confirm-yes').click();
+  await expect(p.getByTestId('role-draft')).toBeHidden({ timeout: NAV_TIMEOUT });
+});
+
+Then('the dispatch MCI log should show an entry by {string}', async ({ page }, unit: string) => {
+  await page.getByTestId('role-login-close').click();
+  await page.getByTestId('mci-log-toggle').click();
+  await expect(page.getByTestId('mci-log-by').filter({ hasText: unit }).first()).toBeVisible({ timeout: NAV_TIMEOUT });
+  await page.getByTestId('mci-role-logins').click();
 });
 
 When('I disable the new role login', async ({ page }) => {

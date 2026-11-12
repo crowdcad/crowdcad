@@ -333,6 +333,21 @@ export default function MciPatientBox({ patient, zoneName, readOnly, teamListId,
         />
       </div>
 
+      {((details.interventions ?? []).length > 0 || details.notes) && (
+        <div className={`flex flex-col gap-0.5 text-[11px] text-surface-light ${readOnly ? '' : 'pl-5'}`} data-testid="mci-patient-care">
+          {(details.interventions ?? []).length > 0 && (
+            <span className="truncate" title={details.interventions!.map((r) => `${formatClock(r.t).slice(0, 5)} ${r.name}${r.byUnit ? ` (${r.byUnit})` : ''}`).join(', ')}>
+              {details.interventions!.map((r) => r.name).join(', ')}
+            </span>
+          )}
+          {details.notes && (
+            <span className="line-clamp-2 text-surface-faint" title={details.notes}>
+              {details.notes}
+            </span>
+          )}
+        </div>
+      )}
+
       {transporting && !readOnly && (
         <TransportRow
           units={unitSuggestions}

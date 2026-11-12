@@ -148,9 +148,12 @@ export interface MciTreatmentArea {
   clinicId?: string;
   /** The map zone drawn for this area, in the event venue's layers. */
   venueZoneId?: string;
+  /** A triage tarp (#154): the treatment zone for that tag color, drawn and shown in that color. */
+  color?: MciColor;
 }
 
-export type MciLogKind = 'tagged' | 'moved' | 'arrived' | 'reassigned' | 'transported' | 'zone_cleared' | 'zone_reopened' | 'undo';
+/** 'noted' records an attributed change that moves no count (a unit's assignment, patient care, logistics), in `note`. */
+export type MciLogKind = 'tagged' | 'moved' | 'arrived' | 'reassigned' | 'transported' | 'zone_cleared' | 'zone_reopened' | 'undo' | 'noted';
 
 export interface MciLogEntry {
   id: string;
@@ -179,6 +182,12 @@ export interface MciLogEntry {
   undoes?: string;
   /** Auth uid when signed in. */
   by?: string;
+  /** The team or supervisor whose role login made the change (#152); unset for the dispatcher's own changes. */
+  byUnit?: string;
+  /** That login's role (src/lib/roleAccounts.ts). */
+  byRole?: string;
+  /** Entries submitted together (one counts submission) share a batch id. */
+  batch?: string;
 }
 
 /** Where a unit in Triage (a zone) or Treatment (a treatment area) is working. */
@@ -205,6 +214,20 @@ export interface MciState {
 /** The Logistics tab's own records (src/lib/mciLogistics.ts). */
 export interface MciLogistics {
   incoming: IncomingTeam[];
+  /** Equipment asked for by the Logistics role (option a): the dispatcher issues it or dismisses the request. */
+  requests?: EquipmentRequest[];
+}
+
+export interface EquipmentRequest {
+  id: string;
+  /** The item or kind of item, as typed or picked ("Trauma bag"). */
+  item: string;
+  /** The unit it is for. */
+  unit: string;
+  t: number;
+  byUnit?: string;
+  state: 'open' | 'done' | 'dismissed';
+  closedAt?: number;
 }
 
 /** When an incoming team is expected: a clock time (HH:MM), or what is known so far. */
@@ -219,7 +242,10 @@ export interface IncomingTeam {
   eta: IncomingEta;
   notes: string;
   reportedAt: number;
-  state: 'incoming' | 'arrived' | 'cancelled';
+  /** 'reported': the Logistics role says they arrived; the dispatcher confirms, which makes the team (option a). */
+  state: 'incoming' | 'reported' | 'arrived' | 'cancelled';
+  /** The unit of the role login that added it, when not the dispatcher. */
+  reportedBy?: string;
   /** When it arrived (became a team) or was cancelled. */
   closedAt?: number;
 }
@@ -236,6 +262,17 @@ export interface MciPatientDetails {
   team?: string;
   /** Transport order in the patient's treatment location. Shown as a rank, so a transport moves everyone after it up one. */
   priority?: number;
+  /** Treatment notes (#153): vitals, response to treatment, handover. */
+  notes?: string;
+  /** Interventions recorded, oldest first (#153). */
+  interventions?: MciIntervention[];
+}
+
+export interface MciIntervention {
+  t: number;
+  name: string;
+  /** Who recorded it: the unit of a role login, else unset (the dispatcher). */
+  byUnit?: string;
 }
 
 export interface SurgePeriod {

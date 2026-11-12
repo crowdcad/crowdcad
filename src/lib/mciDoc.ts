@@ -19,6 +19,8 @@ import type { Event, MciAssignment, MciState } from '@/app/types';
 
 export const MCI_DOC_STATE = 'state';
 export const MCI_DOC_UNITS = 'units';
+/** The event's map layers (venue layers with MCI shapes), for role views, which can't read the event (#154). */
+export const MCI_DOC_MAP = 'map';
 export const mciDocCollection = (eventId: string) => `events/${eventId}/mci`;
 
 /** What a role view needs to know about one unit during an MCI. */

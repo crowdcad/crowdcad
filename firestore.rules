@@ -332,12 +332,13 @@ service cloud.firestore {
     }
 
     // MCI state outside the event document (#143, src/lib/mciDoc.ts): `state`
-    // (what event.mci used to hold) and `units` (a summary of the units for
-    // role views). Dispatchers read and write both; an active role login for
+    // (what event.mci used to hold), `units` (a summary of the units for
+    // role views) and `map` (the event's map layers, for role views, #154).
+    // Role logins never write here: their changes go through /api/mci-role. Dispatchers read and write both; an active role login for
     // the event reads them. What each role may write comes with role views (#144).
     match /events/{eventId}/mci/{docId} {
       allow read: if canReadEventData(eventId) || isActiveRoleAccountFor(eventId);
-      allow create, update: if canReadEventData(eventId) && docId in ['state', 'units'];
+      allow create, update: if canReadEventData(eventId) && docId in ['state', 'units', 'map'];
       allow delete: if canReadEventData(eventId);
     }
 
@@ -345,12 +346,12 @@ service cloud.firestore {
     match /roleAccountIndex/{uid} {
       allow read: if request.auth != null && request.auth.uid == uid;
       allow create: if canReadEventData(request.resource.data.get('eventId', '')) &&
-        request.resource.data.get('role', null) in ['incident_command', 'triage', 'treatment', 'transport', 'logistics'];
+        request.resource.data.get('role', null) in ['responder', 'incident_command', 'triage', 'treatment', 'transport', 'logistics'];
       allow delete: if canReadEventData(resource.data.get('eventId', ''));
     }
 
     match /events/{eventId}/takConfig/{docId} {
-      allow read: if canReadEventData(eventId) ||
+      allow read: if canReadEventData(eventId) || isActiveRoleAccountFor(eventId) ||
         (isBridge() && resource.data.get('bridgeUid', null) == request.auth.uid);
       // The owner manages the config; linking a bridge needs allowedUsers.
       // An admin may only mark it closed (the end-event flow).
@@ -372,13 +373,14 @@ service cloud.firestore {
     // Map alignment for the TAK overlay and heat maps. Never read by the
     // bridge, which works only in lat/lon.
     match /events/{eventId}/takMapAlignment/{layerId} {
-      allow read: if canReadEventData(eventId);
+      allow read: if canReadEventData(eventId) || isActiveRoleAccountFor(eventId);
       allow write: if !isBridge() && isEventOwner(eventId);
     }
 
     // Device -> team links, made by dispatchers. The bridge only reads them.
     match /events/{eventId}/takDeviceLinks/{deviceUid} {
-      allow read: if canReadEventData(eventId) || isLinkedBridge(eventId);
+      // Active role logins read links and positions for the map in their role view (#154).
+      allow read: if canReadEventData(eventId) || isLinkedBridge(eventId) || isActiveRoleAccountFor(eventId);
       allow create, update: if !isBridge() && canReadEventData(eventId) &&
         request.resource.data.keys().hasOnly(['teamId', 'linkedAt', 'method', 'linkedBy']) &&
         request.resource.data.teamId is string &&
@@ -389,7 +391,7 @@ service cloud.firestore {
 
     // Live device positions, one doc per device, overwritten by the bridge.
     match /events/{eventId}/takLive/{deviceUid} {
-      allow read: if canReadEventData(eventId) || isLinkedBridge(eventId);
+      allow read: if canReadEventData(eventId) || isLinkedBridge(eventId) || isActiveRoleAccountFor(eventId);
       allow create, update: if canBridgeWrite(eventId) && isValidLivePosition(request.resource.data);
       // The bridge clears live docs at close (even after closed is set);
       // the owner may clear them when unlinking.
@@ -459,7 +461,7 @@ service cloud.firestore {
 
     function isValidRoleAccount(eventId, uid, d) {
       return d.get('uid', null) == uid && d.get('eventId', null) == eventId &&
-        d.get('role', null) in ['incident_command', 'triage', 'treatment', 'transport', 'logistics'] &&
+        d.get('role', null) in ['responder', 'incident_command', 'triage', 'treatment', 'transport', 'logistics'] &&
         d.get('username', null) is string && d.get('disabled', null) is bool;
     }
 

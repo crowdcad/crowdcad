@@ -81,6 +81,9 @@ export default defineConfig({
         NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: 'demo-crowdcad.appspot.com',
         NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: '000000000000',
         NEXT_PUBLIC_FIREBASE_APP_ID: '1:000000000000:web:fake',
+        // The server routes (role logins, MCI role actions) use the Admin SDK; point it at the emulators too.
+        FIRESTORE_EMULATOR_HOST: '127.0.0.1:8080',
+        FIREBASE_AUTH_EMULATOR_HOST: '127.0.0.1:9099',
       },
       url: NEXT_DEV_URL,
       reuseExistingServer: !process.env.CI,

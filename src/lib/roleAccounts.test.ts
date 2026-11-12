@@ -17,7 +17,7 @@ describe('role logins', () => {
       expect(u).toMatch(/^[a-z]{2,5}-[a-z0-9]{4}$/);
       expect(signInEmailFor(u)).toBe(`${u}@role.crowdcad.org`);
     }
-    expect(newRoleUsername('treatment')).toMatch(/^treat-/);
+    expect(newRoleUsername('responder')).toMatch(/^resp-/);
   });
 
   it('leaves real emails alone and accepts a username in any case or with spaces', () => {
@@ -36,14 +36,15 @@ describe('role logins', () => {
     expect(isRoleLoginEmail('treat-7k2q@role.crowdcad.org')).toBe(true);
     expect(isRoleLoginEmail('alex@example.com')).toBe(false);
     expect(isRoleLoginEmail(null)).toBe(false);
-    expect(isEventRole('treatment')).toBe(true);
+    expect(isEventRole('responder')).toBe(true);
+    expect(isEventRole('treatment')).toBe(true); // legacy, acts as Responder
     expect(isEventRole('admin')).toBe(false);
   });
 
   it('puts the password in the link fragment, not the path', () => {
     const link = roleLoginLink('https://crowdcad.org/', 'treat-7k2q', 'Ab3#x');
     expect(link).toBe('https://crowdcad.org/r/treat-7k2q#Ab3%23x');
-    expect(roleLoginMessage('https://crowdcad.org', 'Spring Show', 'treatment', 'treat-7k2q', 'pw')).toContain(
+    expect(roleLoginMessage('https://crowdcad.org', 'Spring Show', 'responder', 'treat-7k2q', 'pw')).toContain(
       'Or sign in at crowdcad.org with username treat-7k2q and password pw',
     );
   });

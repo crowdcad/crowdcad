@@ -1,4 +1,4 @@
-import type { Event, IncomingEta, IncomingTeam, MciLogistics, MciState, Staff } from '@/app/types';
+import type { EquipmentRequest, Event, IncomingEta, IncomingTeam, MciLogistics, MciState, Staff } from '@/app/types';
 import { newTeamId } from '@/lib/teamId';
 
 /**
@@ -64,6 +64,11 @@ function withIncoming(mci: MciState, incoming: IncomingTeam[]): Partial<Event> {
   return { mci: { ...mci, logistics: { ...logisticsOf(mci), incoming } } };
 }
 
+/** Still on the list: on its way, or reported arrived by the Logistics role and waiting for the dispatcher. */
+export function isOpenIncoming(t: IncomingTeam): boolean {
+  return t.state === 'incoming' || t.state === 'reported';
+}
+
 export type LogisticsResult = { patch: Partial<Event>; error?: 'inactive' | 'invalid' | 'duplicate' | 'missing' };
 
 function nameTaken(event: Pick<Event, 'staff' | 'supervisor' | 'mci'>, name: string, exceptId?: string): boolean {
@@ -71,14 +76,14 @@ function nameTaken(event: Pick<Event, 'staff' | 'supervisor' | 'mci'>, name: str
   return (
     (event.staff ?? []).some((s) => s.team.trim().toLowerCase() === n) ||
     (event.supervisor ?? []).some((s) => s.team.trim().toLowerCase() === n) ||
-    (event.mci?.logistics?.incoming ?? []).some((t) => t.state === 'incoming' && t.id !== exceptId && t.name.trim().toLowerCase() === n)
+    (event.mci?.logistics?.incoming ?? []).some((t) => isOpenIncoming(t) && t.id !== exceptId && t.name.trim().toLowerCase() === n)
   );
 }
 
 /** Adds a team reported on its way. */
 export function addIncoming(
   event: Pick<Event, 'mci' | 'staff' | 'supervisor'>,
-  input: { name: string; members?: string[]; eta?: IncomingEta; notes?: string },
+  input: { name: string; members?: string[]; eta?: IncomingEta; notes?: string; reportedBy?: string },
   now: number,
   id = `incoming-${now.toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
 ): LogisticsResult {
@@ -95,6 +100,7 @@ export function addIncoming(
     notes: input.notes?.trim() ?? '',
     reportedAt: now,
     state: 'incoming',
+    ...(input.reportedBy ? { reportedBy: input.reportedBy } : {}),
   };
   return { patch: withIncoming(mci, [...logisticsOf(mci).incoming, team]) };
 }
@@ -108,7 +114,7 @@ export function updateIncoming(
   const mci = event.mci;
   if (!mci?.active) return { patch: {}, error: 'inactive' };
   const list = logisticsOf(mci).incoming;
-  const current = list.find((t) => t.id === id && t.state === 'incoming');
+  const current = list.find((t) => t.id === id && isOpenIncoming(t));
   if (!current) return { patch: {}, error: 'missing' };
   if (changes.name !== undefined) {
     if (!changes.name.trim()) return { patch: {}, error: 'invalid' };
@@ -128,7 +134,7 @@ export function arriveIncoming(event: Pick<Event, 'mci' | 'staff' | 'supervisor'
   const mci = event.mci;
   if (!mci?.active) return { patch: {}, error: 'inactive' };
   const list = logisticsOf(mci).incoming;
-  const team = list.find((t) => t.id === id && t.state === 'incoming');
+  const team = list.find((t) => t.id === id && isOpenIncoming(t));
   if (!team) return { patch: {}, error: 'missing' };
   if ((event.staff ?? []).some((s) => s.team.trim().toLowerCase() === team.name.toLowerCase())) return { patch: {}, error: 'duplicate' };
   const staff: Staff = {
@@ -153,7 +159,7 @@ export function cancelIncoming(event: Pick<Event, 'mci'>, id: string, now: numbe
   const mci = event.mci;
   if (!mci?.active) return { patch: {}, error: 'inactive' };
   const list = logisticsOf(mci).incoming;
-  if (!list.some((t) => t.id === id && t.state === 'incoming')) return { patch: {}, error: 'missing' };
+  if (!list.some((t) => t.id === id && isOpenIncoming(t))) return { patch: {}, error: 'missing' };
   return { patch: withIncoming(mci, list.map((t) => (t.id === id ? { ...t, state: 'cancelled' as const, closedAt: now } : t))) };
 }
 
@@ -179,4 +185,45 @@ export function logisticsCsvLines(event: Pick<Event, 'mci'>, formatTime: (ms: nu
     }
   }
   return rows.sort((a, b) => a.t - b.t).map((r) => r.line);
+}
+
+/**
+ * The Logistics role says an incoming team has arrived (option a): the row
+ * waits, marked "reported", for the dispatcher to confirm it onto the board.
+ */
+export function reportArrival(event: Pick<Event, 'mci'>, id: string): LogisticsResult {
+  const mci = event.mci;
+  if (!mci?.active) return { patch: {}, error: 'inactive' };
+  const list = logisticsOf(mci).incoming;
+  if (!list.some((t) => t.id === id && t.state === 'incoming')) return { patch: {}, error: 'missing' };
+  return { patch: withIncoming(mci, list.map((t) => (t.id === id ? { ...t, state: 'reported' as const } : t))) };
+}
+
+function withRequests(mci: MciState, requests: EquipmentRequest[]): Partial<Event> {
+  return { mci: { ...mci, logistics: { ...logisticsOf(mci), requests } } };
+}
+
+/** The Logistics role asks for an item for a unit; the dispatcher issues it or dismisses the request. */
+export function requestEquipment(
+  event: Pick<Event, 'mci'>,
+  input: { item: string; unit: string; byUnit?: string },
+  now: number,
+  id = `request-${now.toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+): LogisticsResult {
+  const mci = event.mci;
+  if (!mci?.active) return { patch: {}, error: 'inactive' };
+  const item = input.item.trim().slice(0, 60);
+  const unit = input.unit.trim().slice(0, 60);
+  if (!item || !unit) return { patch: {}, error: 'invalid' };
+  const request: EquipmentRequest = { id, item, unit, t: now, state: 'open', ...(input.byUnit ? { byUnit: input.byUnit } : {}) };
+  return { patch: withRequests(mci, [...(logisticsOf(mci).requests ?? []), request]) };
+}
+
+/** The dispatcher handled an equipment request: done (issued) or dismissed. */
+export function closeRequest(event: Pick<Event, 'mci'>, id: string, outcome: 'done' | 'dismissed', now: number): LogisticsResult {
+  const mci = event.mci;
+  if (!mci?.active) return { patch: {}, error: 'inactive' };
+  const list = logisticsOf(mci).requests ?? [];
+  if (!list.some((r) => r.id === id && r.state === 'open')) return { patch: {}, error: 'missing' };
+  return { patch: withRequests(mci, list.map((r) => (r.id === id ? { ...r, state: outcome, closedAt: now } : r))) };
 }
