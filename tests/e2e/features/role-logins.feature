@@ -7,7 +7,7 @@ Feature: MCI role logins
   Background:
     Given I have created an event and am on the dispatch page
     And I open the add team modal
-    And I create a team named "Alpha" with a member "Sam" certified as "EMT"
+    And I create a team named "Alpha" with a member "Sam" certified as "EMT-B"
 
   Scenario: A Responder submits counts that the board shows under their team, then is disabled
     When I declare an MCI and keep the role logins open
