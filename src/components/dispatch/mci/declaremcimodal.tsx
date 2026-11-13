@@ -17,6 +17,9 @@ type Props = {
   onDeclare: (input: DeclareMciInput) => void | Promise<void>;
 };
 
+// Round in every UI style, so the two choices never read as checkboxes.
+const RADIO_CLASSNAMES = { ...MCI_CHECKBOX_CLASSNAMES, wrapper: '!rounded-circle border-surface-faint group-data-[selected=true]:!border-accent', control: '!rounded-circle !bg-accent' } as const;
+
 const inputClassNames = { ...MCI_INPUT_CLASSNAMES, inputWrapper: 'rounded-2xl px-4 hover:bg-surface-deep' } as const;
 
 /** One checkbox row: the name in normal case (a checkbox is a <label>, which the condensed style would put in capitals). */
@@ -192,10 +195,10 @@ function DeclareMciForm({ event, onClose, onDeclare }: Omit<Props, 'isOpen'>) {
             classNames={{ wrapper: 'gap-2' }}
             data-testid="mci-declare-mode"
           >
-            <Radio value="keep" classNames={MCI_CHECKBOX_CLASSNAMES} data-testid="mci-declare-mode-keep">
+            <Radio value="keep" classNames={RADIO_CLASSNAMES} data-testid="mci-declare-mode-keep">
               Keep existing zones, treatment locations and counts from the earlier period
             </Radio>
-            <Radio value="new" classNames={MCI_CHECKBOX_CLASSNAMES} data-testid="mci-declare-mode-new">
+            <Radio value="new" classNames={RADIO_CLASSNAMES} data-testid="mci-declare-mode-new">
               Declare entirely new MCI
             </Radio>
           </RadioGroup>
