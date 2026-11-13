@@ -53,3 +53,33 @@ Feature: MCI mode on the dispatch board
     And I open the MCI summary from the event summary
     Then the MCI summary patients should include "chest pain"
     And the MCI summary patients should include "A14"
+
+  Scenario: Color treatment zones take only their own color
+    When I declare an MCI with zone "Zone A" and the color treatment zones
+    And I tag 1 "red" patients in zone "Zone A"
+    And I tag 1 "yellow" patients in zone "Zone A"
+    And I quick move 1 "red" patients from zone "Zone A"
+    And I quick move 1 "yellow" patients from zone "Zone A"
+    Then the treatment location "Red treatment" should read "1 MCI"
+    And the treatment location "Yellow treatment" should read "1 MCI"
+
+  Scenario: Hospitals count the patients transported to them
+    When I declare an MCI with zones "Zone A" and "Zone B" and the default clinic
+    And I tag 2 "red" patients in zone "Zone A"
+    And I quick move 2 "red" patients from zone "Zone A"
+    And I open the Logistics tab
+    And I add hospital "General" with capacity 5
+    And I open the MCI tab
+    And I transport 2 "red" patients from "Clinic" in ambulance "A14" to "General"
+    And I open the Logistics tab
+    Then hospital "General" should show 2 sent, 2 of them "red"
+
+  Scenario: Declare an entirely new MCI after a stand-down
+    When I declare an MCI with zones "Zone A" and "Zone B" and the default clinic
+    And I tag 2 "red" patients in zone "Zone A"
+    And I stand down the MCI
+    And I declare the MCI again as an entirely new MCI
+    Then zone "Zone A" should show 0 "red" patients in the zone
+    When I stand down the MCI
+    And I open the MCI summary from the event summary
+    Then the MCI summary should show 2 MCIs

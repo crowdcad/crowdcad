@@ -12,6 +12,8 @@ type Props = {
   area: MciAreaStats | null;
   /** Ambulance numbers already used this MCI, offered as suggestions. */
   units: string[];
+  /** Hospitals from the Logistics tab, offered as destinations: a transport to one counts as sent there. */
+  hospitals?: string[];
   /** Patients are tracked: pick them by name (priority order), with a count only for black (D14). */
   trackPatients?: boolean;
   onClose: () => void;
@@ -22,9 +24,10 @@ type Props = {
 const NAMED_COLORS = new Set<MciColor>(['red', 'yellow', 'green']);
 
 // Remounted by `key` for each location, so the numbers start at nothing.
-function TransportForm({ area, units, trackPatients = false, onClose, onTransport }: Omit<Props, 'area'> & { area: MciAreaStats }) {
+function TransportForm({ area, units, hospitals = [], trackPatients = false, onClose, onTransport }: Omit<Props, 'area'> & { area: MciAreaStats }) {
   const { t } = useDispatchTerms();
   const listId = useId();
+  const hospitalListId = useId();
   const [unit, setUnit] = useState('');
   const [destination, setDestination] = useState('');
   const [counts, setCounts] = useState<MciCounts>(emptyCounts);
@@ -85,10 +88,16 @@ function TransportForm({ area, units, trackPatients = false, onClose, onTranspor
           radius="lg"
           value={destination}
           onValueChange={setDestination}
+          list={hospitalListId}
           maxLength={80}
           classNames={MCI_INPUT_CLASSNAMES}
           data-testid="mci-transport-destination"
         />
+        <datalist id={hospitalListId}>
+          {hospitals.map((h) => (
+            <option key={h} value={h} />
+          ))}
+        </datalist>
 
         {trackPatients && (
           <div className="flex flex-col gap-1" data-testid="mci-transport-patients">
@@ -145,10 +154,10 @@ function TransportForm({ area, units, trackPatients = false, onClose, onTranspor
   );
 }
 
-export default function MciTransportModal({ area, units, trackPatients, onClose, onTransport }: Props) {
+export default function MciTransportModal({ area, units, hospitals, trackPatients, onClose, onTransport }: Props) {
   return (
     <MciModal isOpen={!!area} onClose={onClose} testId="mci-transport-modal">
-      {() => (area ? <TransportForm key={area.area.id} area={area} units={units} trackPatients={trackPatients} onClose={onClose} onTransport={onTransport} /> : null)}
+      {() => (area ? <TransportForm key={area.area.id} area={area} units={units} hospitals={hospitals} trackPatients={trackPatients} onClose={onClose} onTransport={onTransport} /> : null)}
     </MciModal>
   );
 }

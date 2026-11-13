@@ -9,7 +9,7 @@ import { effectiveRole, EVENT_ROLE_INFO } from '@/lib/roleAccounts';
 import RoleSignInForm, { RoleCard } from '@/components/rolelogin/rolesignin';
 import { useRoleSession } from '@/components/roleviews/useRoleSession';
 import RoleShell from '@/components/roleviews/roleshell';
-import ResponderView from '@/components/roleviews/responderview';
+import ResponderView, { TreatmentLeadView } from '@/components/roleviews/responderview';
 import TransportView from '@/components/roleviews/transportview';
 import LogisticsView from '@/components/roleviews/logisticsview';
 import CommandView from '@/components/roleviews/commandview';
@@ -91,9 +91,10 @@ export default function RolePage() {
   const unit = account.unitName ?? '';
   const title = role === 'responder' ? unit || 'Responder' : EVENT_ROLE_INFO[role].label;
   return (
-    <RoleShell title={title} eventId={eventId} unitName={unit || undefined} units={units} layers={layers} mapBottomClass={role === 'responder' ? 'bottom-24' : 'bottom-5'}>
+    <RoleShell title={title} eventId={eventId} unitName={unit || undefined} units={units} layers={layers} mapBottomClass={role === 'responder' || role === 'treatment_lead' ? 'bottom-24' : 'bottom-5'}>
       <div className="flex flex-1 flex-col" data-testid={`role-view-${role}`}>
         {role === 'responder' && <ResponderView mci={mci} unit={unit} units={units} />}
+        {role === 'treatment_lead' && <TreatmentLeadView mci={mci} unit={unit} units={units} />}
         {role === 'transport' && <TransportView mci={mci} />}
         {role === 'logistics' && <LogisticsView mci={mci} units={units} />}
         {role === 'incident_command' && <CommandView mci={mci} units={units} />}

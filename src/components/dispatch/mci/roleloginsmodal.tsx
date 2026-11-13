@@ -5,6 +5,7 @@ import { Button, ModalBody, ModalFooter, ModalHeader, Select, SelectItem } from 
 import { Check, Copy, KeyRound, Mail, Share2 } from 'lucide-react';
 import type { Event } from '@/app/types';
 import { MciModal } from './mciparts';
+import HelpTip from '@/components/ui/helptip';
 import { effectiveRole, EVENT_ROLE_INFO, EVENT_ROLES, roleLoginLink, roleLoginMessage, type EventRole, type RoleAccount } from '@/lib/roleAccounts';
 import { createRoleLogin, setRoleLoginDisabled, subscribeRoleLogins } from '@/lib/roleAccountStore';
 
@@ -134,9 +135,10 @@ function Body({ event, eventId, uid, onClose }: { event: Event; eventId: string;
       <ModalHeader className="flex flex-col items-start gap-0.5 text-xl font-bold text-surface">
         <span className="inline-flex items-center gap-2">
           <KeyRound className="h-5 w-5" /> Role logins
-        </span>
-        <span className="text-sm font-normal text-surface-faint">
-          Each login belongs to a team or supervisor; what it submits is logged under that name. They sign in at {origin.replace(/^https?:\/\//, '')} on any device and see only their role.
+          <HelpTip
+            text={`Each login belongs to a team or supervisor; what it submits is logged under that name. They sign in at ${origin.replace(/^https?:\/\//, '')} on any device and see only their role. Disabling a login stops it within moments; all role logins stop when the event ends.`}
+            label="About role logins"
+          />
         </span>
       </ModalHeader>
       <ModalBody className="gap-4 py-4">
@@ -249,9 +251,6 @@ function Body({ event, eventId, uid, onClose }: { event: Event; eventId: string;
             </div>
           ))}
         </div>
-        <p className="text-xs text-surface-faint">
-          Disabling a login stops it within moments, even on a phone already using it. All role logins stop working when the event ends.
-        </p>
       </ModalBody>
       <ModalFooter>
         <Button radius="lg" variant="flat" onPress={onClose} data-testid="role-login-close">

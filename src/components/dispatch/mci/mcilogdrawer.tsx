@@ -3,7 +3,7 @@
 import React from 'react';
 import { Button } from '@heroui/react';
 import type { Event, MciLogEntry } from '@/app/types';
-import { MCI_LOG_DRAWER_SIZE, mciPatientLabel, mciRecentEntries } from '@/lib/mci';
+import { MCI_LOG_DRAWER_SIZE, mciAllAreas, mciAllZones, mciPatientLabel, mciRecentEntries } from '@/lib/mci';
 import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
 import { MCI_COLOR_STYLES, formatClock } from './mciparts';
 
@@ -21,8 +21,8 @@ function patientText(mci: NonNullable<Event['mci']>, entry: MciLogEntry, color: 
 
 /** One log line in words, e.g. "Zone A: +3 red tagged" or "Zone A: 2 yellow moved to Clinic". */
 export function describeMciEntry(mci: NonNullable<Event['mci']>, entry: MciLogEntry): string {
-  const zone = mci.zones.find((z) => z.id === entry.zoneId)?.name ?? 'Zone';
-  const area = mci.areas.find((a) => a.id === entry.areaId)?.name ?? 'treatment';
+  const zone = mciAllZones(mci).find((z) => z.id === entry.zoneId)?.name ?? 'Zone';
+  const area = mciAllAreas(mci).find((a) => a.id === entry.areaId)?.name ?? 'treatment';
   const color = entry.color ? MCI_COLOR_STYLES[entry.color].label.toLowerCase() : '';
   switch (entry.kind) {
     case 'tagged':
@@ -34,7 +34,7 @@ export function describeMciEntry(mci: NonNullable<Event['mci']>, entry: MciLogEn
     case 'reassigned': {
       const changes = [
         entry.toColor ? `retriaged ${color} to ${MCI_COLOR_STYLES[entry.toColor].label.toLowerCase()}` : '',
-        entry.toAreaId ? `moved to ${mci.areas.find((a) => a.id === entry.toAreaId)?.name ?? 'treatment'}` : '',
+        entry.toAreaId ? `moved to ${mciAllAreas(mci).find((a) => a.id === entry.toAreaId)?.name ?? 'treatment'}` : '',
       ].filter(Boolean);
       return `${area}: ${patientText(mci, entry, color)} ${changes.join(', ')}${entry.note ? ` (${entry.note})` : ''}`;
     }

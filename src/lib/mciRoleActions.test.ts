@@ -62,5 +62,32 @@ describe('applyRoleAction', () => {
     expect(e.staff).toHaveLength(1); // the dispatcher adds the team
     e = apply(e, applyRoleAction(e, { type: 'equipmentRequest', item: 'Trauma bag', unit: 'Alpha' }, sup, 300, ids).patch);
     expect(e.mci!.logistics!.requests![0]).toMatchObject({ item: 'Trauma bag', unit: 'Alpha', state: 'open', byUnit: 'Sup 2' });
+    e = apply(e, applyRoleAction(e, { type: 'hospitalAdd', name: 'General' }, sup, 400, ids).patch);
+    const hospital = e.mci!.logistics!.hospitals![0]!;
+    e = apply(e, applyRoleAction(e, { type: 'hospitalUpdate', id: hospital.id, capacity: 6 }, sup, 500, ids).patch);
+    expect(e.mci!.logistics!.hospitals![0]).toMatchObject({ name: 'General', capacity: 6 });
+    expect(e.mci!.log.at(-1)).toMatchObject({ kind: 'noted', note: 'General: capacity 6', byUnit: 'Sup 2' });
+  });
+
+  it('leaves the transport order to the Treatment Lead', () => {
+    const lead: RoleActor = { uid: 'u3', role: 'treatment_lead', unitName: 'Alpha', unitId: 't1' };
+    let e = event();
+    for (let i = 0; i < 2; i++) e = apply(e, applyRoleAction(e, { type: 'addPatient', areaId: 'red', color: 'red', fields: {} }, alpha, 100 + i, ids).patch);
+    const [first, second] = deriveMci(e).areas[0]!.patients;
+    expect(applyRoleAction(e, { type: 'priority', patientId: second!.id, direction: 'up' }, alpha, 200, ids).error).toMatch(/cannot/);
+    e = apply(e, applyRoleAction(e, { type: 'priority', patientId: second!.id, direction: 'up' }, lead, 200, ids).patch);
+    expect(deriveMci(e).areas[0]!.patients.map((p) => p.id)).toEqual([second!.id, first!.id]);
+    expect(e.mci!.log.at(-1)).toMatchObject({ byUnit: 'Alpha', byRole: 'treatment_lead' });
+    // The lead can't count or move patients out of zones.
+    expect(applyRoleAction(e, { type: 'counts', zoneId: 'za', deltas: { red: 1 } }, lead, 300).error).toMatch(/cannot/);
+  });
+
+  it('moves each color to its own treatment zone when no location is given', () => {
+    let e = event({ mci: mci({ areas: [{ id: 'red', name: 'Red treatment', color: 'red' }, { id: 'green', name: 'Green treatment', color: 'green' }] }) });
+    e = apply(e, applyRoleAction(e, { type: 'counts', zoneId: 'za', deltas: { red: 1, green: 2 } }, alpha, 100, ids).patch);
+    e = apply(e, applyRoleAction(e, { type: 'move', zoneId: 'za', counts: { red: 1, green: 2 } }, alpha, 200, ids).patch);
+    const areas = deriveMci(e).areas;
+    expect(areas.map((a) => a.inTreatmentTotal)).toEqual([1, 2]);
+    expect(applyRoleAction(e, { type: 'move', zoneId: 'za', areaId: 'red', counts: { green: 1 } }, alpha, 300, ids).error).toMatch(/own color/);
   });
 });

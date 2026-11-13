@@ -4,7 +4,7 @@ import React, { useId, useMemo, useState } from 'react';
 import { CornerDownLeft } from 'lucide-react';
 import { Button, Checkbox, Input } from '@heroui/react';
 import type { Event, MciColor } from '@/app/types';
-import { deriveMci, mciMapLayers, mciQuickMoveAreas, mciShapeOf, mciTransportUnits, mciUnitsByAssignment, type MciCounts } from '@/lib/mci';
+import { deriveMci, mciMapLayers, mciQuickMoveAreas, mciRouteArea, mciShapeOf, mciTransportUnits, mciUnitsByAssignment, type MciCounts } from '@/lib/mci';
 import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
 import type { MciActions } from './usemciactions';
 import MciTotalsStrip from './mcitotalsstrip';
@@ -15,7 +15,8 @@ import MciMoveModal from './mcimovemodal';
 import MciTransportModal from './mcitransportmodal';
 import MciDrawZoneModal, { type MciDrawTarget } from './mcidrawzonemodal';
 import MciLogDrawer from './mcilogdrawer';
-import { MCI_INPUT_CLASSNAMES } from './mciparts';
+import { MCI_CHECKBOX_CLASSNAMES, MCI_INPUT_CLASSNAMES } from './mciparts';
+import HelpTip from '@/components/ui/helptip';
 
 type Props = {
   event: Event;
@@ -66,6 +67,7 @@ export default function MciTab({ event, actions, onOpenRoleLogins }: Props) {
   const unitsAt = useMemo(() => mciUnitsByAssignment({ staff, supervisor, calls }), [staff, supervisor, calls]);
   const lastMoveArea = useMemo(() => mciQuickMoveAreas(mci), [mci]);
   const transportUnits = useMemo(() => mciTransportUnits(mci), [mci]);
+  const hospitalNames = useMemo(() => (mci?.logistics?.hospitals ?? []).map((h) => h.name), [mci?.logistics?.hospitals]);
   // Team suggestions for patient boxes: one shared <datalist> per zone (plus one for walk-ins), not one per box.
   // The teams that worked the patient's zone come first.
   const teamListBase = useId();
@@ -146,17 +148,19 @@ export default function MciTab({ event, actions, onOpenRoleLogins }: Props) {
     if (!window.confirm('Stand down the MCI? Teams in Triage, Treatment or Unavailable return to Available. The counts are kept.')) return;
     void actions.standDown();
   };
-  const handleMove = async (zoneId: string, areaId: string, counts: MciCounts) => {
+  const handleMove = async (zoneId: string, areaId: string | undefined, counts: MciCounts) => {
     await actions.move(zoneId, areaId, counts);
   };
-  const areaOptions = derived.areas.map((a) => ({ id: a.area.id, name: a.name }));
-  const quickMoveAreaOf = (zoneId: string) => {
+  const areaOptions = derived.areas.map((a) => ({ id: a.area.id, name: a.name, ...(a.area.color ? { color: a.area.color } : {}) }));
+  // '' (picked on the card) means each color to its own tarp.
+  const quickMoveAreaOf = (zoneId: string): string | undefined => {
     const picked = quickTargets[zoneId];
-    return picked && mci.areas.some((a) => a.id === picked) ? picked : lastMoveArea(zoneId);
+    if (picked !== undefined) return picked && mci.areas.some((a) => a.id === picked) ? picked : undefined;
+    return lastMoveArea(zoneId);
   };
   const handleQuickMove = (zoneId: string, color: MciColor) => {
-    const areaId = quickMoveAreaOf(zoneId);
-    if (areaId) void actions.move(zoneId, areaId, { [color]: 1 });
+    const area = mciRouteArea(mci, color, quickMoveAreaOf(zoneId));
+    if (area) void actions.move(zoneId, area.id, { [color]: 1 });
   };
 
   // Patient boxes (D11).
@@ -165,6 +169,7 @@ export default function MciTab({ event, actions, onOpenRoleLogins }: Props) {
         zoneNames: Object.fromEntries(mci.zones.map((z) => [z.id, z.name])),
         teamListId: (zoneId) => (teamLists.find((list) => list.zoneId === zoneId) ?? teamLists[0]).id,
         unitSuggestions: transportUnits,
+        hospitals: hospitalNames,
         areas: areaOptions,
         onDetails: (id, fields) => void actions.setPatientDetails(id, fields),
         onPriority: (id, rank) => void actions.setPatientPriority(id, rank),
@@ -187,8 +192,8 @@ export default function MciTab({ event, actions, onOpenRoleLogins }: Props) {
         <MciTotalsStrip mci={mci} totals={derived.totals} />
         <div className="flex items-center gap-2">
           {!readOnly && (
-            <Checkbox size="sm" isSelected={!!mci.trackPatients} onValueChange={(on) => void actions.setTrackPatients(on)} data-testid="mci-track-patients">
-              <span className="text-xs text-surface-light">Patient boxes</span>
+            <Checkbox size="sm" isSelected={!!mci.trackPatients} onValueChange={(on) => void actions.setTrackPatients(on)} classNames={MCI_CHECKBOX_CLASSNAMES} data-testid="mci-track-patients">
+              <span className="text-xs">Patient boxes</span>
             </Checkbox>
           )}
           {!readOnly && onOpenRoleLogins && (
@@ -217,7 +222,10 @@ export default function MciTab({ event, actions, onOpenRoleLogins }: Props) {
 
       <section className="flex flex-col gap-2" aria-label={t('Zones')}>
         <div className="flex items-center justify-between gap-2">
-          <h2 className="text-base font-bold text-surface-light">{t('Zones')}</h2>
+          <span className="flex items-center gap-1">
+            <h2 className="text-base font-bold text-surface-light">{t('Zones')}</h2>
+            <HelpTip text="Count tags per zone. The plus beside Moved sends one patient to treatment: each color to its own treatment zone unless the card picks a location that takes any color." label="About zones" />
+          </span>
           {!readOnly && <AddByName label={t('Add zone')} testId="mci-add-zone" onAdd={actions.addZone} />}
         </div>
         {/* Each card is at most a third of the row (auto-fill keeps the empty columns, so one zone doesn't stretch); below 14rem each a new row starts. */}
@@ -248,7 +256,10 @@ export default function MciTab({ event, actions, onOpenRoleLogins }: Props) {
 
       <section className="flex flex-col gap-2" aria-label={t('Treatment locations')}>
         <div className="flex items-center justify-between gap-2">
-          <h2 className="text-base font-bold text-surface-light">{t('Treatment locations')}</h2>
+          <span className="flex items-center gap-1">
+            <h2 className="text-base font-bold text-surface-light">{t('Treatment locations')}</h2>
+            <HelpTip text="A color's treatment zone only takes patients of that color; clinics and other locations take any. Drag a patient box to move or retriage them." label="About treatment locations" />
+          </span>
           {!readOnly && <AddByName label={t('Add treatment area')} testId="mci-add-area" onAdd={actions.addArea} />}
         </div>
         <div className="dispatch-shell-list">
@@ -291,6 +302,7 @@ export default function MciTab({ event, actions, onOpenRoleLogins }: Props) {
       <MciTransportModal
         area={readOnly ? null : transportArea}
         units={transportUnits}
+        hospitals={hospitalNames}
         trackPatients={!!mci.trackPatients}
         onClose={() => setTransportAreaId(null)}
         onTransport={(areaId, counts, trip, patientIds) => actions.transport(areaId, counts, trip, patientIds)}

@@ -9,6 +9,7 @@ import { custodyOf, describeCustody, materializeEventEquipment } from '@/lib/equ
 import { getEquipmentIconType } from '@/lib/equipmentIcon';
 import { isMciActive } from '@/lib/mci';
 import {
+  addHospital,
   addIncoming,
   arriveIncoming,
   cancelIncoming,
@@ -18,10 +19,13 @@ import {
   normalizeEtaTime,
   isOpenIncoming,
   closeRequest,
+  removeHospital,
   sortIncoming,
+  updateHospital,
   updateIncoming,
   type LogisticsResult,
 } from '@/lib/mciLogistics';
+import Hospitals, { type HospitalHandlers } from './hospitals';
 import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
 import EquipmentTypeIcon from '../equipmenttypeicon';
 import { MCI_INPUT_CLASSNAMES } from './mciparts';
@@ -32,7 +36,9 @@ import { MCI_INPUT_CLASSNAMES } from './mciparts';
  * - Equipment issued to teams: ordinary event equipment, handed to a team
  *   (custody: carried by that team), so it shows on the team's card, on the
  *   map and next to the team on its calls. Items can be added at any time.
- * - Incoming staff: teams reported on their way, with an ETA (a time, or
+ * - Hospitals: a box per hospital with its capacity and how many were sent
+ *   (counted from transports to it), opening to show the colors sent.
+ * - Incoming Staff: teams reported on their way, with an ETA (a time, or
  *   Pending / En route / Attempted contact) and notes, until they arrive and
  *   become a team on the board.
  * Read-only once the MCI stands down.
@@ -249,11 +255,20 @@ export default function LogisticsTab({
   const [name, setName] = useState('');
   const [showClosed, setShowClosed] = useState(false);
 
-  const run = (build: (e: Event) => LogisticsResult) => {
+  const run = (build: (e: Event) => LogisticsResult, errors: Partial<typeof ERRORS> = {}) => {
     // Checked against what this page shows first, so a refusal is explained; then applied to the saved event.
     const check = build(event);
-    if (check.error) return void toast.error(ERRORS[check.error]);
+    if (check.error) return void toast.error(errors[check.error] ?? ERRORS[check.error]);
     void updateEvent((current) => build(current).patch);
+  };
+  const hospitalErrors = { invalid: 'Give the hospital a name.', duplicate: 'That hospital is already on the list.', missing: 'That hospital is no longer on the list.' };
+  const hospitalHandlers: HospitalHandlers = {
+    onAdd: (hospitalName) => {
+      const id = `hospital-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+      run((e) => addHospital(e, hospitalName, Date.now(), id), hospitalErrors);
+    },
+    onUpdate: (id, changes) => run((e) => updateHospital(e, id, changes), { ...hospitalErrors, invalid: 'Type a whole number.' }),
+    onRemove: (id) => run((e) => removeHospital(e, id), hospitalErrors),
   };
 
   const add = () => {
@@ -280,7 +295,7 @@ export default function LogisticsTab({
   }, [event]);
 
   return (
-    <div className="minimal-scrollbar grid min-h-0 flex-1 gap-4 overflow-y-auto lg:grid-cols-2" data-testid="logistics-tab">
+    <div className="minimal-scrollbar grid min-h-0 flex-1 grid-cols-[repeat(auto-fit,minmax(min(100%,18rem),1fr))] content-start gap-4 overflow-y-auto" data-testid="logistics-tab">
       <section className="flex min-w-0 flex-col gap-2">
         <div className="flex items-center justify-between gap-2">
           <h2 className="text-lg font-semibold">{t('Equipment')}</h2>
@@ -326,8 +341,10 @@ export default function LogisticsTab({
         )}
       </section>
 
+      {event.mci && <Hospitals mci={event.mci} readOnly={readOnly} handlers={hospitalHandlers} />}
+
       <section className="flex min-w-0 flex-col gap-2">
-        <h2 className="text-lg font-semibold">Incoming staff</h2>
+        <h2 className="text-lg font-semibold">Incoming Staff</h2>
         {!readOnly && (
           <div className="flex gap-2">
             <Input

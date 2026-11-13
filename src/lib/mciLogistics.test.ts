@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Event, IncomingTeam, MciState } from '@/app/types';
 import {
+  addHospital,
   addIncoming,
   arriveIncoming,
   cancelIncoming,
@@ -8,7 +9,10 @@ import {
   isOverdue,
   logisticsCsvLines,
   normalizeEtaTime,
+  hospitalSentCounts,
+  hospitalSentTotal,
   sortIncoming,
+  updateHospital,
   updateIncoming,
 } from './mciLogistics';
 
@@ -80,5 +84,43 @@ describe('incoming teams', () => {
 
   it('does nothing after stand down', () => {
     expect(addIncoming(event({ mci: mci({ active: false }) }), { name: 'X' }, 1).error).toBe('inactive');
+  });
+});
+
+describe('hospitals', () => {
+  const withHospital = () => {
+    const e = event({ mci: mci({ areas: [{ id: 'c1', name: 'Clinic' }] }) });
+    return apply(e, addHospital(e, '  General  ', 10, 'h1').patch);
+  };
+
+  it('adds hospitals by unique name and sets capacity', () => {
+    let e = withHospital();
+    expect(e.mci!.logistics!.hospitals).toEqual([{ id: 'h1', name: 'General' }]);
+    expect(addHospital(e, 'general', 11).error).toBe('duplicate');
+    expect(addHospital(e, ' ', 11).error).toBe('invalid');
+    e = apply(e, updateHospital(e, 'h1', { capacity: 8 }).patch);
+    expect(e.mci!.logistics!.hospitals![0].capacity).toBe(8);
+    e = apply(e, updateHospital(e, 'h1', { capacity: null }).patch);
+    expect(e.mci!.logistics!.hospitals![0].capacity).toBeUndefined();
+    expect(updateHospital(e, 'h1', { capacity: -1 }).error).toBe('invalid');
+  });
+
+  it('counts patients sent from transports to the hospital, by color, and keeps a typed correction', () => {
+    let e = withHospital();
+    const log = [
+      { id: 'a1', t: 20, kind: 'arrived' as const, areaId: 'c1', color: 'red' as const, n: 2 },
+      { id: 'a2', t: 21, kind: 'arrived' as const, areaId: 'c1', color: 'yellow' as const, n: 1 },
+      { id: 't1', t: 30, kind: 'transported' as const, areaId: 'c1', color: 'red' as const, n: 2, unit: 'A1', destination: 'general' },
+      { id: 't2', t: 31, kind: 'transported' as const, areaId: 'c1', color: 'yellow' as const, n: 1, unit: 'A2', destination: 'Other' },
+    ];
+    e = { ...e, mci: { ...e.mci!, log } } as Event;
+    const counted = hospitalSentCounts(e.mci).get('h1')!;
+    expect(counted).toMatchObject({ red: 2, yellow: 0, green: 0 });
+    expect(hospitalSentTotal(e.mci!.logistics!.hospitals![0], counted)).toBe(2);
+    e = apply(e, updateHospital(e, 'h1', { sent: 3 }).patch);
+    expect(hospitalSentTotal(e.mci!.logistics!.hospitals![0], counted)).toBe(3);
+    // Typing the counted number back clears the correction.
+    e = apply(e, updateHospital(e, 'h1', { sent: 2 }).patch);
+    expect(e.mci!.logistics!.hospitals![0].sentAdjust).toBeUndefined();
   });
 });

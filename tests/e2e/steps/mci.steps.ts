@@ -7,16 +7,11 @@ const { When, Then } = createBdd(test);
 
 const capitalize = (word: string) => word.charAt(0).toUpperCase() + word.slice(1);
 
-When('I declare an MCI with zones {string} and {string} and the default clinic', async ({ page }, zoneA: string, zoneB: string) => {
-  await page.getByTestId('mci-declare-button').click();
-  const dialog = page.getByTestId('mci-declare-modal');
-  await expect(dialog).toBeVisible();
-  for (const zone of [zoneA, zoneB]) {
-    await dialog.getByTestId('mci-declare-zone-input').fill(zone);
-    await dialog.getByTestId('mci-declare-zone-add').click();
-  }
-  // The event's clinic is ticked by default.
-  await dialog.getByTestId('mci-declare-confirm').click();
+const COLORS = ['red', 'yellow', 'green', 'black'] as const;
+
+/** Confirms the open declare dialog and closes the role logins offer that follows on Firebase. */
+async function confirmDeclare(page: import('@playwright/test').Page) {
+  await page.getByTestId('mci-declare-modal').getByTestId('mci-declare-confirm').click();
   await expect(page.getByTestId('mci-tab')).toBeVisible({ timeout: NAV_TIMEOUT });
   // Declaring offers role logins (#142) on Firebase; these scenarios don't need them.
   const roleLogins = page.getByTestId('role-logins-modal');
@@ -24,6 +19,84 @@ When('I declare an MCI with zones {string} and {string} and the default clinic',
     await roleLogins.getByTestId('role-login-close').click();
     await expect(roleLogins).not.toBeVisible();
   }
+}
+
+async function openDeclare(page: import('@playwright/test').Page, zones: string[]) {
+  await page.getByTestId('mci-declare-button').click();
+  const dialog = page.getByTestId('mci-declare-modal');
+  await expect(dialog).toBeVisible();
+  for (const zone of zones) {
+    await dialog.getByTestId('mci-declare-zone-input').fill(zone);
+    await dialog.getByTestId('mci-declare-zone-add').click();
+  }
+  return dialog;
+}
+
+When('I declare an MCI with zones {string} and {string} and the default clinic', async ({ page }, zoneA: string, zoneB: string) => {
+  const dialog = await openDeclare(page, [zoneA, zoneB]);
+  // The event's clinic is ticked by default; the color treatment zones are unticked so every move goes to it.
+  for (const color of COLORS) await dialog.getByTestId(`mci-declare-tarp-${color}`).click();
+  await confirmDeclare(page);
+});
+
+When('I declare an MCI with zone {string} and the color treatment zones', async ({ page }, zone: string) => {
+  await openDeclare(page, [zone]);
+  // A treatment zone per color is ticked by default.
+  await confirmDeclare(page);
+});
+
+When('I declare the MCI again as an entirely new MCI', async ({ page }) => {
+  await page.getByTestId('mci-declare-button').click();
+  const dialog = page.getByTestId('mci-declare-modal');
+  await expect(dialog).toBeVisible();
+  // Neither choice is assumed: Declare waits for one.
+  await expect(dialog.getByTestId('mci-declare-confirm')).toBeDisabled();
+  await dialog.getByTestId('mci-declare-mode-new').click();
+  await confirmDeclare(page);
+});
+
+Then('the MCI summary should show {int} MCIs', async ({ page }, count: number) => {
+  await expect(page.getByTestId('mci-summary-record')).toHaveCount(count);
+  await expect(page.getByTestId('mci-summary')).toContainText(`MCI ${count}`);
+});
+
+When('I transport {int} {string} patients from {string} in ambulance {string} to {string}', async ({ page }, count: number, color: string, area: string, unit: string, destination: string) => {
+  await page.getByTestId(`mci-area-transport-${area}`).click();
+  const dialog = page.getByTestId('mci-transport-modal');
+  await expect(dialog).toBeVisible();
+  await dialog.getByTestId('mci-transport-unit').fill(unit);
+  await dialog.getByTestId('mci-transport-destination').fill(destination);
+  const named = dialog.getByTestId(`mci-transport-patient-${color}`);
+  for (let i = 0; i < count; i++) await named.nth(i).click();
+  await dialog.getByTestId('mci-transport-confirm').click();
+  await expect(dialog).not.toBeVisible();
+});
+
+When('I open the Logistics tab', async ({ page }) => {
+  await page.getByTestId('logistics-tab-button').click();
+  await expect(page.getByTestId('logistics-tab')).toBeVisible();
+});
+
+When('I open the MCI tab', async ({ page }) => {
+  await page.getByTestId('mci-tab-button').click();
+  await expect(page.getByTestId('mci-tab')).toBeVisible();
+});
+
+When('I add hospital {string} with capacity {int}', async ({ page }, name: string, capacity: number) => {
+  await page.getByTestId('hospital-name').fill(name);
+  await page.getByTestId('hospital-add').click();
+  const box = page.getByTestId(`hospital-${name}`);
+  await expect(box).toBeVisible();
+  await box.getByTestId(`hospital-${name}-capacity`).fill(String(capacity));
+  await box.getByTestId(`hospital-${name}-capacity`).press('Enter');
+  await expect(box.getByTestId(`hospital-${name}-capacity`)).toHaveValue(String(capacity));
+});
+
+Then('hospital {string} should show {int} sent, {int} of them {string}', async ({ page }, name: string, sent: number, n: number, color: string) => {
+  const box = page.getByTestId(`hospital-${name}`);
+  await expect(box.getByTestId(`hospital-${name}-sent`)).toHaveValue(String(sent));
+  await box.getByTestId(`hospital-${name}-toggle`).click();
+  await expect(box.getByTestId(`hospital-${name}-colors`)).toContainText(`${capitalize(color)}${n}`);
 });
 
 When('I tag {int} {string} patients in zone {string}', async ({ page }, count: number, color: string, zone: string) => {

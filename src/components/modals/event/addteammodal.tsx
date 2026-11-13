@@ -57,10 +57,10 @@ const rowsFromMembers = (members: TeamMemberDraft[], trailingCert: string): Row[
 
 /**
  * "Medic 4" -> "Medic 5"; a name with no trailing integer gets " 1" appended;
- * no prior name in the session defaults to "Team 1".
+ * no prior name in the session defaults to `first` ("Team 1"; supervisors use "S1").
  */
-export function getNextTeamName(existingNames: string[]): string {
-  if (existingNames.length === 0) return "Team 1";
+export function getNextTeamName(existingNames: string[], first = "Team 1"): string {
+  if (existingNames.length === 0) return first;
   const last = existingNames[existingNames.length - 1].trim();
   const match = last.match(/^(.*?)(\d+)$/);
   if (match) {
