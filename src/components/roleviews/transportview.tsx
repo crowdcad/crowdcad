@@ -3,6 +3,7 @@
 import React, { useMemo, useState } from 'react';
 import type { MciState } from '@/app/types';
 import { deriveMci, mciPatientLabel, type MciPatient } from '@/lib/mci';
+import { hospitalSentCounts, hospitalSentTotal } from '@/lib/mciLogistics';
 import { MCI_PILL_STYLES } from '@/components/dispatch/mci/mciparts';
 import { BottomSheet, ColorTag, ErrorBanner, PRIMARY_BUTTON, ROLE_LABEL, SECONDARY_BUTTON, useRoleActions } from './roleparts';
 
@@ -30,7 +31,15 @@ export default function TransportView({ mci }: { mci: MciState }) {
     [derived],
   );
   const left = useMemo(() => derived.patients.filter((p) => p.transportedAt !== undefined).sort((a, b) => b.transportedAt! - a.transportedAt!), [derived]);
-  const destinations = useMemo(() => [...new Set(left.map((p) => p.destination).filter(Boolean) as string[])].slice(0, 4), [left]);
+  // Logistics' hospitals first (with how full each is), then places typed before.
+  const hospitals = useMemo(() => {
+    const counted = hospitalSentCounts(mci);
+    return (mci.logistics?.hospitals ?? []).map((h) => ({ name: h.name, sent: hospitalSentTotal(h, counted.get(h.id)), capacity: h.capacity }));
+  }, [mci]);
+  const destinations = useMemo(() => {
+    const known = new Set(hospitals.map((h) => h.name.toLowerCase()));
+    return [...new Set(left.map((p) => p.destination).filter(Boolean) as string[])].filter((d) => !known.has(d.toLowerCase())).slice(0, 4);
+  }, [left, hospitals]);
 
   const record = async () => {
     if (!picked) return;
@@ -65,7 +74,7 @@ export default function TransportView({ mci }: { mci: MciState }) {
                   onClick={() => {
                     setPicked(p);
                     setUnit('');
-                    setDestination(destinations[0] ?? '');
+                    setDestination(hospitals.length ? '' : destinations[0] ?? '');
                   }}
                   data-testid="role-transport-pick"
                 >
@@ -106,8 +115,24 @@ export default function TransportView({ mci }: { mci: MciState }) {
             Destination
             <input className="h-12 border border-surface-liner bg-surface-deepest px-3 text-lg normal-case tracking-normal text-surface-light" value={destination} placeholder="Hospital" onChange={(e) => setDestination(e.target.value)} />
           </label>
-          {destinations.length > 0 && (
+          {hospitals.length + destinations.length > 0 && (
             <div className="flex flex-wrap gap-1.5">
+              {hospitals.map((h) => (
+                <button
+                  key={h.name}
+                  type="button"
+                  aria-pressed={destination === h.name}
+                  className={`flex h-10 items-center gap-2 border px-3 text-base ${destination === h.name ? 'border-accent bg-accent/15' : 'border-surface-liner bg-surface-deepest'}`}
+                  onClick={() => setDestination(h.name)}
+                  data-testid={`role-transport-hospital-${h.name}`}
+                >
+                  {h.name}
+                  <span className={`font-mono text-sm ${h.capacity !== undefined && h.sent >= h.capacity ? 'text-status-red' : 'text-surface-faint'}`}>
+                    {h.sent}
+                    {h.capacity !== undefined ? `/${h.capacity}` : ''}
+                  </span>
+                </button>
+              ))}
               {destinations.map((d) => (
                 <button key={d} type="button" className="h-10 border border-surface-liner bg-surface-deepest px-3 text-base" onClick={() => setDestination(d)}>
                   {d}

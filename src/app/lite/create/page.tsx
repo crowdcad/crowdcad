@@ -1041,6 +1041,7 @@ function LiteCreateContent() {
         submitLabelOverride="Add Supervisor"
         teamName={samName}
         setTeamName={setSamName}
+        existingNames={eventDraft.supervisor.map((s) => s.team)}
         memberName={samMemberName}
         setMemberName={setSamMemberName}
         memberCert={samCert}

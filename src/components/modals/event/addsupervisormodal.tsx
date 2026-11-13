@@ -9,6 +9,7 @@ import {
 import { CircleHelp } from "lucide-react";
 import { Role } from "@/app/types";
 import { useDispatchTerms } from "@/lib/dispatchVocabulary/context";
+import { getNextTeamName } from "./addteammodal";
 
 type Props = {
   isOpen: boolean;
@@ -31,6 +32,9 @@ type Props = {
   setMemberCert: (v: string) => void;
 
   roles: Role[];
+
+  /** Create mode: the event's supervisor names, oldest first. An empty call sign starts as the next one ("S1", then "S2"). */
+  existingNames?: string[];
 };
 
 export default function AddSupervisorModal({
@@ -47,9 +51,19 @@ export default function AddSupervisorModal({
   memberCert,
   setMemberCert,
   roles,
+  existingNames,
 }: Props) {
   const { t } = useDispatchTerms();
   const [submitting, setSubmitting] = React.useState(false);
+
+  // Suggest the next call sign each time the dialog opens empty, as Add Team does.
+  const wasOpen = React.useRef(false);
+  React.useEffect(() => {
+    if (isOpen && !wasOpen.current && mode === "create" && existingNames && !teamName.trim()) {
+      setTeamName(getNextTeamName(existingNames, "S1"));
+    }
+    wasOpen.current = isOpen;
+  }, [isOpen, mode, existingNames, teamName, setTeamName]);
 
   const inputClassNames = {
     label: "text-surface-light mb-1",

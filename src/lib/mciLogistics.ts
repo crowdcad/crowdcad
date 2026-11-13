@@ -1,4 +1,5 @@
-import type { EquipmentRequest, Event, IncomingEta, IncomingTeam, MciLogistics, MciState, Staff } from '@/app/types';
+import type { EquipmentRequest, Event, IncomingEta, IncomingTeam, MciHospital, MciLogistics, MciState, Staff } from '@/app/types';
+import { deriveMci, emptyCounts, MCI_COLORS, sumCounts, type MciCounts } from './mci';
 import { newTeamId } from '@/lib/teamId';
 
 /**
@@ -226,4 +227,86 @@ export function closeRequest(event: Pick<Event, 'mci'>, id: string, outcome: 'do
   const list = logisticsOf(mci).requests ?? [];
   if (!list.some((r) => r.id === id && r.state === 'open')) return { patch: {}, error: 'missing' };
   return { patch: withRequests(mci, list.map((r) => (r.id === id ? { ...r, state: outcome, closedAt: now } : r))) };
+}
+
+// ---------------------------------------------------------------------------
+// Hospitals: where patients are sent. Logistics adds them by name and types
+// each one's capacity; the number sent and its colors are counted from the
+// transports whose destination is the hospital's name.
+// ---------------------------------------------------------------------------
+
+const MAX_HOSPITAL_NAME = 60;
+
+function withHospitals(mci: MciState, hospitals: MciHospital[]): Partial<Event> {
+  return { mci: { ...mci, logistics: { ...logisticsOf(mci), hospitals } } };
+}
+
+const sameName = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+
+/** Patients sent to each hospital in the current MCI, by color, keyed by hospital id. */
+export function hospitalSentCounts(mci: MciState | undefined): Map<string, MciCounts> {
+  const out = new Map<string, MciCounts>();
+  const hospitals = mci?.logistics?.hospitals ?? [];
+  if (!mci || hospitals.length === 0) return out;
+  for (const h of hospitals) out.set(h.id, emptyCounts());
+  const derived = deriveMci({ mci, calls: [], clinics: [] });
+  for (const area of [...derived.areas, ...derived.retiredAreas]) {
+    for (const trip of area.trips) {
+      const h = trip.destination ? hospitals.find((x) => sameName(x.name, trip.destination!)) : undefined;
+      if (!h) continue;
+      const counts = out.get(h.id)!;
+      for (const color of MCI_COLORS) counts[color] += trip.counts[color];
+    }
+  }
+  return out;
+}
+
+/** What a hospital box shows as Sent: the counted transports plus any correction typed in. */
+export function hospitalSentTotal(hospital: MciHospital, counted: MciCounts | undefined): number {
+  return Math.max(0, sumCounts(counted ?? emptyCounts()) + (hospital.sentAdjust ?? 0));
+}
+
+export function addHospital(event: Pick<Event, 'mci'>, name: string, now: number, id = `hospital-${now.toString(36)}-${Math.random().toString(36).slice(2, 6)}`): LogisticsResult {
+  const mci = event.mci;
+  if (!mci?.active) return { patch: {}, error: 'inactive' };
+  const clean = name.trim().replace(/\s+/g, ' ').slice(0, MAX_HOSPITAL_NAME);
+  if (!clean) return { patch: {}, error: 'invalid' };
+  const list = logisticsOf(mci).hospitals ?? [];
+  if (list.some((h) => sameName(h.name, clean))) return { patch: {}, error: 'duplicate' };
+  return { patch: withHospitals(mci, [...list, { id, name: clean }]) };
+}
+
+/**
+ * Sets a hospital's capacity (`null` clears it) or what it shows as Sent. Typing Sent stores the difference
+ * from the counted transports, so later transports still add to it.
+ */
+export function updateHospital(event: Pick<Event, 'mci'>, id: string, changes: { capacity?: number | null; sent?: number }): LogisticsResult {
+  const mci = event.mci;
+  if (!mci?.active) return { patch: {}, error: 'inactive' };
+  const list = logisticsOf(mci).hospitals ?? [];
+  const current = list.find((h) => h.id === id);
+  if (!current) return { patch: {}, error: 'missing' };
+  const valid = (n: number) => Number.isInteger(n) && n >= 0 && n <= 100000;
+  const next: MciHospital = { ...current };
+  if (changes.capacity !== undefined) {
+    if (changes.capacity === null) delete next.capacity;
+    else if (!valid(changes.capacity)) return { patch: {}, error: 'invalid' };
+    else next.capacity = changes.capacity;
+  }
+  if (changes.sent !== undefined) {
+    if (!valid(changes.sent)) return { patch: {}, error: 'invalid' };
+    const counted = sumCounts(hospitalSentCounts(mci).get(id) ?? emptyCounts());
+    const adjust = changes.sent - counted;
+    if (adjust) next.sentAdjust = adjust;
+    else delete next.sentAdjust;
+  }
+  return { patch: withHospitals(mci, list.map((h) => (h.id === id ? next : h))) };
+}
+
+export function removeHospital(event: Pick<Event, 'mci'>, id: string): LogisticsResult {
+  const mci = event.mci;
+  if (!mci?.active) return { patch: {}, error: 'inactive' };
+  const list = logisticsOf(mci).hospitals ?? [];
+  if (!list.some((h) => h.id === id)) return { patch: {}, error: 'missing' };
+  return { patch: withHospitals(mci, list.filter((h) => h.id !== id)) };
 }

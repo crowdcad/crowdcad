@@ -4,11 +4,12 @@ import React, { useMemo, useState } from 'react';
 import type { IncomingEta, MciState } from '@/app/types';
 import type { MciUnit } from '@/lib/mciDoc';
 import { etaLabel, isOverdue, normalizeEtaTime, sortIncoming } from '@/lib/mciLogistics';
+import Hospitals from '@/components/dispatch/mci/hospitals';
 import { chipState, ErrorBanner, PRIMARY_BUTTON, ROLE_LABEL, SECONDARY_BUTTON, useRoleActions } from './roleparts';
 
 /**
  * The Logistics role view (#144, option a): incoming staff (add, ETA, notes,
- * report arrival) and equipment requests. The dispatcher turns a reported
+ * report arrival), hospitals (add, capacity, sent) and equipment requests. The dispatcher turns a reported
  * arrival into a team and fulfils requests, so this login never writes the
  * event itself.
  */
@@ -44,7 +45,7 @@ function EtaPicker({ eta, onChange, testId }: { eta: IncomingEta; onChange: (eta
 
 export default function LogisticsView({ mci, units }: { mci: MciState; units: MciUnit[] }) {
   const actions = useRoleActions();
-  const [tab, setTab] = useState<'staff' | 'equipment'>('staff');
+  const [tab, setTab] = useState<'staff' | 'hospitals' | 'equipment'>('staff');
   const [name, setName] = useState('');
   const [item, setItem] = useState(ITEMS[0]!);
   const [forUnit, setForUnit] = useState(units.find((u) => u.kind === 'team')?.name ?? '');
@@ -63,9 +64,9 @@ export default function LogisticsView({ mci, units }: { mci: MciState; units: Mc
     <>
       <ErrorBanner error={actions.error} onClose={actions.clearError} />
       <div className="flex border-b border-surface-liner" role="tablist">
-        {(['staff', 'equipment'] as const).map((t) => (
+        {(['staff', 'hospitals', 'equipment'] as const).map((t) => (
           <button key={t} type="button" role="tab" aria-selected={tab === t} onClick={() => setTab(t)} className={`h-12 flex-1 border-b-[3px] text-lg font-bold ${tab === t ? 'border-accent bg-surface-deep' : 'border-transparent'}`}>
-            {t === 'staff' ? `Incoming staff (${open.filter((x) => x.state === 'incoming').length})` : 'Equipment'}
+            {t === 'staff' ? `Incoming Staff (${open.filter((x) => x.state === 'incoming').length})` : t === 'hospitals' ? 'Hospitals' : 'Equipment'}
           </button>
         ))}
       </div>
@@ -121,6 +122,16 @@ export default function LogisticsView({ mci, units }: { mci: MciState; units: Mc
               );
             })}
           </>
+        )}
+        {tab === 'hospitals' && (
+          <Hospitals
+            mci={mci}
+            readOnly={false}
+            handlers={{
+              onAdd: (hospital) => void actions.send({ type: 'hospitalAdd', name: hospital }),
+              onUpdate: (id, changes) => void actions.send({ type: 'hospitalUpdate', id, ...changes }),
+            }}
+          />
         )}
         {tab === 'equipment' && (
           <>

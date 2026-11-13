@@ -2,9 +2,9 @@
 
 import React, { useMemo, useState } from 'react';
 import type { MciLogEntry, MciState } from '@/app/types';
-import { deriveMci, MCI_COLORS, mciPatientLabel } from '@/lib/mci';
+import { currentLog, deriveMci, MCI_COLORS, mciPatientLabel } from '@/lib/mci';
 import type { MciUnit } from '@/lib/mciDoc';
-import { etaLabel, isOverdue } from '@/lib/mciLogistics';
+import { etaLabel, hospitalSentCounts, hospitalSentTotal, isOverdue } from '@/lib/mciLogistics';
 import { MCI_PILL_STYLES } from '@/components/dispatch/mci/mciparts';
 import { describeMciEntry } from '@/components/dispatch/mci/mcilogdrawer';
 import { ColorTag, ROLE_LABEL } from './roleparts';
@@ -24,9 +24,12 @@ export default function CommandView({ mci, units }: { mci: MciState; units: MciU
   const derived = useMemo(() => deriveMci({ mci, calls: [], clinics: [] }), [mci]);
   const [tab, setTab] = useState<'overview' | 'units' | 'log'>('overview');
   const [menuOpen, setMenuOpen] = useState(false);
-  const everyone = useMemo(() => [...new Set(mci.log.map(who))].sort(), [mci.log]);
+  const current = useMemo(() => currentLog(mci), [mci]);
+  const everyone = useMemo(() => [...new Set(current.map(who))].sort(), [current]);
   const [hidden, setHidden] = useState<string[]>([]);
-  const log = useMemo(() => [...mci.log].reverse().filter((e) => !hidden.includes(who(e))), [mci.log, hidden]);
+  const log = useMemo(() => [...current].reverse().filter((e) => !hidden.includes(who(e))), [current, hidden]);
+  const hospitalCounts = useMemo(() => hospitalSentCounts(mci), [mci]);
+  const hospitals = mci.logistics?.hospitals ?? [];
   const unitsAt = (kind: 'zone' | 'area', id: string) => units.filter((u) => u.mciAssignment?.kind === kind && u.mciAssignment.id === id).map((u) => u.name);
   const t = derived.totals;
   const now = new Date();
@@ -148,10 +151,40 @@ export default function CommandView({ mci, units }: { mci: MciState; units: MciU
     </section>
   );
 
+  const hospitalsPanel = hospitals.length > 0 && (
+    <section className={PANEL} data-testid="role-command-hospitals">
+      <div className={PANEL_HEAD}>
+        <span className="text-lg font-bold">Hospitals</span>
+      </div>
+      {hospitals.map((h) => {
+        const counted = hospitalCounts.get(h.id);
+        const sent = hospitalSentTotal(h, counted);
+        const full = h.capacity !== undefined && sent >= h.capacity;
+        return (
+          <div key={h.id} className="flex items-center justify-between gap-3 border-b border-surface-liner px-3.5 py-2">
+            <span className="text-base font-bold">{h.name}</span>
+            <span className="flex items-center gap-2 font-mono text-sm">
+              {(['red', 'yellow', 'green'] as const).map((c) => (
+                <span key={c} className="inline-flex items-center gap-1" aria-label={`${counted?.[c] ?? 0} ${c}`}>
+                  <span className={`h-3 w-3 ${MCI_PILL_STYLES[c].pill}`} aria-hidden />
+                  {counted?.[c] ?? 0}
+                </span>
+              ))}
+              <span className={full ? 'font-bold text-status-red' : ''}>
+                {sent}
+                {h.capacity !== undefined ? `/${h.capacity}` : ''}
+              </span>
+            </span>
+          </div>
+        );
+      })}
+    </section>
+  );
+
   const incomingPanel = (
     <section className={PANEL}>
       <div className={PANEL_HEAD}>
-        <span className="text-lg font-bold">Incoming staff</span>
+        <span className="text-lg font-bold">Incoming Staff</span>
       </div>
       {incoming.length === 0 && <p className="m-0 px-3.5 py-3 text-base text-surface-faint">None reported.</p>}
       {incoming.map((x) => {
@@ -232,6 +265,7 @@ export default function CommandView({ mci, units }: { mci: MciState; units: MciU
       <div className="hidden min-h-0 flex-1 gap-3 p-3 lg:grid lg:grid-cols-[22rem_minmax(0,1fr)_26rem]">
         <div className="flex min-h-0 flex-col gap-3">
           {totals}
+          {hospitalsPanel}
           {incomingPanel}
         </div>
         <div className="flex min-h-0 flex-col gap-3 overflow-y-auto">
@@ -256,6 +290,7 @@ export default function CommandView({ mci, units }: { mci: MciState; units: MciU
               {totals}
               {zones}
               {areas}
+              {hospitalsPanel}
               {incomingPanel}
             </>
           )}

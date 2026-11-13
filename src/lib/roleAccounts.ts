@@ -19,14 +19,18 @@ import { randomString } from './randomString';
 
 export const ROLE_EMAIL_DOMAIN = 'role.crowdcad.org';
 
-/** The roles offered (#144): Responder covers triage and treatment, since people move between them. */
-export const EVENT_ROLES = ['responder', 'transport', 'logistics', 'incident_command'] as const;
+/**
+ * The roles offered (#144): Responder covers triage and treatment, since people move between them. A
+ * Treatment Lead runs one tarp (red, yellow or green): its patients and their transport order.
+ */
+export const EVENT_ROLES = ['responder', 'treatment_lead', 'transport', 'logistics', 'incident_command'] as const;
 /** Earlier separate roles, still accepted on existing logins and treated as Responder. */
 const LEGACY_ROLES = ['triage', 'treatment'] as const;
 export type EventRole = (typeof EVENT_ROLES)[number] | (typeof LEGACY_ROLES)[number];
 
 export const EVENT_ROLE_INFO: Record<EventRole, { label: string; prefix: string }> = {
   responder: { label: 'Responder', prefix: 'resp' },
+  treatment_lead: { label: 'Treatment Lead', prefix: 'lead' },
   transport: { label: 'Transport', prefix: 'trans' },
   logistics: { label: 'Logistics', prefix: 'log' },
   incident_command: { label: 'Incident Command', prefix: 'ic' },

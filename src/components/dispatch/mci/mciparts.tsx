@@ -8,6 +8,9 @@ import { Modal, ModalContent, type ModalProps } from '@heroui/react';
 import type { MciColor } from '@/app/types';
 import { MCI_COLORS, sumCounts, type MciCounts } from '@/lib/mci';
 
+/** A treatment location as the MCI tab's pickers list it. A tarp (`color`) only takes patients of that color. */
+export type MciAreaOption = { id: string; name: string; color?: MciColor };
+
 /** Hides a number input's spinner arrows. */
 export const NO_SPINNER = '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none';
 
@@ -16,6 +19,12 @@ export const MCI_INPUT_CLASSNAMES = {
   inputWrapper: 'rounded-xl px-3',
   input: 'text-surface-light outline-none focus:outline-none data-[focus=true]:outline-none focus:ring-0 focus-visible:ring-0',
 } as const;
+
+/**
+ * HeroUI Checkbox / Radio classNames for the MCI screens: the option reads in normal case at body size. Both
+ * render as a <label>, which the condensed style would otherwise put in tracked capitals.
+ */
+export const MCI_CHECKBOX_CLASSNAMES = { base: 'normal-case tracking-normal', label: 'text-sm normal-case tracking-normal text-surface-light' } as const;
 
 /** The red-tinted Cancel / Skip button in every MCI dialog footer. */
 export const MCI_CANCEL_BUTTON = 'bg-status-red/20 px-4 py-2 text-status-red hover:bg-status-red/30';

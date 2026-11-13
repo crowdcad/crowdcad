@@ -4287,6 +4287,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
         onSubmit={handleSaveNewSupervisor}
         teamName={teamName}
         setTeamName={setTeamName}
+        existingNames={(event?.supervisor || []).map((s) => s.team)}
         memberName={memberName}
         setMemberName={setMemberName}
         memberCert={memberCert}

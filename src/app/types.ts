@@ -148,7 +148,7 @@ export interface MciTreatmentArea {
   clinicId?: string;
   /** The map zone drawn for this area, in the event venue's layers. */
   venueZoneId?: string;
-  /** A triage tarp (#154): the treatment zone for that tag color, drawn and shown in that color. */
+  /** A triage tarp (#154): the treatment zone for that tag color, drawn and shown in that color. Only patients of that color go here. */
   color?: MciColor;
 }
 
@@ -209,6 +209,26 @@ export interface MciState {
   patients?: Record<string, MciPatientDetails>;
   /** The Logistics tab (#139): staff reported on their way. Equipment issued to teams is ordinary event equipment. */
   logistics?: MciLogistics;
+  /** Zones and treatment locations unticked on a re-declare that kept the earlier counts. Kept so the log and summary can still name them. */
+  retiredZones?: MciZone[];
+  retiredAreas?: MciTreatmentArea[];
+  /**
+   * Earlier MCIs on this event, oldest first, archived when a re-declare started an entirely new MCI. Their log
+   * entries stay in `log` (it is append-only): those before an archive's `until` and after the previous one's belong
+   * to it. See `mciRecords` in src/lib/mci.ts.
+   */
+  earlier?: MciEarlier[];
+}
+
+/** An archived MCI: what it looked like when an entirely new MCI was declared. */
+export interface MciEarlier {
+  periods: { startedAt: number; endedAt?: number }[];
+  zones: MciZone[];
+  areas: MciTreatmentArea[];
+  retiredZones?: MciZone[];
+  retiredAreas?: MciTreatmentArea[];
+  /** When the new MCI was declared: this MCI's log entries are the ones before it. */
+  until: number;
 }
 
 /** The Logistics tab's own records (src/lib/mciLogistics.ts). */
@@ -216,6 +236,18 @@ export interface MciLogistics {
   incoming: IncomingTeam[];
   /** Equipment asked for by the Logistics role (option a): the dispatcher issues it or dismisses the request. */
   requests?: EquipmentRequest[];
+  /** Hospitals patients are sent to, in the order added. */
+  hospitals?: MciHospital[];
+}
+
+/** A hospital in the Logistics tab. Patients sent are counted from transports whose destination is its name. */
+export interface MciHospital {
+  id: string;
+  name: string;
+  /** Patients it can take, as typed. */
+  capacity?: number;
+  /** A correction to the counted number sent, set when someone types Sent: shown as counted + adjust. */
+  sentAdjust?: number;
 }
 
 export interface EquipmentRequest {

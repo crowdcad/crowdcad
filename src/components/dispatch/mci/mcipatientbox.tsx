@@ -5,6 +5,7 @@ import { Ambulance, GripVertical, MoreVertical, X } from 'lucide-react';
 import { Dropdown, DropdownItem, DropdownMenu, DropdownSection, DropdownTrigger } from '@heroui/react';
 import type { MciColor } from '@/app/types';
 import { MCI_COLORS, mciPatientLabel, type MciPatient, type MciPatientField } from '@/lib/mci';
+import type { MciAreaOption } from './mciparts';
 import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
 import { MCI_COLOR_STYLES, NO_SPINNER, formatClock } from './mciparts';
 
@@ -22,8 +23,10 @@ type Props = {
   teamListId: string;
   /** Ambulance numbers used this MCI. */
   unitSuggestions: string[];
+  /** Hospitals from the Logistics tab, offered as destinations. */
+  hospitals?: string[];
   /** Every treatment location, for the box's Move to menu. */
-  areas: { id: string; name: string }[];
+  areas: MciAreaOption[];
   onDetails: (patientId: string, fields: Partial<Record<MciPatientField, string>>) => void;
   onPriority: (patientId: string, rank: number | null) => void;
   onTransport: (patientId: string, trip: { unit?: string; destination?: string }) => void | Promise<unknown>;
@@ -115,9 +118,10 @@ function CellInput({
 }
 
 /** The inline "left in an ambulance" form under a box: both fields optional, Enter confirms. */
-function TransportRow({ units, onCancel, onConfirm }: { units: string[]; onCancel: () => void; onConfirm: (trip: { unit?: string; destination?: string }) => void }) {
+function TransportRow({ units, hospitals, onCancel, onConfirm }: { units: string[]; hospitals: string[]; onCancel: () => void; onConfirm: (trip: { unit?: string; destination?: string }) => void }) {
   const { t } = useDispatchTerms();
   const listId = useId();
+  const hospitalListId = useId();
   const [unit, setUnit] = useState('');
   const [destination, setDestination] = useState('');
   const keys = (e: React.KeyboardEvent) => {
@@ -152,8 +156,14 @@ function TransportRow({ units, onCancel, onConfirm }: { units: string[]; onCance
         value={destination}
         onChange={(e) => setDestination(e.target.value)}
         onKeyDown={keys}
+        list={hospitalListId}
         className={`${CELL} w-24 flex-1`}
       />
+      <datalist id={hospitalListId}>
+        {hospitals.map((h) => (
+          <option key={h} value={h} />
+        ))}
+      </datalist>
       <button
         type="button"
         onClick={() => onConfirm({ unit, destination })}
@@ -174,14 +184,15 @@ function TransportRow({ units, onCancel, onConfirm }: { units: string[]; onCance
  * from, when, and the team that brought them on the second. The grip drags the box to another column or location;
  * the menu does the same without dragging; the ambulance marks them transported.
  */
-export default function MciPatientBox({ patient, zoneName, readOnly, teamListId, unitSuggestions, areas, onDetails, onPriority, onTransport, onReassign }: Props) {
+export default function MciPatientBox({ patient, zoneName, readOnly, teamListId, unitSuggestions, hospitals = [], areas, onDetails, onPriority, onTransport, onReassign }: Props) {
   const [transporting, setTransporting] = useState(false);
   // The box is draggable only while the grip is held, so text in its inputs can still be selected.
   const [dragArmed, setDragArmed] = useState(false);
   const { details } = patient;
   const color = MCI_COLOR_STYLES[patient.color];
   const label = mciPatientLabel(details) || 'patient';
-  const otherAreas = areas.filter((a) => a.id !== patient.areaId);
+  // A tarp of another color can't take them; retriage moves them to their new color's tarp.
+  const otherAreas = areas.filter((a) => a.id !== patient.areaId && (!a.color || a.color === patient.color));
 
   const commitPriority = (text: string) => {
     const n = Number.parseInt(text, 10);
@@ -351,6 +362,7 @@ export default function MciPatientBox({ patient, zoneName, readOnly, teamListId,
       {transporting && !readOnly && (
         <TransportRow
           units={unitSuggestions}
+          hospitals={hospitals}
           onCancel={() => setTransporting(false)}
           onConfirm={(trip) => {
             setTransporting(false);

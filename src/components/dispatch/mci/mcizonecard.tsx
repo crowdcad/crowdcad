@@ -4,9 +4,9 @@ import React, { useEffect, useState } from 'react';
 import { ChevronDown, Minus, Plus } from 'lucide-react';
 import { Button, Dropdown, DropdownItem, DropdownMenu, DropdownTrigger } from '@heroui/react';
 import type { MciColor } from '@/app/types';
-import { MCI_COLORS, type MciZoneStats } from '@/lib/mci';
+import { MCI_COLORS, mciRouteArea, type MciZoneStats } from '@/lib/mci';
 import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
-import { MCI_COLOR_STYLES, MCI_PILL_STYLES, MciMapButton, MciTeamChips, NO_SPINNER } from './mciparts';
+import { MCI_COLOR_STYLES, MCI_PILL_STYLES, MciMapButton, MciTeamChips, NO_SPINNER, type MciAreaOption } from './mciparts';
 
 type Props = {
   stats: MciZoneStats;
@@ -24,8 +24,8 @@ type Props = {
   hasShape?: boolean;
   onDraw?: (zoneId: string) => void;
   /** Treatment locations the quick move can send to. */
-  areas: { id: string; name: string }[];
-  /** Where the plus beside Moved sends a patient. */
+  areas: MciAreaOption[];
+  /** The location the plus beside Moved prefers; unset sends each color to its tarp. */
   quickMoveAreaId?: string;
   onQuickMove: (zoneId: string, color: MciColor) => void;
   onQuickMoveAreaChange: (zoneId: string, areaId: string) => void;
@@ -87,16 +87,24 @@ function TaggedValue({ value, label, disabled, onCommit }: { value: number; labe
   );
 }
 
-/** "+ moves to Clinic", with a menu to pick another location when there are several. */
+const MATCHING = { id: '', name: 'Matching color' };
+
+/**
+ * "+ moves to Clinic", with a menu to pick another location when there are several. With color tarps the
+ * default is "Matching color": each color goes to its own tarp; picking a location that takes any color
+ * sends every color there.
+ */
 function QuickMoveTarget({ zoneName, areas, areaId, onChange }: { zoneName: string; areas: Props['areas']; areaId?: string; onChange: (areaId: string) => void }) {
-  const current = areas.find((a) => a.id === areaId);
+  const hasTarps = areas.some((a) => a.color);
+  const options = hasTarps ? [MATCHING, ...areas.filter((a) => !a.color)] : areas;
+  const current = options.find((a) => a.id === (areaId ?? '')) ?? (hasTarps ? MATCHING : undefined);
   if (!current) return null;
   const label = <span className="truncate font-semibold text-surface-light">{current.name}</span>;
   return (
     <div className="flex min-w-0 items-center gap-1 text-xs text-surface-faint" data-testid={`mci-zone-quick-target-${zoneName}`}>
       <Plus className="h-3 w-3 shrink-0" aria-hidden />
       <span className="shrink-0">moves to</span>
-      {areas.length === 1 ? (
+      {options.length === 1 ? (
         label
       ) : (
         <Dropdown>
@@ -107,7 +115,7 @@ function QuickMoveTarget({ zoneName, areas, areaId, onChange }: { zoneName: stri
             </button>
           </DropdownTrigger>
           <DropdownMenu aria-label={`Quick move destination for ${zoneName}`} selectionMode="single" selectedKeys={new Set([current.id])} onAction={(key) => onChange(String(key))}>
-            {areas.map((a) => (
+            {options.map((a) => (
               <DropdownItem key={a.id}>{a.name}</DropdownItem>
             ))}
           </DropdownMenu>
@@ -137,7 +145,8 @@ export default function MciZoneCard({
   const { t } = useDispatchTerms();
   const { zone } = stats;
   const name = zone.name;
-  const quickArea = areas.find((a) => a.id === quickMoveAreaId);
+  // Each color's quick move goes where it may: the picked location, or that color's tarp.
+  const quickAreaFor = (color: MciColor) => mciRouteArea({ areas }, color, quickMoveAreaId);
 
   return (
     <section
@@ -210,7 +219,9 @@ export default function MciZoneCard({
                 </button>
               </div>
               <div className="flex items-center justify-center gap-1.5">
-                {!readOnly && (
+                {!readOnly && (() => {
+                  const quickArea = quickAreaFor(color);
+                  return (
                   <button
                     type="button"
                     disabled={!quickArea || stats.inZone[color] <= 0}
@@ -222,7 +233,8 @@ export default function MciZoneCard({
                   >
                     <Plus className="h-3.5 w-3.5" />
                   </button>
-                )}
+                  );
+                })()}
                 <span className="min-w-[1.5ch] text-center text-sm tabular-nums text-surface-light" data-testid={`mci-zone-${name}-${color}-moved`}>
                   {stats.moved[color]}
                 </span>

@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo, useRef, type MutableRefObject } from 'react';
 import { toast } from 'react-toastify';
-import type { Event, MciColor, MciTreatmentArea, MciZone } from '@/app/types';
+import type { Event, MciColor } from '@/app/types';
 import {
   addMciArea,
   addMciZone,
@@ -14,6 +14,7 @@ import {
   newMciId,
   reassignPatientPatch,
   reopenZonePatch,
+  routedMovePatch,
   setPatientDetailsPatch,
   setPatientPriorityPatch,
   setTaggedTotalPatch,
@@ -23,6 +24,7 @@ import {
   transportPatch,
   transportPatientPatch,
   undoPatch,
+  type DeclareMciInput,
   type MciCounts,
   type MciPatientField,
   type MciShape,
@@ -34,13 +36,14 @@ import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
 type UpdateEvent = (updates: Partial<Event> | ((current: Event) => Partial<Event>)) => Promise<void>;
 
 export interface MciActions {
-  declare: (input: { zones: MciZone[]; areas: MciTreatmentArea[]; trackPatients?: boolean }) => Promise<void>;
+  declare: (input: DeclareMciInput) => Promise<void>;
   standDown: () => Promise<void>;
   addZone: (name: string) => Promise<boolean>;
   addArea: (name: string) => Promise<boolean>;
   tag: (zoneId: string, color: MciColor, delta: number) => Promise<void>;
   setTagged: (zoneId: string, color: MciColor, total: number) => Promise<void>;
-  move: (zoneId: string, areaId: string, counts: Partial<MciCounts>) => Promise<boolean>;
+  /** Without `areaId`, each color goes to its own tarp. */
+  move: (zoneId: string, areaId: string | undefined, counts: Partial<MciCounts>) => Promise<boolean>;
   saveShape: (kind: 'zone' | 'area', id: string, shape: MciShape) => Promise<boolean>;
   transport: (areaId: string, counts: Partial<MciCounts>, trip: { unit: string; destination?: string }, patientIds?: string[]) => Promise<boolean>;
   clearZone: (zoneId: string) => Promise<void>;
@@ -96,6 +99,8 @@ export function useMciActions(updateEvent: UpdateEvent, uid: string | undefined,
       if (outcome?.error === 'duplicate') toast.error(t('A zone or treatment location with that name already exists.'));
       if (outcome?.error === 'cannot-undo') toast.error(t('That entry can no longer be undone. Undo the later changes to that patient first.'));
       if (outcome?.error === 'unknown-patient') toast.error(t('That patient is no longer in the treatment location.'));
+      if (outcome?.error === 'wrong-color') toast.error(t('That treatment zone only takes patients of its own color.'));
+      if (outcome?.error === 'no-area') toast.error(t('There is no treatment zone for that color yet. Add one, or pick a location that takes any color.'));
       return outcome;
     },
     [updateEvent, uid, t]
@@ -159,7 +164,7 @@ export function useMciActions(updateEvent: UpdateEvent, uid: string | undefined,
         await run((current, ctx) => setTaggedTotalPatch(current, zoneId, color, total, ctx));
       },
       move: async (zoneId, areaId, counts) => {
-        const out = await run((current, ctx) => movePatch(current, zoneId, areaId, counts, ctx));
+        const out = await run((current, ctx) => (areaId ? movePatch(current, zoneId, areaId, counts, ctx) : routedMovePatch(current, zoneId, counts, undefined, ctx)));
         return !!out && !out.error;
       },
       saveShape: async (kind, id, shape) => {

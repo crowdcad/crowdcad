@@ -111,3 +111,29 @@ Related: [plan.md](plan.md), [../tak-integration/decisions.md](../tak-integratio
 
 ### D16. Transport priority is shown as a rank
 - **What.** The treatment leader types a number on a box. Typing a number puts the patient at that place in the location's order and moves the patient there and everyone after down one, renumbering 1, 2, 3 in the same write. The number shown is the rank among the patients still there, so a transport moves everyone after it up one with no write. Clearing the number takes the patient out of the order.
+
+## 2026-11-13
+
+Requested by the maintainer after trying the role views.
+
+### D22. A color's treatment zone takes only that color
+- **What.** A tarp (`MciTreatmentArea.color`) takes only patients tagged its color; clinics and other locations take any. Moves, walk-ins and retriages into a tarp of another color are refused (`wrong-color`), in the helpers, so the dispatcher's tab and `/api/mci-role` both enforce it.
+- **Routing.** With no location picked, each color goes to its own tarp (`mciRouteArea`, `routedMovePatch`): the move dialog's and the Responder move sheet's default is **Matching color**, and a zone card's quick move sends each color to its tarp unless the card picks a location that takes any color.
+- **Retriage.** A new color for a patient in a tarp moves them to the new color's tarp in the same entry. With no tarp of that color they stay, shown as needing a move (`MciPatient.misplaced`). A tarp's patient boxes show only its own color.
+
+### D23. Treatment Lead role; the transport order is theirs
+- **What.** A fifth role, `treatment_lead` (label Treatment Lead, usernames `lead-xxxx`). The lead picks the red, yellow or green tarp they run and sees only its patients, with everything a Responder in treatment mode can do (details, retriage, care, walk-ins) plus **up / down** on each patient to set the transport order (`movePatientInOrderPatch`: swaps with the neighbour and writes the order shown as ranks). Reads patient details like every role but Logistics.
+- **Supersedes D20's Responder priority.** Responders no longer have Sooner / Later; only the lead (and the dispatcher, D16) orders patients.
+
+### D24. Re-declaring after a stand-down: keep the earlier MCI, or start an entirely new one
+- **What.** Declaring after a stand-down asks for one of two options, neither preselected: **Keep existing zones, treatment locations and counts from the earlier period**, or **Declare entirely new MCI**. Either way the earlier zones and treatment locations are listed, ticked, and can be unticked; new ones can be added.
+- **Keep.** A period is appended and counts carry on. An unticked zone or location moves to `retiredZones` / `retiredAreas`, so the log and summary can still name it and the totals still count it; one with patients still in it can't be unticked.
+- **New.** The earlier MCI is archived in `MciState.earlier` (its periods, zones and locations, and `until`, the new declaration's time) and the new one starts from zero. The log stays append-only: entries before `until` belong to the archived MCI (`currentLog`, `mciRecords`). The summary, chart and CSV show each MCI ("MCI 1", "MCI 2"). Hospital capacities carry over; typed Sent corrections don't.
+
+### D25. Hospitals in the Logistics tab
+- **What.** A Hospitals column, left of Incoming Staff: a box per hospital with **Capacity:** and **Sent:**, and an arrow opening the red, yellow and green counts sent there. `mci.logistics.hospitals`.
+- **Counting.** Sent is counted from transports whose destination is the hospital's name (ignoring case); the transport dialogs offer the hospitals as destinations, and the Transport role shows each with sent / capacity. Typing Sent stores the difference (`sentAdjust`), so later transports still add to it. The Logistics role can add hospitals and set capacity (`hospitalAdd`, `hospitalUpdate`); Incident Command sees them.
+
+### D26. Help in tooltips
+- **What.** Explanations of what something does sit behind a small circled question mark (`src/components/ui/helptip.tsx`, hover or tap) instead of sentences under headings. Visible text is kept for instructions the maintainer asked for, empty states, warnings and errors.
+- **Supervisor names.** Add Supervisor suggests S1, then the next number after the last supervisor's name, as Add Team does for teams.

@@ -795,6 +795,7 @@ export default function EventCreation() {
         submitLabelOverride="Add Supervisor"
         teamName={samName}
         setTeamName={setSamName}
+        existingNames={(eventData.supervisor || []).map((s) => s.team)}
         memberName={samMemberName}
         setMemberName={setSamMemberName}
         memberCert={samCert}

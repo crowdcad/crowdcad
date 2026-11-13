@@ -5,9 +5,10 @@ import {
   mciAssignmentPatch,
   movePatch,
   notedPatch,
-  nudgePriorityPatch,
+  movePatientInOrderPatch,
   patientCarePatch,
   reassignPatientPatch,
+  routedMovePatch,
   setPatientDetailsPatch,
   tagBatchPatch,
   transportPatientPatch,
@@ -16,7 +17,7 @@ import {
   type MciWrite,
   type MciWriteContext,
 } from './mci';
-import { addIncoming, cancelIncoming, reportArrival, requestEquipment, updateIncoming, type LogisticsResult } from './mciLogistics';
+import { addHospital, addIncoming, cancelIncoming, reportArrival, requestEquipment, updateHospital, updateIncoming, type LogisticsResult } from './mciLogistics';
 import { effectiveRole, type EventRole } from './roleAccounts';
 
 /**
@@ -30,23 +31,29 @@ import { effectiveRole, type EventRole } from './roleAccounts';
 export type RoleAction =
   | { type: 'assign'; assignment: MciAssignment }
   | { type: 'counts'; zoneId: string; deltas: Partial<MciCounts> }
-  | { type: 'move'; zoneId: string; areaId: string; counts: Partial<MciCounts> }
+  /** Without `areaId`, each color goes to its own tarp (`routedMovePatch`). */
+  | { type: 'move'; zoneId: string; areaId?: string; counts: Partial<MciCounts> }
   | { type: 'addPatient'; areaId: string; color: MciColor; fields: Partial<Record<MciPatientField, string>> }
   | { type: 'patientDetails'; patientId: string; fields: Partial<Record<MciPatientField, string>> }
   | { type: 'patientCare'; patientId: string; notes?: string; intervention?: string }
-  | { type: 'priority'; patientId: string; direction: 'sooner' | 'later' }
+  /** The Treatment Lead moves a patient one place up or down the transport order shown. */
+  | { type: 'priority'; patientId: string; direction: 'up' | 'down' }
   | { type: 'reassign'; patientId: string; color?: MciColor; areaId?: string }
   | { type: 'transport'; patientId: string; unit?: string; destination?: string }
   | { type: 'incomingAdd'; name: string; eta?: IncomingEta; notes?: string }
   | { type: 'incomingUpdate'; id: string; eta?: IncomingEta; notes?: string; members?: string[] }
   | { type: 'incomingArrived'; id: string }
   | { type: 'incomingCancel'; id: string }
-  | { type: 'equipmentRequest'; item: string; unit: string };
+  | { type: 'equipmentRequest'; item: string; unit: string }
+  | { type: 'hospitalAdd'; name: string }
+  | { type: 'hospitalUpdate'; id: string; capacity?: number | null; sent?: number };
 
 const ALLOWED: Record<ReturnType<typeof effectiveRole>, readonly RoleAction['type'][]> = {
-  responder: ['assign', 'counts', 'move', 'addPatient', 'patientDetails', 'patientCare', 'priority', 'reassign'],
+  responder: ['assign', 'counts', 'move', 'addPatient', 'patientDetails', 'patientCare', 'reassign'],
+  // The transport order is the Treatment Lead's (and the dispatcher's) alone.
+  treatment_lead: ['assign', 'addPatient', 'patientDetails', 'patientCare', 'priority', 'reassign'],
   transport: ['transport'],
-  logistics: ['incomingAdd', 'incomingUpdate', 'incomingArrived', 'incomingCancel', 'equipmentRequest'],
+  logistics: ['incomingAdd', 'incomingUpdate', 'incomingArrived', 'incomingCancel', 'equipmentRequest', 'hospitalAdd', 'hospitalUpdate'],
   incident_command: [],
 };
 
@@ -68,6 +75,8 @@ const ERROR_TEXT: Record<string, string> = {
   'unknown-zone': 'That zone no longer exists.',
   'unknown-area': 'That treatment zone no longer exists.',
   'unknown-patient': 'That patient is no longer here.',
+  'wrong-color': 'That treatment zone only takes patients of its own color.',
+  'no-area': 'There is no treatment zone for one of those colors yet. Ask the dispatcher.',
   invalid: 'Nothing to send.',
   duplicate: 'That name is already in use.',
   missing: 'That entry is no longer in the list.',
@@ -140,7 +149,11 @@ export function applyRoleAction(event: Event, action: RoleAction, actor: RoleAct
     case 'counts':
       return fromMci(tagBatchPatch(event, action.zoneId, action.deltas, ctx));
     case 'move':
-      return fromMci(movePatch(event, action.zoneId, action.areaId, action.counts, { ...ctx, batch: (newId ?? (() => `b${now}`))() }));
+      return fromMci(
+        action.areaId
+          ? movePatch(event, action.zoneId, action.areaId, action.counts, { ...ctx, batch: (newId ?? (() => `b${now}`))() })
+          : routedMovePatch(event, action.zoneId, action.counts, undefined, ctx)
+      );
     case 'addPatient':
       return fromMci(addPatientPatch(event, action.areaId, action.color, action.fields, ctx));
     case 'patientDetails': {
@@ -150,8 +163,8 @@ export function applyRoleAction(event: Event, action: RoleAction, actor: RoleAct
     case 'patientCare':
       return fromMci(patientCarePatch(event, action.patientId, { notes: action.notes, intervention: action.intervention }, ctx));
     case 'priority': {
-      const w = fromMci(nudgePriorityPatch(event, action.patientId, action.direction));
-      return andNote(event, w, `Patient moved ${action.direction} in the transport order`, { patientId: action.patientId }, ctx);
+      const w = fromMci(movePatientInOrderPatch(event, action.patientId, action.direction));
+      return andNote(event, w, `Patient moved ${action.direction} the transport order`, { patientId: action.patientId }, ctx);
     }
     case 'reassign':
       return fromMci(reassignPatientPatch(event, action.patientId, { color: action.color, areaId: action.areaId }, undefined, ctx));
@@ -178,6 +191,16 @@ export function applyRoleAction(event: Event, action: RoleAction, actor: RoleAct
     case 'equipmentRequest': {
       const w = fromLogistics(requestEquipment(event, { item: action.item, unit: action.unit, byUnit: actor.unitName }, now));
       return andNote(event, w, `Equipment requested: ${action.item.trim()} for ${action.unit.trim()}`, {}, ctx);
+    }
+    case 'hospitalAdd': {
+      const w = fromLogistics(addHospital(event, action.name, now, newId ? `hospital-${newId()}` : undefined));
+      return andNote(event, w, `Hospital added: ${action.name.trim()}`, {}, ctx);
+    }
+    case 'hospitalUpdate': {
+      const name = event.mci?.logistics?.hospitals?.find((h) => h.id === action.id)?.name ?? 'hospital';
+      const w = fromLogistics(updateHospital(event, action.id, { capacity: action.capacity, sent: action.sent }));
+      const said = [action.capacity !== undefined ? `capacity ${action.capacity ?? 'cleared'}` : '', action.sent !== undefined ? `sent ${action.sent}` : ''].filter(Boolean).join(', ');
+      return andNote(event, w, `${name}: ${said}`, {}, ctx);
     }
   }
 }

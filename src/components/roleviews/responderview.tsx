@@ -2,7 +2,8 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import type { MciColor, MciState } from '@/app/types';
-import { deriveMci, emptyCounts, MCI_COLORS, mciPatientLabel, type MciCounts, type MciPatient, type MciPatientField } from '@/lib/mci';
+import { currentLog, deriveMci, emptyCounts, MCI_COLORS, mciAreaAccepts, mciPatientLabel, type MciCounts, type MciPatient, type MciPatientField } from '@/lib/mci';
+import HelpTip from '@/components/ui/helptip';
 import type { MciUnit } from '@/lib/mciDoc';
 import type { RoleAction } from '@/lib/mciRoleActions';
 import { MCI_COLOR_STYLES, MCI_PILL_STYLES } from '@/components/dispatch/mci/mciparts';
@@ -23,11 +24,18 @@ import {
 /**
  * The Responder role view (#144): one role for triage and treatment, since
  * people move between them. Triage mode: pick your zone, count tags as a draft
- * and submit them (with an "Are you sure?"), submit moves to a treatment zone.
+ * and submit them (with an "Are you sure?"), submit moves to a treatment zone
+ * (each color to its own tarp unless another location is picked).
  * Treatment mode: pick your treatment zone (a tarp), add patients with their
- * details, record interventions and notes, set transport priority. Choosing a
- * zone moves the unit on the dispatch board; everything is logged under it.
+ * details, record interventions and notes. Choosing a zone moves the unit on
+ * the dispatch board; everything is logged under it.
+ *
+ * The Treatment Lead view (`TreatmentLeadView`) is treatment mode for one
+ * tarp (red, yellow or green), plus setting its transport order.
  */
+
+/** Where a triage move goes when no location is picked: each color to its own tarp. */
+const MATCHING = '';
 
 const INTERVENTIONS = ['Oxygen', 'IV access', 'Tourniquet', 'Splint', 'Medication', 'Airway'];
 
@@ -49,14 +57,18 @@ function TriageMode({ mci, unit, me }: { mci: MciState; unit: string; me: MciUni
   const [draft, setDraft] = useState<Draft>(emptyCounts());
   const [moveOpen, setMoveOpen] = useState(false);
   const [move, setMove] = useState<Draft>(emptyCounts());
-  const [dest, setDest] = useState<string | undefined>(mci.areas[0]?.id);
+  const hasTarps = mci.areas.some((a) => a.color);
+  const [dest, setDest] = useState<string | undefined>(hasTarps ? MATCHING : mci.areas[0]?.id);
   const [confirm, setConfirm] = useState<'counts' | 'move' | null>(null);
   const stats = derived.zones.find((z) => z.zone.id === zoneId);
   const zoneName = stats?.zone.name ?? 'your zone';
-  const destName = mci.areas.find((a) => a.id === dest)?.name ?? 'treatment';
+  const destArea = mci.areas.find((a) => a.id === dest);
+  const destName = dest === MATCHING ? 'treatment (each color to its own zone)' : destArea?.name ?? 'treatment';
+  // A tarp takes only its own color.
+  const moveColors = destArea ? MCI_COLORS.filter((c) => mciAreaAccepts(destArea, c)) : MCI_COLORS;
   const dirty = MCI_COLORS.some((c) => draft[c] !== 0);
-  const moveTotal = MCI_COLORS.reduce((n, c) => n + move[c], 0);
-  const sent = useMemo(() => mci.log.filter((e) => e.byUnit === unit).slice(-6).reverse(), [mci.log, unit]);
+  const moveTotal = moveColors.reduce((n, c) => n + move[c], 0);
+  const sent = useMemo(() => currentLog(mci).filter((e) => e.byUnit === unit).slice(-6).reverse(), [mci, unit]);
 
   const pickZone = async (id: string) => {
     if (id === zoneId) return;
@@ -71,8 +83,9 @@ function TriageMode({ mci, unit, me }: { mci: MciState; unit: string; me: MciUni
     setConfirm(null);
   };
   const submitMove = async () => {
-    if (!zoneId || !dest) return;
-    if (await actions.send({ type: 'move', zoneId, areaId: dest, counts: move })) setMoveOpen(false);
+    if (!zoneId || dest === undefined) return;
+    const counts = moveColors.reduce((out, c) => ({ ...out, [c]: move[c] }), {} as Partial<MciCounts>);
+    if (await actions.send({ type: 'move', zoneId, ...(dest === MATCHING ? {} : { areaId: dest }), counts })) setMoveOpen(false);
     setConfirm(null);
   };
 
@@ -118,7 +131,7 @@ function TriageMode({ mci, unit, me }: { mci: MciState; unit: string; me: MciUni
         )}
         {dirty && (
           <p className="m-0 border border-dashed border-accent px-3 py-2 text-base text-surface-faint" data-testid="role-draft">
-            Not sent yet: {describe(draft, true)}. The dispatch board updates when you submit.
+            Not sent yet: {describe(draft, true)}
           </p>
         )}
         <div className="flex flex-col gap-1.5">
@@ -157,6 +170,11 @@ function TriageMode({ mci, unit, me }: { mci: MciState; unit: string; me: MciUni
         <BottomSheet title={`Move from ${zoneName}`} onClose={() => setMoveOpen(false)} testId="role-move-sheet">
           <span className={ROLE_LABEL}>To</span>
           <div className="grid grid-cols-2 gap-2">
+            {hasTarps && (
+              <button type="button" className={`${ROLE_CHIP} col-span-2 ${chipState(dest === MATCHING)}`} onClick={() => setDest(MATCHING)} data-testid="role-move-matching">
+                Matching color
+              </button>
+            )}
             {mci.areas.map((a) => (
               <button key={a.id} type="button" className={`${ROLE_CHIP} flex items-center gap-2 ${chipState(a.id === dest)}`} onClick={() => setDest(a.id)}>
                 {a.color && <span className={`h-3.5 w-3.5 ${MCI_PILL_STYLES[a.color].pill}`} aria-hidden />}
@@ -164,7 +182,7 @@ function TriageMode({ mci, unit, me }: { mci: MciState; unit: string; me: MciUni
               </button>
             ))}
           </div>
-          {MCI_COLORS.map((c) => (
+          {moveColors.map((c) => (
             <div key={c} className="flex items-center gap-3">
               <span className="flex-1 text-base text-surface-faint">
                 {stats.inZone[c]} {MCI_COLOR_STYLES[c].label.toLowerCase()} in zone
@@ -187,7 +205,7 @@ function TriageMode({ mci, unit, me }: { mci: MciState; unit: string; me: MciUni
             <button type="button" className={`${SECONDARY_BUTTON} flex-1`} onClick={() => setMoveOpen(false)}>
               Cancel
             </button>
-            <button type="button" className={`${PRIMARY_BUTTON} flex-[2]`} disabled={!moveTotal || !dest} onClick={() => setConfirm('move')} data-testid="role-move-submit">
+            <button type="button" className={`${PRIMARY_BUTTON} flex-[2]`} disabled={!moveTotal || dest === undefined} onClick={() => setConfirm('move')} data-testid="role-move-submit">
               Submit move of {moveTotal}
             </button>
           </div>
@@ -197,7 +215,7 @@ function TriageMode({ mci, unit, me }: { mci: MciState; unit: string; me: MciUni
       {confirm && (
         <ConfirmDialog
           title={confirm === 'move' ? `Move from ${zoneName} to ${destName}:` : `Submit counts for ${zoneName}:`}
-          lines={MCI_COLORS.filter((c) => (confirm === 'move' ? move[c] : draft[c])).map((c) => ({
+          lines={(confirm === 'move' ? moveColors : MCI_COLORS).filter((c) => (confirm === 'move' ? move[c] : draft[c])).map((c) => ({
             color: c,
             text: confirm === 'move' ? String(move[c]) : `${draft[c] > 0 ? '+' : ''}${draft[c]}`,
           }))}
@@ -270,10 +288,20 @@ function PatientSheet({
   return (
     <BottomSheet title={patient ? `Patient${patient.rank ? ` #${patient.rank}` : ''}` : 'New patient'} onClose={onClose} testId="role-patient-sheet">
       <ErrorBanner error={actions.error} onClose={actions.clearError} />
-      <span className={ROLE_LABEL}>Tag color</span>
+      <span className="flex items-center gap-1">
+        <span className={ROLE_LABEL}>Tag color</span>
+        {area?.color && <HelpTip text={`${area.name} only takes ${area.color} patients. Re-tagging a patient moves them to that color's treatment zone.`} label="About tag color" />}
+      </span>
       <div className="flex gap-1.5">
         {MCI_COLORS.map((c) => (
-          <button key={c} type="button" aria-pressed={form.color === c} onClick={() => set({ color: c })} className={`h-11 flex-1 text-sm font-bold uppercase ${MCI_PILL_STYLES[c].pill} ${form.color === c ? 'ring-[3px] ring-inset ring-white' : ''}`}>
+          <button
+            key={c}
+            type="button"
+            aria-pressed={form.color === c}
+            disabled={!patient && !!area && !mciAreaAccepts(area, c)}
+            onClick={() => set({ color: c })}
+            className={`h-11 flex-1 text-sm font-bold uppercase disabled:opacity-30 ${MCI_PILL_STYLES[c].pill} ${form.color === c ? 'ring-[3px] ring-inset ring-white' : ''}`}
+          >
             {MCI_COLOR_STYLES[c].label}
           </button>
         ))}
@@ -340,7 +368,10 @@ function PatientSheet({
 
       {patient && (
         <div className="flex flex-col gap-2 border-t border-surface-liner pt-2.5">
-          <span className={ROLE_LABEL}>Interventions (tap to record, timed)</span>
+          <span className="flex items-center gap-1">
+            <span className={ROLE_LABEL}>Interventions</span>
+            <HelpTip text={`Tap one to record it, with the time, under ${unit}.`} label="About interventions" />
+          </span>
           <div className="flex flex-wrap gap-1.5">
             {INTERVENTIONS.map((name) => (
               <button
@@ -366,15 +397,6 @@ function PatientSheet({
             Treatment notes
             <textarea className="min-h-24 resize-none border border-surface-liner bg-surface-deepest px-3 py-2 text-base normal-case tracking-normal text-surface-light" value={form.notes} placeholder="Vitals, response to treatment, anything to hand over" onChange={(e) => set({ notes: e.target.value })} data-testid="role-patient-notes" />
           </label>
-          <span className={ROLE_LABEL}>Transport priority</span>
-          <div className="flex gap-2">
-            <button type="button" className={`${SECONDARY_BUTTON} h-12 flex-1`} disabled={actions.busy} onClick={() => void actions.send({ type: 'priority', patientId: patient.id, direction: 'sooner' })}>
-              Sooner
-            </button>
-            <button type="button" className={`${SECONDARY_BUTTON} h-12 flex-1`} disabled={actions.busy} onClick={() => void actions.send({ type: 'priority', patientId: patient.id, direction: 'later' })}>
-              Later
-            </button>
-          </div>
         </div>
       )}
 
@@ -386,22 +408,26 @@ function PatientSheet({
           {patient ? 'Save' : 'Add patient'}
         </button>
       </div>
-      <span className="text-sm text-surface-faint">Saved changes are logged as {unit}, with the time.</span>
     </BottomSheet>
   );
 }
 
-function TreatmentMode({ mci, unit, me, units }: { mci: MciState; unit: string; me: MciUnit | undefined; units: MciUnit[] }) {
+/** Tarps a Treatment Lead can run. */
+const LEAD_COLORS = new Set<MciColor>(['red', 'yellow', 'green']);
+
+function TreatmentMode({ mci, unit, me, units, lead = false }: { mci: MciState; unit: string; me: MciUnit | undefined; units: MciUnit[]; lead?: boolean }) {
   const actions = useRoleActions();
   const derived = useMemo(() => deriveMci({ mci, calls: [], clinics: [] }), [mci]);
-  const assigned = me?.mciAssignment?.kind === 'area' ? me.mciAssignment.id : undefined;
+  const choices = lead ? derived.areas.filter((a) => a.area.color && LEAD_COLORS.has(a.area.color)) : derived.areas;
+  const assignedRaw = me?.mciAssignment?.kind === 'area' ? me.mciAssignment.id : undefined;
+  const assigned = assignedRaw && choices.some((a) => a.area.id === assignedRaw) ? assignedRaw : undefined;
   const [areaId, setAreaId] = useState<string | undefined>(assigned);
   const [choosing, setChoosing] = useState(!assigned);
   const [editing, setEditing] = useState<MciPatient | 'new' | null>(null);
   useEffect(() => {
     if (assigned) setAreaId(assigned);
   }, [assigned]);
-  const stats = derived.areas.find((a) => a.area.id === areaId);
+  const stats = choices.find((a) => a.area.id === areaId);
   // Keep an open patient current as other phones change it.
   const editingPatient = editing && editing !== 'new' ? stats?.patients.find((p) => p.id === editing.id) ?? editing : undefined;
 
@@ -415,9 +441,12 @@ function TreatmentMode({ mci, unit, me, units }: { mci: MciState; unit: string; 
     return (
       <div className="flex flex-col gap-3 px-4 py-5">
         <ErrorBanner error={actions.error} onClose={actions.clearError} />
-        <span className="text-2xl font-bold">Which treatment zone are you working in?</span>
-        <span className="text-base text-surface-faint">The dispatch board shows {unit} there. You can switch at any time.</span>
-        {derived.areas.map((a) => (
+        <span className="flex items-center gap-1.5 text-2xl font-bold">
+          {lead ? 'Which treatment zone do you lead?' : 'Which treatment zone are you working in?'}
+          <HelpTip text={`The dispatch board shows ${unit} there. You can switch at any time.`} label="About choosing a zone" />
+        </span>
+        {choices.length === 0 && <span className="text-base text-surface-faint" data-testid="role-lead-no-tarps">No red, yellow or green treatment zone yet. Ask the dispatcher.</span>}
+        {choices.map((a) => (
           <button
             key={a.area.id}
             type="button"
@@ -446,19 +475,45 @@ function TreatmentMode({ mci, unit, me, units }: { mci: MciState; unit: string; 
         </button>
       </div>
       <div className="flex flex-1 flex-col gap-2 overflow-y-auto px-4 pb-28 pt-3">
-        <span className={ROLE_LABEL}>Patients here, by transport priority</span>
         {stats.patients.length === 0 && <p className="m-0 text-base text-surface-faint">No patients in {stats.name} yet.</p>}
         {stats.patients.map((p, i) => (
-          <button key={p.id} type="button" onClick={() => setEditing(p)} className="flex min-h-[4.25rem] items-stretch border border-surface-liner bg-surface-deep text-left" data-testid="role-patient">
-            <span className={`flex w-14 items-center justify-center font-mono text-xl font-bold ${MCI_PILL_STYLES[p.color].pill}`}>#{p.rank ?? i + 1}</span>
-            <span className="flex flex-1 flex-col justify-center gap-0.5 px-3 py-2">
-              <span className="text-lg font-bold">{mciPatientLabel(p.details) || 'Tap to add details'}</span>
-              <span className="text-sm text-surface-faint">
-                {p.details.team ? `Brought in by ${p.details.team}` : 'Team not recorded'}
-                {(p.details.interventions ?? []).length ? ` · ${p.details.interventions!.map((r) => r.name).join(', ')}` : ''}
+          <div key={p.id} className="flex min-h-[4.25rem] items-stretch border border-surface-liner bg-surface-deep" data-testid="role-patient">
+            <button type="button" onClick={() => setEditing(p)} className="flex min-w-0 flex-1 items-stretch text-left">
+              <span className={`flex w-14 shrink-0 items-center justify-center font-mono text-xl font-bold ${MCI_PILL_STYLES[p.color].pill}`}>#{p.rank ?? i + 1}</span>
+              <span className="flex min-w-0 flex-1 flex-col justify-center gap-0.5 px-3 py-2">
+                <span className="text-lg font-bold">{mciPatientLabel(p.details) || 'Tap to add details'}</span>
+                <span className="text-sm text-surface-faint">
+                  {p.misplaced ? <span className="font-semibold text-status-red">Needs a {p.color} treatment zone · </span> : null}
+                  {p.details.team ? `Brought in by ${p.details.team}` : 'Team not recorded'}
+                  {(p.details.interventions ?? []).length ? ` · ${p.details.interventions!.map((r) => r.name).join(', ')}` : ''}
+                </span>
               </span>
-            </span>
-          </button>
+            </button>
+            {lead && (
+              <div className="flex shrink-0 flex-col border-l border-surface-liner">
+                <button
+                  type="button"
+                  className="flex h-1/2 min-h-[2.1rem] w-12 items-center justify-center text-xl disabled:opacity-30"
+                  disabled={actions.busy || i === 0}
+                  onClick={() => void actions.send({ type: 'priority', patientId: p.id, direction: 'up' })}
+                  aria-label={`Move ${mciPatientLabel(p.details) || 'patient'} up the transport order`}
+                  data-testid="role-patient-up"
+                >
+                  ▲
+                </button>
+                <button
+                  type="button"
+                  className="flex h-1/2 min-h-[2.1rem] w-12 items-center justify-center border-t border-surface-liner text-xl disabled:opacity-30"
+                  disabled={actions.busy || i === stats.patients.length - 1}
+                  onClick={() => void actions.send({ type: 'priority', patientId: p.id, direction: 'down' })}
+                  aria-label={`Move ${mciPatientLabel(p.details) || 'patient'} down the transport order`}
+                  data-testid="role-patient-down"
+                >
+                  ▼
+                </button>
+              </div>
+            )}
+          </div>
         ))}
       </div>
       <div className="fixed inset-x-0 bottom-0 z-20 flex border-t border-surface-liner bg-surface-deep px-4 pb-5 pt-3">
@@ -469,6 +524,12 @@ function TreatmentMode({ mci, unit, me, units }: { mci: MciState; unit: string; 
       {editing && <PatientSheet mci={mci} unit={unit} units={units} areaId={stats.area.id} patient={editingPatient} onClose={() => setEditing(null)} />}
     </>
   );
+}
+
+/** The Treatment Lead role: one red, yellow or green treatment zone, its patients and their transport order. */
+export function TreatmentLeadView({ mci, unit, units }: { mci: MciState; unit: string; units: MciUnit[] }) {
+  const me = units.find((u) => u.name === unit);
+  return <TreatmentMode mci={mci} unit={unit} me={me} units={units} lead />;
 }
 
 export default function ResponderView({ mci, unit, units }: { mci: MciState; unit: string; units: MciUnit[] }) {

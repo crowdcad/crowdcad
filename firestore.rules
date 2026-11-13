@@ -349,7 +349,7 @@ service cloud.firestore {
     match /roleAccountIndex/{uid} {
       allow read: if request.auth != null && request.auth.uid == uid;
       allow create: if canReadEventData(request.resource.data.get('eventId', '')) &&
-        request.resource.data.get('role', null) in ['responder', 'incident_command', 'triage', 'treatment', 'transport', 'logistics'];
+        request.resource.data.get('role', null) in ['responder', 'treatment_lead', 'incident_command', 'triage', 'treatment', 'transport', 'logistics'];
       allow delete: if canReadEventData(resource.data.get('eventId', ''));
     }
 
@@ -469,7 +469,7 @@ service cloud.firestore {
 
     function isValidRoleAccount(eventId, uid, d) {
       return d.get('uid', null) == uid && d.get('eventId', null) == eventId &&
-        d.get('role', null) in ['responder', 'incident_command', 'triage', 'treatment', 'transport', 'logistics'] &&
+        d.get('role', null) in ['responder', 'treatment_lead', 'incident_command', 'triage', 'treatment', 'transport', 'logistics'] &&
         d.get('username', null) is string && d.get('disabled', null) is bool;
     }
 

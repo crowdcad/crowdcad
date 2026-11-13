@@ -3,9 +3,9 @@
 import React, { useState } from 'react';
 import { ModalHeader, ModalBody, ModalFooter, Button, Input, Select, SelectItem } from '@heroui/react';
 import type { MciColor } from '@/app/types';
-import { MCI_COLORS, mciPatientLabel, type MciPatient } from '@/lib/mci';
+import { MCI_COLORS, mciAreaAccepts, mciPatientLabel, type MciPatient } from '@/lib/mci';
 import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
-import { MCI_CANCEL_BUTTON, MCI_COLOR_STYLES, MCI_INPUT_CLASSNAMES, MciColorDot, MciModal } from './mciparts';
+import { MCI_CANCEL_BUTTON, MCI_COLOR_STYLES, MCI_INPUT_CLASSNAMES, MciColorDot, MciModal, type MciAreaOption } from './mciparts';
 import type { MciReassignTarget } from './mcipatientbox';
 
 export type MciReassignRequest = { patient: MciPatient; target: MciReassignTarget };
@@ -13,7 +13,7 @@ export type MciReassignRequest = { patient: MciPatient; target: MciReassignTarge
 type Props = {
   /** The patient and where the drop or menu wants them; null keeps the dialog closed. */
   request: MciReassignRequest | null;
-  areas: { id: string; name: string }[];
+  areas: MciAreaOption[];
   onClose: () => void;
   onConfirm: (patientId: string, target: { areaId: string; color: MciColor }, note: string) => boolean | Promise<boolean>;
 };
@@ -22,8 +22,23 @@ type Props = {
 function ReassignForm({ request, areas, onClose, onConfirm }: Omit<Props, 'request'> & { request: MciReassignRequest }) {
   const { t } = useDispatchTerms();
   const { patient } = request;
-  const [areaId, setAreaId] = useState(request.target.areaId ?? patient.areaId);
-  const [color, setColor] = useState<MciColor>(request.target.color ?? patient.color);
+  // Tarps take only their own color: dropped on a tarp of another color means retriage to it; a new color
+  // whose patient is in a tarp of another color moves them to that color's tarp.
+  const tarpOf = (c: MciColor) => areas.find((a) => a.color === c);
+  const startArea = areas.find((a) => a.id === (request.target.areaId ?? patient.areaId));
+  const startColor = request.target.color ?? (request.target.areaId && startArea?.color ? startArea.color : patient.color);
+  const [color, setColorRaw] = useState<MciColor>(startColor);
+  const [areaId, setAreaId] = useState(() => (startArea && !mciAreaAccepts(startArea, startColor) ? tarpOf(startColor)?.id ?? patient.areaId : startArea?.id ?? patient.areaId));
+  const setColor = (c: MciColor) => {
+    setColorRaw(c);
+    const here = areas.find((a) => a.id === areaId);
+    if (here && !mciAreaAccepts(here, c)) setAreaId(tarpOf(c)?.id ?? patient.areaId);
+  };
+  const choices = areas.filter((a) => a.id === patient.areaId || mciAreaAccepts(a, color));
+  const fits = (() => {
+    const at = areas.find((a) => a.id === areaId);
+    return areaId === patient.areaId || (!!at && mciAreaAccepts(at, color));
+  })();
   const [note, setNote] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -34,7 +49,7 @@ function ReassignForm({ request, areas, onClose, onConfirm }: Omit<Props, 'reque
   const fromArea = areas.find((a) => a.id === patient.areaId)?.name ?? '';
 
   const submit = async () => {
-    if (submitting || (!moving && !retriaging)) return;
+    if (submitting || (!moving && !retriaging) || !fits) return;
     setSubmitting(true);
     try {
       if (await onConfirm(patient.id, { areaId, color }, note)) onClose();
@@ -63,7 +78,7 @@ function ReassignForm({ request, areas, onClose, onConfirm }: Omit<Props, 'reque
             disallowEmptySelection
             data-testid="mci-reassign-area"
           >
-            {areas.map((a) => (
+            {choices.map((a) => (
               <SelectItem key={a.id}>{a.name}</SelectItem>
             ))}
           </Select>
@@ -108,7 +123,7 @@ function ReassignForm({ request, areas, onClose, onConfirm }: Omit<Props, 'reque
         <Button
           radius="lg"
           className="bg-accent px-4 py-2 text-surface-light"
-          isDisabled={submitting || (!moving && !retriaging)}
+          isDisabled={submitting || (!moving && !retriaging) || !fits}
           onPress={submit}
           data-testid="mci-reassign-confirm"
         >
