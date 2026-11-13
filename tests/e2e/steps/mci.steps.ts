@@ -130,6 +130,8 @@ When('I mark zone {string} clear', async ({ page }, zone: string) => {
 When('I stand down the MCI', async ({ page }) => {
   page.once('dialog', (dialog) => dialog.accept());
   await page.getByTestId('mci-stand-down').click();
+  // Until it has stood down, the MCI button opens the tab instead of declaring.
+  await expect(page.getByTestId('mci-stood-down')).toBeVisible();
 });
 
 When('I open the MCI summary from the event summary', async ({ page }) => {
