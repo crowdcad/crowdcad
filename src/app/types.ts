@@ -234,7 +234,10 @@ export interface MciEarlier {
 /** The Logistics tab's own records (src/lib/mciLogistics.ts). */
 export interface MciLogistics {
   incoming: IncomingTeam[];
-  /** Equipment asked for by the Logistics role (option a): the dispatcher issues it or dismisses the request. */
+  /**
+   * Equipment asked for by the Logistics role before it could hand equipment out itself (D27). Kept for
+   * events from then; nothing new is written here.
+   */
   requests?: EquipmentRequest[];
   /** Hospitals patients are sent to, in the order added. */
   hospitals?: MciHospital[];
@@ -274,12 +277,17 @@ export interface IncomingTeam {
   eta: IncomingEta;
   notes: string;
   reportedAt: number;
-  /** 'reported': the Logistics role says they arrived; the dispatcher confirms, which makes the team (option a). */
+  /**
+   * 'reported': from before D27, when the Logistics role's arrival waited for the dispatcher to confirm it.
+   * Shown as still to confirm; nothing new is set to it.
+   */
   state: 'incoming' | 'reported' | 'arrived' | 'cancelled';
   /** The unit of the role login that added it, when not the dispatcher. */
   reportedBy?: string;
   /** When it arrived (became a team) or was cancelled. */
   closedAt?: number;
+  /** Staff.id of the team its arrival made, so an arrival marked by mistake can be undone (D28). */
+  teamId?: string;
 }
 
 /** Details typed for one patient in a treatment location. Every field is optional. */

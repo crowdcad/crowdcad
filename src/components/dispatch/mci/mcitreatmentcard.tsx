@@ -8,6 +8,7 @@ import type { MciAreaStats, MciPatient, MciPatientField } from '@/lib/mci';
 import { MCI_COLORS, mciPatientLabel } from '@/lib/mci';
 import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
 import DispatchMotionCell from '@/components/dispatch/motioncell';
+import { TRACKING_ROW_HOVER_CLASS, TRACKING_ROW_OPEN_CLASS } from '@/lib/statusColors';
 import HelpTip from '@/components/ui/helptip';
 import { MCI_COLOR_STYLES, MciColorDot, MciCountsLine, MciMapButton, MciTeamChips, formatClock, type MciAreaOption } from './mciparts';
 import MciPatientBox, { MCI_PATIENT_DRAG_TYPE, type MciReassignTarget } from './mcipatientbox';
@@ -25,6 +26,7 @@ export type MciPatientHandlers = {
   areas: MciAreaOption[];
   onDetails: (patientId: string, fields: Partial<Record<MciPatientField, string>>) => void;
   onPriority: (patientId: string, rank: number | null) => void;
+  onMoveInOrder: (patientId: string, direction: 'up' | 'down') => void;
   onTransportPatient: (patientId: string, trip: { unit?: string; destination?: string }) => void | Promise<unknown>;
   /** Opens the note dialog for a retriage or move (from the menu or a drop). */
   onReassign: (patient: MciPatient, target: MciReassignTarget) => void;
@@ -132,10 +134,13 @@ function PatientColumn({ areaId, color, patients, readOnly, handlers, misplaced 
         )}
       </div>
       <div ref={listRef} className="flex flex-col gap-1">
-        {patients.map((p) => (
+        {patients.map((p, i) => (
           <MciPatientBox
             key={p.id}
             patient={p}
+            onMoveInOrder={misplaced ? undefined : handlers.onMoveInOrder}
+            first={i === 0}
+            last={i === patients.length - 1}
             zoneName={p.fromZoneId ? handlers.zoneNames[p.fromZoneId] : undefined}
             readOnly={readOnly}
             teamListId={handlers.teamListId(p.fromZoneId)}
@@ -176,7 +181,7 @@ export default function MciTreatmentCard({ stats, teams, readOnly, onTransport, 
 
   return (
     <Card
-      className={`dispatch-shell-card ${expanded ? 'dispatch-shell-card--open' : ''} w-full border-0 transition-colors duration-200 ${expanded ? 'rounded-lg bg-surface-deep shadow-sm' : 'rounded-none bg-transparent shadow-none hover:bg-surface-deep'} ${dropOver ? 'ring-1 ring-surface-faint' : ''}`}
+      className={`dispatch-shell-card ${expanded ? 'dispatch-shell-card--open' : ''} w-full border-0 transition-colors duration-200 ${expanded ? `rounded-lg shadow-sm ${TRACKING_ROW_OPEN_CLASS}` : `rounded-none bg-transparent shadow-none ${TRACKING_ROW_HOVER_CLASS}`} ${dropOver ? 'ring-1 ring-surface-faint' : ''}`}
       aria-label={`${name} treatment location`}
       data-testid={`mci-area-${name}`}
       // Dropping a box anywhere on the row outside a column moves the patient here and keeps their color.

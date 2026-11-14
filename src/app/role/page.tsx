@@ -23,7 +23,7 @@ import CommandView from '@/components/roleviews/commandview';
 export default function RolePage() {
   const { user, ready } = useAuth();
   const session = useRoleSession(user, ready);
-  const { account, mci, units, layers, eventId } = session;
+  const { account, mci, units, equipment, layers, eventId } = session;
 
   if (session.status === 'loading') {
     return (
@@ -96,7 +96,7 @@ export default function RolePage() {
         {role === 'responder' && <ResponderView mci={mci} unit={unit} units={units} />}
         {role === 'treatment_lead' && <TreatmentLeadView mci={mci} unit={unit} units={units} />}
         {role === 'transport' && <TransportView mci={mci} />}
-        {role === 'logistics' && <LogisticsView mci={mci} units={units} />}
+        {role === 'logistics' && <LogisticsView mci={mci} units={units} equipment={equipment} />}
         {role === 'incident_command' && <CommandView mci={mci} units={units} />}
       </div>
     </RoleShell>

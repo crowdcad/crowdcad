@@ -120,6 +120,18 @@ describe('transport order', () => {
     expect(areaStats(e, 'red').patients.map((p) => p.rank)).toEqual([1, 2, 3]);
     expect(movePatientInOrderPatch(e, ids[0], 'up').patch).toEqual({});
   });
+
+  it('moves past the next patient of the same color where a location takes several (a column per color)', () => {
+    let e = declared();
+    e = apply(e, arrivePatch(e, 'c1', 'red', 1, ctx(100)));
+    e = apply(e, arrivePatch(e, 'c1', 'yellow', 1, ctx(200)));
+    e = apply(e, arrivePatch(e, 'c1', 'red', 1, ctx(300)));
+    const [redA, yellow, redB] = areaStats(e, 'c1').patients.map((p) => p.id);
+    e = apply(e, movePatientInOrderPatch(e, redB!, 'up'));
+    expect(areaStats(e, 'c1').patients.map((p) => p.id)).toEqual([redB, yellow, redA]);
+    // The yellow column has one patient: nothing to move past.
+    expect(movePatientInOrderPatch(e, yellow!, 'down').patch).toEqual({});
+  });
 });
 
 describe('re-declaring after a stand-down', () => {

@@ -74,6 +74,16 @@ Feature: MCI mode on the dispatch board
     And I open the Logistics tab
     Then hospital "General" should show 2 sent, 2 of them "red"
 
+  Scenario: Logistics hands out equipment itself and can undo an arrival
+    When I declare an MCI with zones "Zone A" and "Zone B" and the default clinic
+    And I open the Logistics tab
+    And I add incoming team "MRC1" and mark it arrived
+    And I give a "Trauma bag" to "MRC1" from the Logistics tab
+    Then team "MRC1" should show it is carrying "Trauma bag"
+    When I return "Trauma bag" from the Logistics tab
+    And I undo the arrival of "MRC1"
+    Then incoming team "MRC1" should be back on the list
+
   Scenario: Declare an entirely new MCI after a stand-down
     When I declare an MCI with zones "Zone A" and "Zone B" and the default clinic
     And I tag 2 "red" patients in zone "Zone A"

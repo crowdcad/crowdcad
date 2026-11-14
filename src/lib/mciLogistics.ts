@@ -1,6 +1,8 @@
-import type { EquipmentRequest, Event, IncomingEta, IncomingTeam, MciHospital, MciLogistics, MciState, Staff } from '@/app/types';
+import type { Event, EventEquipment, IncomingEta, IncomingTeam, MciHospital, MciLogistics, MciState, Staff, Supervisor } from '@/app/types';
 import { deriveMci, emptyCounts, MCI_COLORS, sumCounts, type MciCounts } from './mci';
 import { newTeamId } from '@/lib/teamId';
+import { RESOLVED_CALL_STATUSES } from '@/lib/clinics';
+import { changedFleet, custodyOf, fleetOf, materializeEventEquipment, moveEquipment, returnEquipment, unitNames } from './equipmentCustody';
 
 /**
  * The MCI Logistics tab (#139): staff reported on their way ("incoming"),
@@ -65,12 +67,12 @@ function withIncoming(mci: MciState, incoming: IncomingTeam[]): Partial<Event> {
   return { mci: { ...mci, logistics: { ...logisticsOf(mci), incoming } } };
 }
 
-/** Still on the list: on its way, or reported arrived by the Logistics role and waiting for the dispatcher. */
+/** Still on the list: on its way, or (from before D27) reported arrived by the Logistics role and waiting for the dispatcher. */
 export function isOpenIncoming(t: IncomingTeam): boolean {
   return t.state === 'incoming' || t.state === 'reported';
 }
 
-export type LogisticsResult = { patch: Partial<Event>; error?: 'inactive' | 'invalid' | 'duplicate' | 'missing' };
+export type LogisticsResult = { patch: Partial<Event>; error?: 'inactive' | 'invalid' | 'duplicate' | 'missing' | 'busy' | 'no-team' };
 
 function nameTaken(event: Pick<Event, 'staff' | 'supervisor' | 'mci'>, name: string, exceptId?: string): boolean {
   const n = name.trim().toLowerCase();
@@ -138,8 +140,9 @@ export function arriveIncoming(event: Pick<Event, 'mci' | 'staff' | 'supervisor'
   const team = list.find((t) => t.id === id && isOpenIncoming(t));
   if (!team) return { patch: {}, error: 'missing' };
   if ((event.staff ?? []).some((s) => s.team.trim().toLowerCase() === team.name.toLowerCase())) return { patch: {}, error: 'duplicate' };
+  const teamId = newTeamId();
   const staff: Staff = {
-    id: newTeamId(),
+    id: teamId,
     team: team.name,
     members: team.members,
     status: 'Available',
@@ -149,7 +152,7 @@ export function arriveIncoming(event: Pick<Event, 'mci' | 'staff' | 'supervisor'
   };
   return {
     patch: {
-      ...withIncoming(mci, list.map((t) => (t.id === id ? { ...t, state: 'arrived' as const, closedAt: now } : t))),
+      ...withIncoming(mci, list.map((t) => (t.id === id ? { ...t, state: 'arrived' as const, closedAt: now, teamId } : t))),
       staff: [...(event.staff ?? []), staff],
     },
   };
@@ -162,6 +165,108 @@ export function cancelIncoming(event: Pick<Event, 'mci'>, id: string, now: numbe
   const list = logisticsOf(mci).incoming;
   if (!list.some((t) => t.id === id && isOpenIncoming(t))) return { patch: {}, error: 'missing' };
   return { patch: withIncoming(mci, list.map((t) => (t.id === id ? { ...t, state: 'cancelled' as const, closedAt: now } : t))) };
+}
+
+/**
+ * Undoes an arrival or a cancellation pressed by mistake (D28): the row goes back on the incoming list. An
+ * arrival also takes its team off the board, but only while that team is still as the arrival left it
+ * (Available, on no call, holding nothing, with no MCI assignment): otherwise 'busy'.
+ */
+export function undoIncoming(event: Pick<Event, 'mci' | 'staff' | 'supervisor' | 'calls' | 'eventEquipment'>, id: string): LogisticsResult {
+  const mci = event.mci;
+  if (!mci?.active) return { patch: {}, error: 'inactive' };
+  const list = logisticsOf(mci).incoming;
+  const row = list.find((t) => t.id === id);
+  if (!row || (row.state !== 'arrived' && row.state !== 'cancelled')) return { patch: {}, error: 'missing' };
+  const reopened: IncomingTeam = { ...row, state: 'incoming' };
+  delete reopened.closedAt;
+  delete reopened.teamId;
+  const restOpen = list.some((t) => t.id !== id && isOpenIncoming(t) && sameName(t.name, row.name));
+  if (restOpen) return { patch: {}, error: 'duplicate' };
+  const patch = withIncoming(mci, list.map((t) => (t.id === id ? reopened : t)));
+  if (row.state === 'cancelled') {
+    if (nameTaken(event, row.name, id)) return { patch: {}, error: 'duplicate' };
+    return { patch };
+  }
+  const staff = event.staff ?? [];
+  const team = staff.find((s) => (row.teamId ? s.id === row.teamId : sameName(s.team, row.name)));
+  if (!team) return { patch };
+  const onCall = (event.calls ?? []).some((c) => !RESOLVED_CALL_STATUSES.includes(c.status) && (c.assignedTeam ?? []).includes(team.team));
+  const holds = (event.eventEquipment ?? []).some((eq) => eq.location === team.team || eq.assignedTeam === team.team);
+  if (team.status !== 'Available' || onCall || holds || team.mciAssignment) return { patch: {}, error: 'busy' };
+  return { patch: { ...patch, staff: staff.filter((s) => s !== team) } };
+}
+
+// ---------------------------------------------------------------------------
+// Equipment: Logistics hands items to teams itself (D27); the dispatcher sees
+// them on the team at once. Items are ordinary event equipment
+// (src/lib/equipmentCustody.ts).
+// ---------------------------------------------------------------------------
+
+/** Kinds of item offered when handing equipment to a team; "Other" types a name. */
+export const LOGISTICS_ITEMS = ['Trauma bag', 'Triage bag', 'Wheelchair', 'Gurney', 'AED', 'Oxygen'] as const;
+
+const MAX_ITEM_NAME = 60;
+
+/**
+ * Hands an item to a unit. `item` is an equipment name or a kind ("Trauma bag"): an item of that name, or a
+ * numbered one ("Trauma bag 2"), that no unit holds is handed over; with none free, a new event item is made
+ * ("Trauma bag", else "Trauma bag 2", ...) and handed over. With `exact`, `item` names one item, handed over
+ * from wherever it is. The unit's log notes it.
+ */
+export function giveEquipment(
+  event: Pick<Event, 'mci' | 'staff' | 'supervisor' | 'eventEquipment' | 'venue' | 'clinics'>,
+  input: { item: string; unit: string; by?: string; exact?: boolean },
+  now: number,
+  id = `eq_${now}_${Math.random().toString(36).slice(2, 8)}`,
+): LogisticsResult {
+  if (!event.mci?.active) return { patch: {}, error: 'inactive' };
+  const item = input.item.trim().replace(/\s+/g, ' ').slice(0, MAX_ITEM_NAME);
+  const unit = input.unit.trim();
+  if (!item || !unit) return { patch: {}, error: 'invalid' };
+  if (!unitNames(event).has(unit)) return { patch: {}, error: 'no-team' };
+  const ctx = { ...event, staff: event.staff ?? [], supervisor: event.supervisor ?? [] };
+  let equipment = materializeEventEquipment(event, now);
+  const lower = item.toLowerCase();
+  const sameKind = (eq: EventEquipment) => {
+    const n = eq.name.trim().toLowerCase();
+    return n === lower || (n.startsWith(lower) && /^\s*#?\d+$/.test(n.slice(lower.length)));
+  };
+  const held = (eq: EventEquipment) => {
+    const c = custodyOf(eq, ctx);
+    return c.holder.kind === 'team' || c.phase === 'retrieving';
+  };
+  // `exact`: that very item, wherever it is (a transfer from one team to another).
+  let target = input.exact ? equipment.find((eq) => eq.name === input.item) : equipment.find((eq) => sameKind(eq) && !held(eq));
+  if (input.exact && !target) return { patch: {}, error: 'missing' };
+  if (!target) {
+    const taken = new Set(equipment.map((eq) => eq.name.trim().toLowerCase()));
+    let name = item;
+    for (let n = 2; taken.has(name.toLowerCase()); n++) name = `${item} ${n}`;
+    target = { id, name, status: 'Available', location: 'Staging', defaultLocation: 'Staging', assignedTeam: null, notes: 'Added by logistics during the MCI' };
+    equipment = [...equipment, target];
+  }
+  const before = fleetOf({ ...event, eventEquipment: equipment });
+  const after = moveEquipment(before, ctx, target.name, unit, now);
+  const by = input.by ? ` by ${input.by}` : '';
+  const note = <T extends Staff | Supervisor>(u: T): T =>
+    u.team === unit ? { ...u, log: [...(u.log ?? []), { timestamp: now, message: `${hhmm(now)} - given ${target.name} (logistics${by})` }] } : u;
+  const staff = after.staff.map(note);
+  const supervisor = after.supervisor.map(note);
+  const changed = changedFleet(fleetOf(event), { eventEquipment: after.eventEquipment, staff, supervisor });
+  // A materialized catalog is always written, so the item list doesn't fall back to the venue's.
+  return { patch: { ...changed, eventEquipment: after.eventEquipment } };
+}
+
+/** Takes an item back from whoever has it, to its staging location. */
+export function takeBackEquipment(event: Pick<Event, 'mci' | 'staff' | 'supervisor' | 'eventEquipment' | 'venue' | 'clinics'>, name: string, now: number): LogisticsResult {
+  if (!event.mci?.active) return { patch: {}, error: 'inactive' };
+  const ctx = { ...event, staff: event.staff ?? [], supervisor: event.supervisor ?? [] };
+  const equipment = materializeEventEquipment(event, now);
+  if (!equipment.some((eq) => eq.name === name)) return { patch: {}, error: 'missing' };
+  const before = fleetOf({ ...event, eventEquipment: equipment });
+  const after = returnEquipment(before, ctx, name, now, 'dispatcher');
+  return { patch: { ...changedFleet(fleetOf(event), after), eventEquipment: after.eventEquipment } };
 }
 
 const csvQuote = (text: string) => `"${text.replace(/"/g, '""')}"`;
@@ -186,47 +291,6 @@ export function logisticsCsvLines(event: Pick<Event, 'mci'>, formatTime: (ms: nu
     }
   }
   return rows.sort((a, b) => a.t - b.t).map((r) => r.line);
-}
-
-/**
- * The Logistics role says an incoming team has arrived (option a): the row
- * waits, marked "reported", for the dispatcher to confirm it onto the board.
- */
-export function reportArrival(event: Pick<Event, 'mci'>, id: string): LogisticsResult {
-  const mci = event.mci;
-  if (!mci?.active) return { patch: {}, error: 'inactive' };
-  const list = logisticsOf(mci).incoming;
-  if (!list.some((t) => t.id === id && t.state === 'incoming')) return { patch: {}, error: 'missing' };
-  return { patch: withIncoming(mci, list.map((t) => (t.id === id ? { ...t, state: 'reported' as const } : t))) };
-}
-
-function withRequests(mci: MciState, requests: EquipmentRequest[]): Partial<Event> {
-  return { mci: { ...mci, logistics: { ...logisticsOf(mci), requests } } };
-}
-
-/** The Logistics role asks for an item for a unit; the dispatcher issues it or dismisses the request. */
-export function requestEquipment(
-  event: Pick<Event, 'mci'>,
-  input: { item: string; unit: string; byUnit?: string },
-  now: number,
-  id = `request-${now.toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
-): LogisticsResult {
-  const mci = event.mci;
-  if (!mci?.active) return { patch: {}, error: 'inactive' };
-  const item = input.item.trim().slice(0, 60);
-  const unit = input.unit.trim().slice(0, 60);
-  if (!item || !unit) return { patch: {}, error: 'invalid' };
-  const request: EquipmentRequest = { id, item, unit, t: now, state: 'open', ...(input.byUnit ? { byUnit: input.byUnit } : {}) };
-  return { patch: withRequests(mci, [...(logisticsOf(mci).requests ?? []), request]) };
-}
-
-/** The dispatcher handled an equipment request: done (issued) or dismissed. */
-export function closeRequest(event: Pick<Event, 'mci'>, id: string, outcome: 'done' | 'dismissed', now: number): LogisticsResult {
-  const mci = event.mci;
-  if (!mci?.active) return { patch: {}, error: 'inactive' };
-  const list = logisticsOf(mci).requests ?? [];
-  if (!list.some((r) => r.id === id && r.state === 'open')) return { patch: {}, error: 'missing' };
-  return { patch: withRequests(mci, list.map((r) => (r.id === id ? { ...r, state: outcome, closedAt: now } : r))) };
 }
 
 // ---------------------------------------------------------------------------

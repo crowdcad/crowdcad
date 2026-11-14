@@ -1,5 +1,6 @@
 import isEqual from 'lodash.isequal';
-import type { Event, MciAssignment, MciPatientDetails, MciState } from '@/app/types';
+import type { EquipmentHolder, EquipmentPhase, Event, MciAssignment, MciPatientDetails, MciState } from '@/app/types';
+import { custodyOf, materializeEventEquipment } from './equipmentCustody';
 
 /**
  * MCI state outside the event document (#143). On cloud events (Firebase),
@@ -45,8 +46,19 @@ export interface MciUnit {
   equipment: string[];
 }
 
+/** One item of event equipment and who has it, for the Logistics role view (D27). */
+export interface MciEquipmentItem {
+  name: string;
+  /** Unit, post or clinic name. */
+  holder: string;
+  holderKind: EquipmentHolder['kind'];
+  phase: EquipmentPhase;
+}
+
 export interface MciUnitsDoc {
   units: MciUnit[];
+  /** Every item of event equipment, so Logistics can hand out what no one holds (D27). Absent before D27. */
+  equipment?: MciEquipmentItem[];
   updatedAt: number;
 }
 
@@ -89,7 +101,16 @@ export function mciUnitsFor(event: Pick<Event, 'staff' | 'supervisor' | 'eventEq
   return [...(event.staff ?? []).map(unit('team')), ...(event.supervisor ?? []).map(unit('supervisor'))];
 }
 
-function sameUnits(a: MciUnit[], b: MciUnit[]): boolean {
+/** The equipment summary for the Logistics role view: the event's items (or the venue catalog, before any is saved). */
+export function mciEquipmentFor(event: Pick<Event, 'staff' | 'supervisor' | 'eventEquipment' | 'venue' | 'clinics'>): MciEquipmentItem[] {
+  const ctx = { ...event, staff: event.staff ?? [], supervisor: event.supervisor ?? [] };
+  return materializeEventEquipment(event, 0).map((eq) => {
+    const c = custodyOf(eq, ctx);
+    return { name: eq.name, holder: c.holder.name, holderKind: c.holder.kind, phase: c.phase };
+  });
+}
+
+function sameUnits(a: MciUnit[] | MciEquipmentItem[], b: MciUnit[] | MciEquipmentItem[]): boolean {
   return JSON.stringify(a) === JSON.stringify(b);
 }
 
@@ -101,24 +122,29 @@ function sameUnits(a: MciUnit[], b: MciUnit[]): boolean {
  * - `patients`: the patient details, when the write sets an MCI state and they
  *   changed, or the patients document doesn't exist yet (`patientsStored` false:
  *   a new MCI, or an older state document carrying them inline);
- * - `units`: the new unit summary, when the event has an MCI and the write
- *   changes what the summary shows.
+ * - `units` and `equipment`: the new unit and equipment summaries, when the
+ *   event has an MCI and the write changes what they show (written together).
  * `current` is the event as read, with its MCI state merged in.
  */
 export function splitMciWrite(
   current: Event,
   updates: Partial<Event>,
   { patientsStored = true }: { patientsStored?: boolean } = {},
-): { event: Partial<Event>; mci?: MciState; patients?: Record<string, MciPatientDetails>; units?: MciUnit[] } {
+): { event: Partial<Event>; mci?: MciState; patients?: Record<string, MciPatientDetails>; units?: MciUnit[]; equipment?: MciEquipmentItem[] } {
   const { mci, ...event } = updates;
   const next = { ...current, ...updates } as Event;
   const nextMci = mci ?? current.mci;
   let units: MciUnit[] | undefined;
+  let equipment: MciEquipmentItem[] | undefined;
   const touchesUnits = 'staff' in updates || 'supervisor' in updates || 'eventEquipment' in updates || mci !== undefined;
   if (nextMci && nextMci.periods.length > 0 && touchesUnits) {
     const after = mciUnitsFor(next);
+    const afterEquipment = mciEquipmentFor(next);
     // A new MCI state (declare, stand down, a migrated event) always writes the summary, so it exists.
-    if (mci !== undefined || !sameUnits(after, mciUnitsFor(current))) units = after;
+    if (mci !== undefined || !sameUnits(after, mciUnitsFor(current)) || !sameUnits(afterEquipment, mciEquipmentFor(current))) {
+      units = after;
+      equipment = afterEquipment;
+    }
   }
   let state: MciState | undefined;
   let patients: Record<string, MciPatientDetails> | undefined;
@@ -128,5 +154,5 @@ export function splitMciWrite(
     const after = nextPatients ?? {};
     if (!patientsStored || !isEqual(after, current.mci?.patients ?? {})) patients = after;
   }
-  return { event, ...(state ? { mci: state } : {}), ...(patients ? { patients } : {}), ...(units ? { units } : {}) };
+  return { event, ...(state ? { mci: state } : {}), ...(patients ? { patients } : {}), ...(units ? { units, equipment } : {}) };
 }

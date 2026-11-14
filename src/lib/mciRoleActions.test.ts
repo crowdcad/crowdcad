@@ -52,21 +52,34 @@ describe('applyRoleAction', () => {
     expect(applyRoleAction(event(), { type: 'counts', zoneId: 'za', deltas: { red: 1 } }, { ...alpha, unitName: '' }, 1).error).toMatch(/not assigned/);
   });
 
-  it('lets Logistics report an arrival for the dispatcher to confirm, and request equipment', () => {
+  it('lets Logistics put an arrival straight on the board, undo it, and hand out equipment itself (D27, D28)', () => {
     const sup: RoleActor = { uid: 'u2', role: 'logistics', unitName: 'Sup 2' };
     let e = event();
     e = apply(e, applyRoleAction(e, { type: 'incomingAdd', name: 'Medic 12' }, sup, 100, ids).patch);
     const id = e.mci!.logistics!.incoming[0]!.id;
     e = apply(e, applyRoleAction(e, { type: 'incomingArrived', id }, sup, 200, ids).patch);
-    expect(e.mci!.logistics!.incoming[0]).toMatchObject({ state: 'reported', reportedBy: 'Sup 2' });
-    expect(e.staff).toHaveLength(1); // the dispatcher adds the team
-    e = apply(e, applyRoleAction(e, { type: 'equipmentRequest', item: 'Trauma bag', unit: 'Alpha' }, sup, 300, ids).patch);
-    expect(e.mci!.logistics!.requests![0]).toMatchObject({ item: 'Trauma bag', unit: 'Alpha', state: 'open', byUnit: 'Sup 2' });
+    expect(e.mci!.logistics!.incoming[0]).toMatchObject({ state: 'arrived', reportedBy: 'Sup 2' });
+    expect(e.staff.map((s) => s.team)).toEqual(['Alpha', 'Medic 12']);
+    e = apply(e, applyRoleAction(e, { type: 'incomingUndo', id }, sup, 250, ids).patch);
+    expect(e.mci!.logistics!.incoming[0]).toMatchObject({ state: 'incoming' });
+    expect(e.staff.map((s) => s.team)).toEqual(['Alpha']);
+
+    e = apply(e, applyRoleAction(e, { type: 'equipmentGive', item: 'Trauma bag', unit: 'Alpha' }, sup, 300, ids).patch);
+    expect(e.eventEquipment).toEqual([expect.objectContaining({ name: 'Trauma bag', holder: { kind: 'team', name: 'Alpha' }, phase: 'carried' })]);
+    expect(e.staff[0]!.log?.at(-1)?.message).toMatch(/given Trauma bag \(logistics by Sup 2\)$/);
+    expect(e.mci!.log.at(-1)).toMatchObject({ kind: 'noted', note: 'Equipment: Trauma bag given to Alpha', byUnit: 'Sup 2' });
+    e = apply(e, applyRoleAction(e, { type: 'equipmentReturn', name: 'Trauma bag' }, sup, 350, ids).patch);
+    expect(e.eventEquipment![0]).toMatchObject({ phase: 'staged', holder: { kind: 'post', name: 'Staging' } });
+
     e = apply(e, applyRoleAction(e, { type: 'hospitalAdd', name: 'General' }, sup, 400, ids).patch);
     const hospital = e.mci!.logistics!.hospitals![0]!;
     e = apply(e, applyRoleAction(e, { type: 'hospitalUpdate', id: hospital.id, capacity: 6 }, sup, 500, ids).patch);
     expect(e.mci!.logistics!.hospitals![0]).toMatchObject({ name: 'General', capacity: 6 });
     expect(e.mci!.log.at(-1)).toMatchObject({ kind: 'noted', note: 'General: capacity 6', byUnit: 'Sup 2' });
+    e = apply(e, applyRoleAction(e, { type: 'hospitalRemove', id: hospital.id }, sup, 600, ids).patch);
+    expect(e.mci!.logistics!.hospitals).toEqual([]);
+    // Logistics still can't touch patients.
+    expect(applyRoleAction(e, { type: 'counts', zoneId: 'za', deltas: { red: 1 } }, sup, 700).error).toMatch(/cannot/);
   });
 
   it('leaves the transport order to the Treatment Lead', () => {

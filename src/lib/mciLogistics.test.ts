@@ -6,6 +6,9 @@ import {
   arriveIncoming,
   cancelIncoming,
   etaLabel,
+  giveEquipment,
+  takeBackEquipment,
+  undoIncoming,
   isOverdue,
   logisticsCsvLines,
   normalizeEtaTime,
@@ -84,6 +87,94 @@ describe('incoming teams', () => {
 
   it('does nothing after stand down', () => {
     expect(addIncoming(event({ mci: mci({ active: false }) }), { name: 'X' }, 1).error).toBe('inactive');
+  });
+});
+
+describe('undoing an arrival or a cancellation (D28)', () => {
+  const arrived = () => {
+    let e = event({ calls: [] } as Partial<Event>);
+    e = apply(e, addIncoming(e, { name: 'Bravo' }, 100, 'i1').patch);
+    return apply(e, arriveIncoming(e, 'i1', 200).patch);
+  };
+
+  it('takes the team off the board and puts the row back on the list', () => {
+    let e = arrived();
+    expect(e.mci!.logistics!.incoming[0]!.teamId).toBe(e.staff[0]!.id);
+    e = apply(e, undoIncoming(e, 'i1').patch);
+    expect(e.staff).toEqual([]);
+    expect(e.mci!.logistics!.incoming[0]).toEqual(expect.objectContaining({ state: 'incoming' }));
+    expect(e.mci!.logistics!.incoming[0]).not.toHaveProperty('closedAt');
+    expect(e.mci!.logistics!.incoming[0]).not.toHaveProperty('teamId');
+  });
+
+  it('refuses once the team is working or holds equipment', () => {
+    const e = arrived();
+    const busy = { ...e, staff: [{ ...e.staff[0]!, status: 'En Route' }] } as Event;
+    expect(undoIncoming(busy, 'i1').error).toBe('busy');
+    const holding = { ...e, eventEquipment: [{ id: 'q', name: 'AED', status: 'In Use', location: 'Bravo', assignedTeam: 'Bravo' }] } as Event;
+    expect(undoIncoming(holding, 'i1').error).toBe('busy');
+  });
+
+  it('brings back a cancelled row, unless the name is taken again', () => {
+    let e = event();
+    e = apply(e, addIncoming(e, { name: 'Bravo' }, 100, 'i1').patch);
+    e = apply(e, cancelIncoming(e, 'i1', 200).patch);
+    const again = apply(e, addIncoming(e, { name: 'Bravo' }, 300, 'i2').patch);
+    expect(undoIncoming(again, 'i1').error).toBe('duplicate');
+    e = apply(e, undoIncoming(e, 'i1').patch);
+    expect(e.mci!.logistics!.incoming[0]!.state).toBe('incoming');
+  });
+});
+
+describe('handing out equipment (D27)', () => {
+  const teams = (over: Partial<Event> = {}) =>
+    event({
+      staff: [
+        { id: 'a', team: 'Alpha', location: '', status: 'Available', members: [] },
+        { id: 'b', team: 'MRC1', location: '', status: 'Available', members: [] },
+      ],
+      ...over,
+    } as Partial<Event>);
+  const holderOf = (e: Event, name: string) => e.eventEquipment!.find((x) => x.name === name)?.holder;
+
+  it('makes the item when there is none, and the team holds it', () => {
+    let e = teams();
+    e = apply(e, giveEquipment(e, { item: 'Trauma bag', unit: 'MRC1' }, 100, 'q1').patch);
+    expect(e.eventEquipment).toHaveLength(1);
+    expect(e.eventEquipment![0]).toMatchObject({ id: 'q1', name: 'Trauma bag', phase: 'carried', assignedTeam: 'MRC1', location: 'MRC1' });
+    expect(e.staff[1]!.log?.at(-1)?.message).toMatch(/given Trauma bag \(logistics\)$/);
+  });
+
+  it('hands over a free item of that kind before making another, numbering new ones', () => {
+    let e = teams({ eventEquipment: [{ id: 'v', name: 'Triage Bag 1', status: 'Available', location: 'Staging', assignedTeam: null }] } as Partial<Event>);
+    e = apply(e, giveEquipment(e, { item: 'Triage bag', unit: 'Alpha' }, 100, 'q1').patch);
+    expect(holderOf(e, 'Triage Bag 1')).toEqual({ kind: 'team', name: 'Alpha' });
+    e = apply(e, giveEquipment(e, { item: 'Triage bag', unit: 'MRC1' }, 200, 'q2').patch);
+    e = apply(e, giveEquipment(e, { item: 'Triage bag', unit: 'MRC1' }, 300, 'q3').patch);
+    expect(e.eventEquipment!.map((x) => x.name)).toEqual(['Triage Bag 1', 'Triage bag', 'Triage bag 2']);
+    // A trauma bag is a different item.
+    e = apply(e, giveEquipment(e, { item: 'Trauma bag', unit: 'MRC1' }, 400, 'q4').patch);
+    expect(holderOf(e, 'Trauma bag')).toEqual({ kind: 'team', name: 'MRC1' });
+  });
+
+  it('transfers one item exactly, and takes it back to staging', () => {
+    let e = teams();
+    e = apply(e, giveEquipment(e, { item: 'AED', unit: 'Alpha' }, 100, 'q1').patch);
+    e = apply(e, giveEquipment(e, { item: 'AED', unit: 'MRC1', exact: true }, 200).patch);
+    expect(e.eventEquipment).toHaveLength(1);
+    expect(holderOf(e, 'AED')).toEqual({ kind: 'team', name: 'MRC1' });
+    e = apply(e, takeBackEquipment(e, 'AED', 300).patch);
+    expect(e.eventEquipment![0]).toMatchObject({ phase: 'staged', status: 'Available', assignedTeam: null });
+    expect(giveEquipment(e, { item: 'Gone', unit: 'MRC1', exact: true }, 400).error).toBe('missing');
+  });
+
+  it('writes out the venue catalog with the change, and refuses an unknown team or empty item', () => {
+    const e = teams({ venue: { equipment: ['Wheelchair 1', 'Gurney'] } } as unknown as Partial<Event>);
+    const out = giveEquipment(e, { item: 'Wheelchair', unit: 'Alpha' }, 100, 'q1');
+    expect(out.patch.eventEquipment!.map((x) => [x.name, x.holder?.name ?? x.location])).toEqual([['Wheelchair 1', 'Alpha'], ['Gurney', 'Staging']]);
+    expect(giveEquipment(e, { item: 'AED', unit: 'Nobody' }, 100).error).toBe('no-team');
+    expect(giveEquipment(e, { item: ' ', unit: 'Alpha' }, 100).error).toBe('invalid');
+    expect(giveEquipment(event({ mci: mci({ active: false }) }), { item: 'AED', unit: 'Alpha' }, 100).error).toBe('inactive');
   });
 });
 

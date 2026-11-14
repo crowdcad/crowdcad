@@ -54,7 +54,7 @@ export async function POST(req: Request) {
       if (Object.keys(split.event).length) tx.update(eventRef, split.event as { [key: string]: Partial<unknown> });
       if (split.mci) tx.set(stateRef, split.mci);
       if (split.patients) tx.set(patientsRef, { patients: split.patients, updatedAt: Date.now() } satisfies MciPatientsDoc);
-      if (split.units) tx.set(a.db.doc(`${mciDocCollection(eventId)}/${MCI_DOC_UNITS}`), { units: split.units, updatedAt: Date.now() } satisfies MciUnitsDoc);
+      if (split.units) tx.set(a.db.doc(`${mciDocCollection(eventId)}/${MCI_DOC_UNITS}`), { units: split.units, equipment: split.equipment ?? [], updatedAt: Date.now() } satisfies MciUnitsDoc);
       return { ok: true };
     });
     if ('error' in result) return json({ error: result.error }, 400);

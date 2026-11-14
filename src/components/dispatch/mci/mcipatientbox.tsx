@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useId, useRef, useState } from 'react';
-import { Ambulance, GripVertical, MoreVertical, X } from 'lucide-react';
+import { Ambulance, ChevronDown, ChevronUp, GripVertical, MoreVertical, X } from 'lucide-react';
 import { Dropdown, DropdownItem, DropdownMenu, DropdownSection, DropdownTrigger } from '@heroui/react';
 import type { MciColor } from '@/app/types';
 import { MCI_COLORS, mciPatientLabel, type MciPatient, type MciPatientField } from '@/lib/mci';
@@ -29,6 +29,11 @@ type Props = {
   areas: MciAreaOption[];
   onDetails: (patientId: string, fields: Partial<Record<MciPatientField, string>>) => void;
   onPriority: (patientId: string, rank: number | null) => void;
+  /** Up or down the transport order among this color's patients here; absent where reordering means nothing. */
+  onMoveInOrder?: (patientId: string, direction: 'up' | 'down') => void;
+  /** First or last in its column, so that arrow is off. */
+  first?: boolean;
+  last?: boolean;
   onTransport: (patientId: string, trip: { unit?: string; destination?: string }) => void | Promise<unknown>;
   /** Asks for the optional note, then retriages or moves the patient. */
   onReassign: (patient: MciPatient, target: MciReassignTarget) => void;
@@ -184,7 +189,7 @@ function TransportRow({ units, hospitals, onCancel, onConfirm }: { units: string
  * from, when, and the team that brought them on the second. The grip drags the box to another column or location;
  * the menu does the same without dragging; the ambulance marks them transported.
  */
-export default function MciPatientBox({ patient, zoneName, readOnly, teamListId, unitSuggestions, hospitals = [], areas, onDetails, onPriority, onTransport, onReassign }: Props) {
+export default function MciPatientBox({ patient, zoneName, readOnly, teamListId, unitSuggestions, hospitals = [], areas, onDetails, onPriority, onMoveInOrder, first = false, last = false, onTransport, onReassign }: Props) {
   const [transporting, setTransporting] = useState(false);
   // The box is draggable only while the grip is held, so text in its inputs can still be selected.
   const [dragArmed, setDragArmed] = useState(false);
@@ -276,6 +281,32 @@ export default function MciPatientBox({ patient, zoneName, readOnly, teamListId,
           className={`w-7 font-semibold ${NUMBER_CELL} ${patient.rank !== undefined ? 'bg-accent/30' : ''}`}
           data-testid="mci-patient-priority"
         />
+        {!readOnly && onMoveInOrder && (
+          <span className="flex shrink-0 flex-col" role="group" aria-label={`Transport order of ${label}`}>
+            <button
+              type="button"
+              disabled={first}
+              onClick={() => onMoveInOrder(patient.id, 'up')}
+              aria-label={`Move ${label} up the transport order`}
+              title="Sooner in the transport order"
+              className="flex h-3 w-4 items-center justify-center rounded-sm text-surface-faint hover:bg-surface-liner hover:text-surface-light disabled:pointer-events-none disabled:opacity-30"
+              data-testid="mci-patient-order-up"
+            >
+              <ChevronUp className="h-3 w-3" aria-hidden />
+            </button>
+            <button
+              type="button"
+              disabled={last}
+              onClick={() => onMoveInOrder(patient.id, 'down')}
+              aria-label={`Move ${label} down the transport order`}
+              title="Later in the transport order"
+              className="flex h-3 w-4 items-center justify-center rounded-sm text-surface-faint hover:bg-surface-liner hover:text-surface-light disabled:pointer-events-none disabled:opacity-30"
+              data-testid="mci-patient-order-down"
+            >
+              <ChevronDown className="h-3 w-3" aria-hidden />
+            </button>
+          </span>
+        )}
         {!readOnly && (
           <>
             <Dropdown>

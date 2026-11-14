@@ -1686,7 +1686,8 @@ export const MCI_TARP_HEX: Record<MciColor, string> = { red: '#dc2626', yellow: 
 
 /**
  * Moves a patient one place up or down their location's transport order, as shown (ranked first, then by
- * arrival), and writes the whole shown order as ranks, so the list keeps the order the Treatment Lead sees.
+ * arrival), past the next patient of the same color (a location taking several colors shows a column per
+ * color), and writes the whole shown order as ranks, so every view keeps the order the Treatment Lead sees.
  */
 export function movePatientInOrderPatch(event: Pick<Event, 'mci' | 'calls' | 'clinics'>, patientId: string, direction: 'up' | 'down'): MciWrite {
   const mci = event.mci;
@@ -1695,9 +1696,11 @@ export function movePatientInOrderPatch(event: Pick<Event, 'mci' | 'calls' | 'cl
   if (!patient) return { patch: {}, error: 'unknown-patient' };
   const order = [...(derived.areas.find((a) => a.area.id === patient.areaId)?.patients ?? [])];
   const i = order.findIndex((p) => p.id === patientId);
-  const j = direction === 'up' ? i - 1 : i + 1;
+  const step = direction === 'up' ? -1 : 1;
+  let j = i + step;
+  while (j >= 0 && j < order.length && order[j]!.color !== patient.color) j += step;
   if (i < 0 || j < 0 || j >= order.length) return NO_CHANGE;
-  [order[i], order[j]] = [order[j], order[i]];
+  [order[i], order[j]] = [order[j]!, order[i]!];
   let patients = mci.patients ?? {};
   order.forEach((p, k) => {
     if (patients[p.id]?.priority !== k + 1) patients = withDetails(patients, p.id, { ...(patients[p.id] ?? {}), priority: k + 1 });

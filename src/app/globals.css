@@ -117,6 +117,20 @@
   .minimal-scrollbar::-webkit-scrollbar-corner {
     background: transparent;
   }
+
+  /*
+   * A tab panel's scrolling body (MCI, Logistics, Calls, clinics). The panels pad their sides by px-2.5;
+   * this reaches into the right padding and keeps a gutter for the scrollbar there, so the scrollbar sits
+   * at the panel's right edge and nothing shifts when the content becomes long enough to scroll.
+   * 6px matches .minimal-scrollbar's width.
+   */
+  .tab-scroll {
+    --tab-pad: calc(0.625rem * var(--ui-pad-scale, 1));
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+    margin-right: calc(-1 * var(--tab-pad));
+    padding-right: max(0px, calc(var(--tab-pad) - 6px));
+  }
 }
 
 .animate-cell-ripple {

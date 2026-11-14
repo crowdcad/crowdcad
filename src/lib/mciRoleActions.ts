@@ -17,7 +17,19 @@ import {
   type MciWrite,
   type MciWriteContext,
 } from './mci';
-import { addHospital, addIncoming, cancelIncoming, reportArrival, requestEquipment, updateHospital, updateIncoming, type LogisticsResult } from './mciLogistics';
+import {
+  addHospital,
+  addIncoming,
+  arriveIncoming,
+  cancelIncoming,
+  giveEquipment,
+  removeHospital,
+  takeBackEquipment,
+  undoIncoming,
+  updateHospital,
+  updateIncoming,
+  type LogisticsResult,
+} from './mciLogistics';
 import { effectiveRole, type EventRole } from './roleAccounts';
 
 /**
@@ -42,18 +54,25 @@ export type RoleAction =
   | { type: 'transport'; patientId: string; unit?: string; destination?: string }
   | { type: 'incomingAdd'; name: string; eta?: IncomingEta; notes?: string }
   | { type: 'incomingUpdate'; id: string; eta?: IncomingEta; notes?: string; members?: string[] }
+  /** The team arrived: it goes on the board at once (D27). */
   | { type: 'incomingArrived'; id: string }
   | { type: 'incomingCancel'; id: string }
-  | { type: 'equipmentRequest'; item: string; unit: string }
+  /** An arrival or cancellation pressed by mistake goes back on the list (D28). */
+  | { type: 'incomingUndo'; id: string }
+  /** Hands an item (a name or a kind, "Trauma bag") to a unit, making one if none is free (D27). */
+  | { type: 'equipmentGive'; item: string; unit: string; exact?: boolean }
+  | { type: 'equipmentReturn'; name: string }
   | { type: 'hospitalAdd'; name: string }
-  | { type: 'hospitalUpdate'; id: string; capacity?: number | null; sent?: number };
+  | { type: 'hospitalUpdate'; id: string; capacity?: number | null; sent?: number }
+  | { type: 'hospitalRemove'; id: string };
 
 const ALLOWED: Record<ReturnType<typeof effectiveRole>, readonly RoleAction['type'][]> = {
   responder: ['assign', 'counts', 'move', 'addPatient', 'patientDetails', 'patientCare', 'reassign'],
   // The transport order is the Treatment Lead's (and the dispatcher's) alone.
   treatment_lead: ['assign', 'addPatient', 'patientDetails', 'patientCare', 'priority', 'reassign'],
   transport: ['transport'],
-  logistics: ['incomingAdd', 'incomingUpdate', 'incomingArrived', 'incomingCancel', 'equipmentRequest', 'hospitalAdd', 'hospitalUpdate'],
+  // Everything the dispatcher's Logistics tab does (D27).
+  logistics: ['incomingAdd', 'incomingUpdate', 'incomingArrived', 'incomingCancel', 'incomingUndo', 'equipmentGive', 'equipmentReturn', 'hospitalAdd', 'hospitalUpdate', 'hospitalRemove'],
   incident_command: [],
 };
 
@@ -80,6 +99,8 @@ const ERROR_TEXT: Record<string, string> = {
   invalid: 'Nothing to send.',
   duplicate: 'That name is already in use.',
   missing: 'That entry is no longer in the list.',
+  'no-team': 'That team is no longer on the board.',
+  busy: 'That team is already working (or holds equipment), so it stays on the board.',
   forbidden: 'Your role cannot do that.',
   'no-unit': 'This login is not assigned to a team. Ask the dispatcher to replace it.',
   'unknown-unit': 'Your team is no longer on the board. Ask the dispatcher.',
@@ -99,7 +120,7 @@ function fromLogistics(w: LogisticsResult): RoleActionResult {
 
 /** Chains a 'noted' entry after a patch, so a change that moves no count is still in the log under the unit. */
 function andNote(event: Event, w: RoleActionResult, note: string, where: { zoneId?: string; areaId?: string; patientId?: string }, ctx: MciWriteContext): RoleActionResult {
-  if (w.error || !w.patch.mci) return w;
+  if (w.error || Object.keys(w.patch).length === 0) return w;
   const after = { ...event, ...w.patch } as Event;
   const noted = notedPatch(after, note, where, ctx);
   return noted.error ? w : { patch: { ...w.patch, ...noted.patch } };
@@ -180,17 +201,26 @@ export function applyRoleAction(event: Event, action: RoleAction, actor: RoleAct
     }
     case 'incomingArrived': {
       const team = event.mci?.logistics?.incoming.find((t) => t.id === action.id);
-      const w = fromLogistics(reportArrival(event, action.id));
-      return andNote(event, w, `Arrival reported: ${team?.name ?? 'incoming team'} (waiting for dispatch)`, {}, ctx);
+      const w = fromLogistics(arriveIncoming(event, action.id, now));
+      return andNote(event, w, `Arrived: ${team?.name ?? 'incoming team'}, now on the board`, {}, ctx);
+    }
+    case 'incomingUndo': {
+      const team = event.mci?.logistics?.incoming.find((t) => t.id === action.id);
+      const w = fromLogistics(undoIncoming(event, action.id));
+      return andNote(event, w, `${team?.name ?? 'Team'} back on the incoming list (${team?.state === 'cancelled' ? 'cancel' : 'arrival'} undone)`, {}, ctx);
     }
     case 'incomingCancel': {
       const team = event.mci?.logistics?.incoming.find((t) => t.id === action.id);
       const w = fromLogistics(cancelIncoming(event, action.id, now));
       return andNote(event, w, `Incoming staff cancelled: ${team?.name ?? 'team'}`, {}, ctx);
     }
-    case 'equipmentRequest': {
-      const w = fromLogistics(requestEquipment(event, { item: action.item, unit: action.unit, byUnit: actor.unitName }, now));
-      return andNote(event, w, `Equipment requested: ${action.item.trim()} for ${action.unit.trim()}`, {}, ctx);
+    case 'equipmentGive': {
+      const w = fromLogistics(giveEquipment(event, { item: action.item, unit: action.unit, by: actor.unitName, exact: action.exact }, now, newId ? `eq_${newId()}` : undefined));
+      return andNote(event, w, `Equipment: ${action.item.trim()} given to ${action.unit.trim()}`, {}, ctx);
+    }
+    case 'equipmentReturn': {
+      const w = fromLogistics(takeBackEquipment(event, action.name, now));
+      return andNote(event, w, `Equipment: ${action.name} returned`, {}, ctx);
     }
     case 'hospitalAdd': {
       const w = fromLogistics(addHospital(event, action.name, now, newId ? `hospital-${newId()}` : undefined));
@@ -201,6 +231,10 @@ export function applyRoleAction(event: Event, action: RoleAction, actor: RoleAct
       const w = fromLogistics(updateHospital(event, action.id, { capacity: action.capacity, sent: action.sent }));
       const said = [action.capacity !== undefined ? `capacity ${action.capacity ?? 'cleared'}` : '', action.sent !== undefined ? `sent ${action.sent}` : ''].filter(Boolean).join(', ');
       return andNote(event, w, `${name}: ${said}`, {}, ctx);
+    }
+    case 'hospitalRemove': {
+      const name = event.mci?.logistics?.hospitals?.find((h) => h.id === action.id)?.name ?? 'hospital';
+      return andNote(event, fromLogistics(removeHospital(event, action.id)), `Hospital removed: ${name}`, {}, ctx);
     }
   }
 }
