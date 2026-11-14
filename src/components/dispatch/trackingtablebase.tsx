@@ -103,7 +103,7 @@ export default function TrackingTableBase({
   const { t } = useDispatchTerms();
   return (
     <div className={`w-full h-full flex flex-col min-h-0 ${className || ''}`.trim()} data-team-chips={showTeamAssignmentChips ? 'on' : 'off'}>
-      <div className="flex-1 min-h-0 overflow-auto minimal-scrollbar">
+      <div className="tab-scroll flex-1 min-h-0 overflow-auto minimal-scrollbar">
         <table className="min-w-[870px] w-full text-[14px] sm:text-[15px] text-surface-light table-fixed border-separate border-spacing-0">
           {TableColGroup ? <TableColGroup /> : <FittedColGroup showStatusColumn={showStatusColumn} />}
           <thead className="sticky top-0 z-10 bg-surface-deep">

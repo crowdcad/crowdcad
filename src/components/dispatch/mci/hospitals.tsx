@@ -7,6 +7,7 @@ import { emptyCounts, type MciCounts } from '@/lib/mci';
 import { hospitalSentCounts, hospitalSentTotal } from '@/lib/mciLogistics';
 import HelpTip from '@/components/ui/helptip';
 import { MCI_COLOR_STYLES, MCI_NUMBER_INPUT, MciColorDot } from './mciparts';
+import { LOGI } from './logisticsstyles';
 
 /**
  * Hospitals in the Logistics tab and the Logistics role view: a box per hospital with its capacity and how
@@ -53,7 +54,7 @@ function NumberCell({ value, label, readOnly, allowBlank, onCommit, testId }: { 
       onKeyDown={(e) => {
         if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
       }}
-      className={`h-8 w-16 ${MCI_NUMBER_INPUT}`}
+      className={`${LOGI.number} text-sm ${MCI_NUMBER_INPUT}`}
       data-testid={testId}
     />
   );
@@ -64,9 +65,10 @@ function HospitalBox({ hospital, counted, readOnly, handlers }: { hospital: MciH
   const sent = hospitalSentTotal(hospital, counted);
   const full = hospital.capacity !== undefined && sent >= hospital.capacity;
   return (
-    <div className={`flex flex-col gap-2 rounded-lg border px-3 py-2 ${full ? 'border-status-red/60' : 'border-surface-liner'}`} data-testid={`hospital-${hospital.name}`}>
+    <div className={`${LOGI.card} ${full ? '!border-status-red/60' : ''}`} data-testid={`hospital-${hospital.name}`}>
       <div className="flex items-center justify-between gap-2">
-        <span className="min-w-0 truncate text-sm font-semibold text-surface-light">{hospital.name}</span>
+        <span className={`${LOGI.title} min-w-0 truncate`}>{hospital.name}</span>
+        {full && <span className={`${LOGI.badge} ml-auto text-status-red`}>Full</span>}
         <button
           type="button"
           aria-expanded={open}
@@ -78,12 +80,12 @@ function HospitalBox({ hospital, counted, readOnly, handlers }: { hospital: MciH
           <ChevronDown className={`h-4 w-4 transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden />
         </button>
       </div>
-      <div className="grid grid-cols-2 gap-2 text-sm text-surface-light">
+      <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-surface-light">
         <span className="flex items-center gap-2">
           Capacity:
           <NumberCell value={hospital.capacity} label={`${hospital.name} capacity`} readOnly={readOnly} allowBlank onCommit={(n) => handlers.onUpdate(hospital.id, { capacity: n })} testId={`hospital-${hospital.name}-capacity`} />
         </span>
-        <span className="flex items-center justify-end gap-2">
+        <span className="flex items-center gap-2">
           Sent:
           <NumberCell value={sent} label={`${hospital.name} sent`} readOnly={readOnly} allowBlank={false} onCommit={(n) => n !== null && handlers.onUpdate(hospital.id, { sent: n })} testId={`hospital-${hospital.name}-sent`} />
         </span>
@@ -98,7 +100,7 @@ function HospitalBox({ hospital, counted, readOnly, handlers }: { hospital: MciH
             </span>
           ))}
           {!readOnly && handlers.onRemove && (
-            <button type="button" className="ml-auto text-xs text-status-red" onClick={() => handlers.onRemove?.(hospital.id)} data-testid={`hospital-${hospital.name}-remove`}>
+            <button type="button" className={`${LOGI.link} ml-auto !text-status-red`} onClick={() => handlers.onRemove?.(hospital.id)} data-testid={`hospital-${hospital.name}-remove`}>
               Remove
             </button>
           )}
@@ -108,7 +110,7 @@ function HospitalBox({ hospital, counted, readOnly, handlers }: { hospital: MciH
   );
 }
 
-export default function Hospitals({ mci, readOnly, handlers, inputClassName = '' }: { mci: MciState; readOnly: boolean; handlers: HospitalHandlers; inputClassName?: string }) {
+export default function Hospitals({ mci, readOnly, handlers }: { mci: MciState; readOnly: boolean; handlers: HospitalHandlers }) {
   const [name, setName] = useState('');
   const hospitals = mci.logistics?.hospitals ?? [];
   const counts = useMemo(() => hospitalSentCounts(mci), [mci]);
@@ -118,33 +120,38 @@ export default function Hospitals({ mci, readOnly, handlers, inputClassName = ''
     setName('');
   };
   return (
-    <section className="flex min-w-0 flex-col gap-2" data-testid="hospitals">
-      <div className="flex items-center gap-1">
-        <h2 className="text-lg font-semibold">Hospitals</h2>
-        <HelpTip text="Sent counts transports whose destination is the hospital's name. Type Sent to correct it." label="About hospitals" />
+    <div className="flex min-w-0 flex-col gap-2" data-testid="hospitals">
+      <div className="flex min-h-8 items-center gap-1">
+        <h2 className={LOGI.heading}>Hospitals</h2>
+        <HelpTip text="Where patients are sent. Sent counts transports whose destination is the hospital's name; type Sent to correct it. The arrow shows the colors sent." label="About hospitals" />
       </div>
       {!readOnly && (
-        <div className="flex gap-2">
+        <form
+          className="flex gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            add();
+          }}
+        >
           <input
             aria-label="Hospital name"
             placeholder="Hospital name"
             maxLength={60}
             value={name}
             onChange={(e) => setName(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && add()}
-            className={`h-8 min-w-0 flex-1 rounded-lg border border-surface-liner bg-surface-liner/40 px-3 text-sm text-surface-light outline-none focus:border-surface-faint ${inputClassName}`}
+            className={`${LOGI.input} min-w-0 flex-1`}
             data-testid="hospital-name"
           />
-          <button type="button" onClick={add} disabled={!name.trim()} className="flex h-8 shrink-0 items-center gap-1 rounded-lg bg-accent px-3 text-sm text-surface-light disabled:opacity-40" data-testid="hospital-add">
+          <button type="submit" disabled={!name.trim()} className={LOGI.primaryButton} data-testid="hospital-add">
             <Plus className="h-3.5 w-3.5" aria-hidden />
             Add hospital
           </button>
-        </div>
+        </form>
       )}
-      {hospitals.length === 0 && <p className="text-sm text-surface-faint">No hospitals yet.</p>}
+      {hospitals.length === 0 && <p className={LOGI.empty}>No hospitals yet.</p>}
       {hospitals.map((h) => (
         <HospitalBox key={h.id} hospital={h} counted={counts.get(h.id) ?? emptyCounts()} readOnly={readOnly} handlers={handlers} />
       ))}
-    </section>
+    </div>
   );
 }

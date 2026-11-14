@@ -137,3 +137,16 @@ Requested by the maintainer after trying the role views.
 ### D26. Help in tooltips
 - **What.** Explanations of what something does sit behind a small circled question mark (`src/components/ui/helptip.tsx`, hover or tap) instead of sentences under headings. Visible text is kept for instructions the maintainer asked for, empty states, warnings and errors.
 - **Supervisor names.** Add Supervisor suggests S1, then the next number after the last supervisor's name, as Add Team does for teams.
+
+### D27. Logistics hands out equipment and confirms arrivals itself
+- **What.** Logistics no longer asks the dispatcher. Picking an item (Trauma bag, Triage bag, Wheelchair, Gurney, AED, Oxygen, or **Other** with a typed name) and a team hands it over at once (`giveEquipment`): a free item of that kind (that name, or a numbered one such as "Triage Bag 2") is moved to the team, and with none free a new event item is made. It shows on the team's card for the dispatcher immediately. Trauma bag and triage bag are different items. An item can be given on to another team or returned to staging.
+- **Arrivals.** The Logistics role's **Arrived** puts the team on the board (Available) directly, as the dispatcher's does. **Supersedes D20's option (a)**: the request queue (`mci.logistics.requests`) and the `reported` arrival state are no longer written. Older events still show a reported arrival as "Arrived, to confirm".
+- **Same board.** The dispatcher's Logistics tab and the Logistics login show the same board (`logisticsboard.tsx`) with the same abilities, including removing a hospital. The login shows three columns from laptop width and one section at a time under tabs on a phone. It can't read the event, so `mci/units` now carries `equipment[]`, every item and who has it (`mciEquipmentFor`), written with the unit summary.
+- **Why.** Distributing equipment is the logistics officer's job. The request queue also never moved an item, so a request marked Done left the team with nothing.
+
+### D28. Undo an arrival or a cancellation
+- **What.** Under **Arrived and cancelled**, each row has **Undo**, which puts it back on the incoming list. Undoing an arrival also takes the team it made off the board (`IncomingTeam.teamId`), but only while that team is as the arrival left it: Available, on no open call, holding nothing, with no MCI assignment. Otherwise it is refused, since the team is already working.
+
+### D29. MCI tab layout
+- **What.** The top bar (duration, totals, Role logins, Log, Stand down) stays pinned while the tab scrolls. **Patient boxes** sits beside Add treatment area. Treatment location rows take the call tracker's row highlight on hover and when open. Every tab panel's scroll area keeps its scrollbar in the panel's right padding (`.tab-scroll`), so content doesn't shift when it starts to scroll.
+- **Transport order.** Patient boxes show the Treatment Lead's order (D23). The dispatcher can type a rank (D16) or use the up / down arrows on a box. In a location taking several colors, the arrows move past the next patient of the same color, since each color has its own column.

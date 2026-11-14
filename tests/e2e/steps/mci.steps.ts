@@ -82,6 +82,38 @@ When('I open the MCI tab', async ({ page }) => {
   await expect(page.getByTestId('mci-tab')).toBeVisible();
 });
 
+When('I add incoming team {string} and mark it arrived', async ({ page }, name: string) => {
+  await page.getByTestId('incoming-name').fill(name);
+  await page.getByTestId('incoming-add').click();
+  await page.getByTestId(`incoming-${name}-arrived`).click();
+  await expect(page.getByTestId(`incoming-${name}`)).toHaveCount(0);
+});
+
+When('I give a {string} to {string} from the Logistics tab', async ({ page }, item: string, unit: string) => {
+  await page.getByTestId('logistics-give-item').selectOption(item);
+  await page.getByTestId('logistics-give-unit').selectOption(unit);
+  await page.getByTestId('logistics-give-submit').click();
+  await expect(page.getByTestId(`logistics-unit-${unit}`)).toContainText(item);
+});
+
+Then('team {string} should show it is carrying {string}', async ({ page }, _unit: string, item: string) => {
+  await expect(page.getByText(new RegExp(`Carrying ${item}`)).first()).toBeVisible();
+});
+
+When('I return {string} from the Logistics tab', async ({ page }, item: string) => {
+  await page.getByTestId(`logistics-return-${item}`).click();
+  await expect(page.getByTestId('logistics-not-issued')).toContainText(item);
+});
+
+When('I undo the arrival of {string}', async ({ page }, name: string) => {
+  await page.getByTestId('incoming-closed-toggle').click();
+  await page.getByTestId(`incoming-undo-${name}`).click();
+});
+
+Then('incoming team {string} should be back on the list', async ({ page }, name: string) => {
+  await expect(page.getByTestId(`incoming-${name}`)).toBeVisible();
+});
+
 When('I add hospital {string} with capacity {int}', async ({ page }, name: string, capacity: number) => {
   await page.getByTestId('hospital-name').fill(name);
   await page.getByTestId('hospital-add').click();

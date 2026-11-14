@@ -17,6 +17,7 @@ import {
   routedMovePatch,
   setPatientDetailsPatch,
   setPatientPriorityPatch,
+  movePatientInOrderPatch,
   setTaggedTotalPatch,
   setTrackPatientsPatch,
   standDownMci,
@@ -55,6 +56,8 @@ export interface MciActions {
   transportPatient: (patientId: string, trip: { unit?: string; destination?: string }) => Promise<boolean>;
   setPatientDetails: (patientId: string, fields: Partial<Record<MciPatientField, string>>) => Promise<void>;
   setPatientPriority: (patientId: string, rank: number | null) => Promise<void>;
+  /** One place up or down the transport order among patients of the same color, as the Treatment Lead does. */
+  movePatientInOrder: (patientId: string, direction: 'up' | 'down') => Promise<void>;
 }
 
 export interface MciLocalState {
@@ -195,6 +198,9 @@ export function useMciActions(updateEvent: UpdateEvent, uid: string | undefined,
       },
       setPatientPriority: async (patientId, rank) => {
         await run((current) => setPatientPriorityPatch(current, patientId, rank));
+      },
+      movePatientInOrder: async (patientId, direction) => {
+        await run((current) => movePatientInOrderPatch(current, patientId, direction));
       },
       clearZone: async (zoneId) => {
         await run((current, ctx) => clearZonePatch(current, zoneId, ctx));

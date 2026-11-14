@@ -450,7 +450,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
         if (mapLayers) tx.set(mciDocCollection(eventId), MCI_DOC_MAP, { layers: removeUndefinedDeep(mapLayers), updatedAt: Date.now() });
         if (split.mci) tx.set(mciDocCollection(eventId), MCI_DOC_STATE, split.mci);
         if (split.patients) tx.set<MciPatientsDoc>(mciDocCollection(eventId), MCI_DOC_PATIENTS, { patients: split.patients, updatedAt: Date.now() });
-        if (split.units) tx.set<MciUnitsDoc>(mciDocCollection(eventId), MCI_DOC_UNITS, { units: split.units, updatedAt: Date.now() });
+        if (split.units) tx.set<MciUnitsDoc>(mciDocCollection(eventId), MCI_DOC_UNITS, { units: split.units, equipment: split.equipment ?? [], updatedAt: Date.now() });
       });
     } catch (error) {
       if (error instanceof Error && error.message === 'EVENT_ENDED') {
@@ -3949,8 +3949,8 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
                 {(() => {
                   const list = event.mci?.logistics?.incoming ?? [];
                   const coming = list.filter((x) => x.state === 'incoming').length;
-                  // Arrivals and equipment requests from the Logistics role wait here for the dispatcher (option a).
-                  const toConfirm = list.filter((x) => x.state === 'reported').length + (event.mci?.logistics?.requests ?? []).filter((r) => r.state === 'open').length;
+                  // Only arrivals reported before D27 (when the Logistics role's arrival waited for the dispatcher).
+                  const toConfirm = list.filter((x) => x.state === 'reported').length;
                   const parts = [coming ? `${coming} incoming` : '', toConfirm ? `${toConfirm} to confirm` : ''].filter(Boolean);
                   return parts.length ? ` (${parts.join(', ')})` : '';
                 })()}
@@ -4012,13 +4012,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
 
         {selectedRightTab === 'logistics' && !isMobile && event.mci && (
           <div className="relative z-10 -mt-px mx-1.5 rounded-lg bg-surface-deep px-2.5 py-2 flex flex-col flex-1 min-h-0">
-            <LogisticsTab
-              event={event}
-              updateEvent={updateEvent}
-              onIssueEquipment={(name, unit) => void saveEquipmentChange((fleet, current, t) => moveEquipment(fleet, current, name, unit, t))}
-              onReturnEquipment={(name) => void saveEquipmentChange((fleet, current, t) => returnEquipment(fleet, current, name, t, 'dispatcher'))}
-              onAddEquipment={handleAddNewEquipment}
-            />
+            <LogisticsTab event={event} updateEvent={updateEvent} />
           </div>
         )}
 

@@ -173,6 +173,7 @@ export default function MciTab({ event, actions, onOpenRoleLogins }: Props) {
         areas: areaOptions,
         onDetails: (id, fields) => void actions.setPatientDetails(id, fields),
         onPriority: (id, rank) => void actions.setPatientPriority(id, rank),
+        onMoveInOrder: (id, direction) => void actions.movePatientInOrder(id, direction),
         onTransportPatient: (id, trip) => actions.transportPatient(id, trip),
         onReassign: (patient, target) => setReassign({ patient, target }),
         onDropPatient: (id, target) => {
@@ -187,15 +188,11 @@ export default function MciTab({ event, actions, onOpenRoleLogins }: Props) {
     : undefined;
 
   return (
-    <div className="minimal-scrollbar flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto" data-testid="mci-tab">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <div className="tab-scroll minimal-scrollbar flex min-h-0 flex-1 flex-col gap-4" data-testid="mci-tab">
+      {/* Duration to Stand down stays in view while the tab scrolls. */}
+      <div className="sticky top-0 z-20 -mb-2 flex flex-wrap items-start justify-between gap-3 bg-surface-deep pb-2" data-testid="mci-top-bar">
         <MciTotalsStrip mci={mci} totals={derived.totals} />
         <div className="flex items-center gap-2">
-          {!readOnly && (
-            <Checkbox size="sm" isSelected={!!mci.trackPatients} onValueChange={(on) => void actions.setTrackPatients(on)} classNames={MCI_CHECKBOX_CLASSNAMES} data-testid="mci-track-patients">
-              <span className="text-xs">Patient boxes</span>
-            </Checkbox>
-          )}
           {!readOnly && onOpenRoleLogins && (
             <Button size="sm" variant="flat" radius="lg" onPress={onOpenRoleLogins} data-testid="mci-role-logins">
               Role logins
@@ -260,7 +257,14 @@ export default function MciTab({ event, actions, onOpenRoleLogins }: Props) {
             <h2 className="text-base font-bold text-surface-light">{t('Treatment locations')}</h2>
             <HelpTip text="A color's treatment zone only takes patients of that color; clinics and other locations take any. Drag a patient box to move or retriage them." label="About treatment locations" />
           </span>
-          {!readOnly && <AddByName label={t('Add treatment area')} testId="mci-add-area" onAdd={actions.addArea} />}
+          {!readOnly && (
+            <div className="flex items-center gap-3">
+              <Checkbox size="sm" isSelected={!!mci.trackPatients} onValueChange={(on) => void actions.setTrackPatients(on)} classNames={MCI_CHECKBOX_CLASSNAMES} data-testid="mci-track-patients">
+                <span className="text-xs">Patient boxes</span>
+              </Checkbox>
+              <AddByName label={t('Add treatment area')} testId="mci-add-area" onAdd={actions.addArea} />
+            </div>
+          )}
         </div>
         <div className="dispatch-shell-list">
           {derived.areas.map((stats) => (
