@@ -21,7 +21,8 @@ A short guide to CrowdCAD's main workflows for dispatchers, supervisors and even
 
 - Open `/lite` to use CrowdCAD Lite with no account or server.
 - Lite mode stores data in this browser on this device only. Clearing browser data deletes it, and other devices cannot see it.
-- Lite event setup covers event configuration, locations, staff assignments, equipment and the post schedule, then opens the same dispatch board as the full app.
+- Lite event setup covers event configuration, an optional map, locations, staff assignments, equipment and the post schedule, then opens the same dispatch board as the full app.
+- The Lite **Map** step marks where the event is on the live map: find the place (or type coordinates such as `37.7694, -122.4862`) and click around the area. Locations and areas can then be placed on that map. The map needs an internet connection; everything else in Lite mode works offline. Map images, GIS import and live tracking are not available in Lite mode.
 - Use Lite mode to evaluate CrowdCAD, for training or when a small event has no network.
 
 ## Basic concepts
@@ -41,7 +42,7 @@ A short guide to CrowdCAD's main workflows for dispatchers, supervisors and even
 Click **Create Venue** on Venue Selection. The venue wizard has five steps:
 
 1. **Venue Configuration:** name and basic details.
-2. **Map:** upload a map image per floor, or import a GIS map (see below). Draw areas with **Add Area** and check "Mark as Dispatch Zone" to give an area its own call tab.
+2. **Map:** upload a map image per floor, or import a GIS map (see below). Draw areas with **Add Area**: click the area's points in order, then click the first point's open circle to complete it, and check "Mark as Dispatch Zone" to give an area its own call tab (dispatch zones are drawn with diagonal stripes). A drawn map area works the same way.
 3. **Locations:** place post markers and mark clinics.
 4. **Equipment:** add equipment and set each item's default location.
 5. **Review:** confirm and save.

@@ -18,7 +18,7 @@ import {
 import type { Event, Staff, Supervisor, Call, TeamLogEntry } from "@/app/types";
 import { useDispatchTerms } from "@/lib/dispatchVocabulary/context";
 import { getVenueLocationOptions } from "@/lib/clinics";
-import { STATIC_SELECTOR_BUTTON_CLASS, staticSelectorButtonProps } from "@/lib/autocompleteSelector";
+import { staticSelectorButtonProps } from "@/lib/heroStatic";
 
 type QuickCallState = {
   location: string;
@@ -291,7 +291,6 @@ export default function QuickCallModal({
                 size="lg"
                 radius="lg"
                 inputProps={{ classNames: inputClassNames }}
-                classNames={{ selectorButton: STATIC_SELECTOR_BUTTON_CLASS }}
                 selectorButtonProps={staticSelectorButtonProps}
                 inputValue={quickCall.location}
                 onInputChange={(v) => setQuickCall((p) => ({ ...p, location: v }))}

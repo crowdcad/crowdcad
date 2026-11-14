@@ -9,7 +9,7 @@ service cloud.firestore {
     // - `members/{uid}` subcollection documents (optional future model).
     match /organizations/{orgId} {
       allow read: if isOrgMember(orgId);
-      allow create: if request.auth != null && request.resource.data.get('members', null) is list && request.resource.data.members.hasAny([request.auth.uid]);
+      allow create: if signedIn() && request.resource.data.get('members', null) is list && request.resource.data.members.hasAny([request.auth.uid]);
       allow update, delete: if isOrgMember(orgId);
 
       // Allow reading membership subdocs if member
@@ -37,7 +37,7 @@ service cloud.firestore {
     // Administrator Access).
     match /venues/{venueId} {
       allow read: if isVenueVisibleToUser();
-      allow create: if request.auth != null && request.resource.data.get('userId', null) == request.auth.uid;
+      allow create: if signedIn() && request.resource.data.get('userId', null) == request.auth.uid;
       allow update, delete: if isVenueOwner() || isRequestingUserAdmin();
     }
 
@@ -71,21 +71,24 @@ service cloud.firestore {
     // exempt from this restriction — they may still change anything.
     // Delete stays owner/admin-only, same as venues: a shared or org member
     // shouldn't be able to delete someone else's show.
+    //
+    // TAK bridge accounts (see the TAK block below) never read or write
+    // event documents: `!isBridge()` on every operation here.
     match /events/{eventId} {
-      allow read: if isEventVisibleToUser();
-      allow create: if request.auth != null && request.resource.data.get('userId', null) == request.auth.uid;
-      allow update: if isEventOwnerOrOrgMember() || isRequestingUserAdmin() ||
-        ((isEventSharedWithRequester() || isEventOrgShow()) && isEventProtectedFieldsUnchanged());
-      allow delete: if isEventOwnerOrOrgMember() || isRequestingUserAdmin();
+      allow read: if isEventVisibleToUser() && !isBridge();
+      allow create: if signedIn() && request.resource.data.get('userId', null) == request.auth.uid && !isBridge();
+      allow update: if (isEventOwnerOrOrgMember() || isRequestingUserAdmin() ||
+        ((isEventSharedWithRequester() || isEventOrgShow()) && isEventProtectedFieldsUnchanged())) && !isBridge();
+      allow delete: if (isEventOwnerOrOrgMember() || isRequestingUserAdmin()) && !isBridge();
     }
 
     // Dispatch logs: owner-scoped, with an admin override for the same
     // account-deletion flow. (No prior rule existed for this collection —
     // added now since admin-initiated deletes need it to actually work.)
     match /dispatchLogs/{logId} {
-      allow read, update, delete: if request.auth != null &&
+      allow read, update, delete: if signedIn() &&
         (resource.data.get('userId', null) == request.auth.uid || isRequestingUserAdmin());
-      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      allow create: if signedIn() && request.resource.data.userId == request.auth.uid;
     }
 
     // Users: allow users to read/write their own profile; admins may also
@@ -100,16 +103,16 @@ service cloud.firestore {
     // `isRequestingUserAdmin()` unlocks everywhere else in this file. Only an
     // existing admin may set `isAdmin` on anyone (self included).
     match /users/{userId} {
-      allow read: if request.auth != null &&
+      allow read: if signedIn() &&
         (request.auth.uid == userId || isRequestingUserAdmin());
-      allow create: if request.auth != null && request.auth.uid == userId &&
+      allow create: if signedIn() && request.auth.uid == userId &&
         request.resource.data.get('isAdmin', false) == false;
-      allow update: if request.auth != null &&
+      allow update: if signedIn() &&
         (
           isRequestingUserAdmin() ||
           (request.auth.uid == userId && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['isAdmin']))
         );
-      allow delete: if request.auth != null &&
+      allow delete: if signedIn() &&
         (request.auth.uid == userId || isRequestingUserAdmin());
     }
 
@@ -117,7 +120,7 @@ service cloud.firestore {
     // offered when adding team members). Readable by any authenticated user
     // since it's needed during event creation; writable only by admins.
     match /settings/{settingId} {
-      allow read: if request.auth != null;
+      allow read: if signedIn();
       allow write: if isRequestingUserAdmin();
     }
 
@@ -127,10 +130,10 @@ service cloud.firestore {
     // default-deny the preset list read failed (custom presets vanished from
     // the UI) and creating one was rejected.
     match /dispatchVocabularyPresets/{presetId} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null &&
+      allow read: if signedIn();
+      allow create: if signedIn() &&
         request.resource.data.createdBy == request.auth.uid;
-      allow update, delete: if request.auth != null &&
+      allow update, delete: if signedIn() &&
         (resource.data.createdBy == request.auth.uid || isRequestingUserAdmin());
     }
 
@@ -147,7 +150,7 @@ service cloud.firestore {
     // `Map.get(key, default)` (safe) or the `in` operator (safe presence
     // check) instead of bare dot access.
     function isRequestingUserAdmin() {
-      return request.auth != null &&
+      return signedIn() &&
         exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('isAdmin', false) == true;
     }
@@ -155,7 +158,7 @@ service cloud.firestore {
     // Fallback deny
     function isOrgMember(orgId) {
       // Check members array
-      return request.auth != null && (
+      return signedIn() && (
         exists(/databases/$(database)/documents/organizations/$(orgId)) &&
         (
           get(/databases/$(database)/documents/organizations/$(orgId)).data.get('members', []) is list &&
@@ -193,7 +196,7 @@ service cloud.firestore {
     // `sharedWith array-contains email` (shared), `isOrgVenue/isOrgEvent ==
     // true` (org-wide), `orgId == X`, and admin.
     function isVenueVisibleToUser() {
-      return request.auth != null && (
+      return signedIn() && (
         isVenueOwner() ||
         isVenueSharedWithRequester() ||
         resource.data.get('isOrgVenue', false) == true ||
@@ -203,7 +206,7 @@ service cloud.firestore {
     }
 
     function isEventVisibleToUser() {
-      return request.auth != null && (
+      return signedIn() && (
         isEventOwnerOrOrgMember() ||
         isEventSharedWithRequester() ||
         isEventOrgShow() ||
@@ -213,18 +216,18 @@ service cloud.firestore {
 
     // Same check as isEventSharedWithRequester below.
     function isVenueSharedWithRequester() {
-      return request.auth != null &&
+      return signedIn() &&
         ('email' in request.auth.token) && request.auth.token.email is string &&
         'sharedWith' in resource.data &&
         request.auth.token.email.lower() in resource.data.sharedWith;
     }
 
     function isVenueOwner() {
-      return request.auth != null && resource.data.get('userId', null) == request.auth.uid;
+      return signedIn() && resource.data.get('userId', null) == request.auth.uid;
     }
 
     function isEventOwnerOrOrgMember() {
-      return request.auth != null &&
+      return signedIn() &&
         (resource.data.get('userId', null) == request.auth.uid ||
           ('orgId' in resource.data && resource.data.orgId is string && isOrgMember(resource.data.orgId)));
     }
@@ -238,7 +241,7 @@ service cloud.firestore {
     // `sharedWith array-contains email` list query safe against this form
     // (confirmed against the emulator, where the hasAny form denied it).
     function isEventSharedWithRequester() {
-      return request.auth != null &&
+      return signedIn() &&
         ('email' in request.auth.token) && request.auth.token.email is string &&
         'sharedWith' in resource.data &&
         request.auth.token.email.lower() in resource.data.sharedWith;
@@ -248,16 +251,314 @@ service cloud.firestore {
     // this instance (there's no per-organization scoping today — see the
     // orgId comments above), mirroring how isOrgVenue already works.
     function isEventOrgShow() {
-      return request.auth != null && resource.data.get('isOrgEvent', false) == true;
+      return signedIn() && resource.data.get('isOrgEvent', false) == true;
     }
 
     // The event fields a non-owner, non-admin writer (a shared user, or an
     // org member via isEventOrgShow) must not be able to change: who owns
-    // the event, who it's shared with, whether it's an org-wide show, and
-    // whether/when it's ended. See the events match block above for why.
+    // the event, who it's shared with, whether it's an org-wide show,
+    // whether/when it's ended, and whether it uses TAK (`mapMode`). See the
+    // events match block above for why.
     function isEventProtectedFieldsUnchanged() {
       return !request.resource.data.diff(resource.data).affectedKeys()
-        .hasAny(['userId', 'sharedWith', 'isOrgEvent', 'ended', 'endedAt']);
+        .hasAny(['userId', 'sharedWith', 'isOrgEvent', 'ended', 'endedAt', 'mapMode']);
+    }
+
+    // ===================================================================
+    // TAK integration (in development, optional). Everything below applies
+    // only to TAK collections; see docs/tak-integration/data-contract.md.
+    //
+    // - Bridge accounts are ordinary Auth users with a bridgeAccounts/{uid}
+    //   record, created and managed only by admins. Deleting the record
+    //   revokes the bridge, since every bridge rule checks it.
+    // - A bridge reads only its events' takConfig and takDeviceLinks, and
+    //   writes only takLive, takHistory, takStatus and its own status. It
+    //   never reads event documents (see the events rules above).
+    // - A bridge account can't create or edit bridge records, TAK config,
+    //   map alignment, device links or device mappings.
+    // - An event owner can link a bridge only if they are in its
+    //   allowedUsers.
+    // ===================================================================
+
+    match /bridgeAccounts/{bridgeUid} {
+      // Written as `'allowedUsers' in ... && uid in ...` so Firestore can
+      // prove the event-creation query (allowedUsers array-contains uid).
+      allow read: if signedIn() && (
+        request.auth.uid == bridgeUid ||
+        ('allowedUsers' in resource.data && request.auth.uid in resource.data.allowedUsers) ||
+        isRequestingUserAdmin()
+      );
+      allow create: if isRequestingUserAdmin() && !isBridge() &&
+        bridgeUid != request.auth.uid &&
+        request.resource.data.createdBy == request.auth.uid &&
+        isValidBridgeAccount(request.resource.data);
+      allow update: if isRequestingUserAdmin() && !isBridge() &&
+        request.resource.data.createdBy == resource.data.createdBy &&
+        isValidBridgeAccount(request.resource.data);
+      allow delete: if isRequestingUserAdmin() && !isBridge();
+
+      // Remembered device-to-team-name mappings. Admins manage them; allowed
+      // users add and update them when they link a device by hand.
+      match /deviceMappings/{deviceUid} {
+        allow read: if isRequestingUserAdmin() || isAllowedBridgeUser(bridgeUid);
+        allow create, update: if !isBridge() &&
+          (isRequestingUserAdmin() || isAllowedBridgeUser(bridgeUid)) &&
+          request.resource.data.keys().hasOnly(['teamName', 'callsign', 'updatedAt', 'updatedBy']) &&
+          request.resource.data.teamName is string &&
+          request.resource.data.updatedBy == request.auth.uid;
+        allow delete: if !isBridge() && isRequestingUserAdmin();
+      }
+
+      // Heartbeat, written by the bridge itself.
+      match /status/{docId} {
+        allow read: if signedIn() &&
+          (request.auth.uid == bridgeUid || isRequestingUserAdmin() || isAllowedBridgeUser(bridgeUid));
+        allow write: if docId == 'current' && signedIn() &&
+          request.auth.uid == bridgeUid && isBridge();
+      }
+    }
+
+    // MCI role logins (#142). Managed by anyone who may dispatch the event;
+    // a login may read its own record (to see whether it is still active).
+    // The server route /api/role-accounts writes these with the Admin SDK;
+    // the browser writes them where it can create accounts itself.
+    match /events/{eventId}/roleAccounts/{uid} {
+      allow read: if canReadEventData(eventId) || (isRoleAccount() && request.auth.uid == uid);
+      allow create: if canReadEventData(eventId) && isValidRoleAccount(eventId, uid, request.resource.data) &&
+        request.resource.data.get('createdBy', null) == request.auth.uid;
+      allow update: if canReadEventData(eventId) && isValidRoleAccount(eventId, uid, request.resource.data) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['disabled', 'disabledAt', 'label']);
+      allow delete: if canReadEventData(eventId);
+    }
+
+    // MCI state outside the event document (#143, src/lib/mciDoc.ts): `state`
+    // (what event.mci used to hold), `units` (a summary of the units for
+    // role views), `map` (the event's map layers, for role views, #154) and
+    // `patients` (patient details, #156). Dispatchers read and write them; an
+    // active role login for the event reads them, except `patients` for a
+    // role that doesn't see patients (Logistics). Role logins never write
+    // here: their changes go through /api/mci-role.
+    match /events/{eventId}/mci/{docId} {
+      allow read: if canReadEventData(eventId) ||
+        (isActiveRoleAccountFor(eventId) && (docId != 'patients' || roleReadsPatients(eventId)));
+      allow create, update: if canReadEventData(eventId) && docId in ['state', 'units', 'map', 'patients'];
+      allow delete: if canReadEventData(eventId);
+    }
+
+    // Which event a role login belongs to, read by the login itself after signing in.
+    match /roleAccountIndex/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow create: if canReadEventData(request.resource.data.get('eventId', '')) &&
+        request.resource.data.get('role', null) in ['responder', 'treatment_lead', 'incident_command', 'triage', 'treatment', 'transport', 'logistics'];
+      allow delete: if canReadEventData(resource.data.get('eventId', ''));
+    }
+
+    match /events/{eventId}/takConfig/{docId} {
+      allow read: if canReadEventData(eventId) || isActiveRoleAccountFor(eventId) ||
+        (isBridge() && resource.data.get('bridgeUid', null) == request.auth.uid);
+      // The owner manages the config; linking a bridge needs allowedUsers.
+      // An admin may only mark it closed (the end-event flow).
+      allow create, update: if docId == 'current' && !isBridge() &&
+        isValidTakConfig(eventId, request.resource.data) && (
+          (isEventOwner(eventId) && isBridgeLinkAllowed()) ||
+          (isRequestingUserAdmin() && resource != null &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['closed', 'updatedAt']))
+        );
+      allow delete: if !isBridge() && isEventOwner(eventId);
+    }
+
+    // The bridge finds its events with a collection-group query on
+    // takConfig where bridgeUid == its uid.
+    match /{path=**}/takConfig/{docId} {
+      allow read: if isBridge() && resource.data.bridgeUid == request.auth.uid;
+    }
+
+    // Map alignment for the TAK overlay and heat maps. Never read by the
+    // bridge, which works only in lat/lon.
+    match /events/{eventId}/takMapAlignment/{layerId} {
+      allow read: if canReadEventData(eventId) || isActiveRoleAccountFor(eventId);
+      allow write: if !isBridge() && isEventOwner(eventId);
+    }
+
+    // Device -> team links, made by dispatchers. The bridge only reads them.
+    match /events/{eventId}/takDeviceLinks/{deviceUid} {
+      // Active role logins read links and positions for the map in their role view (#154).
+      allow read: if canReadEventData(eventId) || isLinkedBridge(eventId) || isActiveRoleAccountFor(eventId);
+      allow create, update: if !isBridge() && canReadEventData(eventId) &&
+        request.resource.data.keys().hasOnly(['teamId', 'linkedAt', 'method', 'linkedBy']) &&
+        request.resource.data.teamId is string &&
+        request.resource.data.method in ['auto', 'manual'] &&
+        request.resource.data.linkedBy == request.auth.uid;
+      allow delete: if !isBridge() && canReadEventData(eventId);
+    }
+
+    // Live device positions, one doc per device, overwritten by the bridge.
+    match /events/{eventId}/takLive/{deviceUid} {
+      allow read: if canReadEventData(eventId) || isLinkedBridge(eventId) || isActiveRoleAccountFor(eventId);
+      allow create, update: if canBridgeWrite(eventId) && isValidLivePosition(request.resource.data);
+      // The bridge clears live docs at close (even after closed is set);
+      // the owner may clear them when unlinking.
+      allow delete: if isLinkedBridge(eventId) || (!isBridge() && isEventOwner(eventId));
+    }
+
+    // Location history: owner-only in v1. Unlike live positions, history may
+    // still be written after the event closes, so the bridge can flush and
+    // end its open segments at close.
+    match /events/{eventId}/takHistory/{segmentId} {
+      allow read: if (!isBridge() && isEventOwner(eventId)) || isLinkedBridge(eventId);
+      allow create, update: if canBridgeWriteHistory(eventId) && historyMode(eventId) != 'off' &&
+        request.resource.data.bridgeUid == request.auth.uid;
+      allow delete: if !isBridge() && isEventOwner(eventId);
+
+      match /points/{chunkId} {
+        allow read: if (!isBridge() && isEventOwner(eventId)) || isLinkedBridge(eventId);
+        allow create, update: if canBridgeWriteHistory(eventId) && historyMode(eventId) == 'detailed';
+        allow delete: if !isBridge() && isEventOwner(eventId);
+      }
+    }
+
+    // Which teams are on a call, as opaque team ids only, published by the
+    // dispatchers' browsers so the bridge can keep Detailed history during
+    // calls without reading the event. No call details.
+    match /events/{eventId}/takCallState/{docId} {
+      allow read: if canReadEventData(eventId) || isLinkedBridge(eventId);
+      allow write: if docId == 'current' && !isBridge() && canReadEventData(eventId) &&
+        request.resource.data.keys().hasOnly(['teamIdsOnCall', 'updatedAt']) &&
+        request.resource.data.teamIdsOnCall is list && request.resource.data.updatedAt is number;
+    }
+
+    // Per-event bridge status, for the event's TAK panel.
+    match /events/{eventId}/takStatus/{docId} {
+      allow read: if canReadEventData(eventId);
+      allow write: if docId == 'current' && isLinkedBridge(eventId);
+    }
+
+    // Signed in with a normal account: not an MCI role login (below). Every
+    // rule that lets "anyone signed in" do something uses this, so role
+    // logins only get what the roleAccounts rules give them.
+    function signedIn() {
+      return request.auth != null && !isRoleAccount();
+    }
+
+    // MCI role logins (#142, src/lib/roleAccounts.ts): accounts made for one
+    // event and one role, with an email of <username>@role.crowdcad.org.
+    // Matching the domain only ever removes access, so a self-made account
+    // with such an email gains nothing; access comes only from an active
+    // record at events/{eventId}/roleAccounts/{uid} that a dispatcher made.
+    function isRoleAccount() {
+      return request.auth != null &&
+        request.auth.token.get('email', '') is string &&
+        request.auth.token.get('email', '').lower().matches('^[a-z0-9-]+@role[.]crowdcad[.]org$');
+    }
+
+    function roleAccountPath(eventId) {
+      return /databases/$(database)/documents/events/$(eventId)/roleAccounts/$(request.auth.uid);
+    }
+
+    // A role login for this event that hasn't been disabled, on an event that hasn't ended.
+    function isActiveRoleAccountFor(eventId) {
+      return isRoleAccount() && exists(roleAccountPath(eventId)) &&
+        get(roleAccountPath(eventId)).data.get('disabled', false) == false &&
+        eventDoc(eventId).get('ended', false) == false;
+    }
+
+    // Keep in step with roleReadsPatients in src/lib/roleAccounts.ts.
+    function roleReadsPatients(eventId) {
+      return get(roleAccountPath(eventId)).data.get('role', '') != 'logistics';
+    }
+
+    function isValidRoleAccount(eventId, uid, d) {
+      return d.get('uid', null) == uid && d.get('eventId', null) == eventId &&
+        d.get('role', null) in ['responder', 'treatment_lead', 'incident_command', 'triage', 'treatment', 'transport', 'logistics'] &&
+        d.get('username', null) is string && d.get('disabled', null) is bool;
+    }
+
+    function isBridge() {
+      return request.auth != null &&
+        exists(/databases/$(database)/documents/bridgeAccounts/$(request.auth.uid));
+    }
+
+    function isAllowedBridgeUser(bridgeUid) {
+      return signedIn() && !isBridge() &&
+        exists(/databases/$(database)/documents/bridgeAccounts/$(bridgeUid)) &&
+        request.auth.uid in get(/databases/$(database)/documents/bridgeAccounts/$(bridgeUid)).data.get('allowedUsers', []);
+    }
+
+    function isValidBridgeAccount(data) {
+      return data.keys().hasOnly(['label', 'createdBy', 'allowedUsers', 'defaultHistoryMode', 'createdAt', 'updatedAt']) &&
+        data.label is string && data.allowedUsers is list &&
+        data.defaultHistoryMode in ['off', 'summary', 'detailed'];
+    }
+
+    // The event's data, through a get() on the parent document. Used by the
+    // TAK subcollections, where `resource` is the subcollection doc.
+    function eventDoc(eventId) {
+      return get(/databases/$(database)/documents/events/$(eventId)).data;
+    }
+
+    function isEventOwner(eventId) {
+      return signedIn() && eventDoc(eventId).get('userId', null) == request.auth.uid;
+    }
+
+    // Same access paths as isEventVisibleToUser, which is also everyone who
+    // may dispatch the event.
+    function canReadEventData(eventId) {
+      let d = eventDoc(eventId);
+      return signedIn() && !isBridge() && (
+        d.get('userId', null) == request.auth.uid ||
+        ('orgId' in d && d.orgId is string && isOrgMember(d.orgId)) ||
+        (('email' in request.auth.token) && request.auth.token.email is string &&
+          request.auth.token.email.lower() in d.get('sharedWith', [])) ||
+        d.get('isOrgEvent', false) == true ||
+        isRequestingUserAdmin()
+      );
+    }
+
+    function takConfigDoc(eventId) {
+      return get(/databases/$(database)/documents/events/$(eventId)/takConfig/current).data;
+    }
+
+    function isLinkedBridge(eventId) {
+      return isBridge() &&
+        exists(/databases/$(database)/documents/events/$(eventId)/takConfig/current) &&
+        takConfigDoc(eventId).get('bridgeUid', null) == request.auth.uid;
+    }
+
+    function canBridgeWrite(eventId) {
+      let cfg = takConfigDoc(eventId);
+      return isLinkedBridge(eventId) && cfg.get('enabled', false) == true && cfg.get('closed', false) != true;
+    }
+
+    function canBridgeWriteHistory(eventId) {
+      return isLinkedBridge(eventId) && takConfigDoc(eventId).get('enabled', false) == true;
+    }
+
+    function historyMode(eventId) {
+      return takConfigDoc(eventId).get('historyMode', 'off');
+    }
+
+    function isValidTakConfig(eventId, data) {
+      return data.keys().hasOnly(['eventId', 'bridgeUid', 'enabled', 'closed', 'historyMode', 'updatedAt']) &&
+        data.eventId == eventId &&
+        data.enabled is bool && data.closed is bool &&
+        data.historyMode in ['off', 'summary', 'detailed'];
+    }
+
+    // Linking: unchanged or cleared links are fine; a new bridgeUid must be
+    // one the owner is allowed to use.
+    function isBridgeLinkAllowed() {
+      let next = request.resource.data.get('bridgeUid', null);
+      return next == null ||
+        (resource != null && resource.data.get('bridgeUid', null) == next) ||
+        isAllowedBridgeUser(next);
+    }
+
+    function isValidLivePosition(data) {
+      return data.keys().hasOnly(['lat', 'lon', 'hae', 'ce', 'course', 'speed', 'callsign', 'cotType', 'deviceTime', 'receivedAt', 'bridgeUid']) &&
+        data.bridgeUid == request.auth.uid &&
+        data.lat is number && data.lat >= -90 && data.lat <= 90 &&
+        data.lon is number && data.lon >= -180 && data.lon <= 180 &&
+        data.deviceTime is number && data.receivedAt is number;
     }
   }
 }

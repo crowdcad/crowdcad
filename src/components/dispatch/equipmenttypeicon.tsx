@@ -54,7 +54,20 @@ export default function EquipmentTypeIcon({ type, className = 'w-4 h-4 shrink-0'
  * to the call tracker's per-call chip, which does have that context.
  */
 export function getEquipmentStatusWord(status: string): string {
+  if (status === 'Retrieving Eq') return 'Retrieving';
   if (status === 'Delivered Eq') return 'Delivered';
   if (status === 'En Route Eq') return 'En Route';
+  if (status === 'Returning Eq') return 'Returning';
   return status;
+}
+
+/** Equipment statuses whose "Eq" suffix is swapped for the equipment's icon, or its name in menus. */
+export function isEquipmentIconStatus(status: string): boolean {
+  return status === 'Retrieving Eq' || status === 'En Route Eq' || status === 'Delivered Eq' || status === 'Returning Eq';
+}
+
+/** Menu label naming the equipment: "Retrieving - Wheelchair 1", "Delivered Wheelchair 1". */
+export function getEquipmentStatusMenuLabel(status: string, equipmentNames: string): string {
+  if (status === 'Retrieving Eq' || status === 'En Route Eq') return `${getEquipmentStatusWord(status)} - ${equipmentNames}`;
+  return `${getEquipmentStatusWord(status)} ${equipmentNames}`;
 }

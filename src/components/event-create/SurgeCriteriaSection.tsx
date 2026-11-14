@@ -1,6 +1,6 @@
 "use client";
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Input, Tooltip } from '@heroui/react';
 import { CircleHelp } from 'lucide-react';
 import type { Event } from '@/app/types';
@@ -41,6 +41,25 @@ function FieldLabel({
   );
 }
 
+/**
+ * Lets a number field be cleared while typing. The field used to show the stored number directly, so
+ * deleting the last digit parsed as 0, was clamped or rejected, and the old number came straight back.
+ * Now the typed text is kept while the field is focused, each valid number is saved as it is typed
+ * (`save` clamps or ignores it), and leaving the field shows the saved value again.
+ */
+function useNumberDraft(saved: number, save: (value: number) => void) {
+  const [draft, setDraft] = useState<string | null>(null);
+  return {
+    value: draft ?? String(saved),
+    onValueChange: (text: string) => {
+      setDraft(text);
+      const value = Number(text);
+      if (text.trim() !== '' && Number.isFinite(value)) save(value);
+    },
+    onBlur: () => setDraft(null),
+  };
+}
+
 export default function SurgeCriteriaSection({ eventData, setEventData, inputClassNames }: Props) {
   const unassignedCallSurgeSeconds = eventData.unassignedCallSurgeSeconds ?? 120;
   const unassignedMinutes = Math.floor(unassignedCallSurgeSeconds / 60);
@@ -55,6 +74,15 @@ export default function SurgeCriteriaSection({ eventData, setEventData, inputCla
       unassignedCallSurgeSeconds: total > 0 ? total : prev.unassignedCallSurgeSeconds,
     }));
   };
+
+  const surgeLimit = useNumberDraft(eventData.surgeLimitPercent ?? 70, (value) =>
+    setEventData((prev) => ({ ...prev, surgeLimitPercent: Math.min(100, Math.max(1, value)) }))
+  );
+  const pendingTransport = useNumberDraft(eventData.pendingTransportSurgeThreshold ?? 3, (value) => {
+    if (value >= 1) setEventData((prev) => ({ ...prev, pendingTransportSurgeThreshold: Math.round(value) }));
+  });
+  const minutesField = useNumberDraft(unassignedMinutes, (value) => setUnassignedCallSurgeSeconds(value, unassignedSeconds));
+  const secondsField = useNumberDraft(unassignedSeconds, (value) => setUnassignedCallSurgeSeconds(unassignedMinutes, value));
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -72,14 +100,7 @@ export default function SurgeCriteriaSection({ eventData, setEventData, inputCla
           placeholder="70"
           min={1}
           max={100}
-          value={String(eventData.surgeLimitPercent ?? 70)}
-          onValueChange={(value) => {
-            const parsed = Number(value);
-            setEventData((prev) => ({
-              ...prev,
-              surgeLimitPercent: Number.isFinite(parsed) ? Math.min(100, Math.max(1, parsed)) : prev.surgeLimitPercent,
-            }));
-          }}
+          {...surgeLimit}
           endContent={<span className="text-surface-faint text-sm">%</span>}
           classNames={inputClassNames}
           size="lg"
@@ -99,14 +120,7 @@ export default function SurgeCriteriaSection({ eventData, setEventData, inputCla
           color="default"
           placeholder="3"
           min={1}
-          value={String(eventData.pendingTransportSurgeThreshold ?? 3)}
-          onValueChange={(value) => {
-            const parsed = Number(value);
-            setEventData((prev) => ({
-              ...prev,
-              pendingTransportSurgeThreshold: Number.isFinite(parsed) && parsed >= 1 ? Math.round(parsed) : prev.pendingTransportSurgeThreshold,
-            }));
-          }}
+          {...pendingTransport}
           classNames={inputClassNames}
           size="lg"
         />
@@ -126,8 +140,7 @@ export default function SurgeCriteriaSection({ eventData, setEventData, inputCla
             variant="flat"
             color="default"
             min={0}
-            value={String(unassignedMinutes)}
-            onValueChange={(value) => setUnassignedCallSurgeSeconds(Number(value), unassignedSeconds)}
+            {...minutesField}
             endContent={<span className="text-surface-faint text-sm">min</span>}
             classNames={inputClassNames}
             size="lg"
@@ -140,8 +153,7 @@ export default function SurgeCriteriaSection({ eventData, setEventData, inputCla
             color="default"
             min={0}
             max={59}
-            value={String(unassignedSeconds)}
-            onValueChange={(value) => setUnassignedCallSurgeSeconds(unassignedMinutes, Number(value))}
+            {...secondsField}
             endContent={<span className="text-surface-faint text-sm">sec</span>}
             classNames={inputClassNames}
             size="lg"

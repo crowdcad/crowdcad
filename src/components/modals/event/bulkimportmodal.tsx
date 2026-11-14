@@ -13,6 +13,7 @@ import {
 } from "@heroui/react";
 import { Download, Upload } from "lucide-react";
 import type { Role, Staff, Supervisor } from "@/app/types";
+import { newTeamId } from '@/lib/teamId';
 
 type Props = {
   isOpen: boolean;
@@ -149,6 +150,7 @@ export default function BulkImportModal({
           grouped.get(row.team)!.push(row);
         }
         const staff: Staff[] = Array.from(grouped.entries()).map(([team, members]) => ({
+          id: newTeamId(),
           team,
           location: "No Post",
           status: "On Break",
@@ -157,6 +159,7 @@ export default function BulkImportModal({
         onImport(staff, []);
       } else {
         const supervisors: Supervisor[] = validRows.map((row) => ({
+          id: newTeamId(),
           team: row.team,
           location: "Roaming",
           status: "On Break",

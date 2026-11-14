@@ -1,0 +1,152 @@
+# MCI mode: decision log
+
+Entries are dated and are not edited after the fact. A later entry supersedes an earlier one.
+
+Related: [plan.md](plan.md), [../tak-integration/decisions.md](../tak-integration/decisions.md).
+
+## 2026-10-17
+
+### D1. Counts only, no patient rows, for the December drill
+- **Requested** by the maintainer for the December drill.
+- **What.** MCI mode stores counts by zone and tag color. It has no chief complaint, age, sex, location found or tag number anywhere.
+- **Why.** The drill feeds a descriptive case report and needs no patient-identifying data. Per-patient rows can be added later because the log's `kind` is a union.
+
+### D2. The log is the source of truth; totals are derived; undo appends
+- **What.** `event.mci.log` is the only source of counts. `src/lib/mci.ts` derives Tagged, Moved, In zone now, treatment counts and the chart series from it. Undo appends `{ kind: 'undo', undoes }` and derivations skip both entries. Entries are never edited or removed.
+- **Writes.** Every write uses `updateEvent` in its functional form, built from the event the transaction read, so two dispatchers pressing plus together both count.
+- **Limits.** A move is clamped to In zone now. A removal of tagged patients is clamped the same way. An undo that would leave a zone with negative patients (for example undoing a tag whose patients were already moved) is refused.
+- **Zone clear state.** `MciZone.clearedAt` is a copy of what the log says, rewritten by `appendMciEntries` on every append. The log wins.
+
+### D3. MCI assignment is separate from Location; on TAK events MCI never writes Location
+- **What.** A unit's zone or treatment location is `mciAssignment`. On a standard event, picking it also sets Location to the name and logs "Post changed to <name> (MCI)". On a TAK event (`mapMode === 'tak'`) MCI code never writes Location and the assignment shows as its own chip on the card.
+- **Why.** Follows TAK D66: Location is where a unit is.
+
+### D4. Statuses are Available, Triage, Treatment and Unavailable; an assignment sets status, a location never does
+- **What.** While an MCI is active the status menu offers these four. Triage needs a zone and Treatment needs a treatment location. Available and Unavailable clear the assignment. Equipment-run statuses (TAK D67) are unchanged. Follows TAK D66 and D68: status is never set from a location.
+- **Stand down.** Returns units in Triage, Treatment or Unavailable to Available and clears every assignment.
+
+### D5. One treatment list: clinics are included by default alongside MCI-only areas; clinic cards show regular plus MCI
+- **What.** The declare dialog lists every event clinic, ticked by default with its regular-patient count, and lets the dispatcher add MCI-only treatment areas by name. A clinic card shows "4 regular + 8 MCI". The regular count is the unresolved clinic calls at that clinic. Calls with no `clinicId` belong to the single or default clinic, as they do today.
+
+### D6. Automatic surge alerts are muted while an MCI is active
+- **What.** The three automatic surge effects start no surge while `event.mci.active`. The Surge toggle still works by hand.
+- **Why.** An MCI puts most teams on one task by design, so the alerts would fire at once and carry no news.
+
+### D7. A team on a normal call keeps its call statuses and counts as Unavailable
+- **What.** A team on an active normal call keeps the call status menu, so the call workflow is unchanged, and counts as Unavailable in the availability strip. Its card shows the call status and call chip as it does today. When the call resolves the team returns to Available as it does today. Assigning normal calls during an MCI is not blocked.
+- **Stale assignments.** A unit that goes on a call keeps its `mciAssignment` until it is changed or the MCI stands down. A zone or treatment card lists only units whose current status is Triage or Treatment.
+
+## 2026-10-18
+
+### D8. Declaring an MCI ends an open surge
+- **Requested** by the maintainer after previewing.
+- **What.** `declareMci` closes the open surge period (its `endedAt` is the declare time, so the surge log keeps it) and clears `manualSurgeActive`. The MCI timer and the surge timer never run together. The Surge toggle still works by hand during an MCI (D6).
+- **Why.** An MCI is the larger event. Leaving the surge flashing beside it gave two alarms for one situation.
+
+### D9. Transport takes patients off site from a treatment location
+- **Requested** by the maintainer; designed in [transport-and-summary-plan.md](transport-and-summary-plan.md).
+- **What.** A `transported` log entry names the treatment location the patients left, the color, the count, the ambulance number and an optional destination. In treatment now is received minus transported. One trip is one write with one entry per color. A transport is clamped to the patients in that location. Undoing a transport always works. Undoing a move is refused when its patients have since been transported.
+- **Why.** The ambulance number is a unit label, so counts only (D1) still holds. Transport runs from treatment locations only for the first drill; the entry already names its source if zones are added later.
+
+### D10. A zone or treatment location can be drawn on the venue map
+- **Requested** by the maintainer, and only offered when the venue has a map.
+- **What.** After a zone or treatment location is added, the dispatcher is asked to draw it on the map and can skip. The shape is stored as an ordinary zone on the event's copy of the venue layers (never the venue itself), with the same id as the MCI item or its `venueZoneId`. The map then shows it like any other zone. The shape is not a dispatch zone, so it adds no Calls tab. A card's map button redraws it, which replaces the first shape. Clinics already have a pin and are not drawn.
+- **Skips.** A skipped prompt is remembered for the browser session and not asked again. The card's button still works.
+- **Limits.** Image layers are drawn at the size of the dialog with no zoom. Live-map layers store coordinates.
+
+## 2026-10-29
+
+### D11. Treatment locations show a box per patient with age, sex and chief complaint (supersedes D1)
+- **Requested** by the maintainer so the treatment leader enters each report into CrowdCAD instead of on a whiteboard.
+- **What.** Patients are rebuilt from the log: a move or walk-in of n creates n patients, with ids taken from that entry, so the boxes and the counts can never disagree. The patient's zone and arrival time come from the move with no typing. What is typed (`age`, `sex`, `complaint`, the team that brought them in and the transport priority) sits in `mci.patients`, is edited in place and never changes a count. Names, tag numbers and location found are still never stored.
+- **Switch.** The declare dialog has "Track patients in treatment", ticked by default, and the tab can turn it on or off. It only changes what is shown, so a counts-only drill is still possible and turning it on later shows every patient already moved.
+- **Columns.** Red, yellow and green have columns of boxes. Black stays counts-only, as before.
+- **Formats.** Age is free text up to 5 characters ("34", "6mo"). Sex is any single letter, stored as a capital.
+
+### D12. A zone's quick move sends one patient per press
+- **What.** Each color row on a zone card has a plus beside Moved. A press moves one patient of that color to the location last moved to from this zone, else the first location. The card shows that location and it can be changed there. The Move dialog stays for several at once.
+
+### D13. A patient can be retriaged or sent to another location, with an optional note
+- **What.** Dragging a box to another column, or the box's menu, writes one `reassigned` entry with the patient's old and new color and location and an optional note. Counts follow the patient. The zone's Tagged counts stay as found. A patient sent to another location loses their transport priority there.
+- **Undo.** A patient entry can only be undone while nothing later depends on it: undo the patient's latest change first. Undoing a move or walk-in is refused while any of its patients has since been retriaged, moved on or transported. A transport written as a count (black, or the dialog's counts) takes the patients of that color who arrived first.
+- **Drag.** Native drag needs no new library. The menu is there because native drag does not work on touch screens or from a keyboard.
+
+### D14. A patient can be transported from their box; the ambulance number is optional there (amends D9)
+- **What.** The arrow on a box asks for an ambulance number (with this MCI's numbers suggested) and a destination, both optional, so a tap and Enter is enough. The Transport dialog lists the patients to pick, sorted by priority, and keeps a count for black. It still needs an ambulance number.
+
+### D15. Walk-ins are added at a treatment location
+- **What.** Each column has an add button for a patient who never went through a zone. It writes an `arrived` entry. Walk-ins count in treatment and in the totals but never in a zone's Tagged.
+
+### D21. Patient details have their own document; Logistics can't read it (#156)
+- **Who sees what** (the maintainer's call, 2026-11-12). Responders see a zone's counts when they switch to it. Transport sees age, sex and chief complaint. Incident Command sees everything and stays read only for now. Logistics needs no patient details.
+- **What.** On Firebase cloud events, patient details (`MciState.patients`: age, sex, complaint, team, notes, interventions, transport order) live in `events/{eventId}/mci/patients`, not in `mci/state`. Dispatchers read and write it. Active role logins read it, except Logistics (`roleReadsPatients`, in `src/lib/roleAccounts.ts` and `firestore.rules`). `withMciDoc` merges it back into `event.mci`, so nothing that reads `event.mci` changed. `splitMciWrite` writes it only when the details change, or when it doesn't exist yet.
+- **The log stays shareable.** The log is in `state`, which every role reads, so log text never carries age, sex or complaint. The patient-care line says "Patient: notes updated; Oxygen", and the dispatcher's log shows who it was from `patientId`. A dispatcher's own reassign note is still free text.
+- **Older state documents.** A `state` written before this keeps its details inline, and they are still read from there. The first time a dispatcher opens such an MCI (not ended), the page rewrites it, which moves them to `mci/patients`.
+
+### D20. Role views, and how they write (#144, #152, #153, #154)
+- **Roles.** Responder (triage and treatment in one, with a mode switch), Transport, Logistics (option a: the dispatcher confirms arrivals and equipment requests), Incident Command (read only, a desktop layout and a phone one). `/role` picks the view; `src/components/roleviews/`. The mockup (a Design canvas kept with the maintainer) is kept in step with these screens.
+- **Each login belongs to a unit.** The Role logins dialog lists the event's teams and supervisors with a role each (teams default to Responder) and makes the logins in one press, each sent by share sheet, copied message, email or link. `RoleAccount.unitName` / `unitId`.
+- **Writes go through the server.** Role logins have read access only (their MCI documents, plus TAK positions for the map). Their changes go to `/api/mci-role`, which checks the login is active and its event not ended, checks the action is one its role may take, and applies it in a transaction with the same helpers the MCI tab uses (`src/lib/mciRoleActions.ts`). Every log entry is stamped with `byUnit`, `byRole` and, for one counts submission, a shared `batch`, so attribution can't be forged from a phone. Changes that move no count (a unit's zone, patient care, logistics) are `noted` entries. Without admin credentials the route answers 501 and role views can only read.
+- **Responder.** Picking a zone or treatment zone sets the unit's status and MCI assignment on the board. Counts are a draft until **Submit**, then an **Are you sure?** repeats the zone and each change; moves likewise. Treatment: add a patient with color, brought in by, age, sex and complaint; interventions (timed, by unit) and notes (`MciPatientDetails.interventions`, `notes`); transport priority sooner or later.
+- **Map for every role.** A round Map button opens the event map from `mci/map` (the event's layers, written by the dispatcher's write path whenever the MCI changes) with live positions from TAK when on; the unit's own position is called out. A round Back button in the Map button's place returns to the view.
+- **Tarps.** Declaring offers Red, Yellow, Green and Black tarps: treatment zones with `MciTreatmentArea.color`, drawn in that color.
+- **Summary.** The CSV adds `[unit, role]` to every entry made by a role login; the MCI log drawer shows "· Alpha".
+
+### D19. A Logistics tab beside the MCI tab (#139)
+- **What.** While an event has an MCI, a **Logistics** tab (read-only after stand down) has two halves. **Equipment**: every item, grouped by the team holding it, with **Issue to / Give to** a team and **Return**, plus **Add equipment**; items not issued are listed below. **Incoming staff**: teams reported on their way, each with an ETA (a typed time, or Pending, En route or Attempted contact) and notes, sorted soonest first with overdue times highlighted. **Arrived** turns the row into a team on the board (Available, logged); **Cancel** drops it. The tab label counts teams still incoming.
+- **Equipment reuses custody** (the maintainer's choice): issuing is the dispatcher's manual move to a unit, so the item shows on the team card, on the map and, as an icon with the item's name on hover, next to the team on each of its calls.
+- **Data.** `mci.logistics.incoming` (in the MCI state document on Firebase, D18). Arrived and cancelled rows are kept for the summary's CSV export.
+
+### D18. MCI state has its own document on cloud events (#143)
+- **Why.** Role logins must never read the event document (every call, team and note is in it), and Firestore can't hide part of a document. During an MCI it also stops MCI taps contending with every other dispatch write.
+- **What.** On Firebase cloud events, `events/{eventId}/mci/state` holds what `event.mci` held, and `events/{eventId}/mci/units` a summary of the units for role views (name, kind, status, MCI assignment, equipment held). The dispatch page merges `state` back into its event, so everything that reads `event.mci` is unchanged. Its single write path reads both documents in one transaction and sends the `mci` part to `state`, writing `units` in the same transaction when what it shows changes (`src/lib/mciDoc.ts`). Dispatchers read and write both; an active role login reads them.
+- **Older events.** An event with `mci` inline keeps it readable; the dispatch page copies it to `state` and `units` the first time it opens. The inline copy is left in place and ignored once `state` exists. The summary page reads `state`, falling back to inline.
+- **Not changed.** Lite and PocketBase events keep `mci` inline.
+
+### D17. Role logins are real accounts, made per event and role (#140, #142)
+- **What.** Declaring an MCI offers a login per role (Incident Command, Triage, Treatment, Transport, Logistics), handed out as a one-tap link (`/r/<username>#<password>`) or a username and password typed into the normal sign-in box or at `/role`. The dispatcher can make more, replace one (the old one stops working) or disable one from the MCI tab's **Role logins** button. The password is shown once.
+- **How.** Each login is an email/password account `<username>@role.crowdcad.org`, with its record at `events/{eventId}/roleAccounts/{uid}` and `roleAccountIndex/{uid}` telling the login its event. The Firestore rules treat any account with that email domain as a role login: `signedIn()` (every "anyone signed in" rule) excludes it, so it can read only its own records until role views add more (#143, #144). Claiming the domain only ever removes access. A disabled record, or an ended event, stops it at once.
+- **Making the account.** Hosted Firebase projects turn email/password sign-up off, so the browser can't create accounts; `/api/role-accounts` creates them with the Admin SDK (on Firebase Hosting the function's own service account; elsewhere `GOOGLE_APPLICATION_CREDENTIALS`) and also disables the account itself and revokes its sessions when a login is disabled. Without admin credentials it answers 501 and the browser creates the account, which needs sign-up on (the emulators always allow it).
+- **Not yet.** PocketBase (the button is hidden there), QR codes, and the role views themselves (#144).
+
+### D16. Transport priority is shown as a rank
+- **What.** The treatment leader types a number on a box. Typing a number puts the patient at that place in the location's order and moves the patient there and everyone after down one, renumbering 1, 2, 3 in the same write. The number shown is the rank among the patients still there, so a transport moves everyone after it up one with no write. Clearing the number takes the patient out of the order.
+
+## 2026-11-13
+
+Requested by the maintainer after trying the role views.
+
+### D22. A color's treatment zone takes only that color
+- **What.** A tarp (`MciTreatmentArea.color`) takes only patients tagged its color; clinics and other locations take any. Moves, walk-ins and retriages into a tarp of another color are refused (`wrong-color`), in the helpers, so the dispatcher's tab and `/api/mci-role` both enforce it.
+- **Routing.** With no location picked, each color goes to its own tarp (`mciRouteArea`, `routedMovePatch`): the move dialog's and the Responder move sheet's default is **Matching color**, and a zone card's quick move sends each color to its tarp unless the card picks a location that takes any color.
+- **Retriage.** A new color for a patient in a tarp moves them to the new color's tarp in the same entry. With no tarp of that color they stay, shown as needing a move (`MciPatient.misplaced`). A tarp's patient boxes show only its own color.
+
+### D23. Treatment Lead role; the transport order is theirs
+- **What.** A fifth role, `treatment_lead` (label Treatment Lead, usernames `lead-xxxx`). The lead picks the red, yellow or green tarp they run and sees only its patients, with everything a Responder in treatment mode can do (details, retriage, care, walk-ins) plus **up / down** on each patient to set the transport order (`movePatientInOrderPatch`: swaps with the neighbour and writes the order shown as ranks). Reads patient details like every role but Logistics.
+- **Supersedes D20's Responder priority.** Responders no longer have Sooner / Later; only the lead (and the dispatcher, D16) orders patients.
+
+### D24. Re-declaring after a stand-down: keep the earlier MCI, or start an entirely new one
+- **What.** Declaring after a stand-down asks for one of two options, neither preselected: **Keep existing zones, treatment locations and counts from the earlier period**, or **Declare entirely new MCI**. Either way the earlier zones and treatment locations are listed, ticked, and can be unticked; new ones can be added.
+- **Keep.** A period is appended and counts carry on. An unticked zone or location moves to `retiredZones` / `retiredAreas`, so the log and summary can still name it and the totals still count it; one with patients still in it can't be unticked.
+- **New.** The earlier MCI is archived in `MciState.earlier` (its periods, zones and locations, and `until`, the new declaration's time) and the new one starts from zero. The log stays append-only: entries before `until` belong to the archived MCI (`currentLog`, `mciRecords`). The summary, chart and CSV show each MCI ("MCI 1", "MCI 2"). Hospital capacities carry over; typed Sent corrections don't.
+
+### D25. Hospitals in the Logistics tab
+- **What.** A Hospitals column, left of Incoming Staff: a box per hospital with **Capacity:** and **Sent:**, and an arrow opening the red, yellow and green counts sent there. `mci.logistics.hospitals`.
+- **Counting.** Sent is counted from transports whose destination is the hospital's name (ignoring case); the transport dialogs offer the hospitals as destinations, and the Transport role shows each with sent / capacity. Typing Sent stores the difference (`sentAdjust`), so later transports still add to it. The Logistics role can add hospitals and set capacity (`hospitalAdd`, `hospitalUpdate`); Incident Command sees them.
+
+### D26. Help in tooltips
+- **What.** Explanations of what something does sit behind a small circled question mark (`src/components/ui/helptip.tsx`, hover or tap) instead of sentences under headings. Visible text is kept for instructions the maintainer asked for, empty states, warnings and errors.
+- **Supervisor names.** Add Supervisor suggests S1, then the next number after the last supervisor's name, as Add Team does for teams.
+
+### D27. Logistics hands out equipment and confirms arrivals itself
+- **What.** Logistics no longer asks the dispatcher. Picking an item (Trauma bag, Triage bag, Wheelchair, Gurney, AED, Oxygen, or **Other** with a typed name) and a team hands it over at once (`giveEquipment`): a free item of that kind (that name, or a numbered one such as "Triage Bag 2") is moved to the team, and with none free a new event item is made. It shows on the team's card for the dispatcher immediately. Trauma bag and triage bag are different items. An item can be given on to another team or returned to staging.
+- **Arrivals.** The Logistics role's **Arrived** puts the team on the board (Available) directly, as the dispatcher's does. **Supersedes D20's option (a)**: the request queue (`mci.logistics.requests`) and the `reported` arrival state are no longer written. Older events still show a reported arrival as "Arrived, to confirm".
+- **Same board.** The dispatcher's Logistics tab and the Logistics login show the same board (`logisticsboard.tsx`) with the same abilities, including removing a hospital. The login shows three columns from laptop width and one section at a time under tabs on a phone. It can't read the event, so `mci/units` now carries `equipment[]`, every item and who has it (`mciEquipmentFor`), written with the unit summary.
+- **Why.** Distributing equipment is the logistics officer's job. The request queue also never moved an item, so a request marked Done left the team with nothing.
+
+### D28. Undo an arrival or a cancellation
+- **What.** Under **Arrived and cancelled**, each row has **Undo**, which puts it back on the incoming list. Undoing an arrival also takes the team it made off the board (`IncomingTeam.teamId`), but only while that team is as the arrival left it: Available, on no open call, holding nothing, with no MCI assignment. Otherwise it is refused, since the team is already working.
+
+### D29. MCI tab layout
+- **What.** The top bar (duration, totals, Role logins, Log, Stand down) stays pinned while the tab scrolls. **Patient boxes** sits beside Add treatment area. Treatment location rows take the call tracker's row highlight on hover and when open. Every tab panel's scroll area keeps its scrollbar in the panel's right padding (`.tab-scroll`), so content doesn't shift when it starts to scroll.
+- **Transport order.** Patient boxes show the Treatment Lead's order (D23). The dispatcher can type a rank (D16) or use the up / down arrows on a box. In a location taking several colors, the arrows move past the next patient of the same color, since each color has its own column.

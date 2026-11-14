@@ -5,6 +5,12 @@ const path = require('path');
 const nextConfig = {
   reactStrictMode: true,
   output: 'standalone',
+  // TAK live tracking (optional, in development): always defined at build
+  // time, so `process.env.NEXT_PUBLIC_TAK === 'on'` is a constant and TAK is
+  // compiled out entirely unless the flag is exactly "on".
+  env: {
+    NEXT_PUBLIC_TAK: process.env.NEXT_PUBLIC_TAK === 'on' ? 'on' : 'off',
+  },
   // Ensure Next.js traces output from the project root (Dispatch)
   outputFileTracingRoot: path.resolve(__dirname),
   images: {

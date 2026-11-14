@@ -87,6 +87,8 @@ export default defineConfig({
       },
       dependencies: ['setup'],
       grep: /@authenticated/,
+      // Role logins (#142) are Firebase-only for now.
+      grepInvert: /@firebase-only/,
     },
     {
       name: 'chromium-public',

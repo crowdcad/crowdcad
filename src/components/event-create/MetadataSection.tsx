@@ -1,21 +1,31 @@
 "use client";
 
 import React, { useState } from 'react';
-import { DateValue, Time } from '@internationalized/date';
+import { getLocalTimeZone, parseDate, Time, today } from '@internationalized/date';
 import { DatePicker, Input, TimeInput, Tooltip } from '@heroui/react';
 import { ChevronDown, CircleHelp } from 'lucide-react';
 import type { Event } from '@/app/types';
 import SurgeCriteriaSection from './SurgeCriteriaSection';
+import { EVENT_INPUT_CLASSNAMES } from './fieldClassNames';
+
+/** The event's date for the date picker; today when unset or unreadable. */
+function calendarDateOf(date: string | undefined) {
+  try {
+    if (date) return parseDate(date);
+  } catch {
+    // fall through
+  }
+  return today(getLocalTimeZone());
+}
 
 type Props = {
   eventData: Partial<Event>;
   setEventData: React.Dispatch<React.SetStateAction<Partial<Event> & { eventEquipment: Event['eventEquipment'] }>>;
-  getCalendarDate: () => DateValue;
   scheduleFrom: Time;
   setScheduleFrom: (time: Time) => void;
   scheduleTo: Time;
   setScheduleTo: (time: Time) => void;
-  inputClassNames: {
+  inputClassNames?: {
     label: string;
     inputWrapper: string;
     input: string;
@@ -25,12 +35,11 @@ type Props = {
 export default function MetadataSection({
   eventData,
   setEventData,
-  getCalendarDate,
   scheduleFrom,
   setScheduleFrom,
   scheduleTo,
   setScheduleTo,
-  inputClassNames,
+  inputClassNames = EVENT_INPUT_CLASSNAMES,
 }: Props) {
   const [advancedOpen, setAdvancedOpen] = useState(false);
 
@@ -60,7 +69,7 @@ export default function MetadataSection({
           labelPlacement="outside"
           variant="flat"
           color="default"
-          value={getCalendarDate()}
+          value={calendarDateOf(eventData.date)}
           onChange={(date) => {
             if (date) {
               setEventData((prev) => ({ ...prev, date: date.toString() }));

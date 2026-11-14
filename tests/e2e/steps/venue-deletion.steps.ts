@@ -26,9 +26,20 @@ When('I open the venue actions menu', async ({ page, scenarioState }) => {
   // that contains the "Venue actions" button and click it. This avoids selecting
   // outer container divs that contain all buttons (strict-mode violation).
   const heading = page.getByRole('heading', { name: scenarioState.deletionVenueName, level: 3 });
-  await heading
-    .locator('xpath=ancestor::div[.//button[@aria-label="Venue actions"]][1]//button[@aria-label="Venue actions"]')
-    .click();
+  const trigger = heading.locator(
+    'xpath=ancestor::div[.//button[@aria-label="Venue actions"]][1]//button[@aria-label="Venue actions"]'
+  );
+  // The list is still settling right after the venue is created (realtime
+  // updates from parallel tests, see "I confirm venue deletion"), and a click
+  // in that window can leave the menu closed. Retry until it is open.
+  const menu = page.getByRole('menu', { name: 'Venue actions' });
+  await expect(async () => {
+    if (!(await menu.isVisible())) {
+      await page.keyboard.press('Escape');
+      await trigger.click();
+    }
+    await expect(menu).toBeVisible({ timeout: 1_500 });
+  }).toPass({ timeout: 10_000 });
 });
 
 When('I confirm venue deletion', async ({ page, scenarioState }) => {

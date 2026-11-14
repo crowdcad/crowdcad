@@ -9,6 +9,7 @@ import {
   ModalFooter,
   Button,
 } from '@heroui/react';
+import { STATIC_CLOSE_BUTTON_CLASS } from '@/lib/heroStatic';
 
 export interface EventSummaryModalProps {
   open: boolean;
@@ -53,6 +54,7 @@ export default function EventSummaryModal({
         header: 'pb-0',
         body: 'py-4',
         footer: 'pt-0',
+        closeButton: STATIC_CLOSE_BUTTON_CLASS,
       }}
     >
       <ModalContent>

@@ -61,7 +61,7 @@ export default function VenueMapMarker({
         >
           {isPending && (
             <span
-              className="absolute left-1/2 top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 animate-ping rounded-full"
+              className="absolute left-1/2 top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 animate-ping rounded-circle"
               style={{ backgroundColor: 'hsl(var(--map-marker) / 0.6)' }}
             />
           )}

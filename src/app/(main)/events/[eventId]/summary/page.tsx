@@ -1,18 +1,28 @@
 "use client";
 
-import { useEffect, useState, useMemo } from 'react';
+import { lazy, Suspense, useEffect, useState, useMemo } from 'react';
 import { formatEventDate } from '@/lib/eventDate';
 import { useParams } from 'next/navigation';
-import { dbService } from '@/lib/services';
-import { Event, Call, TeamLogEntry, CallLogEntry, InteractionSession } from '@/app/types';
+import { dbService, isPocketbaseBackend } from '@/lib/services';
+import { MCI_DOC_PATIENTS, MCI_DOC_STATE, mciDocCollection, withMciDoc, type MciPatientsDoc } from '@/lib/mciDoc';
+import { Event, Call, TeamLogEntry, CallLogEntry, InteractionSession, MciState } from '@/app/types';
 import dynamic from 'next/dynamic';
 import { Button } from '@heroui/react';
 import { getScheduleWindow, teamStatusBreakdown, teamAvailabilitySeries, getSurgeIntervals } from '@/lib/analyticsUtils';
 import { getZoneCallSummaries } from '@/lib/zones';
 import { formatLogTimestampForCsv } from '@/lib/csvFormat';
+import { hasMci, mciCsvLines, mciPatientCsvLines, mciSeries } from '@/lib/mci';
+import { logisticsCsvLines } from '@/lib/mciLogistics';
+import MciSummary from '@/components/dispatch/mci/mcisummary';
 import { GRID_WRAPPER, GRID_CELL } from './summaryGrid';
+import EquipmentTimeline from './EquipmentTimeline';
 import LoadingScreen from '@/components/ui/loading-screen';
 import ExportLogModal from '@/components/modals/event/exportlogmodal';
+
+// TAK location history (optional, in development): loaded only for TAK events,
+// and compiled out entirely unless NEXT_PUBLIC_TAK is exactly "on".
+const TakEventSummary =
+  process.env.NEXT_PUBLIC_TAK === 'on' ? lazy(() => import('@/features/tak').then((m) => ({ default: m.TakEventSummary }))) : null;
 
 const SummaryCharts = dynamic(() => import('./SummaryCharts'), { ssr: false, loading: () => <div className="p-6 bg-surface-deep border border-surface-liner">Loading charts...</div> });
 
@@ -34,7 +44,15 @@ export default function SummaryPage() {
     const fetchData = async () => {
       if (!eventId) return;
       const eventDoc = await dbService.getDocument<Event>('events', eventId);
-      setEvent(eventDoc.exists ? eventDoc.data : null);
+      if (!eventDoc.exists || !eventDoc.data) return setEvent(null);
+      // On Firebase an MCI's state is in its own document (#143); older events keep it inline.
+      const [mciDoc, patientsDoc] = isPocketbaseBackend
+        ? [null, null]
+        : await Promise.all([
+            dbService.getDocument<MciState>(mciDocCollection(eventId), MCI_DOC_STATE).catch(() => null),
+            dbService.getDocument<MciPatientsDoc>(mciDocCollection(eventId), MCI_DOC_PATIENTS).catch(() => null),
+          ]);
+      setEvent(withMciDoc(eventDoc.data, mciDoc?.exists ? mciDoc.data : null, patientsDoc?.exists ? patientsDoc.data : null));
     };
     fetchData();
   }, [eventId]);
@@ -138,6 +156,11 @@ export default function SummaryPage() {
         csvRows.push(`Surge,-,${formatTimestamp(period.endedAt)},"Surge deactivated (active for ${minutes} min)"`);
       }
     });
+
+    // MCI log, in time order, then one row per patient in treatment
+    csvRows.push(...mciCsvLines(event, formatTimestamp));
+    csvRows.push(...mciPatientCsvLines(event, formatTimestamp));
+    csvRows.push(...logisticsCsvLines(event, formatTimestamp));
 
     // Zone Summary
     zoneCallSummaries.forEach((zone) => {
@@ -333,14 +356,15 @@ export default function SummaryPage() {
         </div>
 
         {zoneCallSummaries.length > 0 && (
-          <div className={GRID_CELL}>
+          // A standalone box: the wrapper adds the top/left borders a grid cell leaves to its neighbours.
+          <div className={`${GRID_WRAPPER} ${GRID_CELL}`}>
             <div className="px-4 py-3">
               <span className="font-semibold">Zone Breakdown</span>
               <div className="text-sm text-surface-faint">{zoneCallSummaries.length} dispatch zone{zoneCallSummaries.length === 1 ? '' : 's'}</div>
             </div>
             <div className="px-4 pb-4 space-y-2">
               {zoneCallSummaries.map((zone) => (
-                <div key={zone.zoneId} className="bg-surface-deepest p-3 flex items-center justify-between">
+                <div key={zone.zoneId} className="bg-surface-deepest border border-surface-liner/70 p-3 flex items-center justify-between">
                   <span className="font-semibold">{zone.zoneName}</span>
                   <div className="flex gap-6 text-sm">
                     <div>
@@ -362,11 +386,22 @@ export default function SummaryPage() {
           </div>
         )}
 
+        <EquipmentTimeline event={event} />
+
+        {process.env.NEXT_PUBLIC_TAK === 'on' && TakEventSummary && event.mapMode === 'tak' && eventId && (
+          <Suspense fallback={null}>
+            <TakEventSummary eventId={eventId} event={event} className={`${GRID_WRAPPER} ${GRID_CELL}`} />
+          </Suspense>
+        )}
+
         <SummaryCharts
           teamStatusBreakdown={teamBreakdown}
           availabilitySeries={availabilitySeries}
           interactionTimeline={interactionTimeline}
+          mciSeries={hasMci(event) ? mciSeries(event.mci) : undefined}
         />
+
+        {hasMci(event) && <MciSummary event={event} formatTimestamp={formatTimestamp} />}
 
         {totalSessions > 0 && (
           <div className={`grid grid-cols-1 sm:grid-cols-4 ${GRID_WRAPPER}`}>

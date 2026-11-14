@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { authService, dbService, isPocketbaseBackend, type ServiceUser } from '@/lib/services';
+import { isRoleLoginEmail } from '@/lib/roleAccounts';
 
 // Tracks which uids have already had their `users/{uid}` doc synced with
 // email/displayName this session, so the merge write below only fires once
@@ -42,6 +43,12 @@ export function useAuth() {
     const unsub = authService.onAuthStateChanged((u) => {
       setUser(u);
       setReady(true);
+
+      // An MCI role login (#142) only ever sees its role's page; the rules deny it everything else anyway.
+      if (u && isRoleLoginEmail(u.email)) {
+        if (typeof window !== 'undefined' && !/^\/(role|r)(\/|$)/.test(window.location.pathname)) window.location.replace('/role');
+        return;
+      }
 
       // Best-effort sync so the users collection has enough info (email,
       // displayName) for the admin "Manage Admins" lookup — the doc is

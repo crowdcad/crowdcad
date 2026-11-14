@@ -54,6 +54,10 @@ export function postScheduleReviewValue(postsEnabled: boolean, postCount: number
 }
 
 /** Back/next over an ordered list of step ids. */
+/** The wizard's primary button: Skip until the step has any input, then Continue; Create Event on the last step. */
+export const primaryStepLabel = (isLastStep: boolean, stepHasInput: boolean): string =>
+  isLastStep ? 'Create Event' : stepHasInput ? 'Continue' : 'Skip';
+
 export function getStepNavigation<T extends string>(
   stepOrder: readonly T[],
   currentStepId: string,

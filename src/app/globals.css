@@ -117,6 +117,20 @@
   .minimal-scrollbar::-webkit-scrollbar-corner {
     background: transparent;
   }
+
+  /*
+   * A tab panel's scrolling body (MCI, Logistics, Calls, clinics). The panels pad their sides by px-2.5;
+   * this reaches into the right padding and keeps a gutter for the scrollbar there, so the scrollbar sits
+   * at the panel's right edge and nothing shifts when the content becomes long enough to scroll.
+   * 6px matches .minimal-scrollbar's width.
+   */
+  .tab-scroll {
+    --tab-pad: calc(0.625rem * var(--ui-pad-scale, 1));
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+    margin-right: calc(-1 * var(--tab-pad));
+    padding-right: max(0px, calc(var(--tab-pad) - 6px));
+  }
 }
 
 .animate-cell-ripple {
@@ -207,7 +221,6 @@
   .dispatch-expand-fade {
     transition: opacity 260ms cubic-bezier(0.16, 1, 0.3, 1), transform 260ms cubic-bezier(0.16, 1, 0.3, 1);
     transition-delay: var(--dispatch-expand-delay, 0ms);
-    will-change: opacity, transform;
   }
 }
 
@@ -342,7 +355,7 @@ grammarly-card,
   position: absolute;
   z-index: -1;
   inset: -5px;
-  border-radius: 9999px;
+  border-radius: var(--ui-radius-pill); /* follows the button: round in classic, square in condensed */
   background-image: linear-gradient(115deg, rgba(62, 177, 253, 0.28), rgba(128, 199, 247, 0.24), rgba(215, 122, 122, 0.22), rgba(210, 96, 96, 0.2));
   background-size: 220% 220%;
   animation: hero-cta-shift 7s ease-in-out infinite;
@@ -431,4 +444,24 @@ grammarly-card,
   box-shadow: 0 0 10px #3eb1fd, 0 0 5px #3eb1fd;
   opacity: 1.0;
   transform: rotate(3deg) translate(0px, -4px);
+}
+
+/*
+ * Text fields: no focus ring inside the field (see docs/COMPONENTS.md, "Text
+ * inputs: no inner focus ring"). HeroUI draws a blue ring on the field
+ * wrapper on keyboard focus and autoFocus, and the browser outlines the inner
+ * <input>. Removed here for every HeroUI Input, Textarea and Autocomplete, so
+ * new fields cannot miss it. The ring variables are cleared rather than
+ * box-shadow itself, so a field keeps any ordinary shadow it has.
+ */
+[data-slot="input-wrapper"] {
+  --tw-ring-shadow: 0 0 #0000 !important;
+  --tw-ring-offset-shadow: 0 0 #0000 !important;
+}
+[data-slot="input"]:focus,
+[data-slot="input"]:focus-visible {
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  --tw-ring-shadow: 0 0 #0000 !important;
+  --tw-ring-offset-shadow: 0 0 #0000 !important;
 }

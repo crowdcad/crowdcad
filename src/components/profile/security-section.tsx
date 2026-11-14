@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Button, Card, CardBody, Input } from '@heroui/react';
 import { authService, dbService, ServiceError, type ServiceUser } from '@/lib/services';
 import { Eye, EyeOff, LogOut, Trash2, Download } from 'lucide-react';
+import { PROFILE_ACTION_BUTTON } from './buttonStyles';
 
 export default function SecuritySection({ user }: { user: ServiceUser }) {
   const [currentPassword, setCurrentPassword] = useState('');
@@ -184,7 +185,7 @@ export default function SecuritySection({ user }: { user: ServiceUser }) {
               )}
             </div>
             {!showPasswordForm && (
-              <Button variant="bordered" onPress={() => setShowPasswordForm(true)}>
+              <Button variant="bordered" size="md" radius="lg" className={PROFILE_ACTION_BUTTON} onPress={() => setShowPasswordForm(true)}>
                 Change Password
               </Button>
             )}
@@ -282,18 +283,21 @@ export default function SecuritySection({ user }: { user: ServiceUser }) {
               <p className="text-sm text-surface-light/70 mt-1">{dispatchLogs.length} dispatch log entries</p>
             </div>
             <div className="flex flex-wrap items-center gap-3">
-              <Button onPress={handleExportData} variant="bordered" startContent={<Download className="w-4 h-4" />}>
+              <Button onPress={handleExportData} variant="bordered" size="md" radius="lg" className={PROFILE_ACTION_BUTTON} startContent={<Download className="w-4 h-4" />}>
                 Export Data
               </Button>
               <Button
                 onPress={() => setShowDeleteConfirm(true)}
                 color="danger"
                 variant="flat"
+                size="md"
+                radius="lg"
+                className={PROFILE_ACTION_BUTTON}
                 startContent={<Trash2 className="w-4 h-4" />}
               >
                 Delete Account
               </Button>
-              <Button onPress={handleSignOut} startContent={<LogOut className="w-4 h-4" />} className="bg-accent">
+              <Button onPress={handleSignOut} size="md" radius="lg" startContent={<LogOut className="w-4 h-4" />} className={`${PROFILE_ACTION_BUTTON} bg-accent`}>
                 Sign Out
               </Button>
             </div>

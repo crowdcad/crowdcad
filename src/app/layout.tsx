@@ -2,6 +2,9 @@ import type { Metadata } from 'next';
 // import { Geist, Geist_Mono } from 'next/font/google';
 import 'react-toastify/dist/ReactToastify.css';
 import "./globals.css";
+import "../styles/ui-style.css";
+import { DEFAULT_UI_STYLE, UI_STYLE_INIT_SCRIPT } from "@/lib/uiStyle";
+import { UI_FONT_VARIABLES } from "@/lib/uiFonts";
 import { HeroUIProvider } from "@heroui/react";
 import DevServiceWorkerCleanup from "@/components/devServiceWorkerCleanup";
 import ProgressBarProvider from "@/components/ProgressBarProvider";
@@ -9,8 +12,10 @@ import AppShell from "../components/layout/appshell";
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className="text-foreground bg-background" suppressHydrationWarning>
+    <html lang="en" data-ui={DEFAULT_UI_STYLE} className={`text-foreground bg-background ${UI_FONT_VARIABLES}`} suppressHydrationWarning>
       <body suppressHydrationWarning>
+        {/* UI style (src/lib/uiStyle.ts): a style saved in this browser overrides the build default before paint. */}
+        <script dangerouslySetInnerHTML={{ __html: UI_STYLE_INIT_SCRIPT }} />
         <script
           dangerouslySetInnerHTML={{
             __html: `
@@ -103,7 +108,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         )}
         <DevServiceWorkerCleanup />
         <ProgressBarProvider />
-        <HeroUIProvider>
+        <HeroUIProvider disableRipple>
           <AppShell>{children}</AppShell>
         </HeroUIProvider>
       </body>
