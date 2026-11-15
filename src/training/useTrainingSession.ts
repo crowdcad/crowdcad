@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { LiteTrackingFeed, LiteWriteGate } from '@/lib/LiteContext';
 import { normalizeLiteDraftToEvent, toLiteDraftFromEvent } from '@/lib/liteEventAdapters';
 import type { UnitTracking } from '@/lib/unitTracking';
-import { clickSequence, findAnchor, findStepTarget } from './anchors';
+import { clickSequence, findAnchor, findStepTarget, pressElement } from './anchors';
 import { createMemoryLiteStore, type MemoryLiteStore } from './memoryStore';
 import { boardAtStep, gateVerdict, stepDone, stepKind } from './replay';
 import { markModuleComplete, markStepDone } from './progress';
@@ -152,7 +152,8 @@ export function useTrainingSession(module: TrainingModule, startIndex = 0, track
         void clickSequence(step.doClicks);
         return;
       }
-      findStepTarget(step)?.click();
+      const target = findStepTarget(step);
+      if (target) pressElement(target);
       return;
     }
     const draft = store.peek(eventId);

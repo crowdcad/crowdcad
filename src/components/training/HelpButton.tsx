@@ -67,7 +67,8 @@ function LiveGuide({ entry, onClose, t }: { entry: HelpEntry; onClose: () => voi
         role="dialog"
         aria-label="Help"
         data-testid="help-live-guide"
-        className="fixed bottom-4 left-4 z-[1100] w-[min(360px,calc(100vw-2rem))] rounded-xl border border-accent/50 bg-surface-deep/95 p-4 text-sm text-surface-light shadow-2xl backdrop-blur"
+        data-react-aria-top-layer="true"
+        className="pointer-events-auto fixed bottom-4 left-4 z-[1100] w-[min(360px,calc(100vw-2rem))] rounded-xl border border-accent/50 bg-surface-deep/95 p-4 text-sm text-surface-light shadow-2xl backdrop-blur"
       >
         <div className="mb-1 flex items-center justify-between text-xs uppercase tracking-wide text-surface-light/60">
           <span>Help · {entry.module.title}</span>

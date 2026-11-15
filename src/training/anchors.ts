@@ -49,12 +49,38 @@ export async function waitForAnchor(anchor: Anchor, timeoutMs = 2000): Promise<H
   }
 }
 
+/**
+ * Presses an element the way a mouse does. React Aria controls take a plain
+ * `click()`; Radix menus (the call row's +) open on pointerdown, so they get
+ * the pointer sequence.
+ */
+export function pressElement(el: HTMLElement) {
+  // A Radix menu trigger (aria-haspopup + data-state, even on a HeroUI button) opens on pointerdown alone.
+  if (el.getAttribute('aria-haspopup') && el.hasAttribute('data-state')) {
+    const Pointer = typeof PointerEvent !== 'undefined' ? PointerEvent : MouseEvent;
+    el.dispatchEvent(new Pointer('pointerdown', { bubbles: true, cancelable: true, button: 0, pointerType: 'mouse', isPrimary: true }));
+    return;
+  }
+  // React Aria (HeroUI) handles a plain click as a virtual press; synthetic pointer events would leave it mid-press.
+  if (el.closest('[data-react-aria-pressable]') || el.getAttribute('role') === 'option' || el.getAttribute('role') === 'menuitem') {
+    el.click();
+    return;
+  }
+  const opts = { bubbles: true, cancelable: true, button: 0, buttons: 1, pointerType: 'mouse', isPrimary: true } as const;
+  const Pointer = typeof PointerEvent !== 'undefined' ? PointerEvent : MouseEvent;
+  el.dispatchEvent(new Pointer('pointerdown', opts));
+  el.dispatchEvent(new MouseEvent('mousedown', opts));
+  el.dispatchEvent(new Pointer('pointerup', { ...opts, buttons: 0 }));
+  el.dispatchEvent(new MouseEvent('mouseup', { ...opts, buttons: 0 }));
+  el.click();
+}
+
 /** Clicks each anchor in turn, waiting for it to appear (a menu opening). */
 export async function clickSequence(anchors: Anchor[]): Promise<boolean> {
   for (const anchor of anchors) {
     const el = await waitForAnchor(anchor);
     if (!el) return false;
-    el.click();
+    pressElement(el);
     await new Promise((r) => setTimeout(r, 250));
   }
   return true;

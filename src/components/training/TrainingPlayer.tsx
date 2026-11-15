@@ -96,7 +96,9 @@ export default function TrainingPlayer({ module, startIndex = 0 }: { module: Tra
       <aside
         aria-live="polite"
         data-testid="training-card"
-        className={`fixed bottom-4 z-[1100] w-[min(380px,calc(100vw-2rem))] rounded-xl border border-surface-liner bg-surface-deep/95 p-4 text-sm text-surface-light shadow-2xl backdrop-blur ${cardSide === 'right' ? 'right-4' : 'left-4'}`}
+        // Top layer: pressing the card while a board modal is open must not dismiss that modal and swallow the press.
+        data-react-aria-top-layer="true"
+        className={`pointer-events-auto fixed bottom-4 z-[1100] w-[min(380px,calc(100vw-2rem))] rounded-xl border border-surface-liner bg-surface-deep/95 p-4 text-sm text-surface-light shadow-2xl backdrop-blur ${cardSide === 'right' ? 'right-4' : 'left-4'}`}
       >
         <div className="mb-1 flex items-center justify-between gap-2 text-xs uppercase tracking-wide text-surface-light/60">
           <span>
