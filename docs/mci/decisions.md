@@ -116,7 +116,7 @@ Related: [plan.md](plan.md), [../tak-integration/decisions.md](../tak-integratio
 
 Requested by the maintainer after trying the role views.
 
-### D22. A color's treatment zone takes only that color
+### D22. A color's treatment zone takes only that color (replaced by D30)
 - **What.** A tarp (`MciTreatmentArea.color`) takes only patients tagged its color; clinics and other locations take any. Moves, walk-ins and retriages into a tarp of another color are refused (`wrong-color`), in the helpers, so the dispatcher's tab and `/api/mci-role` both enforce it.
 - **Routing.** With no location picked, each color goes to its own tarp (`mciRouteArea`, `routedMovePatch`): the move dialog's and the Responder move sheet's default is **Matching color**, and a zone card's quick move sends each color to its tarp unless the card picks a location that takes any color.
 - **Retriage.** A new color for a patient in a tarp moves them to the new color's tarp in the same entry. With no tarp of that color they stay, shown as needing a move (`MciPatient.misplaced`). A tarp's patient boxes show only its own color.
@@ -148,5 +148,21 @@ Requested by the maintainer after trying the role views.
 - **What.** Under **Arrived and cancelled**, each row has **Undo**, which puts it back on the incoming list. Undoing an arrival also takes the team it made off the board (`IncomingTeam.teamId`), but only while that team is as the arrival left it: Available, on no open call, holding nothing, with no MCI assignment. Otherwise it is refused, since the team is already working.
 
 ### D29. MCI tab layout
-- **What.** The top bar (duration, totals, Role logins, Log, Stand down) stays pinned while the tab scrolls. **Patient boxes** sits beside Add treatment area. Treatment location rows take the call tracker's row highlight on hover and when open. Every tab panel's scroll area keeps its scrollbar in the panel's right padding (`.tab-scroll`), so content doesn't shift when it starts to scroll.
+- **What.** The top bar (duration, totals, Log & logins, Stand down) stays pinned while the tab scrolls. **Patient boxes** sits beside Add treatment area. Treatment location rows take the call tracker's row highlight on hover and when open. Every tab panel's scroll area keeps its scrollbar in the panel's right padding (`.tab-scroll`), so content doesn't shift when it starts to scroll.
 - **Transport order.** Patient boxes show the Treatment Lead's order (D23). The dispatcher can type a rank (D16) or use the up / down arrows on a box. In a location taking several colors, the arrows move past the next patient of the same color, since each color has its own column.
+
+### D30. Treatment locations take every color; units pick the color they treat
+- **What.** The red, yellow, green and black treatment zones (D22) are gone. A treatment location is a clinic or a location the dispatcher names, and it takes patients of any color. Nothing is routed or refused by color: a move goes to the picked location, else where the zone last sent patients, else the first location.
+- **Treating color.** A unit in Treatment may pick the color it is treating (`MciAssignment.color`) and change it at any time. It lists that color first, presets new patients to it and shows as a dot on the unit's MCI chip. It never limits anything.
+- **On the map.** A named location is placed as a point, not drawn: a post on the event's copy of the venue carrying `mciAreaId`, with a medical icon. Units whose location is the treatment location show there. It is not a clinic, so it stays out of the clinic tracker. Shapes drawn on older events still show.
+
+### D31. Clinic patients in the MCI, and back at stand down
+- **During.** A treatment location that is a clinic lists the clinic tracker's open patients for it, not only their count.
+- **Stand down.** Each patient still in a treatment location becomes a clinic tracker call for further treatment on site (`mciClinicImports`): age, sex, complaint (else the tag color), Priority when red, Location the treatment location, and source `MCI: <team>` (the team that brought them in, else the unit that logged them, else their zone). Notes keep the zone, interventions and treatment notes. A clinic location's patients go to that clinic, an MCI-only location's to the default clinic. The call id comes from the patient id, so a later stand down never imports them twice.
+
+### D32. Logins and the log live in MCI Logistics
+- **What.** The tabs are **MCI Patients** (zones, treatment locations) and **MCI Logistics** (logins, equipment, hospitals, incoming staff and the whole log, with Undo, beside the board on a wide screen). The MCI tab's Log & logins button opens MCI Logistics.
+- **Logins.** One row per team or supervisor. Dispatchers create logins, change a login's role in place, note who holds it, and disable it. **Reset password** makes a new password and shows it once to send: the old one stops working and its devices sign out. Passwords are never stored, so this is also how a login is resent. The event's Logistics login sees the list and may only reset passwords (`/api/role-accounts` action `reset`; it reads `roleAccounts` through the rules).
+
+### D33. Full screen hides the navbar
+- **What.** While a pane is full screen (`?focus=`, #138) the page sets `data-dispatch-focus` on `<html>` and one `globals.css` rule hides the navbar, so the tab fills the screen.
