@@ -25,6 +25,12 @@ type Props = {
   onOpenRoleLogins?: () => void;
 };
 
+/** Zone grid columns: thirds for up to three zones, quarters from four, never narrower than 12rem (then they wrap). */
+function zoneGridColumns(count: number): string {
+  const cols = count >= 4 ? 4 : 3;
+  return `repeat(auto-fill, minmax(min(100%, max(12rem, calc((100% - ${(cols - 1) * 0.75}rem) / ${cols}))), 1fr))`;
+}
+
 /** One-line "add by name" form, for zones and treatment areas added after declaring. */
 function AddByName({ label, testId, onAdd }: { label: string; testId: string; onAdd: (name: string) => Promise<boolean> }) {
   const [name, setName] = useState('');
@@ -225,8 +231,8 @@ export default function MciTab({ event, actions, onOpenRoleLogins }: Props) {
           </span>
           {!readOnly && <AddByName label={t('Add zone')} testId="mci-add-zone" onAdd={actions.addZone} />}
         </div>
-        {/* Each card is at most a third of the row (auto-fill keeps the empty columns, so one zone doesn't stretch); below 14rem each a new row starts. */}
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,max(14rem,calc((100%-1.5rem)/3))),1fr))] gap-3">
+        {/* Up to three zones, each card is a third of the row (auto-fill keeps the empty columns, so one zone doesn't stretch); a fourth makes all four a quarter. Below 12rem a new row starts. */}
+        <div className="grid gap-3" style={{ gridTemplateColumns: zoneGridColumns(derived.zones.length) }}>
           {derived.zones.map((stats) => (
             <MciZoneCard
               key={stats.zone.id}

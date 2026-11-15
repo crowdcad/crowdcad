@@ -187,7 +187,7 @@ export default function MciZoneCard({
         </div>
       </header>
 
-      <div className="grid grid-cols-[auto_1fr_1fr] items-center gap-x-3 gap-y-1">
+      <div className="grid grid-cols-[auto_1fr_1fr] items-center gap-x-2 gap-y-1">
         <span className="text-center text-xs uppercase text-surface-faint">{t('Tagged')}</span>
         <span className="text-center text-xs uppercase text-surface-faint">{t('Moved')}</span>
         <span className="text-center text-xs uppercase text-surface-faint">{t('In zone')}</span>
