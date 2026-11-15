@@ -238,6 +238,7 @@ export const DISPATCH_TERMS: DispatchTerm[] = [
     'MCI',
     'MCI Patients',
     'MCI Logistics',
+    'Log',
     'Declare MCI',
     'Stand down',
     'Tagged',

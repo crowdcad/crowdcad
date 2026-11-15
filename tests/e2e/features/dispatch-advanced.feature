@@ -26,7 +26,7 @@ Feature: Dispatch board — advanced (venue with locations and equipment)
     When I switch to the "Equipment" section
     Then the equipment "Wheelchair 1" should show custody "Being retrieved by Runner from Staging"
     When I change team "Runner" status on the call to "En Route"
-    Then the equipment "Wheelchair 1" should show custody "With Runner"
+    Then the equipment "Wheelchair 1" should show no custody line
     When I change team "Runner" status on the call to "Delivered"
     Then the equipment "Wheelchair 1" should show custody "With care team (Care)"
     When I change team "Care" status on the call to "Refusal"
@@ -44,7 +44,7 @@ Feature: Dispatch board — advanced (venue with locations and equipment)
     And I create a team named "Hotel" with a member "Cy Dee" certified as "CPR"
     And I switch to the "Equipment" section
     And I move equipment "Wheelchair 1" to "Hotel"
-    Then the equipment "Wheelchair 1" should show custody "With Hotel"
+    Then the equipment "Wheelchair 1" should show no custody line
     When I mark equipment "Wheelchair 1" returned
     Then the equipment "Wheelchair 1" should show status "Available"
     And the equipment "Wheelchair 1" should show no custody line

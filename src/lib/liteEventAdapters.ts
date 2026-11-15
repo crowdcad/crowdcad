@@ -69,6 +69,7 @@ export function normalizeLiteDraftToEvent(draft: LiteEventDraft): Event {
     clinics: draft.clinics || [],
     dispatchZones: draft.dispatchZones || [],
     mci: draft.mci,
+    eventLog: draft.eventLog,
   };
 }
 
@@ -101,6 +102,7 @@ export function toLiteDraftFromEvent(nextEvent: Event, previousDraft: LiteEventD
     clinics: nextEvent.clinics ?? previousDraft.clinics,
     dispatchZones: nextEvent.dispatchZones ?? previousDraft.dispatchZones,
     mci: nextEvent.mci ?? previousDraft.mci,
+    eventLog: nextEvent.eventLog ?? previousDraft.eventLog,
     createdAt:
       typeof nextEvent.createdAt === 'string' ? nextEvent.createdAt : previousDraft.createdAt,
     updatedAt: new Date().toISOString(),

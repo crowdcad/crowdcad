@@ -20,10 +20,8 @@ import HelpTip from '@/components/ui/helptip';
 type Props = {
   event: Event;
   actions: MciActions;
-  /** Shows MCI Logistics, where the log and role logins are. */
-  onOpenLogistics: () => void;
-  /** Whether role logins (#142) are available here (not Lite or PocketBase), for the button's label. */
-  roleLogins?: boolean;
+  /** Opens role logins in MCI Logistics (#142); omitted where they aren't available (Lite, PocketBase). */
+  onOpenLogins?: () => void;
 };
 
 /** Zone grid columns: thirds for up to three zones, quarters from four, never narrower than 12rem (then they wrap). */
@@ -65,7 +63,7 @@ function AddByName({ label, testId, onAdd }: { label: string; testId: string; on
  * The MCI tab. Every number comes from `deriveMci` (the log is the source of
  * truth). After stand down it stays, read-only, so the record can be reviewed.
  */
-export default function MciTab({ event, actions, onOpenLogistics, roleLogins = false }: Props) {
+export default function MciTab({ event, actions, onOpenLogins }: Props) {
   const { t } = useDispatchTerms();
   const mci = event.mci;
   // Memoized on what each helper reads, not on `event`, which is a new object on every snapshot.
@@ -199,9 +197,11 @@ export default function MciTab({ event, actions, onOpenLogistics, roleLogins = f
       <div className="sticky top-0 z-20 -mb-2 flex flex-wrap items-start justify-between gap-3 bg-surface-deep pb-2" data-testid="mci-top-bar">
         <MciTotalsStrip mci={mci} totals={derived.totals} />
         <div className="flex items-center gap-2">
-          <Button size="sm" variant="flat" radius="lg" onPress={onOpenLogistics} title="Open MCI Logistics" data-testid="mci-open-logistics">
-            {roleLogins && !readOnly ? 'Log & logins' : 'Log'}
-          </Button>
+          {!readOnly && onOpenLogins && (
+            <Button size="sm" variant="flat" radius="lg" onPress={onOpenLogins} title="Role logins, in MCI Logistics" data-testid="mci-open-logins">
+              Logins
+            </Button>
+          )}
           {!readOnly && (
             <Button size="sm" radius="lg" className="bg-status-red text-surface-light" onPress={handleStandDown} data-testid="mci-stand-down">
               {t('Stand down')}

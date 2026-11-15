@@ -19,7 +19,7 @@ export const ROLE_INPUT_CLASSNAMES = {
 
 export function RoleCard({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex min-h-[calc(100vh-56px)] items-start justify-center px-4 pt-16">
+    <div className="flex min-h-screen items-start justify-center px-4 pt-16">
       <Card className="w-full max-w-md border border-default-200" style={{ backgroundColor: 'hsl(var(--surface-bg-2) / 0.5)' }}>
         <CardBody className="flex flex-col gap-4 p-6 text-surface-light">{children}</CardBody>
       </Card>

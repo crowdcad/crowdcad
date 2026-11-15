@@ -246,10 +246,10 @@ Then('the {string} column in {string} should list {int} patients', async ({ page
 });
 
 Then('the MCI log should mention {string}', async ({ page }, text: string) => {
-  // The log lives in MCI Logistics; come back to the MCI tab after.
-  await page.getByTestId('mci-open-logistics').click();
-  await expect(page.getByTestId('mci-log')).toContainText(text);
-  await page.getByTestId('mci-tab-button').click();
+  // MCI entries are in the left panel's Log view.
+  await page.locator('[aria-label="Select section"]').click();
+  await page.getByRole('option', { name: 'Log', exact: true }).click();
+  await expect(page.getByTestId('event-log')).toContainText(text);
 });
 
 Then('the MCI summary patients should include {string}', async ({ page }, text: string) => {

@@ -4,24 +4,11 @@ import React, { useMemo } from 'react';
 import type { Event } from '@/app/types';
 import { mciAvailability } from '@/lib/mci';
 import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
+import { CountPill } from '../availabilitysurgestrip';
 
 type Props = { event: Event };
 
-function CountPill({ colorClass, count, label }: { colorClass: string; count: number; label: string }) {
-  return (
-    <span className="inline-flex items-center gap-1.5">
-      <span
-        className={`min-w-7 h-6 px-1.5 inline-flex items-center justify-center rounded-md border text-sm font-semibold leading-none text-surface-light tabular-nums ${colorClass}`}
-        aria-label={`${count} ${label}`}
-      >
-        <span className="inline-block -translate-y-px">{count}</span>
-      </span>
-      <span className="text-xs text-surface-faint">{label}</span>
-    </span>
-  );
-}
-
-/** The availability strip while an MCI is active: Available, Triage, Treatment and Unavailable counts. */
+/** The availability strip while an MCI is active: Available, Triage, Treatment and Unavailable counts (numbers only; the label is the hover title). */
 export default function MciAvailabilityStrip({ event }: Props) {
   const { t } = useDispatchTerms();
   const { staff, calls } = event;

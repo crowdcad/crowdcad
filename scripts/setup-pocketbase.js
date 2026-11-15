@@ -659,6 +659,7 @@ async function main() {
       { name: 'clinics', type: 'json' },
       { name: 'dispatchZones', type: 'json' },
       { name: 'mci', type: 'json' },
+      { name: 'eventLog', type: 'json' },
       { name: 'isOrgEvent', type: 'bool' },
       { name: 'ended', type: 'bool' },
       { name: 'endedAt', type: 'number' },
@@ -686,6 +687,8 @@ async function main() {
   await ensureField(headers, 'events', { name: 'dispatchZones', type: 'json' });
   // Same, for `mci` (mass casualty incident mode).
   await ensureField(headers, 'events', { name: 'mci', type: 'json' });
+  // Same, for `eventLog` (notes typed into the dispatch Log view).
+  await ensureField(headers, 'events', { name: 'eventLog', type: 'json' });
 
   // `isOrgEvent`/`ended`/`endedAt` on `events` — set for deployments where
   // this collection already existed before these fields were added above.

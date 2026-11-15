@@ -439,7 +439,7 @@ function TreatmentMode({ mci, unit, me, units, lead = false }: { mci: MciState; 
             data-testid={`role-area-${a.name}`}
           >
             {a.name}
-            <span className="font-mono text-lg">{a.inTreatmentTotal} patients</span>
+            <span className="text-lg">{a.inTreatmentTotal} patients</span>
           </button>
         ))}
       </div>
@@ -467,7 +467,7 @@ function TreatmentMode({ mci, unit, me, units, lead = false }: { mci: MciState; 
             className={`h-10 flex-1 text-sm font-bold uppercase ${MCI_PILL_STYLES[c].pill} ${treating === c ? 'ring-[3px] ring-inset ring-white' : 'opacity-60'}`}
             data-testid={`role-treating-${c}`}
           >
-            {MCI_COLOR_STYLES[c].label} <span className="font-mono">{stats.inTreatment[c]}</span>
+            {MCI_COLOR_STYLES[c].label} {stats.inTreatment[c]}
           </button>
         ))}
       </div>

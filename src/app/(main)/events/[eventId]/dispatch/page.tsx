@@ -44,6 +44,7 @@ import MciAvailabilityStrip from '@/components/dispatch/mci/mciavailabilitystrip
 import MciTab from '@/components/dispatch/mci/mcitab';
 import MciToggleButton from '@/components/dispatch/mci/mcitogglebutton';
 import { useMciActions } from '@/components/dispatch/mci/usemciactions';
+import EventLog from '@/components/dispatch/eventlog';
 import { hasMci, isMciActive, mciStatusPatch } from '@/lib/mci';
 import SurgeToggleButton from '@/components/dispatch/surgetogglebutton';
 import PanelTab from '@/components/dispatch/paneltab';
@@ -136,7 +137,8 @@ interface DispatchRoutePageProps {
 //   );
 // }
 
-const LEFT_PANEL_TABS: LeftPanelTab[] = ['teams', 'supervisors', 'equipment'];
+const LEFT_PANEL_TABS: LeftPanelTab[] = ['teams', 'supervisors', 'equipment', 'log'];
+const LEFT_PANEL_LABELS: Record<LeftPanelTab, string> = { teams: 'Teams', supervisors: 'Supervisors', equipment: 'Equipment', log: 'Log' };
 
 
 export default function DispatchPage({ params }: DispatchRoutePageProps) {
@@ -480,6 +482,8 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
   };
   const mciActions = useMciActions(updateEvent, authUser?.uid, { setLocal: setEvent, inFlight: mciWritesInFlight, trackedUnits: () => trackedUnitsRef.current });
   const [showDeclareMci, setShowDeclareMci] = useState(false);
+  // MCI Logistics' Logins section, opened by its own button or the MCI tab's.
+  const [loginsOpen, setLoginsOpen] = useState(false);
 
   const handlePostAssignment = useCallback(async (time: string, post: string, team: string) => {
     await updateEvent((currentEvent) => {
@@ -2004,7 +2008,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
   const [callZoneFilter, setCallZoneFilter] = useState<Set<string>>(new Set(['all']));
   // Controlled so picking "All Calls" can close the dropdown itself while
   // picking a zone leaves it open for further multi-select picks.
-  const [mobileTeamsSubTab, setMobileTeamsSubTab] = useState<'teams' | 'supervisors'>('teams');
+  const [mobileTeamsSubTab, setMobileTeamsSubTab] = useState<'teams' | 'supervisors' | 'log'>('teams');
   const [mobileActiveTab, setMobileActiveTab] = useState<string>('teams');
   const [mobileSelectedClinicId, setMobileSelectedClinicId] = useState<string>('');
   // Set alongside switching to the Map tab from a team card's "view on
@@ -3583,6 +3587,11 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     onDismissArrival: dismissArrival,
   };
 
+  // The Log view (left panel on desktop, under Teams on mobile).
+  const renderEventLog = () => (
+    <EventLog event={event} updateEvent={updateEvent} onUndoMci={(id) => void mciActions.undo(id)} readOnly={eventEnded} />
+  );
+
   // Plain render function (not a component) so the toolbar keeps its
   // identity across renders — see dispatchcontrols.tsx.
   const renderTeamActions = (selectedTab: LeftPanelTab) => (
@@ -3611,7 +3620,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
           <Select
             selectedKeys={[mobileTeamsSubTab]}
             onSelectionChange={(keys) => {
-              const selected = Array.from(keys)[0] as 'teams' | 'supervisors';
+              const selected = Array.from(keys)[0] as 'teams' | 'supervisors' | 'log';
               if (selected) setMobileTeamsSubTab(selected);
             }}
             aria-label="Select teams or supervisors"
@@ -3624,8 +3633,9 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
           >
             <SelectItem key="teams">{t('Teams')}</SelectItem>
             <SelectItem key="supervisors">{t('Supervisors')}</SelectItem>
+            <SelectItem key="log">{t('Log')}</SelectItem>
           </Select>
-          {renderTeamActions(mobileTeamsSubTab)}
+          {mobileTeamsSubTab !== 'log' && renderTeamActions(mobileTeamsSubTab)}
         </>
       );
     }
@@ -3896,17 +3906,18 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
           <SelectItem key="teams">{t('Teams')}</SelectItem>
           <SelectItem key="supervisors">{t('Supervisors')}</SelectItem>
           <SelectItem key="equipment">{t('Equipment')}</SelectItem>
+          <SelectItem key="log">{t('Log')}</SelectItem>
         </Select>
 
         <div className="flex items-center gap-1.5">
-          {renderTeamActions(selectedLeftTab as LeftPanelTab)}
+          {selectedLeftTab !== 'log' && renderTeamActions(selectedLeftTab as LeftPanelTab)}
           {/* No full-screen button on this side; only a way out if a ?focus= link opened it full screen. */}
           {focusedPane === 'left' && (
             <FocusControls
               focused
               onToggle={() => toggleFocus('left')}
               size="md"
-              label={t(selectedLeftTab === 'teams' ? 'Teams' : selectedLeftTab === 'supervisors' ? 'Supervisors' : 'Equipment')}
+              label={t(LEFT_PANEL_LABELS[selectedLeftTab as LeftPanelTab] ?? 'Teams')}
             />
           )}
         </div>
@@ -3932,6 +3943,9 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
           {selectedLeftTab === 'equipment' && (
             <EquipmentList {...equipmentListProps} emptyText={t('No equipment configured')} />
           )}
+
+          {/* LOG: every log and note in one timeline */}
+          {selectedLeftTab === 'log' && renderEventLog()}
 
         </div>
       </div>
@@ -4011,7 +4025,18 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
 
         {selectedRightTab === 'mci' && !isMobile && event.mci && (
           <div className="relative z-10 -mt-px mx-1.5 rounded-lg bg-surface-deep px-2.5 pb-2 pt-1 flex flex-col flex-1 min-h-0">
-            <MciTab event={event} actions={mciActions} onOpenLogistics={() => showRightTab('logistics')} roleLogins={roleLoginsAvailable} />
+            <MciTab
+              event={event}
+              actions={mciActions}
+              onOpenLogins={
+                roleLoginsAvailable
+                  ? () => {
+                      setLoginsOpen(true);
+                      showRightTab('logistics');
+                    }
+                  : undefined
+              }
+            />
           </div>
         )}
 
@@ -4020,8 +4045,9 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
             <LogisticsTab
               event={event}
               updateEvent={updateEvent}
-              onUndo={(id) => void mciActions.undo(id)}
               logins={roleLoginsAvailable && user && eventId ? { eventId, uid: user.uid } : undefined}
+              loginsOpen={loginsOpen}
+              onLoginsOpenChange={setLoginsOpen}
             />
           </div>
         )}
@@ -4411,6 +4437,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
                   {mobileTeamsSubTab === 'supervisors' && (
                     <SupervisorList {...supervisorListProps} emptyText={t('No supervisors added yet')} />
                   )}
+                  {mobileTeamsSubTab === 'log' && renderEventLog()}
                 </div>
               </Tab>
 

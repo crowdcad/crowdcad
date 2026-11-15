@@ -6,6 +6,8 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Button, Card, Input, ScrollShadow, Select, SelectItem, Tooltip } from '@heroui/react';
 import { Time } from '@internationalized/date';
 import { CircleHelp, Pencil, Trash2 } from 'lucide-react';
+import { equipmentHolderUnit, setupEquipmentHolder } from '@/lib/equipmentCustody';
+import EquipmentTeamSelect from '@/components/event-create/EquipmentTeamSelect';
 import type { Equipment, Event, EventEquipment, Post, Staff, Supervisor, Venue, Zone } from '@/app/types';
 import LoadingScreen from '@/components/ui/loading-screen';
 import TutorialTip from '@/components/ui/TutorialTip';
@@ -413,6 +415,16 @@ function LiteCreateContent() {
     setEquipmentEditInput('');
   };
 
+  // Starts the event with a team holding an item (or back at its default location), as on the board.
+  const setEquipmentHolder = (name: string, unit: string) => {
+    updateDraft((current) => {
+      const eventEquipment = withEventEquipment(current.venue.equipment, current.eventEquipment);
+      const ctx = { venue: { equipment: current.venue.equipment } as unknown as Venue, staff: current.staff, supervisor: current.supervisor, clinics: current.clinics, eventEquipment };
+      const next = setupEquipmentHolder(ctx, name, unit, Date.now());
+      return { ...current, eventEquipment: next.eventEquipment, staff: next.staff, supervisor: next.supervisor };
+    });
+  };
+
   const setEquipmentDefaultLocation = (id: string, location: string | undefined) => {
     updateDraft((current) => ({
       ...current,
@@ -765,19 +777,28 @@ function LiteCreateContent() {
               () => startEquipmentEdit(index),
               () => removeEquipment(index),
               item.id,
-              <Select
-                aria-label={`Default location for ${item.name}`}
-                placeholder="Default location"
-                size="sm"
-                variant="flat"
-                selectedKeys={eventEquipment[index]?.defaultLocation ? [eventEquipment[index]!.defaultLocation!] : []}
-                onSelectionChange={(keys) => setEquipmentDefaultLocation(item.id, (Array.from(keys)[0] as string | undefined) || undefined)}
-                classNames={{ ...selectClassNames, base: 'w-44' }}
-              >
-                {allPosts.map((post) => (
-                  <SelectItem key={getPostName(post)}>{getPostName(post)}</SelectItem>
-                ))}
-              </Select>
+              <div className="flex items-center gap-2">
+                <Select
+                  aria-label={`Default location for ${item.name}`}
+                  placeholder="Default location"
+                  size="sm"
+                  variant="flat"
+                  selectedKeys={eventEquipment[index]?.defaultLocation ? [eventEquipment[index]!.defaultLocation!] : []}
+                  onSelectionChange={(keys) => setEquipmentDefaultLocation(item.id, (Array.from(keys)[0] as string | undefined) || undefined)}
+                  classNames={{ ...selectClassNames, base: 'w-44' }}
+                >
+                  {allPosts.map((post) => (
+                    <SelectItem key={getPostName(post)}>{getPostName(post)}</SelectItem>
+                  ))}
+                </Select>
+                <EquipmentTeamSelect
+                  itemName={item.name}
+                  units={[...eventDraft.staff.map((s) => s.team), ...eventDraft.supervisor.map((s) => s.team)]}
+                  value={eventEquipment[index] ? equipmentHolderUnit(eventEquipment[index]!) : ''}
+                  onChange={(unit) => setEquipmentHolder(item.name, unit)}
+                  classNames={selectClassNames}
+                />
+              </div>
             )
           )}
         </ScrollShadow>
