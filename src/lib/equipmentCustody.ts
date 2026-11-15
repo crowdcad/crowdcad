@@ -394,6 +394,23 @@ export function returnAllFromUnit(fleet: Fleet, event: EventLike, unit: string, 
 }
 
 /**
+ * Event setup: an item starts the event with a team or supervisor (`unit`), or, with `unit` empty, at its
+ * default location. The same custody as handing it over on the board (`moveEquipment`), so the team shows
+ * as holding it from the start.
+ */
+export function setupEquipmentHolder(event: EventLike & Pick<Event, 'eventEquipment'>, equipmentName: string, unit: string, t: number): Fleet {
+  const fleet = fleetOf(event);
+  const eq = fleet.eventEquipment.find((e) => e.name === equipmentName);
+  if (!eq) return fleet;
+  return moveEquipment(fleet, event, equipmentName, unit || stagingLocation(eq, event), t);
+}
+
+/** The team or supervisor holding an item, or '' (for a setup picker). */
+export function equipmentHolderUnit(eq: EventEquipment): string {
+  return eq.holder?.kind === 'team' ? eq.holder.name : '';
+}
+
+/**
  * The dispatcher's manual override: the equipment is now at `location`.
  * A unit name means that unit has it, a clinic means it is in that clinic,
  * anything else is a post or free-text place where it is waiting.

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { Call, Event, EventEquipment, Staff } from '@/app/types';
 import {
+  equipmentHolderUnit,
+  setupEquipmentHolder,
   assignEquipment,
   custodyOf,
   custodyRunStats,
@@ -171,5 +173,22 @@ describe('custodyRunStats', () => {
     ];
     expect(custodyRunStats(log, 1_100_000)).toEqual({ runs: 2, awayMs: 840_000 + 100_000 });
     expect(custodyRunStats(undefined, 0)).toEqual({ runs: 0, awayMs: 0 });
+  });
+});
+
+describe('setupEquipmentHolder', () => {
+  it('starts an item with a team, and puts it back at its default location', () => {
+    const event = {
+      venue: { equipment: [] },
+      staff: [{ id: 's1', team: 'Alpha', status: 'Available', location: 'Gate', members: [] }],
+      supervisor: [],
+      clinics: [],
+      eventEquipment: [{ id: 'e1', name: 'AED 1', status: 'Available', defaultLocation: 'Gate A', assignedTeam: null }],
+    } as unknown as Parameters<typeof setupEquipmentHolder>[0];
+    const given = setupEquipmentHolder(event, 'AED 1', 'Alpha', 1000);
+    expect(equipmentHolderUnit(given.eventEquipment[0]!)).toBe('Alpha');
+    const back = setupEquipmentHolder({ ...event, ...given }, 'AED 1', '', 2000);
+    expect(back.eventEquipment[0]!.holder).toEqual({ kind: 'post', name: 'Gate A' });
+    expect(equipmentHolderUnit(back.eventEquipment[0]!)).toBe('');
   });
 });

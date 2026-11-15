@@ -3,6 +3,8 @@ import { Button, Checkbox, Chip, Input, ScrollShadow, Select, SelectItem, Toolti
 import { CircleHelp, Plus, Trash2 } from 'lucide-react';
 import type { Event, Post, Venue, EventEquipment } from '@/app/types';
 import { randomId } from '@/lib/utils';
+import { equipmentHolderUnit, setupEquipmentHolder } from '@/lib/equipmentCustody';
+import EquipmentTeamSelect from './EquipmentTeamSelect';
 import TutorialTip from '@/components/ui/TutorialTip';
 
 type FlattenedPost = {
@@ -207,6 +209,17 @@ export function EquipmentSelectionSection({
     }));
   };
 
+  const units = [...(eventData.staff || []).map((s) => s.team), ...(eventData.supervisor || []).map((s) => s.team)];
+  // Starts the event with a team holding it (or back at its default location), as on the board.
+  const setHolder = (name: string, unit: string) =>
+    setEventData((prev) => {
+      const next = setupEquipmentHolder({ ...prev, staff: prev.staff || [], supervisor: prev.supervisor || [] }, name, unit, Date.now());
+      return { ...prev, ...next };
+    });
+  const teamSelect = (equip: EventEquipment) => (
+    <EquipmentTeamSelect itemName={equip.name} units={units} value={equipmentHolderUnit(equip)} onChange={(unit) => setHolder(equip.name, unit)} classNames={selectClassNames} />
+  );
+
   const setCustomEquipmentLocation = (id: string, locName: string) => {
     setEventData((prev) => ({
       ...prev,
@@ -275,6 +288,7 @@ export function EquipmentSelectionSection({
                       return <SelectItem key={postName}>{postName}</SelectItem>;
                     })}
                   </Select>
+                  {teamSelect(equip)}
                   <button
                     type="button"
                     onClick={() => removeCustomEquipment(equip.id)}
@@ -341,6 +355,7 @@ export function EquipmentSelectionSection({
                         })}
                       </Select>
                     )}
+                    {selectedEquip && teamSelect(selectedEquip)}
                   </div>
                 </div>
               );
