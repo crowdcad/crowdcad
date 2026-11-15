@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Button, Input, Modal, ModalBody, ModalContent, ModalHeader, Tooltip } from '@heroui/react';
 import { CircleHelp, GraduationCap, MousePointerClick, Search, X } from 'lucide-react';
 import { useDispatchVocabulary } from '@/hooks/useDispatchVocabulary';
+import { STATIC_CLOSE_BUTTON_CLASS } from '@/lib/heroStatic';
 import { findAnchor, findStepTarget } from '@/training/anchors';
 import { helpSuggestions, practiceHref, searchHelp, type HelpContext, type HelpEntry } from '@/training/help';
 import { moduleSeconds } from '@/training/registry';
@@ -140,7 +141,7 @@ export default function HelpButton({ className = '' }: { className?: string }) {
         </Button>
       </Tooltip>
 
-      <Modal isOpen={open} onOpenChange={setOpen} placement="top-center" size="lg" classNames={{ base: 'bg-surface-deepest text-surface-light mt-16' }}>
+      <Modal isOpen={open} onOpenChange={setOpen} placement="top-center" size="lg" classNames={{ base: 'bg-surface-deepest text-surface-light mt-16', closeButton: STATIC_CLOSE_BUTTON_CLASS }}>
         <ModalContent>
           <ModalHeader className="flex flex-col gap-1 pb-1">
             <span className="text-lg font-semibold text-surface">What are you trying to do?</span>
