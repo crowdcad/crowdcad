@@ -401,7 +401,7 @@ function TreatmentMode({ mci, unit, me, units, lead = false }: { mci: MciState; 
   const choices = derived.areas;
   const assignment = me?.mciAssignment?.kind === 'area' && choices.some((a) => a.area.id === me.mciAssignment!.id) ? me.mciAssignment : undefined;
   const assigned = assignment?.id;
-  // The color this unit is treating: listed first and used for new patients. Never limits anything.
+  // The color this unit is treating: only its patients are listed (switch color to see the others), and new patients start in it.
   const treating = assignment?.color;
   const [areaId, setAreaId] = useState<string | undefined>(assigned);
   const [choosing, setChoosing] = useState(!assigned);
@@ -418,8 +418,12 @@ function TreatmentMode({ mci, unit, me, units, lead = false }: { mci: MciState; 
     setChoosing(false);
     await actions.send({ type: 'assign', assignment: { kind: 'area', id, ...(color ? { color } : {}) } });
   };
-  // The unit's color first, then the rest, each in transport order.
-  const shown = stats && treating ? [...stats.patients.filter((p) => p.color === treating), ...stats.patients.filter((p) => p.color !== treating)] : stats?.patients ?? [];
+  const shown = stats && treating ? stats.patients.filter((p) => p.color === treating) : stats?.patients ?? [];
+  // The arrows move a patient past the next one of the same color (a priority never crosses colors).
+  const placeInColor = (p: MciPatient) => {
+    const same = (stats?.patients ?? []).filter((q) => q.color === p.color);
+    return { first: same[0] === p, last: same[same.length - 1] === p };
+  };
 
   if (choosing || !stats) {
     return (
@@ -472,7 +476,11 @@ function TreatmentMode({ mci, unit, me, units, lead = false }: { mci: MciState; 
         ))}
       </div>
       <div className="flex flex-1 flex-col gap-2 overflow-y-auto px-4 pb-28 pt-3">
-        {stats.patients.length === 0 && <p className="m-0 text-base text-surface-faint">No patients in {stats.name} yet.</p>}
+        {shown.length === 0 && (
+          <p className="m-0 text-base text-surface-faint">
+            {treating ? `No ${MCI_COLOR_STYLES[treating].label.toLowerCase()} patients in ${stats.name}.` : `No patients in ${stats.name} yet.`}
+          </p>
+        )}
         {shown.map((p) => (
           <div key={p.id} className="flex min-h-[4.25rem] items-stretch border border-surface-liner bg-surface-deep" data-testid="role-patient">
             <button type="button" onClick={() => setEditing(p)} className="flex min-w-0 flex-1 items-stretch text-left">
@@ -490,7 +498,7 @@ function TreatmentMode({ mci, unit, me, units, lead = false }: { mci: MciState; 
                 <button
                   type="button"
                   className="flex h-1/2 min-h-[2.1rem] w-12 items-center justify-center text-xl disabled:opacity-30"
-                  disabled={actions.busy || stats.patients.indexOf(p) === 0}
+                  disabled={actions.busy || placeInColor(p).first}
                   onClick={() => void actions.send({ type: 'priority', patientId: p.id, direction: 'up' })}
                   aria-label={`Move ${mciPatientLabel(p.details) || 'patient'} up the transport order`}
                   data-testid="role-patient-up"
@@ -500,7 +508,7 @@ function TreatmentMode({ mci, unit, me, units, lead = false }: { mci: MciState; 
                 <button
                   type="button"
                   className="flex h-1/2 min-h-[2.1rem] w-12 items-center justify-center border-t border-surface-liner text-xl disabled:opacity-30"
-                  disabled={actions.busy || stats.patients.indexOf(p) === stats.patients.length - 1}
+                  disabled={actions.busy || placeInColor(p).last}
                   onClick={() => void actions.send({ type: 'priority', patientId: p.id, direction: 'down' })}
                   aria-label={`Move ${mciPatientLabel(p.details) || 'patient'} down the transport order`}
                   data-testid="role-patient-down"

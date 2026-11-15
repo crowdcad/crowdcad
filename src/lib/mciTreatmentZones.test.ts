@@ -123,9 +123,11 @@ describe('transport order', () => {
     e = apply(e, arrivePatch(e, 'c1', 'red', 1, ctx(100)));
     e = apply(e, arrivePatch(e, 'c1', 'yellow', 1, ctx(200)));
     e = apply(e, arrivePatch(e, 'c1', 'red', 1, ctx(300)));
-    const [redA, yellow, redB] = areaStats(e, 'c1').patients.map((p) => p.id);
+    // Reds always come before yellows, whatever the arrival order.
+    const [redA, redB, yellow] = areaStats(e, 'c1').patients.map((p) => p.id);
+    expect(areaStats(e, 'c1').patients.map((p) => p.color)).toEqual(['red', 'red', 'yellow']);
     e = apply(e, movePatientInOrderPatch(e, redB!, 'up'));
-    expect(areaStats(e, 'c1').patients.map((p) => p.id)).toEqual([redB, yellow, redA]);
+    expect(areaStats(e, 'c1').patients.map((p) => p.id)).toEqual([redB, redA, yellow]);
     // The yellow column has one patient: nothing to move past.
     expect(movePatientInOrderPatch(e, yellow!, 'down').patch).toEqual({});
   });

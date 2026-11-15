@@ -30,6 +30,9 @@ import { postAt } from '@/lib/geo/positions';
 
 export const MCI_COLORS: readonly MciColor[] = ['red', 'yellow', 'green', 'black'];
 
+/** Transport order between colors: red first, then yellow, green, black. Never overridden by a priority. */
+export const MCI_SEVERITY: Record<MciColor, number> = { red: 0, yellow: 1, green: 2, black: 3 };
+
 /** Team statuses available while an MCI is active (equipment-run statuses are unchanged and not listed). */
 export const MCI_UNIT_STATUSES = ['Available', 'Triage', 'Treatment', 'Unavailable'] as const;
 
@@ -406,7 +409,8 @@ function replayPatients(mci: MciState, live: readonly MciLogEntry[]): MciReplay 
     else queues.set(p.areaId, [p]);
   }
   for (const queue of queues.values()) {
-    queue.sort((a, b) => (a.details.priority as number) - (b.details.priority as number) || a.arrivedAt - b.arrivedAt);
+    // Red always ahead of yellow, then green, then black: a priority only orders patients of one color.
+    queue.sort((a, b) => MCI_SEVERITY[a.color] - MCI_SEVERITY[b.color] || (a.details.priority as number) - (b.details.priority as number) || a.arrivedAt - b.arrivedAt);
     queue.forEach((p, i) => {
       p.rank = i + 1;
     });
@@ -415,8 +419,10 @@ function replayPatients(mci: MciState, live: readonly MciLogEntry[]): MciReplay 
   return { patients, received, transported, transferredOut, arrived, consistent };
 }
 
-/** Ranked patients first, in rank order, then the rest by arrival. */
-function byRankThenArrival(a: MciPatient, b: MciPatient): number {
+/** Transport order: by color (red, yellow, green, black), then ranked patients in rank order, then the rest by arrival. */
+export function byTransportOrder(a: MciPatient, b: MciPatient): number {
+  const bySeverity = MCI_SEVERITY[a.color] - MCI_SEVERITY[b.color];
+  if (bySeverity) return bySeverity;
   if (a.rank !== undefined && b.rank !== undefined) return a.rank - b.rank;
   if (a.rank !== undefined) return -1;
   if (b.rank !== undefined) return 1;
@@ -504,7 +510,7 @@ export function deriveMci(event: Pick<Event, 'mci' | 'calls' | 'clinics'>): MciD
     const received = { ...(replay.received.get(area.id) ?? emptyCounts()) };
     const transported = { ...(replay.transported.get(area.id) ?? emptyCounts()) };
     const transferredOut = { ...(replay.transferredOut.get(area.id) ?? emptyCounts()) };
-    const patients = (inArea.get(area.id) ?? []).sort(byRankThenArrival);
+    const patients = (inArea.get(area.id) ?? []).sort(byTransportOrder);
     const inTreatment = emptyCounts();
     for (const p of patients) inTreatment[p.color] += 1;
     const clinicName = area.clinicId ? clinicNames.get(area.clinicId) : undefined;
@@ -1690,9 +1696,10 @@ export function patientCarePatch(
 }
 
 /**
- * Moves a patient one place up or down their location's transport order, as shown (ranked first, then by
- * arrival), past the next patient of the same color (a location taking several colors shows a column per
- * color), and writes the whole shown order as ranks, so every view keeps the order the Treatment Lead sees.
+ * Moves a patient one place up or down their location's transport order, as shown (by color, then ranked,
+ * then by arrival), past the next patient of the same color (a priority never moves a patient ahead of a
+ * more urgent color), and writes the whole shown order as ranks, so every view keeps the order the
+ * Treatment Lead sees.
  */
 export function movePatientInOrderPatch(event: Pick<Event, 'mci' | 'calls' | 'clinics'>, patientId: string, direction: 'up' | 'down'): MciWrite {
   const mci = event.mci;

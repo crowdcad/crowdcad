@@ -2,7 +2,7 @@
 
 import React, { useMemo, useState } from 'react';
 import type { MciState } from '@/app/types';
-import { deriveMci, mciPatientLabel, type MciPatient } from '@/lib/mci';
+import { byTransportOrder, deriveMci, mciPatientLabel, type MciPatient } from '@/lib/mci';
 import { hospitalSentCounts, hospitalSentTotal } from '@/lib/mciLogistics';
 import { MCI_PILL_STYLES } from '@/components/dispatch/mci/mciparts';
 import { BottomSheet, ColorTag, ErrorBanner, PRIMARY_BUTTON, ROLE_LABEL, SECONDARY_BUTTON, useRoleActions } from './roleparts';
@@ -13,7 +13,6 @@ import { BottomSheet, ColorTag, ErrorBanner, PRIMARY_BUTTON, ROLE_LABEL, SECONDA
  * (ambulance number and destination). Logged under the login's unit.
  */
 
-const SEVERITY = { red: 0, yellow: 1, green: 2, black: 3 } as const;
 
 export default function TransportView({ mci }: { mci: MciState }) {
   const actions = useRoleActions();
@@ -27,7 +26,7 @@ export default function TransportView({ mci }: { mci: MciState }) {
     () =>
       derived.patients
         .filter((p) => p.transportedAt === undefined)
-        .sort((a, b) => (a.rank ?? 999) - (b.rank ?? 999) || SEVERITY[a.color] - SEVERITY[b.color] || a.arrivedAt - b.arrivedAt),
+        .sort(byTransportOrder),
     [derived],
   );
   const left = useMemo(() => derived.patients.filter((p) => p.transportedAt !== undefined).sort((a, b) => b.transportedAt! - a.transportedAt!), [derived]);
