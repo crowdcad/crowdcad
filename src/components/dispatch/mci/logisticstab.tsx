@@ -19,11 +19,14 @@ import {
   type LogisticsResult,
 } from '@/lib/mciLogistics';
 import LogisticsBoard, { type LogisticsHandlers } from './logisticsboard';
+import MciLog from './mcilogdrawer';
+import RoleLogins from './rolelogins';
 
 /**
- * The dispatcher's MCI Logistics tab (#139): the Logistics board (Equipment, Hospitals, Incoming Staff),
- * writing the event directly. The Logistics role login shows the same board (D27). Read-only once the
- * MCI stands down.
+ * The dispatcher's MCI Logistics tab (#139): who has which login, then the Logistics board (Equipment,
+ * Hospitals, Incoming Staff) with the MCI log beside it on a wide screen (below it on a narrow one). The
+ * board writes the event directly; the Logistics role login shows the same board (D27). Read-only once
+ * the MCI stands down.
  */
 
 type UpdateEvent = (updates: Partial<Event> | ((current: Event) => Partial<Event>)) => Promise<void>;
@@ -37,7 +40,18 @@ const ERRORS: Record<NonNullable<LogisticsResult['error']>, string> = {
   'no-team': 'That team is no longer on the board.',
 };
 
-export default function LogisticsTab({ event, updateEvent }: { event: Event; updateEvent: UpdateEvent }) {
+export default function LogisticsTab({
+  event,
+  updateEvent,
+  onUndo,
+  logins,
+}: {
+  event: Event;
+  updateEvent: UpdateEvent;
+  onUndo: (entryId: string) => void;
+  /** Role logins (#142): omitted where they aren't available (Lite, PocketBase). */
+  logins?: { eventId: string; uid: string };
+}) {
   const readOnly = !isMciActive(event);
 
   const run = (build: (e: Event) => LogisticsResult, errors: Partial<typeof ERRORS> = {}) => {
@@ -72,13 +86,21 @@ export default function LogisticsTab({ event, updateEvent }: { event: Event; upd
     },
   };
 
-  const units = useMemo(() => [...(event.staff ?? []).map((s) => s.team), ...(event.supervisor ?? []).map((s) => s.team)], [event.staff, event.supervisor]);
+  const loginUnits = useMemo(
+    () => [...(event.staff ?? []).map((s) => ({ name: s.team, id: s.id, kind: 'team' as const })), ...(event.supervisor ?? []).map((s) => ({ name: s.team, id: s.id, kind: 'supervisor' as const }))],
+    [event.staff, event.supervisor],
+  );
+  const units = useMemo(() => loginUnits.map((u) => u.name), [loginUnits]);
   const equipment = useMemo(() => mciEquipmentFor(event), [event]);
 
   if (!event.mci) return null;
   return (
-    <div className="tab-scroll minimal-scrollbar flex min-h-0 flex-1 flex-col" data-testid="logistics-tab">
-      <LogisticsBoard mci={event.mci} units={units} equipment={equipment} readOnly={readOnly} handlers={handlers} />
+    <div className="tab-scroll minimal-scrollbar flex min-h-0 flex-1 flex-col gap-4" data-testid="logistics-tab">
+      {logins && !readOnly && <RoleLogins eventId={logins.eventId} eventName={event.name} units={loginUnits} uid={logins.uid} />}
+      <div className="grid min-h-0 gap-4 2xl:grid-cols-[minmax(0,1fr)_24rem]">
+        <LogisticsBoard mci={event.mci} units={units} equipment={equipment} readOnly={readOnly} handlers={handlers} />
+        <MciLog mci={event.mci} readOnly={readOnly} onUndo={onUndo} className="max-h-[32rem] 2xl:max-h-[calc(100vh-12rem)]" />
+      </div>
     </div>
   );
 }

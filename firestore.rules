@@ -323,11 +323,13 @@ service cloud.firestore {
     // The server route /api/role-accounts writes these with the Admin SDK;
     // the browser writes them where it can create accounts itself.
     match /events/{eventId}/roleAccounts/{uid} {
-      allow read: if canReadEventData(eventId) || (isRoleAccount() && request.auth.uid == uid);
+      // The Logistics lead sees the event's logins, to reset passwords (through the server) on the ground.
+      allow read: if canReadEventData(eventId) || (isRoleAccount() && request.auth.uid == uid) ||
+        (isActiveRoleAccountFor(eventId) && get(roleAccountPath(eventId)).data.get('role', '') == 'logistics');
       allow create: if canReadEventData(eventId) && isValidRoleAccount(eventId, uid, request.resource.data) &&
         request.resource.data.get('createdBy', null) == request.auth.uid;
       allow update: if canReadEventData(eventId) && isValidRoleAccount(eventId, uid, request.resource.data) &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['disabled', 'disabledAt', 'label']);
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['disabled', 'disabledAt', 'label', 'role']);
       allow delete: if canReadEventData(eventId);
     }
 
@@ -349,6 +351,9 @@ service cloud.firestore {
     match /roleAccountIndex/{uid} {
       allow read: if request.auth != null && request.auth.uid == uid;
       allow create: if canReadEventData(request.resource.data.get('eventId', '')) &&
+        request.resource.data.get('role', null) in ['responder', 'treatment_lead', 'incident_command', 'triage', 'treatment', 'transport', 'logistics'];
+      allow update: if canReadEventData(resource.data.get('eventId', '')) &&
+        request.resource.data.get('eventId', '') == resource.data.get('eventId', '') &&
         request.resource.data.get('role', null) in ['responder', 'treatment_lead', 'incident_command', 'triage', 'treatment', 'transport', 'logistics'];
       allow delete: if canReadEventData(resource.data.get('eventId', ''));
     }

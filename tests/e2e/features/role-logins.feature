@@ -10,7 +10,7 @@ Feature: MCI role logins
     And I create a team named "Alpha" with a member "Sam" certified as "EMT-B"
 
   Scenario: A Responder submits counts that the board shows under their team, then is disabled
-    When I declare an MCI and keep the role logins open
+    When I declare an MCI and open the role logins
     And I create the role logins as assigned
     Then a new role login for "Alpha" should be shown with its password
     When the new role login signs in on another device

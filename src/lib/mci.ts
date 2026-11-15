@@ -34,7 +34,6 @@ export const MCI_COLORS: readonly MciColor[] = ['red', 'yellow', 'green', 'black
 export const MCI_UNIT_STATUSES = ['Available', 'Triage', 'Treatment', 'Unavailable'] as const;
 
 /** How many entries the log drawer lists. */
-export const MCI_LOG_DRAWER_SIZE = 10;
 
 export type MciCounts = Record<MciColor, number>;
 
@@ -1235,7 +1234,7 @@ export function reopenZonePatch(event: Pick<Event, 'mci' | 'calls' | 'clinics'>,
 }
 
 /** The entries the log drawer lists: newest first, with whether each can still be undone. */
-export function mciRecentEntries(mci: MciState | undefined, limit = MCI_LOG_DRAWER_SIZE): { entry: MciLogEntry; undone: boolean }[] {
+export function mciRecentEntries(mci: MciState | undefined, limit = Infinity): { entry: MciLogEntry; undone: boolean }[] {
   if (!mci) return [];
   const log = currentLog(mci);
   const undone = undoneIds(log);

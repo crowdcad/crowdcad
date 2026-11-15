@@ -14,15 +14,16 @@ import MciReassignModal, { type MciReassignRequest } from './mcireassignmodal';
 import MciMoveModal from './mcimovemodal';
 import MciTransportModal from './mcitransportmodal';
 import MciDrawZoneModal, { type MciDrawTarget } from './mcidrawzonemodal';
-import MciLogDrawer from './mcilogdrawer';
 import { MCI_CHECKBOX_CLASSNAMES, MCI_INPUT_CLASSNAMES } from './mciparts';
 import HelpTip from '@/components/ui/helptip';
 
 type Props = {
   event: Event;
   actions: MciActions;
-  /** Opens the role logins dialog (#142); omitted where role logins aren't available (Lite, PocketBase). */
-  onOpenRoleLogins?: () => void;
+  /** Shows MCI Logistics, where the log and role logins are. */
+  onOpenLogistics: () => void;
+  /** Whether role logins (#142) are available here (not Lite or PocketBase), for the button's label. */
+  roleLogins?: boolean;
 };
 
 /** Zone grid columns: thirds for up to three zones, quarters from four, never narrower than 12rem (then they wrap). */
@@ -64,7 +65,7 @@ function AddByName({ label, testId, onAdd }: { label: string; testId: string; on
  * The MCI tab. Every number comes from `deriveMci` (the log is the source of
  * truth). After stand down it stays, read-only, so the record can be reviewed.
  */
-export default function MciTab({ event, actions, onOpenRoleLogins }: Props) {
+export default function MciTab({ event, actions, onOpenLogistics, roleLogins = false }: Props) {
   const { t } = useDispatchTerms();
   const mci = event.mci;
   // Memoized on what each helper reads, not on `event`, which is a new object on every snapshot.
@@ -91,7 +92,6 @@ export default function MciTab({ event, actions, onOpenRoleLogins }: Props) {
   // A shape the dispatcher chose to draw or edit; otherwise the first zone or area still without one is offered.
   const [drawChoice, setDrawChoice] = useState<{ kind: 'zone' | 'area'; id: string } | null>(null);
   const [, setSkippedTick] = useState(0);
-  const [showLog, setShowLog] = useState(false);
   // Quick move destinations the dispatcher picked on a zone card, this browser only; otherwise the log decides.
   const [quickTargets, setQuickTargets] = useState<Record<string, string>>({});
   const [reassign, setReassign] = useState<MciReassignRequest | null>(null);
@@ -199,13 +199,8 @@ export default function MciTab({ event, actions, onOpenRoleLogins }: Props) {
       <div className="sticky top-0 z-20 -mb-2 flex flex-wrap items-start justify-between gap-3 bg-surface-deep pb-2" data-testid="mci-top-bar">
         <MciTotalsStrip mci={mci} totals={derived.totals} />
         <div className="flex items-center gap-2">
-          {!readOnly && onOpenRoleLogins && (
-            <Button size="sm" variant="flat" radius="lg" onPress={onOpenRoleLogins} data-testid="mci-role-logins">
-              Role logins
-            </Button>
-          )}
-          <Button size="sm" variant="flat" radius="lg" onPress={() => setShowLog((v) => !v)} aria-expanded={showLog} data-testid="mci-log-toggle">
-            Log
+          <Button size="sm" variant="flat" radius="lg" onPress={onOpenLogistics} title="Open MCI Logistics" data-testid="mci-open-logistics">
+            {roleLogins && !readOnly ? 'Log & logins' : 'Log'}
           </Button>
           {!readOnly && (
             <Button size="sm" radius="lg" className="bg-status-red text-surface-light" onPress={handleStandDown} data-testid="mci-stand-down">
@@ -220,8 +215,6 @@ export default function MciTab({ event, actions, onOpenRoleLogins }: Props) {
           This MCI has stood down. The record below is read-only.
         </p>
       )}
-
-      {showLog && <MciLogDrawer mci={mci} readOnly={readOnly} onUndo={(id) => void actions.undo(id)} />}
 
       <section className="flex flex-col gap-2" aria-label={t('Zones')}>
         <div className="flex items-center justify-between gap-2">

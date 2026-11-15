@@ -96,7 +96,7 @@ export default function RolePage() {
         {role === 'responder' && <ResponderView mci={mci} unit={unit} units={units} />}
         {role === 'treatment_lead' && <TreatmentLeadView mci={mci} unit={unit} units={units} />}
         {role === 'transport' && <TransportView mci={mci} />}
-        {role === 'logistics' && <LogisticsView mci={mci} units={units} equipment={equipment} />}
+        {role === 'logistics' && <LogisticsView mci={mci} units={units} equipment={equipment} eventId={eventId} eventName={account.eventName} />}
         {role === 'incident_command' && <CommandView mci={mci} units={units} />}
       </div>
     </RoleShell>

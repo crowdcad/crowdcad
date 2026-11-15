@@ -8,16 +8,10 @@ const { When, Then } = createBdd(test);
 const capitalize = (word: string) => word.charAt(0).toUpperCase() + word.slice(1);
 
 
-/** Confirms the open declare dialog and closes the role logins offer that follows on Firebase. */
+/** Confirms the open declare dialog. */
 async function confirmDeclare(page: import('@playwright/test').Page) {
   await page.getByTestId('mci-declare-modal').getByTestId('mci-declare-confirm').click();
   await expect(page.getByTestId('mci-tab')).toBeVisible({ timeout: NAV_TIMEOUT });
-  // Declaring offers role logins (#142) on Firebase; these scenarios don't need them.
-  const roleLogins = page.getByTestId('role-logins-modal');
-  if (await roleLogins.waitFor({ state: 'visible', timeout: 3_000 }).then(() => true, () => false)) {
-    await roleLogins.getByTestId('role-login-close').click();
-    await expect(roleLogins).not.toBeVisible();
-  }
 }
 
 async function openDeclare(page: import('@playwright/test').Page, zones: string[]) {
@@ -252,8 +246,10 @@ Then('the {string} column in {string} should list {int} patients', async ({ page
 });
 
 Then('the MCI log should mention {string}', async ({ page }, text: string) => {
-  await page.getByTestId('mci-log-toggle').click();
-  await expect(page.getByTestId('mci-log-drawer')).toContainText(text);
+  // The log lives in MCI Logistics; come back to the MCI tab after.
+  await page.getByTestId('mci-open-logistics').click();
+  await expect(page.getByTestId('mci-log')).toContainText(text);
+  await page.getByTestId('mci-tab-button').click();
 });
 
 Then('the MCI summary patients should include {string}', async ({ page }, text: string) => {

@@ -12,11 +12,13 @@ import {
 import { getAdmin, isCredentialError, type Admin } from '@/lib/server/firebaseAdmin';
 
 /**
- * Creates, disables and re-enables MCI role logins (#142) with the Firebase
- * Admin SDK, for projects where email/password sign-up is turned off (so the
- * browser can't create accounts). Callable by anyone who may dispatch the
- * event (the same people the rules' canReadEventData allows), never by a role
- * login or a TAK bridge.
+ * Creates, disables, re-enables, reassigns (role, holder) and resets the
+ * password of MCI role logins (#142) with the Firebase Admin SDK, for projects
+ * where email/password sign-up is turned off (so the browser can't create
+ * accounts). Callable by anyone who may dispatch the event (the same people
+ * the rules' canReadEventData allows), never by a TAK bridge. The event's
+ * active Logistics role login may reset passwords too, and nothing else.
+ * Passwords are never stored: a reset makes a new one and shows it once.
  *
  * Answers 501 when the server has no admin credentials, and the app then
  * creates the account in the browser instead (src/lib/roleAccountStore.ts).
@@ -48,7 +50,7 @@ export async function POST(req: Request) {
   const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
   const action = body?.action;
   const eventId = body?.eventId;
-  if (!body || typeof eventId !== 'string' || !eventId || !['create', 'disable', 'enable'].includes(String(action))) {
+  if (!body || typeof eventId !== 'string' || !eventId || !['create', 'disable', 'enable', 'assign', 'reset'].includes(String(action))) {
     return json({ error: 'Invalid request.' }, 400);
   }
 
@@ -61,12 +63,17 @@ export async function POST(req: Request) {
 
   try {
     const decoded = await a.auth.verifyIdToken(token);
-    if (isRoleLoginEmail(decoded.email)) return json({ error: 'Role logins cannot manage logins.' }, 403);
     if ((await a.db.doc(`bridgeAccounts/${decoded.uid}`).get()).exists) return json({ error: 'Not allowed.' }, 403);
     const eventSnap = await a.db.doc(`events/${eventId}`).get();
     const event = eventSnap.data();
     if (!event) return json({ error: 'Event not found.' }, 400);
-    if (!(await canManageEvent(a, event, decoded.uid, decoded.email))) return json({ error: 'You cannot manage this event.' }, 403);
+    if (isRoleLoginEmail(decoded.email)) {
+      // The event's Logistics lead hands logins out on the ground: reset only.
+      const own = (await a.db.doc(`events/${eventId}/roleAccounts/${decoded.uid}`).get()).data() as RoleAccount | undefined;
+      if (action !== 'reset' || !own || own.disabled || own.role !== 'logistics') return json({ error: 'Role logins cannot manage logins.' }, 403);
+    } else if (!(await canManageEvent(a, event, decoded.uid, decoded.email))) {
+      return json({ error: 'You cannot manage this event.' }, 403);
+    }
     if (event.ended === true) return json({ error: 'This event has ended.' }, 400);
 
     if (action === 'create') {
@@ -116,7 +123,33 @@ export async function POST(req: Request) {
     const uid = body.uid;
     if (typeof uid !== 'string' || !uid) return json({ error: 'Invalid request.' }, 400);
     const ref = a.db.doc(`events/${eventId}/roleAccounts/${uid}`);
-    if (!(await ref.get()).exists) return json({ error: 'No such login for this event.' }, 400);
+    const existing = (await ref.get()).data() as RoleAccount | undefined;
+    if (!existing) return json({ error: 'No such login for this event.' }, 400);
+
+    if (action === 'reset') {
+      if (existing.disabled) return json({ error: 'Enable the login first.' }, 400);
+      const password = newRolePassword();
+      // A new password signs the login out everywhere, so only the new holder can use it.
+      await a.auth.updateUser(uid, { password });
+      await a.auth.revokeRefreshTokens(uid);
+      return json({ uid, username: existing.username, password });
+    }
+
+    if (action === 'assign') {
+      const changes: Partial<RoleAccount> = {};
+      if (body.role !== undefined) {
+        if (!isEventRole(body.role)) return json({ error: 'Unknown role.' }, 400);
+        changes.role = body.role;
+      }
+      if (typeof body.label === 'string') changes.label = body.label.trim().slice(0, 80);
+      if (!Object.keys(changes).length) return json({ error: 'Invalid request.' }, 400);
+      const batch = a.db.batch();
+      batch.update(ref, changes);
+      if (changes.role) batch.update(a.db.doc(`roleAccountIndex/${uid}`), { role: changes.role });
+      await batch.commit();
+      return json({ ok: true });
+    }
+
     const disabled = action === 'disable';
     await a.auth.updateUser(uid, { disabled });
     if (disabled) await a.auth.revokeRefreshTokens(uid);
@@ -127,6 +160,6 @@ export async function POST(req: Request) {
     const code = (err as { code?: string }).code ?? '';
     if (code.startsWith('auth/id-token') || code === 'auth/argument-error') return json({ error: 'Sign in again.' }, 401);
     console.error('role-accounts route failed', err);
-    return json({ error: 'Something went wrong creating the login.' }, 500);
+    return json({ error: 'Something went wrong with the login.' }, 500);
   }
 }

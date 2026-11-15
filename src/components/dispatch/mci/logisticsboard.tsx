@@ -65,7 +65,7 @@ export interface LogisticsHandlers {
 }
 
 const OTHER = '__other__';
-type Section = 'equipment' | 'hospitals' | 'staff';
+type Section = 'equipment' | 'hospitals' | 'staff' | 'logins';
 
 function useNow(intervalMs = 30_000): Date {
   const [now, setNow] = useState(() => new Date());
@@ -399,6 +399,7 @@ export default function LogisticsBoard({
   tabs = false,
   className = '',
   bodyClassName = '',
+  logins,
 }: {
   mci: MciState;
   /** Team and supervisor names, for handing out equipment. */
@@ -411,16 +412,18 @@ export default function LogisticsBoard({
   className?: string;
   /** On the sections' grid (padding, scrolling). */
   bodyClassName?: string;
+  /** A Logins section across the whole board (the Logistics role login's), with its own tab on a phone. */
+  logins?: React.ReactNode;
 }) {
   const [section, setSection] = useState<Section>('staff');
   const incomingCount = (mci.logistics?.incoming ?? []).filter((x) => x.state === 'incoming').length;
   const shown = (s: Section) => (tabs ? `${section === s ? 'flex' : 'hidden'} lg:flex` : 'flex');
-  const labels: Record<Section, string> = { equipment: 'Equipment', hospitals: 'Hospitals', staff: incomingCount ? `Incoming (${incomingCount})` : 'Incoming' };
+  const labels: Record<Section, string> = { equipment: 'Equipment', hospitals: 'Hospitals', staff: incomingCount ? `Incoming (${incomingCount})` : 'Incoming', logins: 'Logins' };
   return (
     <div className={`flex min-h-0 flex-col ${className}`}>
       {tabs && (
         <div className="flex shrink-0 border-b border-surface-liner lg:hidden" role="tablist">
-          {(['staff', 'hospitals', 'equipment'] as const).map((s) => (
+          {(['staff', 'hospitals', 'equipment', ...(logins ? (['logins'] as const) : [])] as const).map((s) => (
             <button
               key={s}
               type="button"
@@ -448,6 +451,7 @@ export default function LogisticsBoard({
         <section className={`${shown('staff')} min-w-0 flex-col gap-2`} aria-label="Incoming Staff">
           <IncomingSection mci={mci} readOnly={readOnly} handlers={handlers} />
         </section>
+        {logins && <div className={`${shown('logins')} col-span-full min-w-0 flex-col`}>{logins}</div>}
       </div>
     </div>
   );
