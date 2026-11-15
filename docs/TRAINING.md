@@ -18,6 +18,10 @@ A module runs the dispatch page exactly as Lite mode does (`src/lib/LiteContext.
 
 The dispatch page reads the store, gate and feed from `useLiteMode()`. Lite routes get the IndexedDB store and no gate or feed, so `/lite` behaves as before.
 
+### The TAK panel on practice data
+
+In builds with TAK (`NEXT_PUBLIC_TAK=on`), the TAK module shows the TAK module's own map panel (`TakEventPanel`) on the practice map, so trainees see the real controls: the TAK server, location history, the live tracking switch and device links. `src/features/tak/components/TakTrainingPanel.tsx` wraps it in a `TakDemoContext` (`src/features/tak/data/demo.ts`): inside it, `useTakEvent` returns practice data instead of subscribing to Firestore, and the panel's writes change only that practice data. The practice data has a linked practice server, one device per unit (auto-linked by callsign, positioned by the tracking feed) and one device, MEDIC-7, that matches no team, for practising a manual link. The player loads the panel with the same flag-guarded dynamic import as other TAK touchpoints, so builds without TAK leave it out, and the module's panel steps (`PANEL_STEPS`) are included only in those builds.
+
 ### What trainees can type
 
 The point of the gate is that the hosted site never invites anyone to type real patient details. It is on only while a module is guided:
@@ -121,6 +125,6 @@ A PR that changes the board's UI or data should keep all three passing. A new di
 
 ## Limits
 
-- TAK setup needs a real TAK server and admin accounts, so the TAK module explains setup and practises the board side only.
-- The summary page and role logins are cloud features with no Lite path. They are not practised yet.
+- Adding a TAK server needs a real server and admin accounts, so the TAK module explains those steps. The panel and the board side are practised on practice data.
+- The summary page and MCI role logins are cloud features with no Lite path. They are not practised yet.
 - Progress is per browser. Nothing records who completed what.
