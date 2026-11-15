@@ -70,6 +70,12 @@ export function allowedText(values: Iterable<string>): Set<string> {
     const { age, gender } = parseAgeSex(value);
     if (age) out.add(normalizeText(age));
     if (gender) out.add(normalizeText(gender));
+    // "34M" may be stored whole or as age 34 and sex M.
+    const joined = /^(\d+\s*(?:mo|y|yo)?)\s*([a-z])$/i.exec(value.trim());
+    if (joined) {
+      out.add(normalizeText(joined[1]));
+      out.add(normalizeText(joined[2]));
+    }
     for (const part of value.split(/[,/]/)) {
       const p = normalizeText(part);
       if (p) out.add(p);

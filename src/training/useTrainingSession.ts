@@ -1,14 +1,12 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { Event } from '@/app/types';
 import type { LiteTrackingFeed, LiteWriteGate } from '@/lib/LiteContext';
 import { normalizeLiteDraftToEvent, toLiteDraftFromEvent } from '@/lib/liteEventAdapters';
-import type { LiteEventDraft } from '@/lib/liteEventStore';
 import type { UnitTracking } from '@/lib/unitTracking';
 import { findAnchor } from './anchors';
-import { allowedText, checkWrite } from './gate';
 import { createMemoryLiteStore, type MemoryLiteStore } from './memoryStore';
+import { boardAtStep, gateVerdict, stepDone, stepKind } from './replay';
 import { markModuleComplete, markStepDone } from './progress';
 import { sectionsOf, unlockIndex } from './registry';
 import type { TrainingModule, TrainingStep } from './types';
@@ -18,21 +16,7 @@ import type { TrainingModule, TrainingStep } from './types';
  * write gate is still locked, and the in-memory board they practise on.
  */
 
-/** The board at the start of step `index`: the seed with every earlier step done. */
-export function boardAtStep(module: TrainingModule, index: number): LiteEventDraft {
-  const seed = module.seed();
-  let event: Event = normalizeLiteDraftToEvent(seed);
-  for (const step of module.steps.slice(0, index)) if (step.apply) event = step.apply(event);
-  return toLiteDraftFromEvent(event, seed);
-}
-
-/** Whether a step is finished on this board (data steps only). */
-export function stepDone(step: TrainingStep, event: Event): boolean {
-  return !!step.done && step.done(event);
-}
-
-export type StepKind = 'read' | 'ui' | 'data';
-export const stepKind = (step: TrainingStep): StepKind => (step.done ? 'data' : step.doneWhenVisible ? 'ui' : 'read');
+export { boardAtStep, stepDone, stepKind, type StepKind } from './replay';
 
 /** Closes any open modal or menu (HeroUI listens for Escape) before the board changes underneath it. */
 function closeOverlays() {
@@ -129,10 +113,7 @@ export function useTrainingSession(module: TrainingModule, startIndex = 0, track
 
   const writeGate = useCallback<LiteWriteGate>(
     (current, next) => {
-      const { index: at, unlocked: open, complete: done } = stateRef.current;
-      if (open || done || module.steps[at]?.free) return true;
-      const allowed = allowedText(module.steps.slice(0, at + 1).flatMap((s) => s.values ?? []));
-      const verdict = checkWrite(current, next, allowed);
+      const verdict = gateVerdict(module, stateRef.current, current, next);
       if (!verdict.ok) setRejected(verdict.rejected);
       return verdict.ok;
     },
