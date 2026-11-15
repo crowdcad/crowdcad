@@ -67,10 +67,10 @@ function FreshLogin({ fresh, eventName, origin, onDismiss }: { fresh: Fresh; eve
           Hide
         </button>
       </div>
-      <p className="mt-1 font-mono text-sm">
-        Username <span className="select-all font-semibold" data-testid="role-login-username">{fresh.username}</span>
+      <p className="mt-1 text-sm">
+        Username <span className="select-all font-mono font-semibold" data-testid="role-login-username">{fresh.username}</span>
         <span className="mx-2 text-surface-faint">·</span>
-        Password <span className="select-all font-semibold" data-testid="role-login-password">{fresh.password}</span>
+        Password <span className="select-all font-mono font-semibold" data-testid="role-login-password">{fresh.password}</span>
       </p>
       <div className="mt-2 flex flex-wrap gap-2">
         {canShare && (
@@ -241,7 +241,7 @@ export default function RoleLogins({ eventId, eventName, units, uid }: { eventId
                   <span className="text-sm">{a ? EVENT_ROLE_INFO[a.role]?.label ?? a.role : '–'}</span>
                 )}
                 {manage && (a ? <HolderInput account={a} disabled={!!busy} onSave={(label) => void run(`label:${a.uid}`, () => setRoleLoginAssignment(eventId, a.uid, { label }))} /> : <span />)}
-                <span className="truncate font-mono text-sm text-surface-faint" data-testid={a ? `role-login-row-${a.username}` : undefined}>
+                <span className={`truncate text-sm text-surface-faint ${a ? 'font-mono' : ''}`} data-testid={a ? `role-login-row-${a.username}` : undefined}>
                   {a ? (
                     <>
                       {a.username} <span className="sr-only">Active</span>

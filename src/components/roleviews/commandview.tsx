@@ -119,7 +119,7 @@ export default function CommandView({ mci, units }: { mci: MciState; units: MciU
           <div key={a.area.id} className="flex flex-col gap-1.5 border border-surface-liner p-2.5">
             <span className="text-lg font-bold">{a.name}</span>
             <span className="text-base">
-              <span className="font-mono">{a.inTreatmentTotal}</span> patients · <span className="font-mono">{a.patients.filter((p) => p.rank !== undefined).length}</span> waiting
+              {a.inTreatmentTotal} patients · {a.patients.filter((p) => p.rank !== undefined).length} waiting
             </span>
             <span className="text-sm text-surface-faint">{unitsAt('area', a.area.id).join(', ') || 'No one assigned'}</span>
           </div>
@@ -223,7 +223,7 @@ export default function CommandView({ mci, units }: { mci: MciState; units: MciU
           <div key={e.id} className="grid grid-cols-[3rem_6rem_minmax(0,1fr)] gap-2 border-b border-surface-liner px-3.5 py-2">
             <span className="font-mono text-sm text-surface-faint">{new Date(e.t).toTimeString().slice(0, 5)}</span>
             <span className="text-sm font-bold">{who(e)}</span>
-            <span className="text-base">{describeMciEntry(mci, e)}</span>
+            <span className="text-sm">{describeMciEntry(mci, e)}</span>
           </div>
         ))}
       </div>
