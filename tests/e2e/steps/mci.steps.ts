@@ -182,6 +182,8 @@ When('I transport {int} {string} patients from {string} in ambulance {string}', 
   } else {
     await dialog.getByTestId(`mci-transport-${color}`).fill(String(count));
   }
+  // A destination is required (any name; this one isn't on the hospital list). Filled last, so its suggestions never cover the patient list.
+  await dialog.getByTestId('mci-transport-destination').fill('County General');
   await dialog.getByTestId('mci-transport-confirm').click();
   await expect(dialog).not.toBeVisible();
 });
