@@ -246,6 +246,7 @@ export function TeamStatusSelect({
   return (
     <Select
       aria-label="Status"
+      data-testid={`unit-status-${staff.team}`}
       selectedKeys={new Set([staff.status ?? ''])}
       onSelectionChange={(keys) => {
         const val = Array.from(keys as Set<string>)[0] || '';
@@ -280,7 +281,7 @@ export function TeamStatusSelect({
       classNames={{ base: 'min-w-0', trigger: pillClass }}
     >
       {statusOptions.map((s) => (
-        <SelectItem key={s}>
+        <SelectItem key={s} data-testid={`unit-status-option-${s}`}>
           {isEquipmentIconStatus(s) && teamEquipmentNames
             ? getEquipmentStatusMenuLabel(s, teamEquipmentNames)
             : t(s)}

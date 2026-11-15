@@ -18,8 +18,11 @@ import { parseAgeSex } from '@/lib/ageSex';
 const SKIP_KEYS = new Set([
   'id', 'status', 'phase', 'kind', 'outcome', 'color', 'previousStatus', 'mode', 'mapMode', 'userId',
   'createdAt', 'updatedAt', 'date', 'log', 'custodyLog', 'surgeLog', 'periods', 'interactionSessions',
-  'message', 'mapUrl', 'by', 'from', 'to', 'type', 'action', 'icon',
+  'message', 'mapUrl', 'by', 'from', 'to', 'type', 'action', 'icon', 'reason',
 ]);
+
+/** Words the board itself writes as locations or labels. */
+export const SYSTEM_TEXT = ['unknown', 'clinic', 'roaming', 'en route', 'on scene'];
 
 function skipKey(key: string): boolean {
   return SKIP_KEYS.has(key) || /Id$/.test(key) || /Ids$/.test(key);
@@ -59,7 +62,7 @@ export function newText(current: Event, next: Event): string[] {
  * field splits it into (an Age/Sex field turns `34M` into `34` and `M`).
  */
 export function allowedText(values: Iterable<string>): Set<string> {
-  const out = new Set<string>(['unknown']);
+  const out = new Set<string>(SYSTEM_TEXT);
   for (const value of values) {
     const n = normalizeText(value);
     if (!n) continue;

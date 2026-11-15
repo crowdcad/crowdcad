@@ -8,10 +8,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const isLiteRoute = pathname?.startsWith('/lite');
   // MCI role logins (/role, /r/<username>) have their own top bar (RoleShell).
   const isRoleRoute = !!pathname && /^\/(?:role|r)(?:$|\/)/.test(pathname);
+  // A training module (/training/<id>) has its own bar (TrainingPlayer); the catalog keeps the navbar.
+  const isTrainingPlayer = !!pathname && /^\/training\/[^/]+/.test(pathname);
 
   return (
     <>
-      {!isLiteRoute && !isRoleRoute && <AppNavbar />}
+      {!isLiteRoute && !isRoleRoute && !isTrainingPlayer && <AppNavbar />}
       <div>{children}</div>
     </>
   );

@@ -281,6 +281,7 @@ export const CallTrackingTable: React.FC<CallTrackingTableProps> = ({
                     const rowBg = isOpen ? TRACKING_ROW_OPEN_CLASS : `bg-transparent transition-colors ${hoverClass}`;
                     return (
                   <tr
+                      data-testid={`call-row-${callDisplayNumberMap.get(call.id)}`}
                       className={`cursor-pointer min-h-3.25rem ${rowBg} rounded-none ${isResolvedCall && !isMotionVisible ? '[&>td]:!border-b-0 pointer-events-none' : ''} ${openCallId === call.id ? '[&>td]:!border-b-0' : ''}`}
                     aria-hidden={isResolvedCall && !isMotionVisible}
                     onClick={(e) => handleRowClick(e, call.id)}
@@ -519,6 +520,7 @@ export const CallTrackingTable: React.FC<CallTrackingTableProps> = ({
                                             radius="full"
                                             variant="light"
                                             className={statusButtonClass}
+                                            data-testid={`team-status-${team}`}
                                           >
                                             {isEqStatus && teamEquipmentIconType ? (
                                               <span className="inline-flex items-center gap-1">
@@ -554,7 +556,7 @@ export const CallTrackingTable: React.FC<CallTrackingTableProps> = ({
                                           }}
                                         >
                                           {statusOptions.map((status: string) => (
-                                            <DropdownItem key={status}>
+                                            <DropdownItem key={status} data-testid={`team-status-option-${status}`}>
                                               {isEquipmentIconStatus(status) && teamEquipmentNames
                                                 ? getEquipmentStatusMenuLabel(status, teamEquipmentNames)
                                                 : getMenuLabel(status, t)}
@@ -604,6 +606,7 @@ export const CallTrackingTable: React.FC<CallTrackingTableProps> = ({
                                   size="sm"
                                   variant="flat"
                                   aria-label="Add"
+                                  data-testid="call-add-menu"
                                   isDisabled={isResolvedCall}
                                   className="w-8 h-8 rounded-full hover:bg-surface-liner shrink-0"
                                 >
@@ -614,7 +617,7 @@ export const CallTrackingTable: React.FC<CallTrackingTableProps> = ({
                                 
                                 {/* Add Team Submenu */}
                                 <DropdownMenuSub>
-                                  <DropdownMenuSubTrigger className="hover:bg-surface-liner focus:bg-surface-liner cursor-pointer">
+                                  <DropdownMenuSubTrigger data-testid="call-add-team" className="hover:bg-surface-liner focus:bg-surface-liner cursor-pointer">
                                     {t('Add Team')}
                                   </DropdownMenuSubTrigger>
                                   <DropdownMenuSubContent className="bg-surface-deep border-surface-liner">
@@ -643,6 +646,7 @@ export const CallTrackingTable: React.FC<CallTrackingTableProps> = ({
                                         ...activeTeams.map(team => (
                                           <DropdownMenuItem
                                             key={team}
+                                            data-testid={`call-add-team-${team}`}
                                             className="text-surface-light hover:bg-surface-liner focus:bg-surface-liner cursor-pointer"
                                             onClick={() => handleAddTeamToCall(call.id, team)}
                                           >
