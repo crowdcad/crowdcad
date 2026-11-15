@@ -3,16 +3,17 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ChevronDown, Plus } from 'lucide-react';
 import type { MciHospital, MciState } from '@/app/types';
-import { emptyCounts, type MciCounts } from '@/lib/mci';
-import { hospitalSentCounts, hospitalSentTotal } from '@/lib/mciLogistics';
+import { emptyCounts, mciPatientLabel, type MciCounts, type MciPatient } from '@/lib/mci';
+import { hospitalPatients, hospitalSentCounts, hospitalSentTotal } from '@/lib/mciLogistics';
 import HelpTip from '@/components/ui/helptip';
-import { MCI_COLOR_STYLES, MCI_NUMBER_INPUT, MciColorDot } from './mciparts';
+import { MCI_COLOR_STYLES, MCI_NUMBER_INPUT, MciColorDot, formatClock } from './mciparts';
 import { LOGI } from './logisticsstyles';
 
 /**
  * Hospitals in the Logistics tab and the Logistics role view: a box per hospital with its capacity and how
- * many were sent, and an arrow that opens the red, yellow and green counts sent there. Sent is counted from
- * transports whose destination is the hospital; typing it corrects the count.
+ * many were sent, and an arrow that opens the red, yellow and green counts sent there and each patient sent
+ * (age, sex, complaint). Sent is counted from transports whose destination is the hospital; typing it
+ * corrects the count.
  */
 
 export interface HospitalHandlers {
@@ -60,7 +61,7 @@ function NumberCell({ value, label, readOnly, allowBlank, onCommit, testId }: { 
   );
 }
 
-function HospitalBox({ hospital, counted, readOnly, handlers }: { hospital: MciHospital; counted: MciCounts; readOnly: boolean; handlers: HospitalHandlers }) {
+function HospitalBox({ hospital, counted, patients, readOnly, handlers }: { hospital: MciHospital; counted: MciCounts; patients: MciPatient[]; readOnly: boolean; handlers: HospitalHandlers }) {
   const [open, setOpen] = useState(false);
   const sent = hospitalSentTotal(hospital, counted);
   const full = hospital.capacity !== undefined && sent >= hospital.capacity;
@@ -104,6 +105,18 @@ function HospitalBox({ hospital, counted, readOnly, handlers }: { hospital: MciH
               Remove
             </button>
           )}
+          {patients.length > 0 && (
+            <ul className="flex w-full flex-col divide-y divide-surface-liner" data-testid={`hospital-${hospital.name}-patients`}>
+              {patients.map((p) => (
+                <li key={p.id} className="flex items-center gap-2 py-1">
+                  <MciColorDot color={p.color} />
+                  <span className={`min-w-0 flex-1 truncate ${mciPatientLabel(p.details) ? 'text-surface-light' : 'italic text-surface-faint'}`}>{mciPatientLabel(p.details) || 'No details'}</span>
+                  {p.unit && <span className={LOGI.meta}>{p.unit}</span>}
+                  <span className="font-mono text-xs text-surface-faint">{formatClock(p.transportedAt!)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
     </div>
@@ -114,6 +127,7 @@ export default function Hospitals({ mci, readOnly, handlers }: { mci: MciState; 
   const [name, setName] = useState('');
   const hospitals = mci.logistics?.hospitals ?? [];
   const counts = useMemo(() => hospitalSentCounts(mci), [mci]);
+  const sentPatients = useMemo(() => hospitalPatients(mci), [mci]);
   const add = () => {
     if (!name.trim()) return;
     handlers.onAdd(name);
@@ -123,7 +137,7 @@ export default function Hospitals({ mci, readOnly, handlers }: { mci: MciState; 
     <div className="flex min-w-0 flex-col gap-2" data-testid="hospitals">
       <div className="flex min-h-8 items-center gap-1">
         <h2 className={LOGI.heading}>Hospitals</h2>
-        <HelpTip text="Where patients are sent. Sent counts transports whose destination is the hospital's name; type Sent to correct it. The arrow shows the colors sent." label="About hospitals" />
+        <HelpTip text="Where patients are sent. Sent counts transports whose destination is the hospital's name; type Sent to correct it. The arrow shows the colors and patients sent." label="About hospitals" />
       </div>
       {!readOnly && (
         <form
@@ -150,7 +164,7 @@ export default function Hospitals({ mci, readOnly, handlers }: { mci: MciState; 
       )}
       {hospitals.length === 0 && <p className={LOGI.empty}>No hospitals yet.</p>}
       {hospitals.map((h) => (
-        <HospitalBox key={h.id} hospital={h} counted={counts.get(h.id) ?? emptyCounts()} readOnly={readOnly} handlers={handlers} />
+        <HospitalBox key={h.id} hospital={h} counted={counts.get(h.id) ?? emptyCounts()} patients={sentPatients.get(h.id) ?? []} readOnly={readOnly} handlers={handlers} />
       ))}
     </div>
   );
