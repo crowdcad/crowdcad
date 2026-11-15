@@ -35,7 +35,7 @@ export default function StepsMenu({
       <PopoverContent className="w-[320px] max-h-[70vh] overflow-y-auto bg-surface-deep p-2 text-surface-light">
         <ol className="flex w-full flex-col gap-1">
           {sections.map((section, si) => {
-            const secs = module.steps.slice(section.start, section.end + 1).reduce((s, x) => s + x.estSec, 0);
+            const secs = module.steps.slice(section.start, section.end + 1).reduce((s, x) => s + x.estSec + 10, 0);
             const current = index >= section.start && index <= section.end && !complete;
             return (
               <li key={section.name}>

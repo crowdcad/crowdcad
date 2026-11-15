@@ -24,14 +24,14 @@ export const TRACKS: TrainingTrack[] = [
   {
     id: 'dispatcher',
     title: 'Dispatcher essentials',
-    summary: 'The calls, teams, clinics and equipment a dispatcher handles on every shift.',
+    summary: 'The calls, teams, clinics and busy moments a dispatcher handles on every shift.',
     audience: 'New dispatchers',
     release: 'stable',
   },
   {
     id: 'mci',
     title: 'MCI response',
-    summary: 'Declaring a mass casualty incident, counting and moving patients, logistics and role views.',
+    summary: 'Declaring a mass casualty incident, counting patients by triage color, moving them to treatment and sending them to hospital.',
     audience: 'Dispatchers and supervisors running an MCI',
     release: 'preview',
   },
@@ -73,8 +73,11 @@ export function findModule(id: string): TrainingModule | undefined {
   return visibleModules().find((m) => m.id === id);
 }
 
+/** Reading the step card, on top of each step's own estimate. */
+const READ_SEC_PER_STEP = 10;
+
 export function moduleSeconds(module: TrainingModule): number {
-  return module.steps.reduce((sum, s) => sum + s.estSec, 0);
+  return module.steps.reduce((sum, s) => sum + s.estSec + READ_SEC_PER_STEP, 0);
 }
 
 export function trackSeconds(track: TrackId): number {
