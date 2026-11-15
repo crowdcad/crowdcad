@@ -144,6 +144,11 @@
    radii and visibly layer during the switch. The ::after strip bridges the
    tab into the panel below it and inherits the tab's background so the two
    always change together. */
+/* Full-screen (focus) view of the dispatch board (src/lib/dispatchFocus.ts): no navbar, the tab fills the screen. */
+html[data-dispatch-focus] .app-navbar {
+  display: none;
+}
+
 .tab-chrome {
   position: relative;
   isolation: isolate;

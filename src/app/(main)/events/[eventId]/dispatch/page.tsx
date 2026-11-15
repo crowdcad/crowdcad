@@ -1976,6 +1976,13 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     const search = focusSearch(window.location.search, tab);
     if (search !== window.location.search) window.history.replaceState(window.history.state, '', `${window.location.pathname}${search}${window.location.hash}`);
   }, [focusedPane, selectedLeftTab, selectedRightTab]);
+  // Full screen hides the navbar (a rule in globals.css), so the tab fills the screen.
+  useEffect(() => {
+    const root = document.documentElement;
+    if (focusedPane) root.setAttribute('data-dispatch-focus', '');
+    else root.removeAttribute('data-dispatch-focus');
+    return () => root.removeAttribute('data-dispatch-focus');
+  }, [focusedPane]);
   const toggleFocus = (pane: FocusPane) => setFocusedPane((current) => (current === pane ? null : pane));
   const openFocusWindow = (tab: string) => {
     window.open(`${window.location.pathname}${focusSearch(window.location.search, tab)}`, '_blank', 'noopener');
@@ -4314,7 +4321,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
         event={event}
       />
       {/* Main Layout */}
-      <div className="relative w-full bg-surface-deepest h-[calc(100vh-72px)]">
+      <div className={`relative w-full bg-surface-deepest ${focusedPane ? 'h-screen' : 'h-[calc(100vh-72px)]'}`}>
         {eventEnded && (
           // Fixed from below the navbar (h-14) to the screen's bottom edge, so it also covers the
           // mobile tab bar and anything scrolled below; the page container stops short of both.
