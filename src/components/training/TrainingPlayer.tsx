@@ -12,6 +12,7 @@ import { plainStepText } from '@/training/text';
 import type { TrainingModule } from '@/training/types';
 import { stepKind, useTrainingSession } from '@/training/useTrainingSession';
 import Coachmark from './Coachmark';
+import HelpButton from './HelpButton';
 import StepsMenu from './StepsMenu';
 import StepText from './StepText';
 
@@ -81,6 +82,7 @@ export default function TrainingPlayer({ module, startIndex = 0 }: { module: Tra
           {session.unlocked || complete ? 'Free practice' : 'Guided'}
         </Chip>
         <StepsMenu module={module} index={index} complete={complete} onJump={session.jumpTo} />
+        <HelpButton />
       </header>
 
       <div className="relative min-h-0 flex-1">
