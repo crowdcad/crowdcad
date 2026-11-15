@@ -52,6 +52,9 @@ function equipmentStatusTone(status: string) {
   return getStatusColor(status);
 }
 
+/** Custody phases whose line would only repeat the location field. */
+const REDUNDANT_PHASES = new Set(['staged', 'carried', 'in_clinic']);
+
 export default function EquipmentCard({
   equipment,
   event,
@@ -106,8 +109,9 @@ export default function EquipmentCard({
 
   const statusTone = equipmentStatusTone(equipment.status);
 
-  // Where it is in its run, e.g. "Being retrieved by Team 3 from Gate A".
-  const custodyLine = equipment.phase && equipment.holder
+  // Where it is mid-run, e.g. "Being retrieved by Team 3 from Gate A". Not "At Gate A", "With Team 3" or "In Clinic":
+  // the location field already shows where it is.
+  const custodyLine = equipment.phase && equipment.holder && !REDUNDANT_PHASES.has(equipment.phase)
     ? describeCustody({ phase: equipment.phase, holder: equipment.holder }, equipment.assignedTeam)
     : null;
   const isHome = equipment.phase === 'staged' && equipment.holder?.name === equipment.stagingLocation;
