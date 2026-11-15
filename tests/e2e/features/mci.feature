@@ -54,14 +54,13 @@ Feature: MCI mode on the dispatch board
     Then the MCI summary patients should include "chest pain"
     And the MCI summary patients should include "A14"
 
-  Scenario: Color treatment zones take only their own color
-    When I declare an MCI with zone "Zone A" and the color treatment zones
+  Scenario: A treatment location takes every color
+    When I declare an MCI with zones "Zone A" and "Zone B" and the default clinic
     And I tag 1 "red" patients in zone "Zone A"
     And I tag 1 "yellow" patients in zone "Zone A"
     And I quick move 1 "red" patients from zone "Zone A"
     And I quick move 1 "yellow" patients from zone "Zone A"
-    Then the treatment location "Red treatment" should read "1 MCI"
-    And the treatment location "Yellow treatment" should read "1 MCI"
+    Then the treatment location "Clinic" should read "0 regular + 2 MCI"
 
   Scenario: Hospitals count the patients transported to them
     When I declare an MCI with zones "Zone A" and "Zone B" and the default clinic

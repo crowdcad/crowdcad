@@ -21,6 +21,7 @@ import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
 import { getEventClinics } from '@/lib/clinics';
 import { isMciActive, mciAssignmentKindFor, mciAssignmentName, mciStatusOptions } from '@/lib/mci';
 import { getEquipmentIconType, type EquipmentIconType } from '@/lib/equipmentIcon';
+import { MciColorDot } from './mci/mciparts';
 import { textToLog } from '@/lib/logText';
 import { parseTimeToMinutes } from '@/lib/postingTimes';
 import { staticSelectorButtonProps } from '@/lib/heroStatic';
@@ -132,13 +133,15 @@ export function TeamCarrying({ staff, event, compact = false }: { staff: Staff; 
 export function TeamMciChip({ staff, event, compact = false }: { staff: Staff; event: Event; compact?: boolean }) {
   const name = isMciActive(event) && mciAssignmentKindFor(staff.status) ? mciAssignmentName(event.mci, staff.mciAssignment) : undefined;
   if (!name) return null;
+  const color = staff.mciAssignment?.color;
   return (
     <span
       className={`inline-flex max-w-full items-center truncate rounded-md border border-status-card-ring-red bg-status-card-red px-1.5 text-xs text-surface-light ${compact ? '' : 'mt-0.5'}`}
-      title={`MCI assignment: ${name}`}
+      title={`MCI assignment: ${name}${color ? `, treating ${color}` : ''}`}
       data-testid={`team-mci-chip-${staff.team}`}
     >
-      {name}
+      {color && <MciColorDot color={color} className="mr-1 shrink-0" />}
+      <span className="truncate">{name}</span>
     </span>
   );
 }

@@ -118,7 +118,7 @@ export default function MciTab({ event, actions, onOpenRoleLogins }: Props) {
     const zone = mci.zones.find((z) => !shapeOf(z) && !wasSkipped('zone', z.id));
     if (zone) return { kind: 'zone', id: zone.id, name: zone.name, venueZoneId: zone.venueZoneId };
     const area = mci.areas.find((a) => !a.clinicId && !shapeOf(a) && !wasSkipped('area', a.id));
-    return area ? { kind: 'area', id: area.id, name: area.name, venueZoneId: area.venueZoneId, color: area.color } : null;
+    return area ? { kind: 'area', id: area.id, name: area.name, venueZoneId: area.venueZoneId } : null;
   })();
   const chosenItem = drawChoice ? (drawChoice.kind === 'zone' ? mci.zones : mci.areas).find((x) => x.id === drawChoice.id) : undefined;
   const drawTarget: MciDrawTarget | null =
@@ -157,15 +157,13 @@ export default function MciTab({ event, actions, onOpenRoleLogins }: Props) {
   const handleMove = async (zoneId: string, areaId: string | undefined, counts: MciCounts) => {
     await actions.move(zoneId, areaId, counts);
   };
-  const areaOptions = derived.areas.map((a) => ({ id: a.area.id, name: a.name, ...(a.area.color ? { color: a.area.color } : {}) }));
-  // '' (picked on the card) means each color to its own tarp.
+  const areaOptions = derived.areas.map((a) => ({ id: a.area.id, name: a.name }));
   const quickMoveAreaOf = (zoneId: string): string | undefined => {
     const picked = quickTargets[zoneId];
-    if (picked !== undefined) return picked && mci.areas.some((a) => a.id === picked) ? picked : undefined;
-    return lastMoveArea(zoneId);
+    return picked && mci.areas.some((a) => a.id === picked) ? picked : lastMoveArea(zoneId);
   };
   const handleQuickMove = (zoneId: string, color: MciColor) => {
-    const area = mciRouteArea(mci, color, quickMoveAreaOf(zoneId));
+    const area = mciRouteArea(mci, quickMoveAreaOf(zoneId));
     if (area) void actions.move(zoneId, area.id, { [color]: 1 });
   };
 

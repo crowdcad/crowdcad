@@ -112,15 +112,12 @@ export default function CommandView({ mci, units }: { mci: MciState; units: MciU
   const areas = (
     <section className={PANEL}>
       <div className={PANEL_HEAD}>
-        <span className="text-lg font-bold">Treatment zones</span>
+        <span className="text-lg font-bold">Treatment locations</span>
       </div>
       <div className="grid gap-2.5 p-3 sm:grid-cols-2 xl:grid-cols-3">
         {derived.areas.map((a) => (
           <div key={a.area.id} className="flex flex-col gap-1.5 border border-surface-liner p-2.5">
-            <span className="flex items-center gap-2 text-lg font-bold">
-              {a.area.color && <span className={`h-3 w-3 ${MCI_PILL_STYLES[a.area.color].pill}`} aria-hidden />}
-              {a.name}
-            </span>
+            <span className="text-lg font-bold">{a.name}</span>
             <span className="text-base">
               <span className="font-mono">{a.inTreatmentTotal}</span> patients · <span className="font-mono">{a.patients.filter((p) => p.rank !== undefined).length}</span> waiting
             </span>

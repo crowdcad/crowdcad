@@ -7,7 +7,7 @@ const mci = (over: Partial<MciState> = {}): MciState => ({
   active: true,
   periods: [{ startedAt: 1 }],
   zones: [{ id: 'za', name: 'Zone A' }],
-  areas: [{ id: 'red', name: 'Red treatment', color: 'red' }],
+  areas: [{ id: 'red', name: 'Red treatment' }],
   log: [],
   ...over,
 });
@@ -95,12 +95,19 @@ describe('applyRoleAction', () => {
     expect(applyRoleAction(e, { type: 'counts', zoneId: 'za', deltas: { red: 1 } }, lead, 300).error).toMatch(/cannot/);
   });
 
-  it('moves each color to its own treatment zone when no location is given', () => {
-    let e = event({ mci: mci({ areas: [{ id: 'red', name: 'Red treatment', color: 'red' }, { id: 'green', name: 'Green treatment', color: 'green' }] }) });
+  it('moves to the first location when none is given, and any color anywhere', () => {
+    let e = event({ mci: mci({ areas: [{ id: 'a1', name: 'Tent 1' }, { id: 'a2', name: 'Tent 2' }] }) });
     e = apply(e, applyRoleAction(e, { type: 'counts', zoneId: 'za', deltas: { red: 1, green: 2 } }, alpha, 100, ids).patch);
-    e = apply(e, applyRoleAction(e, { type: 'move', zoneId: 'za', counts: { red: 1, green: 2 } }, alpha, 200, ids).patch);
-    const areas = deriveMci(e).areas;
-    expect(areas.map((a) => a.inTreatmentTotal)).toEqual([1, 2]);
-    expect(applyRoleAction(e, { type: 'move', zoneId: 'za', areaId: 'red', counts: { green: 1 } }, alpha, 300, ids).error).toMatch(/own color/);
+    e = apply(e, applyRoleAction(e, { type: 'move', zoneId: 'za', counts: { red: 1 } }, alpha, 200, ids).patch);
+    e = apply(e, applyRoleAction(e, { type: 'move', zoneId: 'za', areaId: 'a2', counts: { green: 2 } }, alpha, 300, ids).patch);
+    expect(deriveMci(e).areas.map((a) => a.inTreatmentTotal)).toEqual([1, 2]);
+  });
+
+  it('keeps a valid treating color on a treatment assignment and drops anything else', () => {
+    let e = apply(event(), applyRoleAction(event(), { type: 'assign', assignment: { kind: 'area', id: 'red', color: 'yellow' } }, alpha, 100, ids).patch);
+    expect(e.staff![0]!.mciAssignment).toEqual({ kind: 'area', id: 'red', color: 'yellow' });
+    const bogus = { kind: 'area', id: 'red', color: 'purple' } as unknown as Parameters<typeof applyRoleAction>[1] extends { assignment: infer A } ? A : never;
+    e = apply(e, applyRoleAction(e, { type: 'assign', assignment: bogus }, alpha, 200, ids).patch);
+    expect(e.staff![0]!.mciAssignment).toEqual({ kind: 'area', id: 'red' });
   });
 });

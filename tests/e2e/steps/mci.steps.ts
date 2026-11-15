@@ -7,7 +7,6 @@ const { When, Then } = createBdd(test);
 
 const capitalize = (word: string) => word.charAt(0).toUpperCase() + word.slice(1);
 
-const COLORS = ['red', 'yellow', 'green', 'black'] as const;
 
 /** Confirms the open declare dialog and closes the role logins offer that follows on Firebase. */
 async function confirmDeclare(page: import('@playwright/test').Page) {
@@ -33,15 +32,8 @@ async function openDeclare(page: import('@playwright/test').Page, zones: string[
 }
 
 When('I declare an MCI with zones {string} and {string} and the default clinic', async ({ page }, zoneA: string, zoneB: string) => {
-  const dialog = await openDeclare(page, [zoneA, zoneB]);
-  // The event's clinic is ticked by default; the color treatment zones are unticked so every move goes to it.
-  for (const color of COLORS) await dialog.getByTestId(`mci-declare-tarp-${color}`).click();
-  await confirmDeclare(page);
-});
-
-When('I declare an MCI with zone {string} and the color treatment zones', async ({ page }, zone: string) => {
-  await openDeclare(page, [zone]);
-  // A treatment zone per color is ticked by default.
+  // The event's clinic is ticked by default, so every move goes to it.
+  await openDeclare(page, [zoneA, zoneB]);
   await confirmDeclare(page);
 });
 

@@ -19,9 +19,9 @@ import {
 } from './mci';
 
 /**
- * Color-locked treatment zones (a tarp takes only its own color), re-declaring
- * after a stand-down (keep the earlier MCI, or archive it and start a new one)
- * and the Treatment Lead's transport order.
+ * Treatment locations (every one takes every color), re-declaring after a
+ * stand-down (keep the earlier MCI, or archive it and start a new one) and the
+ * Treatment Lead's transport order.
  */
 
 let seq = 0;
@@ -31,7 +31,7 @@ function base(over: Partial<Event> = {}): Event {
   return { id: 'e1', name: 'Drill', staff: [], supervisor: [], calls: [], clinics: [{ id: 'c1', name: 'Clinic' }], ...over } as unknown as Event;
 }
 
-/** Zone A, a red and a yellow tarp, and the clinic. */
+/** Zone A, two named treatment locations, and the clinic. */
 function declared(): Event {
   const e = base();
   return {
@@ -41,8 +41,8 @@ function declared(): Event {
       {
         zones: [{ id: 'za', name: 'Zone A' }],
         areas: [
-          { id: 'red', name: 'Red treatment', color: 'red' },
-          { id: 'yellow', name: 'Yellow treatment', color: 'yellow' },
+          { id: 'red', name: 'Red treatment' },
+          { id: 'yellow', name: 'Yellow treatment' },
           { id: 'c1', name: 'Clinic', clinicId: 'c1' },
         ],
       },
@@ -58,55 +58,49 @@ function apply(event: Event, write: { patch: Partial<Event>; error?: string }): 
 
 const areaStats = (e: Event, id: string) => deriveMci(e).areas.find((a) => a.area.id === id)!;
 
-describe('color treatment zones', () => {
-  it('routes each color to its tarp, a preferred location that takes it, or anywhere that takes any color', () => {
+describe('treatment locations', () => {
+  it('routes to the preferred location while it exists, else the first', () => {
     const mci = declared().mci!;
-    expect(mciRouteArea(mci, 'red')?.id).toBe('red');
-    expect(mciRouteArea(mci, 'yellow', 'red')?.id).toBe('yellow');
-    expect(mciRouteArea(mci, 'red', 'c1')?.id).toBe('c1');
-    // No green tarp: the clinic takes green.
-    expect(mciRouteArea(mci, 'green')?.id).toBe('c1');
-    expect(mciRouteArea({ areas: [{ id: 'red', color: 'red' as const }] }, 'green')).toBeUndefined();
+    expect(mciRouteArea(mci)?.id).toBe('red');
+    expect(mciRouteArea(mci, 'c1')?.id).toBe('c1');
+    expect(mciRouteArea(mci, 'gone')?.id).toBe('red');
+    expect(mciRouteArea({ areas: [] })).toBeUndefined();
   });
 
-  it('refuses a move or walk-in of the wrong color into a tarp', () => {
+  it('takes any color anywhere, by move or walk-in', () => {
     let e = declared();
     e = apply(e, tagPatch(e, 'za', 'yellow', 1, ctx()));
-    expect(movePatch(e, 'za', 'red', { yellow: 1 }, ctx()).error).toBe('wrong-color');
-    expect(arrivePatch(e, 'red', 'yellow', 1, ctx()).error).toBe('wrong-color');
-    expect(movePatch(e, 'za', 'c1', { yellow: 1 }, ctx()).error).toBeUndefined();
+    e = apply(e, movePatch(e, 'za', 'red', { yellow: 1 }, ctx()));
+    e = apply(e, arrivePatch(e, 'red', 'black', 1, ctx()));
+    expect(areaStats(e, 'red').inTreatment).toMatchObject({ yellow: 1, black: 1 });
   });
 
-  it('moves a mixed submission to each color tarp in one batch', () => {
+  it('moves a mixed submission to one location in one batch', () => {
     let e = declared();
     e = apply(e, tagPatch(e, 'za', 'red', 2, ctx()));
     e = apply(e, tagPatch(e, 'za', 'yellow', 1, ctx()));
-    e = apply(e, routedMovePatch(e, 'za', { red: 2, yellow: 1 }, undefined, ctx(2000)));
-    expect(areaStats(e, 'red').inTreatment.red).toBe(2);
-    expect(areaStats(e, 'yellow').inTreatment.yellow).toBe(1);
+    e = apply(e, routedMovePatch(e, 'za', { red: 2, yellow: 1 }, 'c1', ctx(2000)));
+    expect(areaStats(e, 'c1').inTreatment).toMatchObject({ red: 2, yellow: 1 });
     const moved = e.mci!.log.filter((x) => x.kind === 'moved');
     expect(new Set(moved.map((x) => x.batch)).size).toBe(1);
   });
 
-  it('quick moves prefer each color tarp until a location that takes any color is used', () => {
+  it('quick moves go where the zone last sent patients, else the first location', () => {
     let e = declared();
-    expect(mciQuickMoveArea(e.mci, 'za')).toBeUndefined();
+    expect(mciQuickMoveArea(e.mci, 'za')).toBe('red');
     e = apply(e, tagPatch(e, 'za', 'green', 1, ctx()));
     e = apply(e, movePatch(e, 'za', 'c1', { green: 1 }, ctx()));
     expect(mciQuickMoveArea(e.mci, 'za')).toBe('c1');
   });
 
-  it('moves a re-tagged patient to the tarp of their new color, or flags them when there is none', () => {
+  it('retriages a patient in place, and moves them anywhere on request', () => {
     let e = declared();
-    e = apply(e, arrivePatch(e, 'yellow', 'yellow', 2, ctx()));
-    const [first, second] = deriveMci(e).patients;
+    e = apply(e, arrivePatch(e, 'yellow', 'yellow', 1, ctx()));
+    const [first] = deriveMci(e).patients;
     e = apply(e, reassignPatientPatch(e, first.id, { color: 'red' }, undefined, ctx()));
-    expect(deriveMci(e).patients.find((p) => p.id === first.id)).toMatchObject({ areaId: 'red', color: 'red' });
-    e = apply(e, reassignPatientPatch(e, second.id, { color: 'green' }, undefined, ctx()));
-    const flagged = areaStats(e, 'yellow').patients.find((p) => p.id === second.id)!;
-    expect(flagged).toMatchObject({ color: 'green', misplaced: true });
-    // Moving them by hand to a tarp of another color is refused.
-    expect(reassignPatientPatch(e, second.id, { areaId: 'red' }, undefined, ctx()).error).toBe('wrong-color');
+    expect(deriveMci(e).patients.find((p) => p.id === first.id)).toMatchObject({ areaId: 'yellow', color: 'red' });
+    e = apply(e, reassignPatientPatch(e, first.id, { areaId: 'c1' }, undefined, ctx()));
+    expect(deriveMci(e).patients.find((p) => p.id === first.id)).toMatchObject({ areaId: 'c1', color: 'red' });
   });
 });
 

@@ -102,8 +102,7 @@ export function useMciActions(updateEvent: UpdateEvent, uid: string | undefined,
       if (outcome?.error === 'duplicate') toast.error(t('A zone or treatment location with that name already exists.'));
       if (outcome?.error === 'cannot-undo') toast.error(t('That entry can no longer be undone. Undo the later changes to that patient first.'));
       if (outcome?.error === 'unknown-patient') toast.error(t('That patient is no longer in the treatment location.'));
-      if (outcome?.error === 'wrong-color') toast.error(t('That treatment zone only takes patients of its own color.'));
-      if (outcome?.error === 'no-area') toast.error(t('There is no treatment zone for that color yet. Add one, or pick a location that takes any color.'));
+      if (outcome?.error === 'no-area') toast.error(t('Add a treatment location first.'));
       return outcome;
     },
     [updateEvent, uid, t]

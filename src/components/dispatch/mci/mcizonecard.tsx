@@ -87,17 +87,10 @@ function TaggedValue({ value, label, disabled, onCommit }: { value: number; labe
   );
 }
 
-const MATCHING = { id: '', name: 'Matching color' };
-
-/**
- * "+ moves to Clinic", with a menu to pick another location when there are several. With color tarps the
- * default is "Matching color": each color goes to its own tarp; picking a location that takes any color
- * sends every color there.
- */
+/** "+ moves to Clinic", with a menu to pick another location when there are several. */
 function QuickMoveTarget({ zoneName, areas, areaId, onChange }: { zoneName: string; areas: Props['areas']; areaId?: string; onChange: (areaId: string) => void }) {
-  const hasTarps = areas.some((a) => a.color);
-  const options = hasTarps ? [MATCHING, ...areas.filter((a) => !a.color)] : areas;
-  const current = options.find((a) => a.id === (areaId ?? '')) ?? (hasTarps ? MATCHING : undefined);
+  const options = areas;
+  const current = options.find((a) => a.id === areaId) ?? options[0];
   if (!current) return null;
   const label = <span className="truncate font-semibold text-surface-light">{current.name}</span>;
   return (
@@ -145,8 +138,7 @@ export default function MciZoneCard({
   const { t } = useDispatchTerms();
   const { zone } = stats;
   const name = zone.name;
-  // Each color's quick move goes where it may: the picked location, or that color's tarp.
-  const quickAreaFor = (color: MciColor) => mciRouteArea({ areas }, color, quickMoveAreaId);
+  const quickArea = mciRouteArea({ areas }, quickMoveAreaId);
 
   return (
     <section
@@ -219,9 +211,7 @@ export default function MciZoneCard({
                 </button>
               </div>
               <div className="flex items-center justify-center gap-1.5">
-                {!readOnly && (() => {
-                  const quickArea = quickAreaFor(color);
-                  return (
+                {!readOnly && (
                   <button
                     type="button"
                     disabled={!quickArea || stats.inZone[color] <= 0}
@@ -233,8 +223,7 @@ export default function MciZoneCard({
                   >
                     <Plus className="h-3.5 w-3.5" />
                   </button>
-                  );
-                })()}
+                )}
                 <span className="min-w-[1.5ch] text-center text-sm tabular-nums text-surface-light" data-testid={`mci-zone-${name}-${color}-moved`}>
                   {stats.moved[color]}
                 </span>

@@ -9,7 +9,7 @@ import type { MciColor } from '@/app/types';
 import { MCI_COLORS, sumCounts, type MciCounts } from '@/lib/mci';
 
 /** A treatment location as the MCI tab's pickers list it. A tarp (`color`) only takes patients of that color. */
-export type MciAreaOption = { id: string; name: string; color?: MciColor };
+export type MciAreaOption = { id: string; name: string };
 
 /** Hides a number input's spinner arrows. */
 export const NO_SPINNER = '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none';
