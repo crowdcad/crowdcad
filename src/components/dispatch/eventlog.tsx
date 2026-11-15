@@ -1,21 +1,20 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
-import { Button, Input } from '@heroui/react';
-import { CornerDownLeft } from 'lucide-react';
+import { Button, Dropdown, DropdownItem, DropdownMenu, DropdownSection, DropdownTrigger, Input } from '@heroui/react';
+import { ListFilter, Search } from 'lucide-react';
 import type { Event } from '@/app/types';
-import { addEventNote, eventLogRows } from '@/lib/eventLog';
+import { ALL_EVENT_LOG, EVENT_LOG_KINDS, EVENT_LOG_WINDOWS, eventLogRows, filterEventLog, type EventLogFilter, type EventLogKind } from '@/lib/eventLog';
 import { currentLog, isMciActive, undoneIds } from '@/lib/mci';
 import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
 import { describeMciEntry } from './mci/mcilogdrawer';
 import { MCI_INPUT_CLASSNAMES, formatClock } from './mci/mciparts';
 
-type UpdateEvent = (updates: Partial<Event> | ((current: Event) => Partial<Event>)) => Promise<void>;
-
 interface Row {
   key: string;
   t: number;
   source: string;
+  kind: EventLogKind;
   text: string;
   /** An MCI entry that can still be undone. */
   undoId?: string;
@@ -23,14 +22,55 @@ interface Row {
 }
 
 /**
- * The left panel's Log view: one running timeline, newest first, of every team, supervisor and call log
- * entry, every MCI log entry (with Undo while the MCI is active) and the notes typed here. Built from those
- * logs each time (src/lib/eventLog.ts), so edits in a team's or call's own log show here too. Enter adds a
- * note.
+ * The Log view's filter (beside the panel's section picker): which kinds of entries, and how recent.
  */
-export default function EventLog({ event, updateEvent, onUndoMci, readOnly = false }: { event: Event; updateEvent: UpdateEvent; onUndoMci: (entryId: string) => void; readOnly?: boolean }) {
+export function EventLogFilterButton({ filter, onChange }: { filter: EventLogFilter; onChange: (filter: EventLogFilter) => void }) {
+  const narrowed = filter.kinds.length < EVENT_LOG_KINDS.length || filter.windowMinutes > 0;
+  return (
+    <Dropdown placement="bottom-end">
+      <DropdownTrigger>
+        <Button isIconOnly size="sm" variant="flat" radius="full" aria-label="Filter the log" className={narrowed ? 'bg-accent/30 text-surface-light' : ''} data-testid="event-log-filter">
+          <ListFilter className="h-4 w-4" />
+        </Button>
+      </DropdownTrigger>
+      <DropdownMenu
+        aria-label="Filter the log"
+        closeOnSelect={false}
+        selectionMode="multiple"
+        selectedKeys={new Set([...filter.kinds, `window:${filter.windowMinutes}`])}
+        onAction={(key) => {
+          const k = String(key);
+          if (k.startsWith('window:')) return onChange({ ...filter, windowMinutes: Number(k.slice(7)) });
+          const kind = k as EventLogKind;
+          const kinds = filter.kinds.includes(kind) ? filter.kinds.filter((x) => x !== kind) : [...filter.kinds, kind];
+          onChange({ ...filter, kinds });
+        }}
+      >
+        <DropdownSection title="Show" showDivider>
+          {EVENT_LOG_KINDS.map((k) => (
+            <DropdownItem key={k.key}>{k.label}</DropdownItem>
+          ))}
+        </DropdownSection>
+        <DropdownSection title="When">
+          {EVENT_LOG_WINDOWS.map((w) => (
+            <DropdownItem key={`window:${w.minutes}`}>{w.label}</DropdownItem>
+          ))}
+        </DropdownSection>
+      </DropdownMenu>
+    </Dropdown>
+  );
+}
+
+/**
+ * The left panel's Log view: one running timeline, newest first, of every team, supervisor and call log
+ * entry, every MCI log entry (with Undo while the MCI is active) and notes from earlier events. Built from
+ * those logs each time (src/lib/eventLog.ts), so edits in a team's or call's own log show here too. The
+ * search takes keywords and/or a time range ("14:00-15:30"); the filter (EventLogFilterButton) picks kinds
+ * and how recent.
+ */
+export default function EventLog({ event, filter = ALL_EVENT_LOG, onUndoMci }: { event: Event; filter?: EventLogFilter; onUndoMci: (entryId: string) => void }) {
   const { t } = useDispatchTerms();
-  const [note, setNote] = useState('');
+  const [query, setQuery] = useState('');
   const { staff, supervisor, calls, eventLog, mci } = event;
 
   const rows = useMemo(() => {
@@ -46,6 +86,7 @@ export default function EventLog({ event, updateEvent, onUndoMci, readOnly = fal
           key: `mci:${entry.id}`,
           t: entry.t,
           source: entry.byUnit ?? 'MCI',
+          kind: 'mci',
           text: describeMciEntry(mci, entry),
           ...(active && entry.kind !== 'undo' && !isUndone ? { undoId: entry.id } : {}),
           ...(isUndone ? { undone: true } : {}),
@@ -54,35 +95,25 @@ export default function EventLog({ event, updateEvent, onUndoMci, readOnly = fal
     }
     return out.sort((a, b) => b.t - a.t);
   }, [staff, supervisor, calls, eventLog, mci]);
-
-  const submit = () => {
-    if (!note.trim()) return;
-    const text = note;
-    setNote('');
-    void updateEvent((current) => addEventNote(current, text, Date.now()));
-  };
+  const shown = useMemo(() => filterEventLog(rows, filter, query, Date.now(), formatClock), [rows, filter, query]);
 
   return (
     <div className="flex flex-col gap-2 px-2 py-2" data-testid="event-log">
-      {!readOnly && (
-        <Input
-          aria-label="Add a note to the log"
-          placeholder="Add a note…"
-          size="sm"
-          radius="lg"
-          value={note}
-          onValueChange={setNote}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') submit();
-          }}
-          classNames={MCI_INPUT_CLASSNAMES}
-          endContent={<CornerDownLeft className={`h-4 w-4 shrink-0 ${note.trim() ? 'text-surface-light' : 'text-surface-faint'}`} aria-hidden />}
-          data-testid="event-log-input"
-        />
-      )}
-      {rows.length === 0 && <p className="px-1 text-sm italic text-surface-faint">{t('No log entries')}</p>}
+      <Input
+        aria-label="Search the log"
+        placeholder="Search words or a time range (14:00-15:30)"
+        size="sm"
+        radius="lg"
+        isClearable
+        value={query}
+        onValueChange={setQuery}
+        classNames={MCI_INPUT_CLASSNAMES}
+        startContent={<Search className="h-4 w-4 shrink-0 text-surface-faint" aria-hidden />}
+        data-testid="event-log-search"
+      />
+      {shown.length === 0 && <p className="px-1 text-sm italic text-surface-faint">{rows.length ? 'Nothing matches.' : t('No log entries')}</p>}
       <ul className="flex flex-col divide-y divide-surface-liner">
-        {rows.map((r) => (
+        {shown.map((r) => (
           <li key={r.key} className="grid grid-cols-[auto_minmax(4.5rem,auto)_minmax(0,1fr)_auto] items-baseline gap-x-2 py-1.5 text-sm" data-testid="event-log-row">
             <span className="font-mono text-xs text-surface-faint">{formatClock(r.t)}</span>
             <span className="truncate font-bold text-surface-light">{r.source}</span>

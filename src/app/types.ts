@@ -129,7 +129,7 @@ export interface Event {
 
   /** Mass casualty incident (MCI) mode. Unset on events that never declared one. See src/lib/mci.ts. */
   mci?: MciState;
-  /** Notes typed into the dispatch board's Log view (src/lib/eventLog.ts), like a team's log: "HHMM - text". */
+  /** Notes typed into the dispatch board's Log view while it had a note box (it searches now); still shown there. "HHMM - text". */
   eventLog?: TeamLogEntry[];
 }
 

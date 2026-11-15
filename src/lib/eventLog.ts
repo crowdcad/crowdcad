@@ -1,18 +1,45 @@
 import type { Event, TeamLogEntry } from '@/app/types';
 
 /**
- * The dispatch board's running Log view: every team, supervisor and call log entry plus the notes typed into
- * the Log itself (`Event.eventLog`), in one timeline. It is rebuilt from those logs each time, so an edit made
- * in a team's or a call's own log shows here too. MCI log entries are added by the view (they need the MCI's
- * names to be described).
+ * The dispatch board's running Log view: every team, supervisor and call log entry plus the notes typed
+ * into the Log on earlier events (`Event.eventLog`), in one timeline. It is rebuilt from those logs each time,
+ * so an edit made in a team's or a call's own log shows here too. MCI log entries are added by the view (they
+ * need the MCI's names to be described). The view filters it by kind, a recent time window and a search
+ * (keywords and/or a time range, see `parseLogSearch`).
  */
+
+export type EventLogKind = 'team' | 'supervisor' | 'call' | 'mci' | 'note';
+
+export const EVENT_LOG_KINDS: { key: EventLogKind; label: string }[] = [
+  { key: 'team', label: 'Teams' },
+  { key: 'supervisor', label: 'Supervisors' },
+  { key: 'call', label: 'Calls' },
+  { key: 'mci', label: 'MCI' },
+  { key: 'note', label: 'Notes' },
+];
+
+/** Recent windows offered by the filter, in minutes (0: all). */
+export const EVENT_LOG_WINDOWS: { minutes: number; label: string }[] = [
+  { minutes: 0, label: 'All time' },
+  { minutes: 15, label: 'Last 15 min' },
+  { minutes: 60, label: 'Last hour' },
+  { minutes: 240, label: 'Last 4 hours' },
+];
+
+export interface EventLogFilter {
+  kinds: EventLogKind[];
+  /** Only entries from the last this many minutes; 0 for all. */
+  windowMinutes: number;
+}
+
+export const ALL_EVENT_LOG: EventLogFilter = { kinds: EVENT_LOG_KINDS.map((k) => k.key), windowMinutes: 0 };
 
 export interface EventLogRow {
   key: string;
   t: number;
   /** Who or what the entry is about: a team or supervisor name, "Call 12", or "Note". */
   source: string;
-  kind: 'team' | 'supervisor' | 'call' | 'note';
+  kind: EventLogKind;
   /** The entry without its leading "HHMM - " (the row shows the time itself). */
   text: string;
 }
@@ -20,12 +47,6 @@ export interface EventLogRow {
 /** Logs write "HHMM - what happened"; the view shows the time on its own. */
 export function stripLogTime(message: string): string {
   return message.replace(/^\d{4}\s*-\s*/, '');
-}
-
-/** "HHMM" for a log line, as every other log writes it. */
-export function logClock(ms: number): string {
-  const d = new Date(ms);
-  return d.getHours().toString().padStart(2, '0') + d.getMinutes().toString().padStart(2, '0');
 }
 
 export function eventLogRows(event: Pick<Event, 'staff' | 'supervisor' | 'calls' | 'eventLog'>): EventLogRow[] {
@@ -42,9 +63,55 @@ export function eventLogRows(event: Pick<Event, 'staff' | 'supervisor' | 'calls'
   return rows;
 }
 
-/** A note typed into the Log view, appended to `Event.eventLog`. */
-export function addEventNote(event: Pick<Event, 'eventLog'>, text: string, now: number): Partial<Event> {
-  const note = text.trim();
-  if (!note) return {};
-  return { eventLog: [...(event.eventLog || []), { timestamp: now, message: `${logClock(now)} - ${note}` }] };
+/** Minutes after midnight for "14:05", "1405" or "9" (an hour), else null. */
+function minutesOf(text: string): number | null {
+  const m = /^(\d{1,2})(?::?(\d{2}))?$/.exec(text);
+  if (!m) return null;
+  const h = Number(m[1]);
+  const min = m[2] ? Number(m[2]) : 0;
+  return h < 24 && min < 60 ? h * 60 + min : null;
+}
+
+/**
+ * A Log search: a time range anywhere in it ("14:00-15:30", "1400-1530", "9-10"; the end minute is included)
+ * and keywords, all of which must appear in the entry (its source, text or time), ignoring case.
+ */
+export function parseLogSearch(query: string): { from?: number; to?: number; words: string[] } {
+  let from: number | undefined;
+  let to: number | undefined;
+  const rest = query.replace(/(\d{1,2}(?::?\d{2})?)\s*(?:-|–|to)\s*(\d{1,2}(?::?\d{2})?)/i, (whole, a: string, b: string) => {
+    const start = minutesOf(a);
+    const end = minutesOf(b);
+    if (start === null || end === null) return whole;
+    from = start;
+    to = end;
+    return ' ';
+  });
+  const words = rest.toLowerCase().split(/\s+/).filter(Boolean);
+  return { ...(from !== undefined ? { from, to } : {}), words };
+}
+
+/** Rows that pass the filter and search, keeping their order. `clock` gives each row's time as shown, so it can be searched. */
+export function filterEventLog<R extends { t: number; source: string; text: string; kind: EventLogKind }>(
+  rows: R[],
+  filter: EventLogFilter,
+  query: string,
+  now: number,
+  clock: (ms: number) => string,
+): R[] {
+  const kinds = new Set(filter.kinds);
+  const since = filter.windowMinutes ? now - filter.windowMinutes * 60_000 : -Infinity;
+  const { from, to, words } = parseLogSearch(query);
+  return rows.filter((r) => {
+    if (!kinds.has(r.kind) || r.t < since) return false;
+    if (from !== undefined && to !== undefined) {
+      const d = new Date(r.t);
+      const m = d.getHours() * 60 + d.getMinutes();
+      // A range past midnight ("23:00-01:00") wraps.
+      if (from <= to ? m < from || m > to : m < from && m > to) return false;
+    }
+    if (!words.length) return true;
+    const hay = `${clock(r.t)} ${r.source} ${r.text}`.toLowerCase();
+    return words.every((w) => hay.includes(w));
+  });
 }

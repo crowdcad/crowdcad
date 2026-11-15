@@ -751,16 +751,20 @@ describe('patients in treatment locations', () => {
     const [a, b, c] = patientsOf(e, 'c1').map((p) => p.id);
     e = apply(e, setPatientPriorityPatch(e, a, 1));
     e = apply(e, setPatientPriorityPatch(e, b, 2));
-    // Putting c at 1 moves a to 2 and b to 3.
+    // c is yellow: put at 1 it still follows the reds (a priority only orders patients of one color).
     e = apply(e, setPatientPriorityPatch(e, c, 1));
-    expect(patientsOf(e, 'c1').map((p) => [p.id, p.rank])).toEqual([[c, 1], [a, 2], [b, 3]]);
-    // Beyond the end goes last.
-    e = apply(e, setPatientPriorityPatch(e, c, 9));
+    expect(patientsOf(e, 'c1').map((p) => [p.id, p.rank])).toEqual([[a, 1], [b, 2], [c, 3]]);
+    // Putting b at 1 moves a to 2.
+    e = apply(e, setPatientPriorityPatch(e, b, 1));
+    expect(patientsOf(e, 'c1').map((p) => [p.id, p.rank])).toEqual([[b, 1], [a, 2], [c, 3]]);
+    // Beyond the end goes last of its color.
+    e = apply(e, setPatientPriorityPatch(e, b, 9));
     expect(patientsOf(e, 'c1').map((p) => [p.id, p.rank])).toEqual([[a, 1], [b, 2], [c, 3]]);
     e = apply(e, transportPatientPatch(e, a, {}, ctx(3000)));
     expect(patientsOf(e, 'c1').map((p) => [p.id, p.rank])).toEqual([[b, 1], [c, 2]]);
     e = apply(e, setPatientPriorityPatch(e, b, null));
-    expect(patientsOf(e, 'c1').map((p) => [p.id, p.rank])).toEqual([[c, 1], [b, undefined]]);
+    // An unranked red still comes before a ranked yellow.
+    expect(patientsOf(e, 'c1').map((p) => [p.id, p.rank])).toEqual([[b, undefined], [c, 1]]);
     expect(e.mci!.patients![b]).toBeUndefined();
     expect(setPatientPriorityPatch(e, c, 0).error).toBe('invalid');
     expect(setPatientPriorityPatch(e, a, 1).error).toBe('unknown-patient');
@@ -805,9 +809,10 @@ describe('patients in treatment locations', () => {
     e = apply(e, tagPatch(e, 'zb', 'red', 1, ctx(2100)));
     e = apply(e, movePatch(e, 'zb', 'c1', { red: 1 }, ctx(2200)));
     e = apply(e, transportPatch(e, 'c1', { red: 2 }, { unit: 'A1' }, ctx(3000)));
+    // The two reds that arrived first (from za) left; the later red (zb) stays, ahead of the yellow.
     expect(patientsOf(e, 'c1').map((p) => [p.color, p.fromZoneId])).toEqual([
-      ['yellow', 'za'],
       ['red', 'zb'],
+      ['yellow', 'za'],
     ]);
   });
 

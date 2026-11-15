@@ -166,3 +166,10 @@ Requested by the maintainer after trying the role views.
 
 ### D33. Full screen hides the navbar
 - **What.** While a pane is full screen (`?focus=`, #138) the page sets `data-dispatch-focus` on `<html>` and one `globals.css` rule hides the navbar, so the tab fills the screen.
+
+### D34. Color leads the transport order; treating a color narrows the list
+- **Order.** Patients in a location go red, yellow, green, then black. A priority (typed rank or the Treatment Lead's arrows) only orders patients of the same color (`MCI_SEVERITY`, `byTransportOrder`), in every view.
+- **Treating.** A unit treating a color sees only that color's patients; it switches color to see and edit the others.
+
+### D35. Transport destination is required
+- **What.** Every transport (dialog, per-patient row, Transport role) needs a destination. The dialog offers the Logistics hospitals and takes any other name. A hospital's dropdown in Logistics lists each patient sent there (`hospitalPatients`).

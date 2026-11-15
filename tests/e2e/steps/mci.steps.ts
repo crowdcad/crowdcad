@@ -182,6 +182,8 @@ When('I transport {int} {string} patients from {string} in ambulance {string}', 
   } else {
     await dialog.getByTestId(`mci-transport-${color}`).fill(String(count));
   }
+  // A destination is required (any name; this one isn't on the hospital list). Filled last, so its suggestions never cover the patient list.
+  await dialog.getByTestId('mci-transport-destination').fill('County General');
   await dialog.getByTestId('mci-transport-confirm').click();
   await expect(dialog).not.toBeVisible();
 });
@@ -238,6 +240,7 @@ When('I mark {string} patient {int} in {string} transported in ambulance {string
   const box = patientBox(page, color, n, area);
   await box.getByTestId('mci-patient-transport').click();
   await box.getByTestId('mci-patient-transport-unit').fill(unit);
+  await box.getByTestId('mci-patient-transport-destination').fill('General');
   await box.getByTestId('mci-patient-transport-confirm').click();
 });
 

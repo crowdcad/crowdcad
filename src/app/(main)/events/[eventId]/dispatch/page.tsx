@@ -44,7 +44,8 @@ import MciAvailabilityStrip from '@/components/dispatch/mci/mciavailabilitystrip
 import MciTab from '@/components/dispatch/mci/mcitab';
 import MciToggleButton from '@/components/dispatch/mci/mcitogglebutton';
 import { useMciActions } from '@/components/dispatch/mci/usemciactions';
-import EventLog from '@/components/dispatch/eventlog';
+import EventLog, { EventLogFilterButton } from '@/components/dispatch/eventlog';
+import { ALL_EVENT_LOG, type EventLogFilter } from '@/lib/eventLog';
 import { hasMci, isMciActive, mciStatusPatch } from '@/lib/mci';
 import SurgeToggleButton from '@/components/dispatch/surgetogglebutton';
 import PanelTab from '@/components/dispatch/paneltab';
@@ -482,6 +483,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
   };
   const mciActions = useMciActions(updateEvent, authUser?.uid, { setLocal: setEvent, inFlight: mciWritesInFlight, trackedUnits: () => trackedUnitsRef.current });
   const [showDeclareMci, setShowDeclareMci] = useState(false);
+  const [logFilter, setLogFilter] = useState<EventLogFilter>(ALL_EVENT_LOG);
   // MCI Logistics' Logins section, opened by its own button or the MCI tab's.
   const [loginsOpen, setLoginsOpen] = useState(false);
 
@@ -3587,10 +3589,9 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     onDismissArrival: dismissArrival,
   };
 
-  // The Log view (left panel on desktop, under Teams on mobile).
-  const renderEventLog = () => (
-    <EventLog event={event} updateEvent={updateEvent} onUndoMci={(id) => void mciActions.undo(id)} readOnly={eventEnded} />
-  );
+  // The Log view (left panel on desktop, under Teams on mobile), and its filter in the panel header.
+  const renderEventLog = () => <EventLog event={event} filter={logFilter} onUndoMci={(id) => void mciActions.undo(id)} />;
+  const renderLogFilter = () => <EventLogFilterButton filter={logFilter} onChange={setLogFilter} />;
 
   // Plain render function (not a component) so the toolbar keeps its
   // identity across renders — see dispatchcontrols.tsx.
@@ -3635,7 +3636,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
             <SelectItem key="supervisors">{t('Supervisors')}</SelectItem>
             <SelectItem key="log">{t('Log')}</SelectItem>
           </Select>
-          {mobileTeamsSubTab !== 'log' && renderTeamActions(mobileTeamsSubTab)}
+          {mobileTeamsSubTab === 'log' ? renderLogFilter() : renderTeamActions(mobileTeamsSubTab)}
         </>
       );
     }
@@ -3910,7 +3911,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
         </Select>
 
         <div className="flex items-center gap-1.5">
-          {selectedLeftTab !== 'log' && renderTeamActions(selectedLeftTab as LeftPanelTab)}
+          {selectedLeftTab === 'log' ? renderLogFilter() : renderTeamActions(selectedLeftTab as LeftPanelTab)}
           {/* No full-screen button on this side; only a way out if a ?focus= link opened it full screen. */}
           {focusedPane === 'left' && (
             <FocusControls

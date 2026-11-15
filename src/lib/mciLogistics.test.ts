@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Event, IncomingTeam, MciState } from '@/app/types';
 import {
+  hospitalPatients,
   addHospital,
   addIncoming,
   arriveIncoming,
@@ -213,5 +214,27 @@ describe('hospitals', () => {
     // Typing the counted number back clears the correction.
     e = apply(e, updateHospital(e, 'h1', { sent: 2 }).patch);
     expect(e.mci!.logistics!.hospitals![0].sentAdjust).toBeUndefined();
+  });
+});
+
+describe('hospitalPatients', () => {
+  it('lists the patients transported to each hospital, newest first, matching names loosely', () => {
+    const mci = {
+      active: true,
+      periods: [{ startedAt: 1 }],
+      zones: [],
+      areas: [{ id: 'c1', name: 'Clinic' }],
+      log: [
+        { id: 'a', t: 100, kind: 'arrived', areaId: 'c1', color: 'red', n: 2 },
+        { id: 't1', t: 200, kind: 'transported', areaId: 'c1', color: 'red', n: 1, patientId: 'a:0', destination: 'general' },
+        { id: 't2', t: 300, kind: 'transported', areaId: 'c1', color: 'red', n: 1, patientId: 'a:1', destination: 'General ' },
+      ],
+      patients: { 'a:0': { age: '34', sex: 'M', complaint: 'chest pain' } },
+      logistics: { incoming: [], hospitals: [{ id: 'h1', name: 'General' }, { id: 'h2', name: 'Mercy' }] },
+    } as unknown as MciState;
+    const out = hospitalPatients(mci);
+    expect(out.get('h1')!.map((p) => p.id)).toEqual(['a:1', 'a:0']);
+    expect(out.get('h1')![1]!.details.complaint).toBe('chest pain');
+    expect(out.get('h2')).toBeUndefined();
   });
 });

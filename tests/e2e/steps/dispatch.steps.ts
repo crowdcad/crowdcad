@@ -177,11 +177,10 @@ When('I switch to the {string} section', async ({ page }, section: string) => {
   }
 });
 
-When('I add the note {string} in the Log view', async ({ page }, note: string) => {
+When('I search the Log view for {string}', async ({ page }, query: string) => {
   await page.locator('[aria-label="Select section"]').click();
   await page.getByRole('option', { name: 'Log', exact: true }).click();
-  await page.getByTestId('event-log-input').fill(note);
-  await page.getByTestId('event-log-input').press('Enter');
+  await page.getByTestId('event-log-search').fill(query);
 });
 
 Then('the Log view should show {string} from {string}', async ({ page }, text: string, source: string) => {

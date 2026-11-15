@@ -1,5 +1,5 @@
 import type { Event, EventEquipment, IncomingEta, IncomingTeam, MciHospital, MciLogistics, MciState, Staff, Supervisor } from '@/app/types';
-import { deriveMci, emptyCounts, MCI_COLORS, sumCounts, type MciCounts } from './mci';
+import { deriveMci, emptyCounts, MCI_COLORS, sumCounts, type MciCounts, type MciPatient } from './mci';
 import { newTeamId } from '@/lib/teamId';
 import { RESOLVED_CALL_STATUSES } from '@/lib/clinics';
 import { changedFleet, custodyOf, fleetOf, materializeEventEquipment, moveEquipment, returnEquipment, unitNames } from './equipmentCustody';
@@ -322,6 +322,23 @@ export function hospitalSentCounts(mci: MciState | undefined): Map<string, MciCo
       for (const color of MCI_COLORS) counts[color] += trip.counts[color];
     }
   }
+  return out;
+}
+
+/**
+ * The patients sent to each hospital (by transport destination), newest first, for the hospital's dropdown.
+ * Only patients transported one by one are known individually; a counted transport shows in the counts only.
+ */
+export function hospitalPatients(mci: MciState | undefined): Map<string, MciPatient[]> {
+  const out = new Map<string, MciPatient[]>();
+  const hospitals = mci?.logistics?.hospitals ?? [];
+  if (!mci || hospitals.length === 0) return out;
+  for (const p of deriveMci({ mci, calls: [], clinics: [] }).patients) {
+    if (p.transportedAt === undefined || !p.destination) continue;
+    const h = hospitals.find((x) => sameName(x.name, p.destination!));
+    if (h) out.set(h.id, [...(out.get(h.id) ?? []), p]);
+  }
+  for (const list of out.values()) list.sort((a, b) => b.transportedAt! - a.transportedAt!);
   return out;
 }
 
