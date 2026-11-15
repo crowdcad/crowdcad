@@ -1,6 +1,6 @@
 'use client';
 
-// Small pieces shared by the MCI tab's cards, the totals strip and the log drawer.
+// Small pieces shared by the MCI tab's cards, the totals strip and the log.
 
 import React from 'react';
 import { MapPin } from 'lucide-react';
@@ -8,7 +8,7 @@ import { Modal, ModalContent, type ModalProps } from '@heroui/react';
 import type { MciColor } from '@/app/types';
 import { MCI_COLORS, sumCounts, type MciCounts } from '@/lib/mci';
 
-/** A treatment location as the MCI tab's pickers list it. A tarp (`color`) only takes patients of that color. */
+/** A treatment location as the MCI tab's pickers list it. */
 export type MciAreaOption = { id: string; name: string };
 
 /** Hides a number input's spinner arrows. */

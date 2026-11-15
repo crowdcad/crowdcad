@@ -236,6 +236,8 @@ export const DISPATCH_TERMS: DispatchTerm[] = [
     'Go to Event Summary',
     // Mass casualty incident (MCI) mode.
     'MCI',
+    'MCI Patients',
+    'MCI Logistics',
     'Declare MCI',
     'Stand down',
     'Tagged',

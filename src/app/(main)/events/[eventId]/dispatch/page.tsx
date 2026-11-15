@@ -3865,8 +3865,8 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
   // The desktop board's two sides, shared by the split layout and the full-screen (focus) view (#138).
   const rightTabLabel =
     selectedRightTab === 'map' ? t('Map')
-    : selectedRightTab === 'mci' ? t('MCI')
-    : selectedRightTab === 'logistics' ? t('Logistics')
+    : selectedRightTab === 'mci' ? t('MCI Patients')
+    : selectedRightTab === 'logistics' ? t('MCI Logistics')
     : clinics.find((c) => c.id === selectedRightTab)?.name ?? t('Calls');
   const desktopLeftPane = (
     <div className="h-full rounded-xl flex flex-col">
@@ -3938,12 +3938,12 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
           <div className="flex items-end gap-1 min-w-0">
             {hasMci(event) && (
               <PanelTab active={selectedRightTab === 'mci'} onSelect={() => setSelectedRightTab('mci')} data-testid="mci-tab-button">
-                {t('MCI')}{isMciActive(event) ? '' : ' (ended)'}
+                {t('MCI Patients')}{isMciActive(event) ? '' : ' (ended)'}
               </PanelTab>
             )}
             {hasMci(event) && (
               <PanelTab active={selectedRightTab === 'logistics'} onSelect={() => setSelectedRightTab('logistics')} data-testid="logistics-tab-button">
-                {t('Logistics')}
+                {t('MCI Logistics')}
                 {(() => {
                   const list = event.mci?.logistics?.incoming ?? [];
                   const coming = list.filter((x) => x.state === 'incoming').length;
