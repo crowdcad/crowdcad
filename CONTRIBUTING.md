@@ -90,6 +90,7 @@ npm run test:e2e:pocketbase # PocketBase E2E
 ```
 
 - Add or update `.feature` files and step definitions under `tests/e2e/` for new features.
+- If the change touches a dispatcher-facing flow, check its training module still works (`npx vitest run src/training`, and `tests/e2e/features/training.feature`) and update or add steps for new features. See [`docs/TRAINING.md`](docs/TRAINING.md).
 - Follow the conventions in `docs/COMPONENTS.md` ("Tips"): no components declared inside other components, shared `*parts.tsx` modules for variants and pure helpers in `src/lib/`.
 
 ## Documentation
