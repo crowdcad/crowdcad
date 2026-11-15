@@ -2,6 +2,8 @@
 
 import React, { useMemo } from 'react';
 import { toast } from 'react-toastify';
+import { Button } from '@heroui/react';
+import { ChevronDown, KeyRound } from 'lucide-react';
 import type { Event } from '@/app/types';
 import { isMciActive } from '@/lib/mci';
 import { mciEquipmentFor } from '@/lib/mciDoc';
@@ -19,14 +21,13 @@ import {
   type LogisticsResult,
 } from '@/lib/mciLogistics';
 import LogisticsBoard, { type LogisticsHandlers } from './logisticsboard';
-import MciLog from './mcilogdrawer';
 import RoleLogins from './rolelogins';
 
 /**
- * The dispatcher's MCI Logistics tab (#139): who has which login, then the Logistics board (Equipment,
- * Hospitals, Incoming Staff) with the MCI log beside it on a wide screen (below it on a narrow one). The
- * board writes the event directly; the Logistics role login shows the same board (D27). Read-only once
- * the MCI stands down.
+ * The dispatcher's MCI Logistics tab (#139): the Logistics board (Equipment, Hospitals, Incoming Staff),
+ * with role logins behind a Logins button that opens them above the board. The board writes the event
+ * directly; the Logistics role login shows the same board (D27). The MCI log is in the left panel's Log
+ * view. Read-only once the MCI stands down.
  */
 
 type UpdateEvent = (updates: Partial<Event> | ((current: Event) => Partial<Event>)) => Promise<void>;
@@ -43,14 +44,17 @@ const ERRORS: Record<NonNullable<LogisticsResult['error']>, string> = {
 export default function LogisticsTab({
   event,
   updateEvent,
-  onUndo,
   logins,
+  loginsOpen = false,
+  onLoginsOpenChange,
 }: {
   event: Event;
   updateEvent: UpdateEvent;
-  onUndo: (entryId: string) => void;
   /** Role logins (#142): omitted where they aren't available (Lite, PocketBase). */
   logins?: { eventId: string; uid: string };
+  /** Whether the Logins section is open (the page keeps it, so the MCI tab's Logins button can open it). */
+  loginsOpen?: boolean;
+  onLoginsOpenChange?: (open: boolean) => void;
 }) {
   const readOnly = !isMciActive(event);
 
@@ -96,11 +100,25 @@ export default function LogisticsTab({
   if (!event.mci) return null;
   return (
     <div className="tab-scroll minimal-scrollbar flex min-h-0 flex-1 flex-col gap-4" data-testid="logistics-tab">
-      {logins && !readOnly && <RoleLogins eventId={logins.eventId} eventName={event.name} units={loginUnits} uid={logins.uid} />}
-      <div className="grid min-h-0 gap-4 2xl:grid-cols-[minmax(0,1fr)_24rem]">
-        <LogisticsBoard mci={event.mci} units={units} equipment={equipment} readOnly={readOnly} handlers={handlers} />
-        <MciLog mci={event.mci} readOnly={readOnly} onUndo={onUndo} className="max-h-[32rem] 2xl:max-h-[calc(100vh-12rem)]" />
-      </div>
+      {logins && !readOnly && (
+        <div className="flex flex-col gap-3">
+          <Button
+            size="sm"
+            variant="flat"
+            radius="lg"
+            className="self-end"
+            startContent={<KeyRound className="h-3.5 w-3.5" />}
+            endContent={<ChevronDown className={`h-3.5 w-3.5 transition-transform ${loginsOpen ? 'rotate-180' : ''}`} />}
+            onPress={() => onLoginsOpenChange?.(!loginsOpen)}
+            aria-expanded={loginsOpen}
+            data-testid="logistics-logins-toggle"
+          >
+            Logins
+          </Button>
+          {loginsOpen && <RoleLogins eventId={logins.eventId} eventName={event.name} units={loginUnits} uid={logins.uid} />}
+        </div>
+      )}
+      <LogisticsBoard mci={event.mci} units={units} equipment={equipment} readOnly={readOnly} handlers={handlers} />
     </div>
   );
 }

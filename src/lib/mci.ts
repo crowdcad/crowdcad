@@ -1233,14 +1233,6 @@ export function reopenZonePatch(event: Pick<Event, 'mci' | 'calls' | 'clinics'>,
   return { patch: { mci: appendMciEntries(event.mci, [makeEntry(ctx, { kind: 'zone_reopened', zoneId })]) } };
 }
 
-/** The entries the log drawer lists: newest first, with whether each can still be undone. */
-export function mciRecentEntries(mci: MciState | undefined, limit = Infinity): { entry: MciLogEntry; undone: boolean }[] {
-  if (!mci) return [];
-  const log = currentLog(mci);
-  const undone = undoneIds(log);
-  return [...log].reverse().slice(0, limit).map((entry) => ({ entry, undone: undone.has(entry.id) }));
-}
-
 /**
  * Appends a compensating entry. Refused when the entry is gone already, when undoing it would leave a zone
  * with negative patients, or when a later entry depends on it (a patient who was since retriaged, moved on

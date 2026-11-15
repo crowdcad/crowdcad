@@ -25,6 +25,13 @@ Feature: Dispatch board
     And I create a team named "Alpha" with a member "John Doe" certified as "CPR"
     Then the team "Alpha" should appear in the teams list
 
+  Scenario: The Log view gathers team logs and takes notes
+    When I open the add team modal
+    And I create a team named "Alpha" with a member "John Doe" certified as "CPR"
+    And I add the note "Gate B closed" in the Log view
+    Then the Log view should show "Gate B closed" from "Note"
+    And the Log view should show "created" from "Alpha"
+
   Scenario: A call without a team assigned shows Pending status
     When I open the quick call modal
     And I log a call with location "Parking Lot" and complaint "Laceration"

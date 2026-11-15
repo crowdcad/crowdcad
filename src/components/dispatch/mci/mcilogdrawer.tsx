@@ -1,17 +1,7 @@
-'use client';
-
-import React from 'react';
-import { Button } from '@heroui/react';
+// How an MCI log entry reads, for the dispatch Log view and the role views.
 import type { Event, MciLogEntry } from '@/app/types';
-import { mciAllAreas, mciAllZones, mciPatientLabel, mciRecentEntries } from '@/lib/mci';
-import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
-import { MCI_COLOR_STYLES, formatClock } from './mciparts';
-
-type Props = {
-  mci: NonNullable<Event['mci']>;
-  readOnly: boolean;
-  onUndo: (entryId: string) => void;
-};
+import { mciAllAreas, mciAllZones, mciPatientLabel } from '@/lib/mci';
+import { MCI_COLOR_STYLES } from './mciparts';
 
 /** "1 red (34 M chest pain)" for an entry about one patient. */
 function patientText(mci: NonNullable<Event['mci']>, entry: MciLogEntry, color: string): string {
@@ -53,35 +43,4 @@ export function describeMciEntry(mci: NonNullable<Event['mci']>, entry: MciLogEn
       return `Undid: ${target ? describeMciEntry(mci, target) : 'an earlier entry'}`;
     }
   }
-}
-
-/** The whole MCI log, newest first, scrolling in place, with Undo on each entry. Undo appends a compensating entry; nothing is deleted. */
-export default function MciLog({ mci, readOnly, onUndo, className = '' }: Props & { className?: string }) {
-  const { t } = useDispatchTerms();
-  const rows = mciRecentEntries(mci);
-  return (
-    <section className={`flex min-h-0 min-w-0 flex-col gap-1 ${className}`} aria-label="Log" data-testid="mci-log">
-      <h3 className="text-base font-bold text-surface-light">
-        Log <span className="text-sm font-normal text-surface-faint">({rows.length})</span>
-      </h3>
-      {rows.length === 0 && <p className="text-sm italic text-surface-faint">No entries yet</p>}
-      <ul className="minimal-scrollbar flex min-h-0 flex-1 flex-col divide-y divide-surface-liner overflow-y-auto">
-        {rows.map(({ entry, undone }) => (
-          <li key={entry.id} className="flex items-center justify-between gap-3 py-1 text-sm" data-testid="mci-log-entry">
-            <span className={`min-w-0 truncate ${undone || entry.kind === 'undo' ? 'text-surface-faint' : 'text-surface-light'} ${undone ? 'line-through' : ''}`}>
-              <span className="mr-2 tabular-nums text-surface-faint">{formatClock(entry.t)}</span>
-              {describeMciEntry(mci, entry)}
-              {entry.byUnit && <span className="ml-1 text-surface-faint" data-testid="mci-log-by">· {entry.byUnit}</span>}
-            </span>
-            {entry.kind !== 'undo' && !undone && !readOnly && (
-              <Button size="sm" variant="flat" radius="lg" onPress={() => onUndo(entry.id)} data-testid="mci-log-undo">
-                {t('Undo')}
-              </Button>
-            )}
-            {undone && <span className="text-xs text-surface-faint">Undone</span>}
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
 }

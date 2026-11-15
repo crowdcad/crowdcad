@@ -23,7 +23,7 @@ When('I declare an MCI and open the role logins', async ({ page }) => {
   await dialog.getByTestId('mci-declare-zone-add').click();
   await dialog.getByTestId('mci-declare-confirm').click();
   // Logins are in MCI Logistics, beside the log.
-  await page.getByTestId('mci-open-logistics').click();
+  await page.getByTestId('mci-open-logins').click();
   await expect(page.getByTestId('role-logins')).toBeVisible({ timeout: NAV_TIMEOUT });
 });
 
@@ -73,7 +73,9 @@ When('the other device picks zone {string} and submits {int} {string} after conf
 });
 
 Then('the dispatch MCI log should show an entry by {string}', async ({ page }, unit: string) => {
-  await expect(page.getByTestId('mci-log').getByTestId('mci-log-by').filter({ hasText: unit }).first()).toBeVisible({ timeout: NAV_TIMEOUT });
+  await page.locator('[aria-label="Select section"]').click();
+  await page.getByRole('option', { name: 'Log', exact: true }).click();
+  await expect(page.getByTestId('event-log-row').filter({ hasText: unit }).first()).toBeVisible({ timeout: NAV_TIMEOUT });
 });
 
 When('I disable the new role login', async ({ page }) => {

@@ -11,6 +11,7 @@ import type {
   Post,
   Staff,
   Supervisor,
+  TeamLogEntry,
   Zone,
 } from '@/app/types';
 import type { MapArea } from '@/lib/geo/types';
@@ -61,6 +62,7 @@ export interface LiteEventDraft {
   clinics?: Clinic[];
   dispatchZones?: DispatchZone[];
   mci?: MciState;
+  eventLog?: TeamLogEntry[];
   status: 'draft' | 'active';
   createdAt: string;
   updatedAt: string;
