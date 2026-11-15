@@ -4,7 +4,9 @@ import React, { lazy, Suspense, useCallback, useMemo, useState } from 'react';
 import type { Layer, Staff, Supervisor } from '@/app/types';
 import type { MciUnit } from '@/lib/mciDoc';
 import type { UnitTracking } from '@/lib/unitTracking';
+import { Moon, Sun } from 'lucide-react';
 import { authService } from '@/lib/services';
+import { useThemeToggle } from '@/components/layout/navbarshared';
 import VenueMapTab from '@/components/dispatch/venuemaptab';
 import { MapBackFab, MapFab } from './roleparts';
 
@@ -39,6 +41,7 @@ export default function RoleShell({
   headerExtra?: React.ReactNode;
 }) {
   const [mapOpen, setMapOpen] = useState(false);
+  const { isDarkTheme, toggleTheme } = useThemeToggle();
   const [tracking, setTracking] = useState<UnitTracking>({ positions: {}, alignments: {} });
   const [focusId, setFocusId] = useState(0);
   const onTracking = useCallback((t: UnitTracking) => setTracking(t), []);
@@ -50,13 +53,23 @@ export default function RoleShell({
   const youTracked = !!me;
 
   return (
-    <div className="flex min-h-[calc(100dvh-56px)] flex-col bg-surface-deepest text-surface-light">
-      <header className="flex items-center justify-between border-b border-surface-liner bg-surface-deep px-4 py-3">
+    <div className="flex min-h-dvh flex-col bg-surface-deepest text-surface-light">
+      {/* No site navbar on role pages: this bar stays at the top instead. */}
+      <header className="sticky top-0 z-30 flex items-center justify-between border-b border-surface-liner bg-surface-deep px-4 py-3">
         <h1 className="m-0 text-2xl font-bold" data-testid="role-title">
           {title}
         </h1>
         <div className="flex items-center gap-4">
           {headerExtra}
+          <button
+            type="button"
+            onClick={toggleTheme}
+            aria-label={isDarkTheme ? 'Switch to light mode' : 'Switch to dark mode'}
+            className="flex h-11 w-11 items-center justify-center rounded-circle text-surface-light hover:bg-surface-liner"
+            data-testid="role-theme-toggle"
+          >
+            {isDarkTheme ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+          </button>
           <button type="button" className="min-h-11 text-base text-accent" onClick={() => void authService.signOut()} data-testid="role-signout">
             Sign out
           </button>
@@ -78,8 +91,7 @@ export default function RoleShell({
         </Suspense>
       )}
       {mapOpen && (
-        // Below the site navbar (sticky, z-300), which would otherwise cover the top of the map.
-        <div className="fixed inset-x-0 bottom-0 top-14 z-40 flex flex-col bg-surface-deepest" data-testid="role-map">
+        <div className="fixed inset-0 z-40 flex flex-col bg-surface-deepest" data-testid="role-map">
           {youTracked && (
             <div className="flex items-center gap-2.5 border-b border-accent/40 bg-accent/10 px-4 py-2.5 text-base" data-testid="role-map-you">
               <span className="h-3.5 w-3.5 rounded-circle border-2 border-white bg-accent" aria-hidden />
