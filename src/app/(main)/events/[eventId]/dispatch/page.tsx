@@ -729,7 +729,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
 
 
   const handleSaveNewSupervisor = useCallback(async () => {
-    if (!event) return;
+    if (!event) return false;
 
     const callSign = teamName.trim();
     const cert = memberCert.trim();
@@ -738,13 +738,13 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
 
     if (!callSign) {
       alert('Supervisor Call Sign is required.');
-      return;
+      return false;
     }
 
     // Prevent duplicate call signs
     if (event.supervisor?.some(s => s.team.toLowerCase().trim() === callSign.toLowerCase())) {
       alert(`A supervisor with the call sign "${callSign}" already exists.`);
-      return;
+      return false;
     }
 
     // Build the single-line member string (name and certification may be empty)
@@ -768,14 +768,15 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
         supervisor: [...(event.supervisor || []), newSupervisor],
       });
 
-      // clear fields + close
+      // The dialog closes itself, or stays open for the next supervisor.
       setTeamName('');
       setMemberName('');
       setMemberCert('');
-      setShowAddSupervisorModal(false);
+      return true;
     } catch (error) {
       console.error('Error saving supervisor:', error);
       alert('Error saving supervisor. Please try again.');
+      return false;
     }
   }, [event, teamName, memberName, memberCert, updateEvent]);
 

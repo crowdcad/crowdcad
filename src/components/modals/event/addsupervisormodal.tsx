@@ -17,7 +17,8 @@ type Props = {
 
   // unify create/edit just like AddTeamModal
   mode?: "create" | "edit";
-  onSubmit: () => void;
+  /** Saves the form. Returning false (a refused save) leaves the dialog as it is; otherwise it closes, or resets for the next supervisor. */
+  onSubmit: () => boolean | void | Promise<boolean | void>;
   titleOverride?: string;
   submitLabelOverride?: string;
 
@@ -83,6 +84,21 @@ export default function AddSupervisorModal({
   const submitLabel = submitLabelOverride ?? (mode === "edit" ? t("Save Changes") : t("Create Supervisor"));
 
   const canSubmit = teamName.trim().length > 0;
+
+  const commitSave = async (addAnother: boolean) => {
+    if (submitting || !canSubmit) return;
+    const saved = teamName.trim();
+    let result: boolean | void;
+    try {
+      setSubmitting(true);
+      result = await Promise.resolve(onSubmit());
+    } finally {
+      setSubmitting(false);
+    }
+    if (result === false) return;
+    if (addAnother) setTeamName(getNextTeamName([...(existingNames ?? []), saved], "S1"));
+    else onClose();
+  };
 
   return (
     <Modal
@@ -170,16 +186,20 @@ export default function AddSupervisorModal({
               >
                 {t("Cancel")}
               </Button>
+              {mode === "create" && (
+                <Button
+                  onPress={() => void commitSave(true)}
+                  isDisabled={submitting || !canSubmit}
+                  variant="flat"
+                  radius="lg"
+                  className="px-4 py-2 text-surface-light bg-default/40 hover:bg-default/60"
+                  data-testid="supervisor-save-add-another"
+                >
+                  {t("Save & add another")}
+                </Button>
+              )}
               <Button
-                onPress={async () => {
-                  if (submitting || !canSubmit) return;
-                  try {
-                    setSubmitting(true);
-                    await Promise.resolve(onSubmit());
-                  } finally {
-                    setSubmitting(false);
-                  }
-                }}
+                onPress={() => void commitSave(false)}
                 radius="lg"
                 className="px-4 py-2 bg-accent hover:bg-accent/90 text-surface-light"
                 isDisabled={submitting || !canSubmit}

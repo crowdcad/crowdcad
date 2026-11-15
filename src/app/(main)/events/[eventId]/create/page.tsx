@@ -279,7 +279,7 @@ export default function EventCreation() {
   };
 
   const handleAddSamUnit = () => {
-    if (!samName.trim()) return;
+    if (!samName.trim()) return false;
     setEventData(prev => ({
       ...prev,
       supervisor: [...(prev.supervisor || []), newSupervisor(samName, samMemberName, samCert)]
@@ -287,7 +287,6 @@ export default function EventCreation() {
     setSamName('');
     setSamMemberName('');
     setSamCert('');
-    setIsSupervisorModalOpen(false);
   };
 
   const handleBulkImport = (staff: Staff[], supervisors: Supervisor[]) => {
