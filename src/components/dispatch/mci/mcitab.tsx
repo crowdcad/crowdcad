@@ -153,7 +153,7 @@ export default function MciTab({ event, actions, onOpenRoleLogins }: Props) {
     void actions.setTagged(zoneId, color, total);
   };
   const handleStandDown = () => {
-    if (!window.confirm('Stand down the MCI? Teams in Triage, Treatment or Unavailable return to Available. The counts are kept.')) return;
+    if (!window.confirm('Stand down the MCI? Teams in Triage, Treatment or Unavailable return to Available. Patients still in a treatment location move to the clinic tracker. The counts are kept.')) return;
     void actions.standDown();
   };
   const handleMove = async (zoneId: string, areaId: string | undefined, counts: MciCounts) => {

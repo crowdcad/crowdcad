@@ -415,7 +415,7 @@ export default function ClinicTrackingTable({
                     <DispatchMotionCell isOpen={isClinicCallVisible(call)} animate={isResolvedClinicCall} delayMs={motionDelayMs} className="px-3 py-2.5">
                       {(call.assignedTeam && call.assignedTeam.length > 0)
                         ? (Array.isArray(call.assignedTeam) ? call.assignedTeam.join(', ') : call.assignedTeam)
-                        : (call.detachedTeams?.map(d => d.team).join(', ') || t('Walkup'))}
+                        : (call.detachedTeams?.map(d => d.team).join(', ') || call.source || t('Walkup'))}
                     </DispatchMotionCell>
                   </td>
                   {/* Options Ellipsis */}

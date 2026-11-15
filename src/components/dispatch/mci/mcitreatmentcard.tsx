@@ -6,6 +6,7 @@ import { Button, Card, CardBody, CardHeader } from '@heroui/react';
 import type { MciColor } from '@/app/types';
 import type { MciAreaStats, MciPatient, MciPatientField } from '@/lib/mci';
 import { MCI_COLORS, mciPatientLabel } from '@/lib/mci';
+import { formatAgeSex } from '@/lib/ageSex';
 import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
 import DispatchMotionCell from '@/components/dispatch/motioncell';
 import { TRACKING_ROW_HOVER_CLASS, TRACKING_ROW_OPEN_CLASS } from '@/lib/statusColors';
@@ -244,6 +245,21 @@ export default function MciTreatmentCard({ stats, teams, readOnly, onTransport, 
                     {blackHere} black here (counts only)
                   </span>
                 )}
+              </div>
+            )}
+
+            {stats.regularCalls.length > 0 && (
+              <div className="flex flex-col gap-1" data-testid={`mci-area-clinic-patients-${name}`}>
+                <span className="text-xs font-bold text-surface-light">Clinic tracker patients ({stats.regularCalls.length})</span>
+                <ul className="flex flex-col divide-y divide-surface-liner text-xs">
+                  {stats.regularCalls.map((call) => (
+                    <li key={call.id} className="flex flex-wrap items-baseline gap-x-2 py-1">
+                      <span className="font-semibold text-surface-light">{[formatAgeSex(call.age, call.gender), call.chiefComplaint].filter(Boolean).join(' ') || 'No details'}</span>
+                      <span className="text-surface-faint">{call.assignedTeam?.length ? call.assignedTeam.join(', ') : call.source || 'Walkup'}</span>
+                      {call.outcome && <span className="text-surface-faint">{call.outcome}</span>}
+                    </li>
+                  ))}
+                </ul>
               </div>
             )}
 

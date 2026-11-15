@@ -1,4 +1,5 @@
 import type {
+  Call,
   Event,
   Layer,
   Post,
@@ -226,8 +227,10 @@ export interface MciAreaStats {
   patients: MciPatient[];
   /** Ambulance trips that left from here, newest first (see `mciTransportTrips`). */
   trips: MciTransportTrip[];
-  /** Unresolved regular clinic patients, 0 for an MCI-only area. */
+  /** Unresolved regular clinic patients (clinic tracker calls), 0 for an MCI-only area. */
   regular: number;
+  /** Those patients' calls, oldest first, so the location shows everyone in it. Empty for an MCI-only area. */
+  regularCalls: Call[];
   isClinic: boolean;
 }
 
@@ -259,25 +262,25 @@ export interface MciDerived {
 }
 
 /**
- * Counts unresolved clinic patients per clinic in one pass over the calls, for every clinic area at once.
+ * Groups unresolved clinic patients by clinic in one pass over the calls, for every clinic area at once.
  * Calls with no `clinicId` belong to the single or default clinic; with one clinic, every clinic call counts.
  */
-function regularClinicCounter(event: Pick<Event, 'calls' | 'clinics'>): (clinicId: string | undefined) => number {
+function regularClinicCalls(event: Pick<Event, 'calls' | 'clinics'>): (clinicId: string | undefined) => Call[] {
   const clinics = getEventClinics(event.clinics);
   const single = clinics.length <= 1;
   const defaultId = clinics[0]?.id;
-  const counts = new Map<string | undefined, number>();
+  const byClinic = new Map<string | undefined, Call[]>();
   for (const call of event.calls || []) {
     if (!call.clinic || isClinicCallResolved(call)) continue;
     const key = single ? undefined : call.clinicId ?? defaultId;
-    counts.set(key, (counts.get(key) ?? 0) + 1);
+    byClinic.set(key, [...(byClinic.get(key) ?? []), call]);
   }
-  return (clinicId) => (clinicId ? counts.get(single ? undefined : clinicId) ?? 0 : 0);
+  return (clinicId) => (clinicId ? byClinic.get(single ? undefined : clinicId) ?? [] : []);
 }
 
 /** Unresolved clinic patients at a clinic area. Calls with no `clinicId` belong to the single or default clinic. */
 export function regularClinicCount(event: Pick<Event, 'calls' | 'clinics'>, area: Pick<MciTreatmentArea, 'clinicId'>): number {
-  return regularClinicCounter(event)(area.clinicId);
+  return regularClinicCalls(event)(area.clinicId).length;
 }
 
 interface ZoneClearState {
@@ -496,7 +499,7 @@ export function deriveMci(event: Pick<Event, 'mci' | 'calls' | 'clinics'>): MciD
     else inArea.set(p.areaId, [p]);
   }
   const clinicNames = new Map(getEventClinics(event.clinics).map((c) => [c.id, c.name]));
-  const regularAt = regularClinicCounter(event);
+  const regularAt = regularClinicCalls(event);
 
   const areaStats = (area: MciTreatmentArea): MciAreaStats => {
     const received = { ...(replay.received.get(area.id) ?? emptyCounts()) };
@@ -519,7 +522,8 @@ export function deriveMci(event: Pick<Event, 'mci' | 'calls' | 'clinics'>): MciD
       inTreatmentTotal: sumCounts(inTreatment),
       patients,
       trips: trips.get(area.id) ?? [],
-      regular: regularAt(area.clinicId),
+      regular: regularAt(area.clinicId).length,
+      regularCalls: regularAt(area.clinicId),
       isClinic: !!area.clinicId,
     };
   };
@@ -761,11 +765,67 @@ function hhmm(ms: number): string {
   return d.getHours().toString().padStart(2, '0') + d.getMinutes().toString().padStart(2, '0');
 }
 
+/** The prefix of a clinic call made from an MCI patient, so a second stand down never imports them twice. */
+export const MCI_CLINIC_CALL_PREFIX = 'mci-';
+
+/**
+ * Clinic tracker calls for the MCI patients still in a treatment location, for further treatment on site.
+ * Each keeps what the MCI knew: age, sex, complaint (else the tag color), the tag color (red is Priority),
+ * where they are, and the source "MCI: <team>", naming the team that brought them in, else the unit whose
+ * phone logged them, else the zone they came from. Notes carry the zone, treatment notes and interventions.
+ * A clinic location's patients go to that clinic; an MCI-only location's to the event's default clinic,
+ * with the location as the call's Location. Patients already imported are skipped.
+ */
+export function mciClinicImports(event: Pick<Event, 'mci' | 'calls' | 'clinics'>, now: number): Call[] {
+  const mci = event.mci;
+  if (!mci) return [];
+  const derived = deriveMci(event);
+  const existing = new Set((event.calls || []).map((c) => c.id));
+  const entries = new Map(mci.log.map((e) => [e.id, e]));
+  const zoneName = (id?: string) => (id ? mciAllZones(mci).find((z) => z.id === id)?.name : undefined);
+  let order = Math.max(0, ...(event.calls || []).map((c) => (typeof c.order === 'number' ? c.order : 0)));
+  const out: Call[] = [];
+  for (const stats of derived.areas) {
+    for (const p of stats.patients) {
+      const id = `${MCI_CLINIC_CALL_PREFIX}${p.id}`;
+      if (p.transportedAt !== undefined || existing.has(id)) continue;
+      const d = p.details;
+      const color = p.color.charAt(0).toUpperCase() + p.color.slice(1);
+      const zone = zoneName(p.fromZoneId);
+      const loggedBy = entries.get(p.id.slice(0, p.id.lastIndexOf(':')))?.byUnit;
+      const who = d.team || loggedBy || zone || 'walk-in';
+      const notes = [
+        `MCI patient, ${color} tag${zone ? `, from ${zone}` : ''}${d.team ? `, brought in by ${d.team}` : ''}${loggedBy && loggedBy !== d.team ? `, logged by ${loggedBy}` : ''}.`,
+        d.interventions?.length ? `Interventions: ${d.interventions.map((i) => i.name).join(', ')}.` : '',
+        d.notes ? `Treatment notes: ${d.notes}` : '',
+      ].filter(Boolean).join(' ');
+      out.push({
+        id,
+        order: ++order,
+        status: 'Delivered',
+        location: stats.name,
+        assignedTeam: [],
+        chiefComplaint: d.complaint || `${color} tag`,
+        source: `MCI: ${who}`,
+        ...(d.age ? { age: d.age } : {}),
+        ...(d.sex ? { gender: d.sex } : {}),
+        priority: p.color === 'red',
+        clinic: true,
+        ...(stats.area.clinicId ? { clinicId: stats.area.clinicId } : {}),
+        notes,
+        log: [{ timestamp: now, message: `${hhmm(now)} - Imported from the MCI at stand down: ${color} tag at ${stats.name}, from ${who}` }],
+      });
+    }
+  }
+  return out;
+}
+
 /**
  * Closes the period, clears every unit's MCI assignment and returns units in
  * Triage, Treatment or Unavailable to Available. The data stays on the event.
  * A unit whose Location was set by its assignment goes back to its post; a
  * unit with live tracking (`tracked`, D66) keeps its tracked Location.
+ * Patients still in a treatment location become clinic tracker calls (`mciClinicImports`).
  */
 export function standDownMci(event: Event, now: number, tracked: ReadonlySet<string> = new Set()): Partial<Event> {
   const base = event.mci ?? emptyMci();
@@ -786,10 +846,12 @@ export function standDownMci(event: Event, now: number, tracked: ReadonlySet<str
     return next;
   };
 
+  const imports = mciClinicImports(event, now);
   return {
     mci: { ...base, active: false, periods },
     staff: (event.staff || []).map(reset),
     supervisor: (event.supervisor || []).map(reset),
+    ...(imports.length ? { calls: [...(event.calls || []), ...imports] } : {}),
   };
 }
 

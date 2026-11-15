@@ -18,6 +18,7 @@ import {
   routedMovePatch,
   standDownMci,
   tagPatch,
+  transportPatientPatch,
 } from './mci';
 
 /**
@@ -197,5 +198,35 @@ describe('treatment location points', () => {
     expect(e.venue!.layers![0]!.posts).toEqual(['Gate']);
     // Never a clinic.
     expect(mciPointOf(e.venue, 'red')?.post.isClinic).toBeUndefined();
+  });
+});
+
+describe('stand down hands remaining patients to the clinic tracker', () => {
+  it('imports each untransported patient once, with details, color priority and who brought them', () => {
+    let e = declared();
+    e = apply(e, tagPatch(e, 'za', 'red', 1, ctx()));
+    e = apply(e, tagPatch(e, 'za', 'green', 1, ctx()));
+    e = apply(e, movePatch(e, 'za', 'c1', { red: 1 }, ctx()));
+    e = apply(e, movePatch(e, 'za', 'yellow', { green: 1 }, ctx()));
+    e = apply(e, arrivePatch(e, 'red', 'yellow', 1, ctx()));
+    const [fromZone, , walkIn] = deriveMci(e).patients;
+    e = { ...e, mci: { ...e.mci!, patients: { [fromZone!.id]: { age: '34', sex: 'M', complaint: 'chest pain', team: 'Alpha' } } } } as Event;
+    // One leaves by ambulance before stand down.
+    e = apply(e, transportPatientPatch(e, walkIn!.id, { unit: 'A1' }, ctx()));
+
+    e = { ...e, ...standDownMci(e, 9000) } as Event;
+    const imported = (e.calls || []).filter((c) => c.id.startsWith('mci-'));
+    expect(imported).toHaveLength(2);
+    const chest = imported.find((c) => c.chiefComplaint === 'chest pain')!;
+    expect(chest).toMatchObject({ clinic: true, clinicId: 'c1', status: 'Delivered', priority: true, age: '34', gender: 'M', source: 'MCI: Alpha', location: 'Clinic' });
+    const green = imported.find((c) => c.chiefComplaint === 'Green tag')!;
+    // An MCI-only location: the default clinic, with the location as Location; no team recorded, so the zone.
+    expect(green).toMatchObject({ priority: false, location: 'Yellow treatment', source: 'MCI: Zone A' });
+    expect(green.clinicId).toBeUndefined();
+    expect(green.notes).toContain('from Zone A');
+    // A re-declare and second stand down does not import them again.
+    e = { ...e, ...declareMci(e, { zones: [], areas: [], mode: 'keep' }, 10000) } as Event;
+    e = { ...e, ...standDownMci(e, 11000) } as Event;
+    expect((e.calls || []).filter((c) => c.id.startsWith('mci-'))).toHaveLength(2);
   });
 });
