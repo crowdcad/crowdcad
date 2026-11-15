@@ -293,7 +293,7 @@ export default function VenueMapTab({
   };
 
   return (
-    <div className="flex h-full flex-col gap-2">
+    <div className="flex h-full flex-col gap-2" data-testid="venue-map-tab">
       <div className="flex shrink-0 items-center gap-2">
         {layers.length > 1 ? (
           <div className="flex shrink-0 items-center gap-1">
