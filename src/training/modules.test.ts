@@ -127,8 +127,8 @@ describe.each(MODULES.map((m) => [m.id, m] as const))('training module %s', (_id
 });
 
 describe('write gate', () => {
-  const module = MODULES[0];
-  const board = normalizeLiteDraftToEvent(module.seed());
+  const lesson = MODULES.find((m) => m.id === 'call-assignment')!;
+  const board = normalizeLiteDraftToEvent(lesson.seed());
 
   it('turns away text the script did not ask for', () => {
     const next = addCall(board, { location: 'Jane Doe, 42 Elm St', chiefComplaint: 'Chest pain' });
@@ -149,8 +149,8 @@ describe('write gate', () => {
 
   it('is off once the module unlocks, so free practice takes any text', () => {
     const next = addCall(board, { location: 'Riverbank Bench', chiefComplaint: 'Sprained ankle' });
-    expect(gateVerdict(module, { index: 1, unlocked: false, complete: false }, board, next).ok).toBe(false);
-    expect(gateVerdict(module, { index: 1, unlocked: true, complete: false }, board, next).ok).toBe(true);
-    expect(gateVerdict(module, { index: module.steps.length - 1, unlocked: false, complete: true }, board, next).ok).toBe(true);
+    expect(gateVerdict(lesson, { index: 1, unlocked: false, complete: false }, board, next).ok).toBe(false);
+    expect(gateVerdict(lesson, { index: 1, unlocked: true, complete: false }, board, next).ok).toBe(true);
+    expect(gateVerdict(lesson, { index: lesson.steps.length - 1, unlocked: false, complete: true }, board, next).ok).toBe(true);
   });
 });
