@@ -18,7 +18,6 @@ export const LOGI = {
   empty: 'text-sm italic text-surface-faint',
   link: 'text-xs text-surface-faint underline hover:text-surface-light',
   input: FIELD,
-  select: `${FIELD} pr-1`,
   primaryButton: `${BUTTON_BASE} bg-accent text-surface-light`,
   goodButton: `${BUTTON_BASE} bg-status-green/25 text-status-green hover:bg-status-green/35`,
   button: `${BUTTON_BASE} bg-surface-liner/60 text-surface-light hover:bg-surface-liner`,

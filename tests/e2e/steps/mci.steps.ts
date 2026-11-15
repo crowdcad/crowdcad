@@ -90,8 +90,10 @@ When('I add incoming team {string} and mark it arrived', async ({ page }, name: 
 });
 
 When('I give a {string} to {string} from the Logistics tab', async ({ page }, item: string, unit: string) => {
-  await page.getByTestId('logistics-give-item').selectOption(item);
-  await page.getByTestId('logistics-give-unit').selectOption(unit);
+  for (const [testId, value] of [['logistics-give-item', item], ['logistics-give-unit', unit]]) {
+    await page.getByTestId(testId).click();
+    await page.locator('[role="listbox"]').getByText(value, { exact: true }).click();
+  }
   await page.getByTestId('logistics-give-submit').click();
   await expect(page.getByTestId(`logistics-unit-${unit}`)).toContainText(item);
 });
