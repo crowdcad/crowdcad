@@ -28,6 +28,7 @@ import {
 } from "@heroui/react";
 
 import { Menu, Moon, UserRound, LogOut, Sun } from "lucide-react";
+import HelpButton from '@/components/training/HelpButton';
 import { LiveClock, LoginModalLazy, MobileMenuAccountItems, useThemeToggle } from '@/components/layout/navbarshared';
 
 export default function AppNavbar() {
@@ -241,6 +242,10 @@ export default function AppNavbar() {
                 )}
               />
             </div>
+
+            <NavbarItem>
+              <HelpButton />
+            </NavbarItem>
 
             <NavbarItem>
               <Button

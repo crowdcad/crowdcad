@@ -11,6 +11,7 @@ import type {
   Post,
   Staff,
   Supervisor,
+  SurgePeriod,
   TeamLogEntry,
   Zone,
 } from '@/app/types';
@@ -63,6 +64,12 @@ export interface LiteEventDraft {
   dispatchZones?: DispatchZone[];
   mci?: MciState;
   eventLog?: TeamLogEntry[];
+  /** 'tak' only for training events, which feed scripted positions (src/training); Lite itself has no TAK. */
+  mapMode?: 'standard' | 'tak';
+  /** The Surge button's state and every surge period, as on cloud events. */
+  manualSurgeActive?: boolean;
+  manualSurgeStartedAt?: number;
+  surgeLog?: SurgePeriod[];
   status: 'draft' | 'active';
   createdAt: string;
   updatedAt: string;
@@ -381,3 +388,23 @@ export async function updateLiteEquipmentStatus(
   await saveLiteEvent(updated);
   return updated;
 }
+
+/**
+ * The storage a Lite dispatch page reads and writes. Lite routes use the
+ * browser's IndexedDB (`indexedDbLiteStore`); Training gives the same page an
+ * in-memory store instead (src/training/memoryStore.ts), so nothing a trainee
+ * types is ever kept. `subscribe`, when given, tells the page about changes
+ * made outside it (a training step filled in for the trainee).
+ */
+export interface LiteEventStore {
+  get(eventId: string): Promise<LiteEventDraft | null>;
+  save(event: LiteEventDraft): Promise<void>;
+  delete(eventId: string): Promise<void>;
+  subscribe?(eventId: string, onChange: (event: LiteEventDraft | null) => void): () => void;
+}
+
+export const indexedDbLiteStore: LiteEventStore = {
+  get: getLiteEvent,
+  save: saveLiteEvent,
+  delete: deleteLiteEvent,
+};

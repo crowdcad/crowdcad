@@ -208,6 +208,7 @@ export default function ClinicTrackingTable({
         onClick={() => setShowResolvedClinicCalls(prev => !prev)}
         className="text-surface-faint text-base hover:text-surface-light"
         aria-label="Toggle resolved clinic calls"
+        data-testid="clinic-resolved-toggle"
       >
         {showResolvedClinicCalls ? t('Hide Resolved Clinic Calls') : t('Show Resolved Clinic Calls')}
       </button>
@@ -246,6 +247,7 @@ export default function ClinicTrackingTable({
                   return (
                 <tr
                   key={rowRenderKey}
+                  data-testid={`clinic-row-${callDisplayNumberMap.get(call.id)}`}
                   className={`cursor-pointer min-h-3.25rem rounded-none ${openRowBg(call)} ${isOpen || statusRowClass ? '' : `${TRACKING_ROW_HOVER_CLASS} transition-colors`} ${isResolvedClinicCall && !isClinicCallVisible(call) ? '[&>td]:!border-b-0 pointer-events-none' : ''} ${openClinicCallId === call.id ? '[&>td]:!border-b-0' : ''}`}
                   aria-hidden={isResolvedClinicCall && !isClinicCallVisible(call)}
                   onClick={(e) => {
@@ -377,6 +379,7 @@ export default function ClinicTrackingTable({
                               radius="full"
                               variant="light"
                               isDisabled={isResolvedClinicCall}
+                              data-testid={`clinic-status-${callDisplayNumberMap.get(call.id)}`}
                               className={`min-w-0 h-8 px-2 text-xs justify-start bg-transparent ${isResolvedClinicCall ? 'opacity-100 cursor-default' : 'hover:bg-surface-muted'}`}
                             >
                               <StatusLabel status={call.outcome || 'In Clinic'} text={t(call.outcome || 'In Clinic')} />
@@ -389,11 +392,11 @@ export default function ClinicTrackingTable({
                               onOutcomeChange(call.id, key as string);
                             }}
                           >
-                            <DropdownItem key="In Clinic">{t('In Clinic')}</DropdownItem>
-                            <DropdownItem key="Pending Transport">{getMenuLabel('Pending Transport', t)}</DropdownItem>
-                            <DropdownItem key="Transported">{getMenuLabel('Transported', t)}</DropdownItem>
-                            <DropdownItem key="AMA">{t('AMA')}</DropdownItem>
-                            <DropdownItem key="Discharged">{t('Discharged')}</DropdownItem>
+                            <DropdownItem key="In Clinic" data-testid="clinic-status-option-In Clinic">{t('In Clinic')}</DropdownItem>
+                            <DropdownItem key="Pending Transport" data-testid="clinic-status-option-Pending Transport">{getMenuLabel('Pending Transport', t)}</DropdownItem>
+                            <DropdownItem key="Transported" data-testid="clinic-status-option-Transported">{getMenuLabel('Transported', t)}</DropdownItem>
+                            <DropdownItem key="AMA" data-testid="clinic-status-option-AMA">{t('AMA')}</DropdownItem>
+                            <DropdownItem key="Discharged" data-testid="clinic-status-option-Discharged">{t('Discharged')}</DropdownItem>
                           </DropdownMenu>
                         </Dropdown>
                         {call.outcome && call.outcome !== 'Pending Transport' && (

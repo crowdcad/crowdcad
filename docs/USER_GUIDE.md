@@ -25,6 +25,15 @@ A short guide to CrowdCAD's main workflows for dispatchers, supervisors and even
 - The Lite **Map** step marks where the event is on the live map: find the place (or type coordinates such as `37.7694, -122.4862`) and click around the area. Locations and areas can then be placed on that map. The map needs an internet connection; everything else in Lite mode works offline. Map images, GIS import and live tracking are not available in Lite mode.
 - Use Lite mode to evaluate CrowdCAD, for training or when a small event has no network.
 
+## Training
+
+- Open `/training` for interactive modules that teach the dispatch board on a practice event: a tour of the board, the call flow, clinic patients and more, each with an estimated time.
+- A module guides you step by step and points at each control. "Do it for me" does a step for you, and the **Steps** menu restarts any section.
+- While a module is guided the board takes only the values the step asks you to type, so nobody types real patient details into a practice board. Once you finish, the board is yours to practise on freely.
+- Practice boards live only in the browser tab: nothing is saved or sent anywhere. Your progress through the modules is remembered in this browser.
+- The **?** button in the navbar finds the step for what you are trying to do. It can point at the control on your own board ("Show me", which never changes anything) or open the step as practice.
+- Maintainers: see [`TRAINING.md`](TRAINING.md) for how modules are built and tested.
+
 ## Basic concepts
 
 - **Venue:** a physical site with one or more map floors. A venue holds locations (posts and clinics), map areas and default equipment, and is reused across events.

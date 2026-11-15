@@ -22,7 +22,6 @@ import { useAuth } from '@/hooks/useauth';
 import { useAdmin } from '@/hooks/useAdmin';
 import { useCertifications } from '@/hooks/useCertifications';
 import { useLiteMode } from '@/lib/LiteContext';
-import { deleteLiteEvent, getLiteEvent, saveLiteEvent } from '@/lib/liteEventStore';
 import { Map as MapIcon, Users, BriefcaseMedical, HousePlus } from "lucide-react";
 import CrowdcadRadioIcon from "@/components/ui/crowdcad-radio-icon";
 import DispatchMotionCell from '@/components/dispatch/motioncell';
@@ -155,7 +154,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
   //   setPostAssignments(newAssignments);
   // };
   const { eventId } = use(params);
-  const { isLiteMode: layoutLiteMode } = useLiteMode();
+  const { isLiteMode: layoutLiteMode, store: liteStore, writeGate, tracking: liteTracking } = useLiteMode();
   const isLiteMode = layoutLiteMode;
   // Cloud events on Firebase keep MCI state in its own document (#143, src/lib/mciDoc.ts); Lite and PocketBase keep it inline.
   const mciDocMode = !isLiteMode && !isPocketbaseBackend;
@@ -173,6 +172,12 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
   const vocabularyTerms = dispatchVocabularyPreset.terms;
   const t = useCallback((key: string) => vocabularyTerms[key] ?? key, [vocabularyTerms]);
   const router = useRouter();
+
+  // Training: a scripted position feed stands in for the TAK agent on a Lite event.
+  useEffect(() => {
+    if (!isLiteMode || !liteTracking) return;
+    return liteTracking.subscribe(setUnitTracking);
+  }, [isLiteMode, liteTracking]);
 
   const wasSurgingRef = useRef(false);
   useEffect(() => {
@@ -378,7 +383,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
 
     if (isLiteMode) {
       try {
-        const currentDraft = await getLiteEvent(eventId);
+        const currentDraft = await liteStore.get(eventId);
         if (!currentDraft) {
           throw new Error('Lite event not found');
         }
@@ -400,8 +405,14 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
           ...removeUndefinedDeep(updates),
         } as Event;
 
+        // Training: a locked step can turn the write away (src/training/gate.ts); the board stays as it was.
+        if (writeGate && !writeGate(currentEvent, nextEvent)) {
+          setEvent((prev) => (prev ? { ...prev } : prev));
+          return;
+        }
+
         const nextDraft = toLiteDraftFromEvent(nextEvent, currentDraft);
-        await saveLiteEvent(nextDraft);
+        await liteStore.save(nextDraft);
 
         setEvent(nextEvent);
         setPostAssignments(nextEvent.postAssignments || {});
@@ -462,7 +473,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
       console.error("Update failed:", error);
       toast.error("Failed to save changes. Please try again.");
     }
-  }, [mciDocMode, eventId, isLiteMode]);
+  }, [mciDocMode, eventId, isLiteMode, liteStore, writeGate]);
 
   // MCI mode (src/lib/mci.ts): every write goes through updateEvent's functional form.
   const mciWritesInFlight = useRef(0);
@@ -2089,7 +2100,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
 
       const loadLiteEvent = async () => {
         try {
-          const draft = await getLiteEvent(eventId);
+          const draft = await liteStore.get(eventId);
           if (cancelled) return;
 
           if (!draft) {
@@ -2102,7 +2113,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
             draft.status === 'draft' ? { ...draft, status: 'active' as const } : draft;
 
           if (activeDraft !== draft) {
-            await saveLiteEvent(activeDraft);
+            await liteStore.save(activeDraft);
           }
 
           const normalizedEvent = normalizeLiteDraftToEvent(activeDraft);
@@ -2121,8 +2132,16 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
       };
 
       void loadLiteEvent();
+      // Changes made outside this page (a training step filled in for the trainee) arrive here.
+      const unsubscribe = liteStore.subscribe?.(eventId, (draft) => {
+        if (cancelled || !draft) return;
+        const next = normalizeLiteDraftToEvent(draft);
+        setEvent((prev) => (isEqual(prev, next) ? prev : next));
+        setPostAssignments(next.postAssignments || {});
+      });
       return () => {
         cancelled = true;
+        unsubscribe?.();
       };
     }
 
@@ -2184,7 +2203,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
       },
     );
     return () => unsubscribe();
-  }, [eventId, user, router, isAdmin, isLiteMode, mciDocMode]);
+  }, [eventId, user, router, isAdmin, isLiteMode, mciDocMode, liteStore]);
 
   // The MCI state document (#143): merged into the event as it changes.
   useEffect(() => {
@@ -3036,14 +3055,14 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     if (!confirmed) return;
 
     try {
-      await deleteLiteEvent(eventId);
+      await liteStore.delete(eventId);
       toast.success('Local event cleared.');
       router.push('/lite');
     } catch (error) {
       console.error('Failed to clear local event:', error);
       toast.error('Failed to clear local event. Please try again.');
     }
-  }, [isLiteMode, eventId, router]);
+  }, [isLiteMode, eventId, router, liteStore]);
 
   // Ticks every 30s so the "ended by the 1-hour-no-activity backup" state
   // (a pure function of wall-clock time against the event's own End Time,
@@ -3391,7 +3410,13 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
             </Suspense>
           ),
         }
-      : undefined;
+      : event.mapMode === 'tak' && isLiteMode && liteTracking
+        // Training: a scripted feed stands in for TAK (src/training/trackingFeed.ts); same positions shape, no server.
+        ? {
+            unitTracking: unitTracking ?? { positions: {}, alignments: {} },
+            chrome: typeof liteTracking.chrome === 'function' ? liteTracking.chrome({ event, layers: venueLayers, tracking: unitTracking }) : liteTracking.chrome,
+          }
+        : undefined;
 
   // TAK background work (call state, auto-linking) for the whole page, not only the Map tab.
   const takAgent =
@@ -3887,7 +3912,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     : selectedRightTab === 'logistics' ? t('MCI Logistics')
     : clinics.find((c) => c.id === selectedRightTab)?.name ?? t('Calls');
   const desktopLeftPane = (
-    <div className="h-full rounded-xl flex flex-col">
+    <div className="h-full rounded-xl flex flex-col" data-testid="left-panel">
       {/* Header with Select and Action Buttons */}
       <div className="flex w-full justify-between items-center pt-2 pb-2 border-b border-surface-liner shrink-0">
         <Select
@@ -3897,6 +3922,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
             setSelectedLeftTab(selected);
           }}
           aria-label="Select section"
+          data-testid="left-panel-select"
           className="w-auto min-w-[180px]"
           classNames={{
             trigger: "bg-surface-deep border border-surface-liner rounded-full hover:bg-surface-liner h-10 min-h-10",
@@ -3904,10 +3930,10 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
             popoverContent: "bg-surface-deep border-surface-liner",
           }}
         >
-          <SelectItem key="teams">{t('Teams')}</SelectItem>
-          <SelectItem key="supervisors">{t('Supervisors')}</SelectItem>
-          <SelectItem key="equipment">{t('Equipment')}</SelectItem>
-          <SelectItem key="log">{t('Log')}</SelectItem>
+          <SelectItem key="teams" data-testid="left-panel-option-teams">{t('Teams')}</SelectItem>
+          <SelectItem key="supervisors" data-testid="left-panel-option-supervisors">{t('Supervisors')}</SelectItem>
+          <SelectItem key="equipment" data-testid="left-panel-option-equipment">{t('Equipment')}</SelectItem>
+          <SelectItem key="log" data-testid="left-panel-option-log">{t('Log')}</SelectItem>
         </Select>
 
         <div className="flex items-center gap-1.5">
@@ -3954,7 +3980,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
   );
 
   const desktopRightPane = (
-    <div className="h-full flex flex-col overflow-hidden pt-2 pb-2">
+    <div className="h-full flex flex-col overflow-hidden pt-2 pb-2" data-testid="right-panel">
       <div className="w-full flex flex-col flex-1 min-h-0">
         <div className="relative z-0 mx-1.5 pb-0 flex items-start justify-between gap-1 h-10 shrink-0">
           <div className="flex items-end gap-1 min-w-0">
@@ -3976,7 +4002,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
                 })()}
               </PanelTab>
             )}
-            <PanelTab active={selectedRightTab === 'calls'} onSelect={() => setSelectedRightTab('calls')}>
+            <PanelTab active={selectedRightTab === 'calls'} onSelect={() => setSelectedRightTab('calls')} data-testid="calls-tab-button">
               {dispatchZones.length > 0 ? callZoneFilterLabel : t('Calls')} ({getActiveCallsForZoneSelection(callZoneFilter).length})
             </PanelTab>
 
@@ -3985,6 +4011,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
                 key={clinic.id}
                 active={selectedRightTab === clinic.id}
                 onSelect={() => setSelectedRightTab(clinic.id)}
+                data-testid={`clinic-tab-${clinic.id}`}
               >
                 {clinic.name} ({getClinicCalls(clinic.id).filter(c => !c.outcome).length})
               </PanelTab>
@@ -3996,6 +4023,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
                   active={selectedRightTab === 'map'}
                   onSelect={() => setSelectedRightTab('map')}
                   aria-label={t('Map')}
+                  data-testid="map-tab-button"
                 >
                   <MapIcon className="h-4 w-4" />
                 </PanelTab>
@@ -4157,6 +4185,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
                       variant="flat"
                       className="rounded-full bg-surface-deep border border-surface-liner hover:bg-surface-liner"
                       aria-label={t('Add Patient')}
+                      data-testid="clinic-add-patient"
                       onPress={() => setShowQuickClinicCallForm(true)}
                     >
                       {t('Add Patient')}

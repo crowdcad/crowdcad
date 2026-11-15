@@ -25,6 +25,7 @@ import {
 } from '@heroui/react';
 import { LogOut, Menu, Moon, Sun, UserRound } from 'lucide-react';
 import { LiveClock, LoginModalLazy, MobileMenuAccountItems, useThemeToggle } from '@/components/layout/navbarshared';
+import HelpButton from '@/components/training/HelpButton';
 
 const liteNavItems = [
   { label: 'Lite Home', href: '/lite' },
@@ -210,6 +211,10 @@ export default function LiteNavbar() {
                 )}
               />
             </div>
+
+            <NavbarItem>
+              <HelpButton />
+            </NavbarItem>
 
             <NavbarItem>
               <Button

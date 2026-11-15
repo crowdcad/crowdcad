@@ -6,6 +6,7 @@ import { ChevronUp, Link2Off, Radio } from 'lucide-react';
 import DispatchMotionCell from '@/components/dispatch/motioncell';
 import type { Event, Layer } from '@/app/types';
 import { refreshAlignments, useTakEvent } from '../data/hub';
+import { useTakDemo } from '../data/demo';
 import { PREF, usePref } from '@/lib/geo/prefs';
 import { alignmentFor, alignmentMatches, copyVenueAlignmentsToEvent, takMapStatus } from '../data/alignmentStore';
 import {
@@ -50,6 +51,8 @@ function ago(ms: number, now: number): string {
 
 export default function TakEventPanel({ eventId, event, uid, isOwner, layers }: TakEventPanelProps) {
   const tak = useTakEvent(eventId);
+  // Training's practice data (../data/demo.ts): writes go to it, never to a server.
+  const demo = useTakDemo();
   const [open, setOpen] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const [bridges, setBridges] = useState<TakBridge[]>([]);
@@ -72,8 +75,9 @@ export default function TakEventPanel({ eventId, event, uid, isOwner, layers }: 
   const bridgeUid = config?.bridgeUid ?? null;
 
   useEffect(() => {
+    if (demo) return setBridges(demo.bridges);
     if (isOwner) void listAllowedBridges(uid).then(setBridges).catch(() => setBridges([]));
-  }, [isOwner, uid]);
+  }, [isOwner, uid, demo]);
 
   const updateConfig = async (patch: Partial<TakEventConfig>) => {
     setError(null);
@@ -84,6 +88,7 @@ export default function TakEventPanel({ eventId, event, uid, isOwner, layers }: 
       historyMode: config?.historyMode ?? 'summary',
       ...patch,
     };
+    if (demo) return demo.saveConfig(next);
     try {
       if (patch.bridgeUid === null && config?.bridgeUid) await clearLive(eventId);
       await saveEventConfig(eventId, next);
@@ -94,6 +99,7 @@ export default function TakEventPanel({ eventId, event, uid, isOwner, layers }: 
 
   const manualLink = async (deviceUid: string, teamId: string, callsign?: string) => {
     setError(null);
+    if (demo) return demo.linkDevice(deviceUid, teamId);
     try {
       await linkDevice(eventId, deviceUid, teamId, 'manual', uid);
       const team = teams.find((t) => t.id === teamId);
@@ -150,6 +156,7 @@ export default function TakEventPanel({ eventId, event, uid, isOwner, layers }: 
         onClick={() => setOpen((o) => !o)}
         className="flex items-center gap-2 rounded-full border border-surface-liner bg-surface-deepest/95 px-3 py-1.5 text-xs shadow"
         aria-expanded={open}
+        data-testid="tak-panel-toggle"
       >
         <span className={`h-2 w-2 rounded-full ${dotClass}`} aria-hidden />
         <span className="font-semibold">TAK</span>
@@ -167,7 +174,7 @@ export default function TakEventPanel({ eventId, event, uid, isOwner, layers }: 
 
       {/* Opens and closes with the team cards' expand animation (DispatchMotionCell); kept mounted so it can animate out. */}
       <DispatchMotionCell isOpen={open} animate>
-        <div inert={!open} className="minimal-scrollbar mt-2 max-h-[60vh] space-y-3 overflow-y-auto overflow-x-hidden rounded-lg border border-surface-liner bg-surface-deepest/95 p-3 text-sm shadow-lg">
+        <div inert={!open} data-testid="tak-panel" className="minimal-scrollbar mt-2 max-h-[60vh] space-y-3 overflow-y-auto overflow-x-hidden rounded-lg border border-surface-liner bg-surface-deepest/95 p-3 text-sm shadow-lg">
           <section>
             <p>
               {!bridgeUid
@@ -262,6 +269,7 @@ export default function TakEventPanel({ eventId, event, uid, isOwner, layers }: 
                   <Select
                     size="sm"
                     aria-label={`Team for ${p.callsign || p.deviceUid}`}
+                    data-testid={`tak-assign-${p.deviceUid}`}
                     placeholder="Assign to team"
                     className="w-40"
                     onSelectionChange={(keys) => {
@@ -270,7 +278,7 @@ export default function TakEventPanel({ eventId, event, uid, isOwner, layers }: 
                     }}
                   >
                     {teams.map((t) => (
-                      <SelectItem key={t.id}>{t.kind === 'equipment' ? `${t.name} (equipment)` : t.name}</SelectItem>
+                      <SelectItem key={t.id} data-testid={`tak-assign-option-${t.id}`}>{t.kind === 'equipment' ? `${t.name} (equipment)` : t.name}</SelectItem>
                     ))}
                   </Select>
                 </div>
@@ -281,12 +289,12 @@ export default function TakEventPanel({ eventId, event, uid, isOwner, layers }: 
                   {tak.links.map((l) => {
                     const p = tak.live.find((x) => x.deviceUid === l.deviceUid);
                     return (
-                      <div key={l.deviceUid} className="flex items-center justify-between gap-2">
+                      <div key={l.deviceUid} className="flex items-center justify-between gap-2" data-testid={`tak-linked-${l.deviceUid}`}>
                         <span className="truncate">
                           {p?.callsign || l.deviceUid} → {teamName(l.teamId)}{' '}
                           <span className="text-surface-faint">({l.method})</span>
                         </span>
-                        <Button isIconOnly size="sm" variant="light" aria-label="Unlink device" onPress={() => void unlinkDevice(eventId, l.deviceUid)}>
+                        <Button isIconOnly size="sm" variant="light" aria-label="Unlink device" onPress={() => (demo ? demo.unlinkDevice(l.deviceUid) : void unlinkDevice(eventId, l.deviceUid))}>
                           <Link2Off className="h-4 w-4" />
                         </Button>
                       </div>

@@ -246,6 +246,7 @@ export function TeamStatusSelect({
   return (
     <Select
       aria-label="Status"
+      data-testid={`unit-status-${staff.team}`}
       selectedKeys={new Set([staff.status ?? ''])}
       onSelectionChange={(keys) => {
         const val = Array.from(keys as Set<string>)[0] || '';
@@ -280,7 +281,7 @@ export function TeamStatusSelect({
       classNames={{ base: 'min-w-0', trigger: pillClass }}
     >
       {statusOptions.map((s) => (
-        <SelectItem key={s}>
+        <SelectItem key={s} data-testid={`unit-status-option-${s}`}>
           {isEquipmentIconStatus(s) && teamEquipmentNames
             ? getEquipmentStatusMenuLabel(s, teamEquipmentNames)
             : t(s)}
@@ -295,9 +296,10 @@ function TrackedLocation({ location }: { location: string }) {
   const { t } = useDispatchTerms();
   return (
     <div
-      className="flex h-8 min-w-0 items-center gap-1 rounded-full border border-surface-liner bg-surface-deep px-3 text-sm text-surface-light"
+      className="flex h-10 min-h-10 min-w-0 items-center gap-1 rounded-full border border-surface-liner bg-surface-deep px-3 text-sm text-surface-light"
       title={`${location || t('No location')} (live from TAK; not editable while connected)`}
       aria-label="Location (live)"
+      data-testid="unit-live-location"
     >
       <Radio className="h-[18px] w-[18px] shrink-0 text-status-green" aria-hidden />
       <span className="min-w-0 truncate pl-1">{location || t('No location')}</span>

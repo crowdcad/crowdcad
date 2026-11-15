@@ -128,7 +128,7 @@ export default function ClinicWalkupModal({
     >
       <ModalContent>
         {(close) => (
-          <form onSubmit={handleSubmit}>
+          <form onSubmit={handleSubmit} data-testid="clinic-walkup-modal">
             <ModalHeader className="text-2xl font-bold text-surface">
               {t('Add Clinic Walkup')}
             </ModalHeader>
