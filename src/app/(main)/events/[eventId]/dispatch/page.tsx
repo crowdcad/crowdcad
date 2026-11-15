@@ -22,7 +22,6 @@ import { useAuth } from '@/hooks/useauth';
 import { useAdmin } from '@/hooks/useAdmin';
 import { useCertifications } from '@/hooks/useCertifications';
 import { useLiteMode } from '@/lib/LiteContext';
-import { deleteLiteEvent, getLiteEvent, saveLiteEvent } from '@/lib/liteEventStore';
 import { Map as MapIcon, Users, BriefcaseMedical, HousePlus } from "lucide-react";
 import CrowdcadRadioIcon from "@/components/ui/crowdcad-radio-icon";
 import DispatchMotionCell from '@/components/dispatch/motioncell';
@@ -155,7 +154,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
   //   setPostAssignments(newAssignments);
   // };
   const { eventId } = use(params);
-  const { isLiteMode: layoutLiteMode } = useLiteMode();
+  const { isLiteMode: layoutLiteMode, store: liteStore, writeGate, tracking: liteTracking } = useLiteMode();
   const isLiteMode = layoutLiteMode;
   // Cloud events on Firebase keep MCI state in its own document (#143, src/lib/mciDoc.ts); Lite and PocketBase keep it inline.
   const mciDocMode = !isLiteMode && !isPocketbaseBackend;
@@ -173,6 +172,12 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
   const vocabularyTerms = dispatchVocabularyPreset.terms;
   const t = useCallback((key: string) => vocabularyTerms[key] ?? key, [vocabularyTerms]);
   const router = useRouter();
+
+  // Training: a scripted position feed stands in for the TAK agent on a Lite event.
+  useEffect(() => {
+    if (!isLiteMode || !liteTracking) return;
+    return liteTracking.subscribe(setUnitTracking);
+  }, [isLiteMode, liteTracking]);
 
   const wasSurgingRef = useRef(false);
   useEffect(() => {
@@ -378,7 +383,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
 
     if (isLiteMode) {
       try {
-        const currentDraft = await getLiteEvent(eventId);
+        const currentDraft = await liteStore.get(eventId);
         if (!currentDraft) {
           throw new Error('Lite event not found');
         }
@@ -400,8 +405,14 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
           ...removeUndefinedDeep(updates),
         } as Event;
 
+        // Training: a locked step can turn the write away (src/training/gate.ts); the board stays as it was.
+        if (writeGate && !writeGate(currentEvent, nextEvent)) {
+          setEvent((prev) => (prev ? { ...prev } : prev));
+          return;
+        }
+
         const nextDraft = toLiteDraftFromEvent(nextEvent, currentDraft);
-        await saveLiteEvent(nextDraft);
+        await liteStore.save(nextDraft);
 
         setEvent(nextEvent);
         setPostAssignments(nextEvent.postAssignments || {});
@@ -462,7 +473,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
       console.error("Update failed:", error);
       toast.error("Failed to save changes. Please try again.");
     }
-  }, [mciDocMode, eventId, isLiteMode]);
+  }, [mciDocMode, eventId, isLiteMode, liteStore, writeGate]);
 
   // MCI mode (src/lib/mci.ts): every write goes through updateEvent's functional form.
   const mciWritesInFlight = useRef(0);
@@ -2089,7 +2100,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
 
       const loadLiteEvent = async () => {
         try {
-          const draft = await getLiteEvent(eventId);
+          const draft = await liteStore.get(eventId);
           if (cancelled) return;
 
           if (!draft) {
@@ -2102,7 +2113,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
             draft.status === 'draft' ? { ...draft, status: 'active' as const } : draft;
 
           if (activeDraft !== draft) {
-            await saveLiteEvent(activeDraft);
+            await liteStore.save(activeDraft);
           }
 
           const normalizedEvent = normalizeLiteDraftToEvent(activeDraft);
@@ -2121,8 +2132,16 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
       };
 
       void loadLiteEvent();
+      // Changes made outside this page (a training step filled in for the trainee) arrive here.
+      const unsubscribe = liteStore.subscribe?.(eventId, (draft) => {
+        if (cancelled || !draft) return;
+        const next = normalizeLiteDraftToEvent(draft);
+        setEvent((prev) => (isEqual(prev, next) ? prev : next));
+        setPostAssignments(next.postAssignments || {});
+      });
       return () => {
         cancelled = true;
+        unsubscribe?.();
       };
     }
 
@@ -2184,7 +2203,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
       },
     );
     return () => unsubscribe();
-  }, [eventId, user, router, isAdmin, isLiteMode, mciDocMode]);
+  }, [eventId, user, router, isAdmin, isLiteMode, mciDocMode, liteStore]);
 
   // The MCI state document (#143): merged into the event as it changes.
   useEffect(() => {
@@ -3036,14 +3055,14 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     if (!confirmed) return;
 
     try {
-      await deleteLiteEvent(eventId);
+      await liteStore.delete(eventId);
       toast.success('Local event cleared.');
       router.push('/lite');
     } catch (error) {
       console.error('Failed to clear local event:', error);
       toast.error('Failed to clear local event. Please try again.');
     }
-  }, [isLiteMode, eventId, router]);
+  }, [isLiteMode, eventId, router, liteStore]);
 
   // Ticks every 30s so the "ended by the 1-hour-no-activity backup" state
   // (a pure function of wall-clock time against the event's own End Time,
@@ -3391,7 +3410,10 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
             </Suspense>
           ),
         }
-      : undefined;
+      : event.mapMode === 'tak' && isLiteMode && liteTracking
+        // Training: a scripted feed stands in for TAK (src/training/trackingFeed.ts); same positions shape, no server.
+        ? { unitTracking: unitTracking ?? { positions: {}, alignments: {} }, chrome: liteTracking.chrome }
+        : undefined;
 
   // TAK background work (call state, auto-linking) for the whole page, not only the Map tab.
   const takAgent =
