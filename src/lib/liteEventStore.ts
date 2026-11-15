@@ -11,6 +11,7 @@ import type {
   Post,
   Staff,
   Supervisor,
+  SurgePeriod,
   TeamLogEntry,
   Zone,
 } from '@/app/types';
@@ -65,6 +66,10 @@ export interface LiteEventDraft {
   eventLog?: TeamLogEntry[];
   /** 'tak' only for training events, which feed scripted positions (src/training); Lite itself has no TAK. */
   mapMode?: 'standard' | 'tak';
+  /** The Surge button's state and every surge period, as on cloud events. */
+  manualSurgeActive?: boolean;
+  manualSurgeStartedAt?: number;
+  surgeLog?: SurgePeriod[];
   status: 'draft' | 'active';
   createdAt: string;
   updatedAt: string;

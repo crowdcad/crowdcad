@@ -71,6 +71,9 @@ export function normalizeLiteDraftToEvent(draft: LiteEventDraft): Event {
     mci: draft.mci,
     eventLog: draft.eventLog,
     ...(draft.mapMode && { mapMode: draft.mapMode }),
+    ...(draft.manualSurgeActive !== undefined && { manualSurgeActive: draft.manualSurgeActive }),
+    ...(draft.manualSurgeStartedAt !== undefined && { manualSurgeStartedAt: draft.manualSurgeStartedAt }),
+    ...(draft.surgeLog && { surgeLog: draft.surgeLog }),
   };
 }
 
@@ -105,6 +108,10 @@ export function toLiteDraftFromEvent(nextEvent: Event, previousDraft: LiteEventD
     mci: nextEvent.mci ?? previousDraft.mci,
     eventLog: nextEvent.eventLog ?? previousDraft.eventLog,
     mapMode: nextEvent.mapMode ?? previousDraft.mapMode,
+    // Not `??`: ending a surge clears these on purpose.
+    manualSurgeActive: nextEvent.manualSurgeActive,
+    manualSurgeStartedAt: nextEvent.manualSurgeStartedAt,
+    surgeLog: nextEvent.surgeLog ?? previousDraft.surgeLog,
     createdAt:
       typeof nextEvent.createdAt === 'string' ? nextEvent.createdAt : previousDraft.createdAt,
     updatedAt: new Date().toISOString(),

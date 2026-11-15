@@ -3,6 +3,7 @@ import callAssignment from './modules/callAssignment';
 import clinicPatients from './modules/clinicPatients';
 import mciResponse from './modules/mciResponse';
 import orientation from './modules/orientation';
+import surgeAndLog from './modules/surgeAndLog';
 import takLiveTracking from './modules/takLiveTracking';
 
 /**
@@ -43,7 +44,7 @@ export const TRACKS: TrainingTrack[] = [
   },
 ];
 
-export const MODULES: TrainingModule[] = [orientation, callAssignment, clinicPatients, mciResponse, takLiveTracking];
+export const MODULES: TrainingModule[] = [orientation, callAssignment, clinicPatients, surgeAndLog, mciResponse, takLiveTracking];
 
 /**
  * Preview (unreleased) modules are shown only with NEXT_PUBLIC_TRAINING_PREVIEW=on

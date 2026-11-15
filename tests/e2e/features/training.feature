@@ -21,6 +21,7 @@ Feature: CrowdCAD Training
       | orientation       |
       | call-assignment   |
       | clinic-patients   |
+      | surge-and-log     |
       | mci-response      |
       | tak-live-tracking |
 

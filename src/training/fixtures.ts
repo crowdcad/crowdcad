@@ -1,4 +1,5 @@
-import type { Call, EventEquipment, Post, Staff, Supervisor, Zone } from '@/app/types';
+import type { Call, Event, EventEquipment, Post, Staff, Supervisor, Zone } from '@/app/types';
+import { normalizeLiteDraftToEvent, toLiteDraftFromEvent } from '@/lib/liteEventAdapters';
 import type { LiteEventDraft } from '@/lib/liteEventStore';
 
 /**
@@ -151,4 +152,10 @@ export function festivalBoard(moduleId: string, options: BoardOptions = {}): Lit
     // Long enough that an unassigned training call doesn't raise a surge alert mid-lesson.
     unassignedCallSurgeSeconds: 900,
   };
+}
+
+/** The festival board with some of the shift already played out (calls, statuses), built with src/training/actions.ts. */
+export function festivalBoardAfter(moduleId: string, play: (event: Event) => Event, options: BoardOptions = {}): LiteEventDraft {
+  const draft = festivalBoard(moduleId, options);
+  return toLiteDraftFromEvent(play(normalizeLiteDraftToEvent(draft)), draft);
 }
