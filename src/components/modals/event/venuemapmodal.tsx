@@ -5,6 +5,7 @@ import { MapPin, ShieldPlus, ShieldUser, Briefcase, HousePlus, ArrowBigDown } fr
 import { Post, Staff, Supervisor, Equipment, Layer, Call, Clinic } from '@/app/types';
 import { isClinicPost } from '@/lib/clinics';
 import { getEquipmentIconType } from '@/lib/equipmentIcon';
+import EquipmentTypeIcon from '@/components/dispatch/equipmenttypeicon';
 import { getStatusColor } from '@/lib/statusColors';
 import { STATUS_COLORS_HEX } from '@/lib/colorTokens';
 import VenueMapZones from '@/components/venue-management/VenueMapZones';
@@ -208,21 +209,12 @@ function getEquipmentIcon(equipment: Equipment) {
   return getEquipmentIconType(equipment.name);
 }
 
-// 'wheelchair'/'stretcher' are separate raster assets (not lucide icons), so
-// unlike every other marker on the map they can't take a fill/stroke prop —
-// recoloring them to match would mean editing those SVG files directly.
-// They keep their original white-on-transparent look; the status color and
-// white border now live on the circular badge these sit inside of
-// (EquipmentMarker), not on the icon itself.
-function EquipmentIcon({ type, size = 16 }: { type: string; size?: number }) {
-  if (type === 'wheelchair') {
-    return <Image src="/map/wheelchair.svg" alt="Wheelchair" width={size} height={size} draggable={false} />;
-  }
-  if (type === 'stretcher') {
-    return <Image src="/map/gurney.svg" alt="Gurney" width={size} height={size} draggable={false} />;
-  }
-  // 'aed' and the default case: plain white glyph, same as the raster icons above.
-  return <Briefcase size={size} strokeWidth={1.75} stroke="white" fill="none" />;
+// White glyphs: the status color and white border live on the circular badge
+// these sit inside of (EquipmentMarker), not on the icon itself.
+function EquipmentIcon({ type }: { type: string }) {
+  if (type === 'wheelchair' || type === 'stretcher') return <EquipmentTypeIcon type={type} className="h-4 w-4 text-white" />;
+  // 'aed' and the default case.
+  return <Briefcase size={16} strokeWidth={1.75} stroke="white" fill="none" />;
 }
 
 function getContainedImageRect(containerW: number, containerH: number, naturalW: number, naturalH: number) {
