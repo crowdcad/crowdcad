@@ -333,7 +333,10 @@ export default function VenueMapTab({
 
         <div className="ml-auto flex min-w-0 items-center gap-2">
           {currentLayerData && isGeoLayer(currentLayerData) ? (
-            <GeoLayerMapControls layer={currentLayerData} />
+            // On a phone the map type sits on the map, beside the layers menu and +/- (below).
+            <div className="hidden md:block">
+              <GeoLayerMapControls layer={currentLayerData} />
+            </div>
           ) : (
             overlay?.toolbar?.({ layer: currentLayerData, layerIndex: safeCurrentLayer })
           )}
@@ -396,8 +399,11 @@ export default function VenueMapTab({
             focus={geoFocus}
             overlay={overlay}
           />
-          {/* Beside MapLibre's own +/- (10px margin, 29px wide). */}
-          <div className="absolute right-[45px] top-[10px] z-10">
+          {/* Beside MapLibre's own +/- (10px margin, 29px wide); on a phone the map type too. */}
+          <div className="absolute right-[45px] top-[10px] z-10 flex items-start gap-2">
+            <div className="md:hidden">
+              <GeoLayerMapControls layer={currentLayerData} variant="map" />
+            </div>
             <MapLayersMenu hidden={hidden} onChange={setStoredHidden} variant="maplibre" />
           </div>
         </div>
