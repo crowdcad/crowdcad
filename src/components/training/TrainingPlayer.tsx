@@ -1,11 +1,12 @@
 'use client';
 
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Button, Chip } from '@heroui/react';
-import { ArrowLeftRight, Lock, LockOpen, RotateCcw, X } from 'lucide-react';
+import { ArrowLeftRight, ChevronDown, ChevronUp, Lock, LockOpen, RotateCcw, X } from 'lucide-react';
 import DispatchPage from '@/app/(main)/events/[eventId]/dispatch/page';
 import { LiteProvider } from '@/lib/LiteContext';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { useDispatchVocabulary } from '@/hooks/useDispatchVocabulary';
 import { sectionsOf, visibleModules } from '@/training/registry';
 import { plainStepText } from '@/training/text';
@@ -49,8 +50,12 @@ export default function TrainingPlayer({ module, startIndex = 0 }: { module: Tra
   const session = useTrainingSession(module, startIndex, trackingChrome);
   const params = useMemo(() => fulfilled({ eventId: session.eventId }), [session.eventId]);
   const [cardSide, setCardSide] = useState<'left' | 'right'>('right');
+  const [minimized, setMinimized] = useState(false);
+  const isMobile = useIsMobile();
 
   const { step, index, complete } = session;
+  // A new step (or the end) always shows its instruction, even if the card was hidden.
+  useEffect(() => setMinimized(false), [index, complete]);
   const kind = stepKind(step);
   const section = sectionsOf(module).find((s) => index >= s.start && index <= s.end);
   const nextModule = useMemo(() => {
@@ -102,20 +107,34 @@ export default function TrainingPlayer({ module, startIndex = 0 }: { module: Tra
         className={`pointer-events-auto fixed bottom-4 z-[1100] w-[min(380px,calc(100vw-2rem))] rounded-xl border border-surface-liner bg-surface-deep/95 p-4 text-sm text-surface-light shadow-2xl backdrop-blur ${cardSide === 'right' ? 'right-4' : 'left-4'}`}
       >
         <div className="mb-1 flex items-center justify-between gap-2 text-xs uppercase tracking-wide text-surface-light/60">
-          <span>
+          <span className="truncate">
             {complete ? 'Complete' : `${section?.name ?? ''} · Step ${index + 1} of ${module.steps.length}`}
           </span>
-          <button
-            type="button"
-            aria-label="Move this card to the other side"
-            className="rounded p-1 hover:bg-surface-liner"
-            onClick={() => setCardSide((s) => (s === 'right' ? 'left' : 'right'))}
-          >
-            <ArrowLeftRight className="h-3.5 w-3.5" />
-          </button>
+          <span className="flex shrink-0 items-center gap-0.5">
+            <button
+              type="button"
+              aria-label={minimized ? 'Show the step' : 'Hide the step to see the board'}
+              aria-expanded={!minimized}
+              className="rounded p-1 hover:bg-surface-liner"
+              onClick={() => setMinimized((m) => !m)}
+              data-testid="training-card-toggle"
+            >
+              {minimized ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+            </button>
+            <button
+              type="button"
+              aria-label="Move this card to the other side"
+              className="rounded p-1 hover:bg-surface-liner"
+              onClick={() => setCardSide((s) => (s === 'right' ? 'left' : 'right'))}
+            >
+              <ArrowLeftRight className="h-3.5 w-3.5" />
+            </button>
+          </span>
         </div>
 
-        {complete ? (
+        {minimized ? (
+          <div className="truncate font-semibold text-surface">{complete ? 'Module complete' : step.title}</div>
+        ) : complete ? (
           <div data-testid="training-complete">
             <h2 className="text-base font-semibold text-surface">Module complete</h2>
             <p className="mt-1 text-surface-light/85">
@@ -149,6 +168,11 @@ export default function TrainingPlayer({ module, startIndex = 0 }: { module: Tra
             <p className="mt-1 leading-relaxed text-surface-light/90" aria-label={plainStepText(step.body, t)}>
               <StepText text={step.body} t={t} />
             </p>
+            {isMobile && (
+              <p className="mt-2 text-xs text-surface-light/60">
+                Best on a computer: the board&apos;s phone layout hides some of the controls these steps point at.
+              </p>
+            )}
             {session.rejected && (
               <div role="alert" className="mt-3 rounded-lg border border-status-yellow/50 bg-status-yellow/10 px-3 py-2 text-xs" data-testid="training-gate-nudge">
                 That wasn&apos;t saved: while this lesson is guided, the board only takes the values shown in the step
