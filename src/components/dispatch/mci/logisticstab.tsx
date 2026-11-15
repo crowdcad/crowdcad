@@ -5,7 +5,7 @@ import { toast } from 'react-toastify';
 import { Button } from '@heroui/react';
 import { ChevronDown, KeyRound } from 'lucide-react';
 import type { Event } from '@/app/types';
-import { isMciActive } from '@/lib/mci';
+import { deriveMci, isMciActive } from '@/lib/mci';
 import { mciEquipmentFor } from '@/lib/mciDoc';
 import {
   addHospital,
@@ -22,6 +22,7 @@ import {
 } from '@/lib/mciLogistics';
 import LogisticsBoard, { type LogisticsHandlers } from './logisticsboard';
 import RoleLogins from './rolelogins';
+import MciTotalsStrip from './mcitotalsstrip';
 
 /**
  * The dispatcher's MCI Logistics tab (#139): the Logistics board (Equipment, Hospitals, Incoming Staff),
@@ -96,17 +97,19 @@ export default function LogisticsTab({
   );
   const units = useMemo(() => loginUnits.map((u) => u.name), [loginUnits]);
   const equipment = useMemo(() => mciEquipmentFor(event), [event]);
+  const totals = useMemo(() => deriveMci(event).totals, [event]);
 
   if (!event.mci) return null;
   return (
     <div className="tab-scroll minimal-scrollbar flex min-h-0 flex-1 flex-col gap-4" data-testid="logistics-tab">
-      {logins && !readOnly && (
-        <div className="flex flex-col gap-3">
+      {/* The same totals as MCI Patients, with Logins beside them; the opened logins push the board down. */}
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <MciTotalsStrip mci={event.mci} totals={totals} />
+        {logins && !readOnly && (
           <Button
             size="sm"
             variant="flat"
             radius="lg"
-            className="self-end"
             startContent={<KeyRound className="h-3.5 w-3.5" />}
             endContent={<ChevronDown className={`h-3.5 w-3.5 transition-transform ${loginsOpen ? 'rotate-180' : ''}`} />}
             onPress={() => onLoginsOpenChange?.(!loginsOpen)}
@@ -115,9 +118,9 @@ export default function LogisticsTab({
           >
             Logins
           </Button>
-          {loginsOpen && <RoleLogins eventId={logins.eventId} eventName={event.name} units={loginUnits} uid={logins.uid} />}
-        </div>
-      )}
+        )}
+      </div>
+      {logins && !readOnly && loginsOpen && <RoleLogins eventId={logins.eventId} eventName={event.name} units={loginUnits} uid={logins.uid} />}
       <LogisticsBoard mci={event.mci} units={units} equipment={equipment} readOnly={readOnly} handlers={handlers} />
     </div>
   );
