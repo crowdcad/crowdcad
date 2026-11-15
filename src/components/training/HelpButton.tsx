@@ -146,7 +146,7 @@ export default function HelpButton({ className = '' }: { className?: string }) {
         <ModalContent>
           <ModalHeader className="flex flex-col gap-1 pb-1">
             <span className="text-lg font-semibold text-surface">What are you trying to do?</span>
-            <span className="text-xs font-normal text-surface-light/70">Find the step, then have it pointed out here or practise it with sample data.</span>
+            <span className="text-xs font-normal text-surface-light/70">Pick a result to see where to click, or practise it with sample data.</span>
           </ModalHeader>
           <ModalBody className="pb-5">
             <Input

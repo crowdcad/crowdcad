@@ -88,8 +88,8 @@ export default function TrainingCatalog() {
         <p className="text-xs uppercase tracking-widest text-accent">CrowdCAD Training</p>
         <h1 className="mt-2 text-3xl font-bold text-surface">Learn the dispatch board by using it</h1>
         <p className="mt-3 max-w-[720px] text-surface-light/85">
-          Each module puts you on the real dispatch board with a practice event and walks you through one job, step by
-          step. Work through the tracks in order before your first shift, or jump to the part you need.
+          Each module opens the real dispatch board with practice data and walks you through one task, step by step.
+          Start at the top, or jump to what you need.
         </p>
         <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-sm text-surface-light/75">
           <span className="flex items-center gap-1.5">
@@ -113,7 +113,7 @@ export default function TrainingCatalog() {
                   {track.release === 'preview' && <span className="ml-2 align-middle text-xs font-normal text-status-yellow">Preview</span>}
                 </h2>
                 <span className="text-sm text-surface-light/70">
-                  {modules.length} {modules.length === 1 ? 'module' : 'modules'} · {formatDuration(trackSeconds(track.id))} · {track.audience}
+                  {modules.length} {modules.length === 1 ? 'module' : 'modules'} · {formatDuration(trackSeconds(track.id))}
                 </span>
               </div>
               <p className="mt-2 text-sm text-surface-light/80">{track.summary}</p>

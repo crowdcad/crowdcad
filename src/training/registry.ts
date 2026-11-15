@@ -17,29 +17,25 @@ export const TRACKS: TrainingTrack[] = [
   {
     id: 'start',
     title: 'Start here',
-    summary: 'A first look around the dispatch board.',
-    audience: 'Everyone, before their first shift',
+    summary: 'A quick tour of the dispatch board.',
     release: 'stable',
   },
   {
     id: 'dispatcher',
     title: 'Dispatcher essentials',
-    summary: 'The calls, teams, clinics and busy moments a dispatcher handles on every shift.',
-    audience: 'New dispatchers',
+    summary: 'Calls, clinic patients and busy moments.',
     release: 'stable',
   },
   {
     id: 'mci',
     title: 'MCI response',
-    summary: 'Declaring a mass casualty incident, counting patients by triage color, moving them to treatment and sending them to hospital.',
-    audience: 'Dispatchers and supervisors running an MCI',
+    summary: 'Declare an MCI, count patients, move them to treatment and send them to hospital.',
     release: 'preview',
   },
   {
     id: 'tak',
     title: 'TAK live tracking',
-    summary: 'Running an event where teams report their positions from TAK devices.',
-    audience: 'Dispatchers and event leads on TAK events',
+    summary: "Events where teams' positions come from TAK devices.",
     release: 'preview',
   },
 ];
