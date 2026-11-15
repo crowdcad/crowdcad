@@ -38,7 +38,6 @@ import { Select, SelectItem, Tabs, Tab, Button, Tooltip } from "@heroui/react"
 import AvailabilitySurgeStrip from '@/components/dispatch/availabilitysurgestrip';
 import { isRowToggleClick } from '@/components/dispatch/trackingtablebase';
 import DeclareMciModal from '@/components/dispatch/mci/declaremcimodal';
-import RoleLoginsModal from '@/components/dispatch/mci/roleloginsmodal';
 import LogisticsTab from '@/components/dispatch/mci/logisticstab';
 import { ROLE_LOGINS_SUPPORTED } from '@/lib/roleAccountStore';
 import MciAvailabilityStrip from '@/components/dispatch/mci/mciavailabilitystrip';
@@ -481,8 +480,6 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
   };
   const mciActions = useMciActions(updateEvent, authUser?.uid, { setLocal: setEvent, inFlight: mciWritesInFlight, trackedUnits: () => trackedUnitsRef.current });
   const [showDeclareMci, setShowDeclareMci] = useState(false);
-  // MCI role logins (#142): cloud events on Firebase only (Lite has no accounts).
-  const [showRoleLogins, setShowRoleLogins] = useState(false);
 
   const handlePostAssignment = useCallback(async (time: string, post: string, team: string) => {
     await updateEvent((currentEvent) => {
@@ -729,7 +726,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
 
 
   const handleSaveNewSupervisor = useCallback(async () => {
-    if (!event) return;
+    if (!event) return false;
 
     const callSign = teamName.trim();
     const cert = memberCert.trim();
@@ -738,13 +735,13 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
 
     if (!callSign) {
       alert('Supervisor Call Sign is required.');
-      return;
+      return false;
     }
 
     // Prevent duplicate call signs
     if (event.supervisor?.some(s => s.team.toLowerCase().trim() === callSign.toLowerCase())) {
       alert(`A supervisor with the call sign "${callSign}" already exists.`);
-      return;
+      return false;
     }
 
     // Build the single-line member string (name and certification may be empty)
@@ -768,14 +765,15 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
         supervisor: [...(event.supervisor || []), newSupervisor],
       });
 
-      // clear fields + close
+      // The dialog closes itself, or stays open for the next supervisor.
       setTeamName('');
       setMemberName('');
       setMemberCert('');
-      setShowAddSupervisorModal(false);
+      return true;
     } catch (error) {
       console.error('Error saving supervisor:', error);
       alert('Error saving supervisor. Please try again.');
+      return false;
     }
   }, [event, teamName, memberName, memberCert, updateEvent]);
 
@@ -1978,6 +1976,13 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     const search = focusSearch(window.location.search, tab);
     if (search !== window.location.search) window.history.replaceState(window.history.state, '', `${window.location.pathname}${search}${window.location.hash}`);
   }, [focusedPane, selectedLeftTab, selectedRightTab]);
+  // Full screen hides the navbar (a rule in globals.css), so the tab fills the screen.
+  useEffect(() => {
+    const root = document.documentElement;
+    if (focusedPane) root.setAttribute('data-dispatch-focus', '');
+    else root.removeAttribute('data-dispatch-focus');
+    return () => root.removeAttribute('data-dispatch-focus');
+  }, [focusedPane]);
   const toggleFocus = (pane: FocusPane) => setFocusedPane((current) => (current === pane ? null : pane));
   const openFocusWindow = (tab: string) => {
     window.open(`${window.location.pathname}${focusSearch(window.location.search, tab)}`, '_blank', 'noopener');
@@ -3867,8 +3872,8 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
   // The desktop board's two sides, shared by the split layout and the full-screen (focus) view (#138).
   const rightTabLabel =
     selectedRightTab === 'map' ? t('Map')
-    : selectedRightTab === 'mci' ? t('MCI')
-    : selectedRightTab === 'logistics' ? t('Logistics')
+    : selectedRightTab === 'mci' ? t('MCI Patients')
+    : selectedRightTab === 'logistics' ? t('MCI Logistics')
     : clinics.find((c) => c.id === selectedRightTab)?.name ?? t('Calls');
   const desktopLeftPane = (
     <div className="h-full rounded-xl flex flex-col">
@@ -3940,12 +3945,12 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
           <div className="flex items-end gap-1 min-w-0">
             {hasMci(event) && (
               <PanelTab active={selectedRightTab === 'mci'} onSelect={() => setSelectedRightTab('mci')} data-testid="mci-tab-button">
-                {t('MCI')}{isMciActive(event) ? '' : ' (ended)'}
+                {t('MCI Patients')}{isMciActive(event) ? '' : ' (ended)'}
               </PanelTab>
             )}
             {hasMci(event) && (
               <PanelTab active={selectedRightTab === 'logistics'} onSelect={() => setSelectedRightTab('logistics')} data-testid="logistics-tab-button">
-                {t('Logistics')}
+                {t('MCI Logistics')}
                 {(() => {
                   const list = event.mci?.logistics?.incoming ?? [];
                   const coming = list.filter((x) => x.state === 'incoming').length;
@@ -4006,13 +4011,18 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
 
         {selectedRightTab === 'mci' && !isMobile && event.mci && (
           <div className="relative z-10 -mt-px mx-1.5 rounded-lg bg-surface-deep px-2.5 pb-2 pt-1 flex flex-col flex-1 min-h-0">
-            <MciTab event={event} actions={mciActions} onOpenRoleLogins={roleLoginsAvailable ? () => setShowRoleLogins(true) : undefined} />
+            <MciTab event={event} actions={mciActions} onOpenLogistics={() => showRightTab('logistics')} roleLogins={roleLoginsAvailable} />
           </div>
         )}
 
         {selectedRightTab === 'logistics' && !isMobile && event.mci && (
           <div className="relative z-10 -mt-px mx-1.5 rounded-lg bg-surface-deep px-2.5 py-2 flex flex-col flex-1 min-h-0">
-            <LogisticsTab event={event} updateEvent={updateEvent} />
+            <LogisticsTab
+              event={event}
+              updateEvent={updateEvent}
+              onUndo={(id) => void mciActions.undo(id)}
+              logins={roleLoginsAvailable && user && eventId ? { eventId, uid: user.uid } : undefined}
+            />
           </div>
         )}
 
@@ -4223,13 +4233,8 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
           await mciActions.declare(input);
           mciTabOpenedRef.current = true;
           setSelectedRightTab('mci');
-          // Offer role logins straight away, so the people arriving can be sent theirs.
-          if (roleLoginsAvailable) setShowRoleLogins(true);
         }}
       />
-      {roleLoginsAvailable && user && eventId && (
-        <RoleLoginsModal isOpen={showRoleLogins} onClose={() => setShowRoleLogins(false)} event={event} eventId={eventId} uid={user.uid} />
-      )}
       <TransportUnitModal
         isOpen={showTransportUnitModal}
         onClose={() => {
@@ -4316,7 +4321,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
         event={event}
       />
       {/* Main Layout */}
-      <div className="relative w-full bg-surface-deepest h-[calc(100vh-72px)]">
+      <div className={`relative w-full bg-surface-deepest ${focusedPane ? 'h-screen' : 'h-[calc(100vh-72px)]'}`}>
         {eventEnded && (
           // Fixed from below the navbar (h-14) to the screen's bottom edge, so it also covers the
           // mobile tab bar and anything scrolled below; the page container stops short of both.

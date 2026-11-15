@@ -4,15 +4,17 @@ import React, { useMemo } from 'react';
 import type { MciState } from '@/app/types';
 import type { MciEquipmentItem, MciUnit } from '@/lib/mciDoc';
 import LogisticsBoard, { type LogisticsHandlers } from '@/components/dispatch/mci/logisticsboard';
+import RoleLogins from '@/components/dispatch/mci/rolelogins';
 import { ErrorBanner, useRoleActions } from './roleparts';
 
 /**
  * The Logistics role view (#144, D27): the same Logistics board as the dispatcher's tab, with the same
  * abilities (hand equipment to teams, hospitals, incoming staff with arrivals straight onto the board).
  * One section at a time under tabs on a phone, the three columns from laptop width. Every change goes
- * through /api/mci-role, so this login still never writes the event itself.
+ * through /api/mci-role, so this login still never writes the event itself. A Logins section lists who
+ * holds which login, and resets a password (through /api/role-accounts) to hand a login over.
  */
-export default function LogisticsView({ mci, units, equipment }: { mci: MciState; units: MciUnit[]; equipment: MciEquipmentItem[] }) {
+export default function LogisticsView({ mci, units, equipment, eventId, eventName }: { mci: MciState; units: MciUnit[]; equipment: MciEquipmentItem[]; eventId: string; eventName: string }) {
   const actions = useRoleActions();
   const send = actions.send;
   const handlers: LogisticsHandlers = {
@@ -42,6 +44,7 @@ export default function LogisticsView({ mci, units, equipment }: { mci: MciState
         tabs
         className="flex-1"
         bodyClassName="flex-1 overflow-y-auto px-4 pb-24 pt-3"
+        logins={<RoleLogins eventId={eventId} eventName={eventName} units={units} />}
       />
     </>
   );

@@ -2,7 +2,6 @@
 'use client';
 
 import React from 'react';
-import Image from 'next/image';
 import { Briefcase } from 'lucide-react';
 import type { EquipmentIconType } from '@/lib/equipmentIcon';
 
@@ -12,34 +11,27 @@ type Props = {
 };
 
 /**
- * Renders an equipment type's icon for inline text contexts (status pills,
- * dropdown options) — same three visuals as the venue map's EquipmentMarker
- * (wheelchair.svg, gurney.svg, or a medical briefcase for 'aed'/default),
- * but without the map's forced white-on-badge styling.
- *
- * wheelchair.svg/gurney.svg are baked white — fine on the map's colored
- * badge, illegible on these pills' surface in light mode. Unlike a lucide
- * icon, an <Image> pointing at an SVG file can't be recolored with a
- * `fill`/`stroke`/`currentColor` prop (the color is inside the file), so
- * this renders both a white and a black copy and lets Tailwind's `dark:`
- * variant pick one via plain CSS — no theme-detection JS or hydration
- * flash. The map's own EquipmentMarker is untouched and always white.
+ * An equipment type's icon: a wheelchair, a gurney, or a medical briefcase
+ * for 'aed' and anything else. All three are drawn in `currentColor`, so they
+ * take the color of the text around them (a team card's status color, a
+ * pill's text, white on the map's badges).
  */
 export default function EquipmentTypeIcon({ type, className = 'w-4 h-4 shrink-0' }: Props) {
   if (type === 'wheelchair') {
     return (
-      <>
-        <Image src="/map/wheelchair.svg" alt="Wheelchair" width={16} height={16} className={`${className} hidden dark:block`} />
-        <Image src="/map/wheelchair-black.svg" alt="Wheelchair" width={16} height={16} className={`${className} block dark:hidden`} />
-      </>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className={className} role="img" aria-label="Wheelchair">
+        <path d="M12 16a5 5 0 1 1-10 0a5 5 0 0 1 10 0Zm6 3.5a1.5 1.5 0 1 1-3 0a1.5 1.5 0 0 1 3 0Z" />
+        <path d="M7.008 16h-.009" />
+        <path d="m6 11l-.628-5.023c-.145-1.159-.217-1.738-.522-2.155a2 2 0 0 0-.647-.572C3.751 3 3.167 3 2 3m4 4h5.5c2.357 0 3.536 0 4.268.732S16.5 9.643 16.5 12v6" />
+        <path d="M12 14h4.024c.885 0 1.328 0 1.713.189q.14.068.267.158c.356.25.601.659 1.092 1.474c.393.653.59.98.884 1.107q.105.044.215.063c.312.052.629-.124 1.263-.475l.542-.3" />
+      </svg>
     );
   }
   if (type === 'stretcher') {
     return (
-      <>
-        <Image src="/map/gurney.svg" alt="Gurney" width={16} height={16} className={`${className} hidden dark:block`} />
-        <Image src="/map/gurney-black.svg" alt="Gurney" width={16} height={16} className={`${className} block dark:hidden`} />
-      </>
+      <svg viewBox="0 0 24 24" fill="currentColor" className={className} role="img" aria-label="Gurney">
+        <path d="M18 4.5h3a1 1 0 0 0 0-2h-3a1 1 0 0 0 0 2m3 2H3a1 1 0 0 0-1 1v4a1 1 0 0 0 1 1h1.55l5.11 2.56l-2.58 1.29A3 3 0 0 0 5 15.5a3 3 0 1 0 3 3a2 2 0 0 0 0-.36l3.94-2l4.06 2.1a2 2 0 0 0 0 .26a3 3 0 1 0 3-3a3 3 0 0 0-2.15.92l-2.72-1.36l5.11-2.56H21a1 1 0 0 0 1-1v-4a1 1 0 0 0-1-1m-16 13a1 1 0 1 1 1-1a1 1 0 0 1-1 1m14-2a1 1 0 1 1-1 1a1 1 0 0 1 1-1m-7.1-3.56L9 12.5h5.75ZM20 10.5H4v-2h16Z" />
+      </svg>
     );
   }
   return <Briefcase className={className} aria-hidden="true" />;

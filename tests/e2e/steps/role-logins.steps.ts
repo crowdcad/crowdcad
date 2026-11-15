@@ -15,21 +15,21 @@ After(async () => {
   fresh = null;
 });
 
-When('I declare an MCI and keep the role logins open', async ({ page }) => {
+When('I declare an MCI and open the role logins', async ({ page }) => {
   await page.getByTestId('mci-declare-button').click();
   const dialog = page.getByTestId('mci-declare-modal');
   await expect(dialog).toBeVisible();
   await dialog.getByTestId('mci-declare-zone-input').fill('Zone A');
   await dialog.getByTestId('mci-declare-zone-add').click();
   await dialog.getByTestId('mci-declare-confirm').click();
-  // Declaring offers role logins straight away.
-  await expect(page.getByTestId('role-logins-modal')).toBeVisible({ timeout: NAV_TIMEOUT });
+  // Logins are in MCI Logistics, beside the log.
+  await page.getByTestId('mci-open-logistics').click();
+  await expect(page.getByTestId('role-logins')).toBeVisible({ timeout: NAV_TIMEOUT });
 });
 
 When('I create the role logins as assigned', async ({ page }) => {
-  const modal = page.getByTestId('role-logins-modal');
   // Teams default to Responder.
-  await modal.getByTestId('role-login-create-assigned').click();
+  await page.getByTestId('role-logins').getByTestId('role-login-create-assigned').click();
 });
 
 Then('a new role login for {string} should be shown with its password', async ({ page }, unit: string) => {
@@ -73,10 +73,7 @@ When('the other device picks zone {string} and submits {int} {string} after conf
 });
 
 Then('the dispatch MCI log should show an entry by {string}', async ({ page }, unit: string) => {
-  await page.getByTestId('role-login-close').click();
-  await page.getByTestId('mci-log-toggle').click();
-  await expect(page.getByTestId('mci-log-by').filter({ hasText: unit }).first()).toBeVisible({ timeout: NAV_TIMEOUT });
-  await page.getByTestId('mci-role-logins').click();
+  await expect(page.getByTestId('mci-log').getByTestId('mci-log-by').filter({ hasText: unit }).first()).toBeVisible({ timeout: NAV_TIMEOUT });
 });
 
 When('I disable the new role login', async ({ page }) => {

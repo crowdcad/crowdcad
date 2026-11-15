@@ -21,7 +21,7 @@ export const ROLE_EMAIL_DOMAIN = 'role.crowdcad.org';
 
 /**
  * The roles offered (#144): Responder covers triage and treatment, since people move between them. A
- * Treatment Lead runs one tarp (red, yellow or green): its patients and their transport order.
+ * Treatment Lead runs a treatment location: its patients and their transport order, picking which color they are on.
  */
 export const EVENT_ROLES = ['responder', 'treatment_lead', 'transport', 'logistics', 'incident_command'] as const;
 /** Earlier separate roles, still accepted on existing logins and treated as Responder. */

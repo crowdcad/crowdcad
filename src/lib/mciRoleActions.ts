@@ -1,6 +1,7 @@
 import type { Event, IncomingEta, MciAssignment, MciColor, Staff, Supervisor } from '@/app/types';
 import {
   addPatientPatch,
+  MCI_COLORS,
   mciAssignmentName,
   mciAssignmentPatch,
   movePatch,
@@ -43,7 +44,7 @@ import { effectiveRole, type EventRole } from './roleAccounts';
 export type RoleAction =
   | { type: 'assign'; assignment: MciAssignment }
   | { type: 'counts'; zoneId: string; deltas: Partial<MciCounts> }
-  /** Without `areaId`, each color goes to its own tarp (`routedMovePatch`). */
+  /** Without `areaId`, patients go where the zone last sent them, else the first location (`routedMovePatch`). */
   | { type: 'move'; zoneId: string; areaId?: string; counts: Partial<MciCounts> }
   | { type: 'addPatient'; areaId: string; color: MciColor; fields: Partial<Record<MciPatientField, string>> }
   | { type: 'patientDetails'; patientId: string; fields: Partial<Record<MciPatientField, string>> }
@@ -92,10 +93,9 @@ export interface RoleActionResult {
 const ERROR_TEXT: Record<string, string> = {
   inactive: 'The MCI has stood down.',
   'unknown-zone': 'That zone no longer exists.',
-  'unknown-area': 'That treatment zone no longer exists.',
+  'unknown-area': 'That treatment location no longer exists.',
   'unknown-patient': 'That patient is no longer here.',
-  'wrong-color': 'That treatment zone only takes patients of its own color.',
-  'no-area': 'There is no treatment zone for one of those colors yet. Ask the dispatcher.',
+  'no-area': 'There is no treatment location yet. Ask the dispatcher.',
   invalid: 'Nothing to send.',
   duplicate: 'That name is already in use.',
   missing: 'That entry is no longer in the list.',
@@ -132,7 +132,10 @@ function hhmm(ms: number): string {
 }
 
 /** Sets the unit's own Triage zone or Treatment zone on the board, as the dispatcher's status picker would. */
-function assign(event: Event, actor: RoleActor, assignment: MciAssignment, ctx: MciWriteContext): RoleActionResult {
+function assign(event: Event, actor: RoleActor, requested: MciAssignment, ctx: MciWriteContext): RoleActionResult {
+  // Only a treatment location carries a treating color, and only a real one.
+  const color = requested.kind === 'area' && requested.color && (MCI_COLORS as readonly string[]).includes(requested.color) ? requested.color : undefined;
+  const assignment: MciAssignment = { kind: requested.kind, id: requested.id, ...(color ? { color } : {}) };
   const name = mciAssignmentName(event.mci, assignment);
   if (!event.mci?.active) return { patch: {}, error: ERROR_TEXT.inactive };
   if (!name) return { patch: {}, error: ERROR_TEXT[assignment.kind === 'zone' ? 'unknown-zone' : 'unknown-area'] };
@@ -154,7 +157,7 @@ function assign(event: Event, actor: RoleActor, assignment: MciAssignment, ctx: 
   const supervisor = (event.supervisor || []).map(update);
   const found = staff.some(matches) || supervisor.some(matches);
   if (!found) return { patch: {}, error: ERROR_TEXT['unknown-unit'] };
-  const noted = notedPatch(event, `${actor.unitName}: ${status}, ${name}`, assignment.kind === 'zone' ? { zoneId: assignment.id } : { areaId: assignment.id }, ctx);
+  const noted = notedPatch(event, `${actor.unitName}: ${status}, ${name}${color ? ` (treating ${color})` : ''}`, assignment.kind === 'zone' ? { zoneId: assignment.id } : { areaId: assignment.id }, ctx);
   if (noted.error) return fromMci(noted);
   return { patch: { staff, supervisor, ...noted.patch } };
 }

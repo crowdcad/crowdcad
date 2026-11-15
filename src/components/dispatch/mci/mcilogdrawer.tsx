@@ -3,7 +3,7 @@
 import React from 'react';
 import { Button } from '@heroui/react';
 import type { Event, MciLogEntry } from '@/app/types';
-import { MCI_LOG_DRAWER_SIZE, mciAllAreas, mciAllZones, mciPatientLabel, mciRecentEntries } from '@/lib/mci';
+import { mciAllAreas, mciAllZones, mciPatientLabel, mciRecentEntries } from '@/lib/mci';
 import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
 import { MCI_COLOR_STYLES, formatClock } from './mciparts';
 
@@ -55,15 +55,17 @@ export function describeMciEntry(mci: NonNullable<Event['mci']>, entry: MciLogEn
   }
 }
 
-/** The last entries with Undo on each. Undo appends a compensating entry; nothing is deleted. */
-export default function MciLogDrawer({ mci, readOnly, onUndo }: Props) {
+/** The whole MCI log, newest first, scrolling in place, with Undo on each entry. Undo appends a compensating entry; nothing is deleted. */
+export default function MciLog({ mci, readOnly, onUndo, className = '' }: Props & { className?: string }) {
   const { t } = useDispatchTerms();
-  const rows = mciRecentEntries(mci, MCI_LOG_DRAWER_SIZE);
+  const rows = mciRecentEntries(mci);
   return (
-    <div className="flex flex-col gap-1" data-testid="mci-log-drawer">
-      <h3 className="text-sm font-bold text-surface-light">Last {MCI_LOG_DRAWER_SIZE} entries</h3>
+    <section className={`flex min-h-0 min-w-0 flex-col gap-1 ${className}`} aria-label="Log" data-testid="mci-log">
+      <h3 className="text-base font-bold text-surface-light">
+        Log <span className="text-sm font-normal text-surface-faint">({rows.length})</span>
+      </h3>
       {rows.length === 0 && <p className="text-sm italic text-surface-faint">No entries yet</p>}
-      <ul className="flex flex-col divide-y divide-surface-liner">
+      <ul className="minimal-scrollbar flex min-h-0 flex-1 flex-col divide-y divide-surface-liner overflow-y-auto">
         {rows.map(({ entry, undone }) => (
           <li key={entry.id} className="flex items-center justify-between gap-3 py-1 text-sm" data-testid="mci-log-entry">
             <span className={`min-w-0 truncate ${undone || entry.kind === 'undo' ? 'text-surface-faint' : 'text-surface-light'} ${undone ? 'line-through' : ''}`}>
@@ -80,6 +82,6 @@ export default function MciLogDrawer({ mci, readOnly, onUndo }: Props) {
           </li>
         ))}
       </ul>
-    </div>
+    </section>
   );
 }

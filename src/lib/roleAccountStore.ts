@@ -101,6 +101,30 @@ export async function setRoleLoginDisabled(eventId: string, uid: string, disable
   await dbService.updateDocument(accountsPath(eventId), uid, disabled ? { disabled: true, disabledAt: Date.now() } : { disabled: false });
 }
 
+/**
+ * Changes a login's role or the note on who holds it. Takes effect at once: the rules and /api/mci-role read
+ * the role from the record. Where the server can't (emulator, no credentials) the browser writes it.
+ */
+export async function setRoleLoginAssignment(eventId: string, uid: string, changes: { role?: EventRole; label?: string }): Promise<void> {
+  const res = await callApi({ action: 'assign', eventId, uid, ...changes });
+  if (res?.ok) return;
+  if (!serverUnavailable(res)) throw await errorFrom(res!);
+  await dbService.updateDocument(accountsPath(eventId), uid, changes);
+  if (changes.role) await dbService.updateDocument('roleAccountIndex', uid, { role: changes.role });
+}
+
+/**
+ * Gives a login a new password (the old one stops working and its devices are signed out) and returns it,
+ * once, to send. Dispatchers and the event's Logistics lead may do this. Only the server can change another
+ * account's password, so this needs /api/role-accounts: null where it isn't available (emulator, no credentials).
+ */
+export async function resetRoleLoginPassword(eventId: string, uid: string): Promise<RoleLoginCredentials | null> {
+  const res = await callApi({ action: 'reset', eventId, uid });
+  if (res?.ok) return (await res.json()) as RoleLoginCredentials;
+  if (!serverUnavailable(res)) throw await errorFrom(res!);
+  return null;
+}
+
 /** An event's logins, newest first. */
 export function subscribeRoleLogins(eventId: string, callback: (accounts: RoleAccount[]) => void, onError?: (error: Error) => void): Unsubscribe {
   return dbService.subscribeToQuery<RoleAccount>(

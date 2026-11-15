@@ -13,6 +13,8 @@ export type Post =
     // provenance from a GIS import and rendering uses x/y.
     lat?: number | null;
     lng?: number | null;
+    /** Set on the map point of an MCI treatment location (that location's id): drawn with a medical icon, never a clinic. */
+    mciAreaId?: string;
   };
 
 export interface Clinic {
@@ -146,10 +148,8 @@ export interface MciTreatmentArea {
   name: string;
   /** Set when this area is an existing event clinic. */
   clinicId?: string;
-  /** The map zone drawn for this area, in the event venue's layers. */
+  /** The map zone drawn for this area, in the event venue's layers (older events; now a point, see `mciPointOf`). */
   venueZoneId?: string;
-  /** A triage tarp (#154): the treatment zone for that tag color, drawn and shown in that color. Only patients of that color go here. */
-  color?: MciColor;
 }
 
 /** 'noted' records an attributed change that moves no count (a unit's assignment, patient care, logistics), in `note`. */
@@ -194,6 +194,8 @@ export interface MciLogEntry {
 export interface MciAssignment {
   kind: 'zone' | 'area';
   id: string;
+  /** For a treatment location: the tag color the unit is treating now. Changed freely; never limits where patients go. */
+  color?: MciColor;
 }
 
 export interface MciState {

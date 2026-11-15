@@ -7,18 +7,11 @@ const { When, Then } = createBdd(test);
 
 const capitalize = (word: string) => word.charAt(0).toUpperCase() + word.slice(1);
 
-const COLORS = ['red', 'yellow', 'green', 'black'] as const;
 
-/** Confirms the open declare dialog and closes the role logins offer that follows on Firebase. */
+/** Confirms the open declare dialog. */
 async function confirmDeclare(page: import('@playwright/test').Page) {
   await page.getByTestId('mci-declare-modal').getByTestId('mci-declare-confirm').click();
   await expect(page.getByTestId('mci-tab')).toBeVisible({ timeout: NAV_TIMEOUT });
-  // Declaring offers role logins (#142) on Firebase; these scenarios don't need them.
-  const roleLogins = page.getByTestId('role-logins-modal');
-  if (await roleLogins.waitFor({ state: 'visible', timeout: 3_000 }).then(() => true, () => false)) {
-    await roleLogins.getByTestId('role-login-close').click();
-    await expect(roleLogins).not.toBeVisible();
-  }
 }
 
 async function openDeclare(page: import('@playwright/test').Page, zones: string[]) {
@@ -33,15 +26,8 @@ async function openDeclare(page: import('@playwright/test').Page, zones: string[
 }
 
 When('I declare an MCI with zones {string} and {string} and the default clinic', async ({ page }, zoneA: string, zoneB: string) => {
-  const dialog = await openDeclare(page, [zoneA, zoneB]);
-  // The event's clinic is ticked by default; the color treatment zones are unticked so every move goes to it.
-  for (const color of COLORS) await dialog.getByTestId(`mci-declare-tarp-${color}`).click();
-  await confirmDeclare(page);
-});
-
-When('I declare an MCI with zone {string} and the color treatment zones', async ({ page }, zone: string) => {
-  await openDeclare(page, [zone]);
-  // A treatment zone per color is ticked by default.
+  // The event's clinic is ticked by default, so every move goes to it.
+  await openDeclare(page, [zoneA, zoneB]);
   await confirmDeclare(page);
 });
 
@@ -90,8 +76,10 @@ When('I add incoming team {string} and mark it arrived', async ({ page }, name: 
 });
 
 When('I give a {string} to {string} from the Logistics tab', async ({ page }, item: string, unit: string) => {
-  await page.getByTestId('logistics-give-item').selectOption(item);
-  await page.getByTestId('logistics-give-unit').selectOption(unit);
+  for (const [testId, value] of [['logistics-give-item', item], ['logistics-give-unit', unit]]) {
+    await page.getByTestId(testId).click();
+    await page.locator('[role="listbox"]').getByText(value, { exact: true }).click();
+  }
   await page.getByTestId('logistics-give-submit').click();
   await expect(page.getByTestId(`logistics-unit-${unit}`)).toContainText(item);
 });
@@ -258,8 +246,10 @@ Then('the {string} column in {string} should list {int} patients', async ({ page
 });
 
 Then('the MCI log should mention {string}', async ({ page }, text: string) => {
-  await page.getByTestId('mci-log-toggle').click();
-  await expect(page.getByTestId('mci-log-drawer')).toContainText(text);
+  // The log lives in MCI Logistics; come back to the MCI tab after.
+  await page.getByTestId('mci-open-logistics').click();
+  await expect(page.getByTestId('mci-log')).toContainText(text);
+  await page.getByTestId('mci-tab-button').click();
 });
 
 Then('the MCI summary patients should include {string}', async ({ page }, text: string) => {

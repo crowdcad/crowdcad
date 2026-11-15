@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
+import { Select, SelectItem } from '@heroui/react';
 import { Plus, Undo2 } from 'lucide-react';
 import type { IncomingEta, IncomingTeam, MciState } from '@/app/types';
 import type { MciEquipmentItem } from '@/lib/mciDoc';
@@ -10,6 +11,39 @@ import HelpTip from '@/components/ui/helptip';
 import EquipmentTypeIcon from '../equipmenttypeicon';
 import Hospitals, { type HospitalHandlers } from './hospitals';
 import { LOGI } from './logisticsstyles';
+
+/** The app's usual dropdown, sized for the board. `value` '' shows the placeholder (a pick-to-act menu stays empty). */
+function LogiSelect({ label, value, options, onChange, placeholder, disabled, className, testId }: {
+  label: string;
+  value: string;
+  options: { key: string; label: string }[];
+  onChange: (key: string) => void;
+  placeholder?: string;
+  disabled?: boolean;
+  className?: string;
+  testId?: string;
+}) {
+  return (
+    <Select
+      aria-label={label}
+      size="sm"
+      radius="lg"
+      placeholder={placeholder}
+      selectedKeys={value ? new Set([value]) : new Set<string>()}
+      onSelectionChange={(keys) => {
+        const key = Array.from(keys as Set<string>)[0];
+        if (key) onChange(key);
+      }}
+      isDisabled={disabled}
+      className={className}
+      data-testid={testId}
+    >
+      {options.map((o) => (
+        <SelectItem key={o.key}>{o.label}</SelectItem>
+      ))}
+    </Select>
+  );
+}
 
 /**
  * The Logistics board (#139, D27): Equipment, Hospitals and Incoming Staff, side by side. The dispatcher's
@@ -31,7 +65,7 @@ export interface LogisticsHandlers {
 }
 
 const OTHER = '__other__';
-type Section = 'equipment' | 'hospitals' | 'staff';
+type Section = 'equipment' | 'hospitals' | 'staff' | 'logins';
 
 function useNow(intervalMs = 30_000): Date {
   const [now, setNow] = useState(() => new Date());
@@ -91,25 +125,19 @@ function EtaEditor({ eta, onChange, disabled, testId }: { eta: IncomingEta; onCh
   };
   return (
     <div className="flex items-center gap-1.5">
-      <select
-        aria-label="ETA"
+      <LogiSelect
+        label="ETA"
         value={kind}
         disabled={disabled}
-        onChange={(e) => {
-          const k = e.target.value as IncomingEta['kind'];
+        onChange={(value) => {
+          const k = value as IncomingEta['kind'];
           setKind(k);
           if (k !== 'time') onChange({ kind: k } as IncomingEta);
         }}
-        className={`${LOGI.select} w-36`}
-        data-testid={`${testId}-eta`}
-      >
-        <option value="time">Time</option>
-        {(['en_route', 'pending', 'attempted'] as const).map((k) => (
-          <option key={k} value={k}>
-            {ETA_STATUS_LABELS[k]}
-          </option>
-        ))}
-      </select>
+        options={[{ key: 'time', label: 'Time' }, ...(['en_route', 'pending', 'attempted'] as const).map((k) => ({ key: k, label: ETA_STATUS_LABELS[k] }))]}
+        className="w-36"
+        testId={`${testId}-eta`}
+      />
       {kind === 'time' && (
         <input
           aria-label="ETA time"
@@ -252,20 +280,15 @@ function EquipmentLine({ item, units, readOnly, handlers }: { item: MciEquipment
       {note && <span className={LOGI.meta}>{note}</span>}
       {!readOnly && (
         <div className="ml-auto flex items-center gap-1.5">
-          <select
-            aria-label={`Give ${item.name} to a team`}
+          <LogiSelect
+            label={`Give ${item.name} to a team`}
             value=""
-            onChange={(e) => e.target.value && handlers.equipmentGive(item.name, e.target.value, true)}
-            className={`${LOGI.select} w-32`}
-            data-testid={`logistics-issue-${item.name}`}
-          >
-            <option value="">{heldBy ? 'Give to…' : 'Issue to…'}</option>
-            {units.filter((u) => u !== heldBy).map((u) => (
-              <option key={u} value={u}>
-                {u}
-              </option>
-            ))}
-          </select>
+            placeholder={heldBy ? 'Give to…' : 'Issue to…'}
+            onChange={(u) => handlers.equipmentGive(item.name, u, true)}
+            options={units.filter((u) => u !== heldBy).map((u) => ({ key: u, label: u }))}
+            className="w-32"
+            testId={`logistics-issue-${item.name}`}
+          />
           {heldBy && (
             <button type="button" className={LOGI.smallButton} onClick={() => handlers.equipmentReturn(item.name)} data-testid={`logistics-return-${item.name}`}>
               <Undo2 className="h-3 w-3" aria-hidden />
@@ -302,27 +325,20 @@ function GiveForm({ units, handlers }: { units: string[]; handlers: LogisticsHan
       data-testid="logistics-give"
     >
       <div className="flex flex-wrap gap-2">
-        <select aria-label="Item" value={item} onChange={(e) => setItem(e.target.value)} className={`${LOGI.select} min-w-[8rem] flex-1`} data-testid="logistics-give-item">
-          {LOGISTICS_ITEMS.map((i) => (
-            <option key={i} value={i}>
-              {i}
-            </option>
-          ))}
-          <option value={OTHER}>Other…</option>
-        </select>
+        <LogiSelect
+          label="Item"
+          value={item}
+          onChange={setItem}
+          options={[...LOGISTICS_ITEMS.map((i) => ({ key: i, label: i })), { key: OTHER, label: 'Other…' }]}
+          className="min-w-[8rem] flex-1"
+          testId="logistics-give-item"
+        />
         {item === OTHER && (
           <input aria-label="Other item" placeholder="Item name" maxLength={60} value={other} onChange={(e) => setOther(e.target.value)} className={`${LOGI.input} min-w-[8rem] flex-1`} autoFocus data-testid="logistics-give-other" />
         )}
       </div>
       <div className="flex gap-2">
-        <select aria-label="Team" value={unit} onChange={(e) => setUnit(e.target.value)} className={`${LOGI.select} min-w-0 flex-1`} data-testid="logistics-give-unit">
-          <option value="">Team…</option>
-          {units.map((u) => (
-            <option key={u} value={u}>
-              {u}
-            </option>
-          ))}
-        </select>
+        <LogiSelect label="Team" value={unit} placeholder="Team…" onChange={setUnit} options={units.map((u) => ({ key: u, label: u }))} className="min-w-0 flex-1" testId="logistics-give-unit" />
         <button type="submit" disabled={!name || !unit} className={LOGI.primaryButton} data-testid="logistics-give-submit">
           Give
         </button>
@@ -383,6 +399,7 @@ export default function LogisticsBoard({
   tabs = false,
   className = '',
   bodyClassName = '',
+  logins,
 }: {
   mci: MciState;
   /** Team and supervisor names, for handing out equipment. */
@@ -395,16 +412,18 @@ export default function LogisticsBoard({
   className?: string;
   /** On the sections' grid (padding, scrolling). */
   bodyClassName?: string;
+  /** A Logins section across the whole board (the Logistics role login's), with its own tab on a phone. */
+  logins?: React.ReactNode;
 }) {
   const [section, setSection] = useState<Section>('staff');
   const incomingCount = (mci.logistics?.incoming ?? []).filter((x) => x.state === 'incoming').length;
   const shown = (s: Section) => (tabs ? `${section === s ? 'flex' : 'hidden'} lg:flex` : 'flex');
-  const labels: Record<Section, string> = { equipment: 'Equipment', hospitals: 'Hospitals', staff: incomingCount ? `Incoming (${incomingCount})` : 'Incoming' };
+  const labels: Record<Section, string> = { equipment: 'Equipment', hospitals: 'Hospitals', staff: incomingCount ? `Incoming (${incomingCount})` : 'Incoming', logins: 'Logins' };
   return (
     <div className={`flex min-h-0 flex-col ${className}`}>
       {tabs && (
         <div className="flex shrink-0 border-b border-surface-liner lg:hidden" role="tablist">
-          {(['staff', 'hospitals', 'equipment'] as const).map((s) => (
+          {(['staff', 'hospitals', 'equipment', ...(logins ? (['logins'] as const) : [])] as const).map((s) => (
             <button
               key={s}
               type="button"
@@ -432,6 +451,7 @@ export default function LogisticsBoard({
         <section className={`${shown('staff')} min-w-0 flex-col gap-2`} aria-label="Incoming Staff">
           <IncomingSection mci={mci} readOnly={readOnly} handlers={handlers} />
         </section>
+        {logins && <div className={`${shown('logins')} col-span-full min-w-0 flex-col`}>{logins}</div>}
       </div>
     </div>
   );

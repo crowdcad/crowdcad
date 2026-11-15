@@ -632,17 +632,6 @@ describe('map shapes', () => {
     expect(e.mci!.zones[0].venueZoneId).toBe('za');
   });
 
-  it('draws a treatment area in blue and a redraw replaces the first shape, even on another layer', () => {
-    let e = withMap();
-    e = apply(e, mciShapePatch(e, { kind: 'area', id: 'ar1' }, { layerId: 'l1', points: triangle }));
-    expect(mciShapeOf(e.venue, e.mci!.areas[1])!.zone.color).toBe('#3b82f6');
-    const square = [{ x: 0, y: 0 }, { x: 5, y: 0 }, { x: 5, y: 5 }, { x: 0, y: 5 }];
-    e = apply(e, mciShapePatch(e, { kind: 'area', id: 'ar1' }, { layerId: 'l2', points: square }));
-    const zones = e.venue.layers!.flatMap((l) => (l.zones || []).map((z) => [l.id, z.id]));
-    expect(zones.filter(([, id]) => id === 'ar1')).toEqual([['l2', 'ar1']]);
-    expect(zones).toContainEqual(['l1', 'old']);
-  });
-
   it('refuses a shape with too few points, an unknown layer or an unknown zone', () => {
     const e = withMap();
     expect(mciShapePatch(e, { kind: 'zone', id: 'za' }, { layerId: 'l1', points: triangle.slice(0, 2) }).error).toBe('invalid');

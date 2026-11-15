@@ -6,10 +6,10 @@ import { Button, Card, CardBody, CardHeader } from '@heroui/react';
 import type { MciColor } from '@/app/types';
 import type { MciAreaStats, MciPatient, MciPatientField } from '@/lib/mci';
 import { MCI_COLORS, mciPatientLabel } from '@/lib/mci';
+import { formatAgeSex } from '@/lib/ageSex';
 import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
 import DispatchMotionCell from '@/components/dispatch/motioncell';
 import { TRACKING_ROW_HOVER_CLASS, TRACKING_ROW_OPEN_CLASS } from '@/lib/statusColors';
-import HelpTip from '@/components/ui/helptip';
 import { MCI_COLOR_STYLES, MciColorDot, MciCountsLine, MciMapButton, MciTeamChips, formatClock, type MciAreaOption } from './mciparts';
 import MciPatientBox, { MCI_PATIENT_DRAG_TYPE, type MciReassignTarget } from './mcipatientbox';
 
@@ -81,7 +81,7 @@ function usePatientDrop(enabled: boolean, onDropId: (id: string) => void, stopPr
 }
 
 /** One color's column: a header with the count and the walk-in button, then a box per patient. A box dropped here takes this color and location. */
-function PatientColumn({ areaId, color, patients, readOnly, handlers, misplaced = false }: { areaId: string; color: MciColor; patients: MciPatient[]; readOnly: boolean; handlers: MciPatientHandlers; misplaced?: boolean }) {
+function PatientColumn({ areaId, color, patients, readOnly, handlers }: { areaId: string; color: MciColor; patients: MciPatient[]; readOnly: boolean; handlers: MciPatientHandlers }) {
   const { over, handlers: dropHandlers } = usePatientDrop(!readOnly, (id) => handlers.onDropPatient(id, { areaId, color }), true);
   const listRef = useRef<HTMLDivElement>(null);
   // After a walk-in is added, its box (the last, having no priority) takes focus for typing.
@@ -109,14 +109,8 @@ function PatientColumn({ areaId, color, patients, readOnly, handlers, misplaced 
           <MciColorDot color={color} />
           {style.label}
           <span className="tabular-nums text-surface-light">{count}</span>
-          {misplaced && (
-            <span className="inline-flex items-center gap-0.5 normal-case text-status-red" data-testid={`mci-patient-misplaced-${color}`}>
-              Move
-              <HelpTip text={`This treatment zone only takes its own color. There is no ${style.label.toLowerCase()} treatment zone to move them to yet.`} label="Why move" />
-            </span>
-          )}
         </span>
-        {!readOnly && !misplaced && (
+        {!readOnly && (
           <button
             type="button"
             onClick={() => {
@@ -138,7 +132,7 @@ function PatientColumn({ areaId, color, patients, readOnly, handlers, misplaced 
           <MciPatientBox
             key={p.id}
             patient={p}
-            onMoveInOrder={misplaced ? undefined : handlers.onMoveInOrder}
+            onMoveInOrder={handlers.onMoveInOrder}
             first={i === 0}
             last={i === patients.length - 1}
             zoneName={p.fromZoneId ? handlers.zoneNames[p.fromZoneId] : undefined}
@@ -177,7 +171,6 @@ export default function MciTreatmentCard({ stats, teams, readOnly, onTransport, 
   }, [tracking, inTreatmentTotal]);
   const { over: dropOver, handlers: dropHandlers } = usePatientDrop(!!patients && !readOnly, (id) => patients?.onDropPatient(id, { areaId: stats.area.id }));
   const blackHere = inTreatment.black;
-  const tarp = stats.area.color;
 
   return (
     <Card
@@ -195,7 +188,7 @@ export default function MciTreatmentCard({ stats, teams, readOnly, onTransport, 
           <div className="truncate text-[15px] font-semibold text-surface-light sm:text-base">{name}</div>
           {isClinic && <span className="shrink-0 rounded-md border border-status-card-ring-blue bg-status-card-blue px-2 py-0.5 text-xs text-surface-light">Clinic</span>}
           {mapEnabled && !isClinic && onDraw && (
-            <MciMapButton name={name} hasShape={hasShape} onPress={() => onDraw(stats.area.id)} testId={`mci-area-draw-${name}`} />
+            <MciMapButton name={name} hasShape={hasShape} verb="Place" onPress={() => onDraw(stats.area.id)} testId={`mci-area-draw-${name}`} />
           )}
         </div>
 
@@ -235,8 +228,7 @@ export default function MciTreatmentCard({ stats, teams, readOnly, onTransport, 
               <div className="flex flex-col gap-1" data-testid={`mci-area-patients-${name}`}>
                 {/* Columns sit side by side once each has room for a box, else they stack. */}
                 <div className="grid grid-cols-[repeat(auto-fit,minmax(15rem,1fr))] gap-2">
-                  {/* A tarp shows its own color, plus any patient re-tagged with nowhere to go yet. */}
-                  {PATIENT_COLUMNS.filter((color) => !tarp || color === tarp || stats.patients.some((p) => p.color === color)).map((color) => (
+                  {PATIENT_COLUMNS.map((color) => (
                     <PatientColumn
                       key={color}
                       areaId={stats.area.id}
@@ -244,7 +236,6 @@ export default function MciTreatmentCard({ stats, teams, readOnly, onTransport, 
                       patients={stats.patients.filter((p) => p.color === color)}
                       readOnly={readOnly}
                       handlers={patients}
-                      misplaced={!!tarp && color !== tarp}
                     />
                   ))}
                 </div>
@@ -254,6 +245,21 @@ export default function MciTreatmentCard({ stats, teams, readOnly, onTransport, 
                     {blackHere} black here (counts only)
                   </span>
                 )}
+              </div>
+            )}
+
+            {stats.regularCalls.length > 0 && (
+              <div className="flex flex-col gap-1" data-testid={`mci-area-clinic-patients-${name}`}>
+                <span className="text-xs font-bold text-surface-light">Clinic tracker patients ({stats.regularCalls.length})</span>
+                <ul className="flex flex-col divide-y divide-surface-liner text-xs">
+                  {stats.regularCalls.map((call) => (
+                    <li key={call.id} className="flex flex-wrap items-baseline gap-x-2 py-1">
+                      <span className="font-semibold text-surface-light">{[formatAgeSex(call.age, call.gender), call.chiefComplaint].filter(Boolean).join(' ') || 'No details'}</span>
+                      <span className="text-surface-faint">{call.assignedTeam?.length ? call.assignedTeam.join(', ') : call.source || 'Walkup'}</span>
+                      {call.outcome && <span className="text-surface-faint">{call.outcome}</span>}
+                    </li>
+                  ))}
+                </ul>
               </div>
             )}
 

@@ -158,7 +158,7 @@ export default function AppNavbar() {
         onMenuOpenChange={setIsMenuOpen}
         classNames={{
           base:
-            `sticky top-0 z-[300] ${isDispatch ? 'bg-surface-deep' : 'bg-surface-deepest/70'} backdrop-blur-md`,
+            `app-navbar sticky top-0 z-[300] ${isDispatch ? 'bg-surface-deep' : 'bg-surface-deepest/70'} backdrop-blur-md`,
           wrapper:
             `${wrapperHeightClass} px-4 sm:px-6 md:px-6 lg:px-6 xl:px-6 2xl:px-6 flex items-center`,
           item: "text-[16px] leading-6",

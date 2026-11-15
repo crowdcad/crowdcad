@@ -57,8 +57,9 @@ export default function ClinicTrackingCard({
     if (call.detachedTeams && call.detachedTeams.length > 0) {
       return call.detachedTeams[0].team;
     }
-    return 'Walkup';
-  }, [call.assignedTeam, call.detachedTeams]);
+    // No team: where they came from (Walkup, or MCI: <team or zone> for a patient the MCI handed over).
+    return call.source || 'Walkup';
+  }, [call.assignedTeam, call.detachedTeams, call.source]);
 
   return (
     <Card

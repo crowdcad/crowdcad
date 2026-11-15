@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
-import { HousePlus, MapPin } from 'lucide-react';
+import { BriefcaseMedical, HousePlus, MapPin } from 'lucide-react';
 import type { Layer } from '@/app/types';
 import { imageCorners } from '@/lib/geo/basemapFrame';
 import { DEFAULT_BASEMAP_ID, validChoice } from '@/lib/geo/basemaps';
@@ -113,7 +113,7 @@ export default function GeoLayerMap({
     const at = postLatLng(post, layer);
     if (!at) return [];
     const selected = selectedPostName === post.name;
-    const Icon = post.isClinic ? HousePlus : MapPin;
+    const Icon = post.isClinic ? HousePlus : post.mciAreaId ? BriefcaseMedical : MapPin;
     return [
       {
         key: `post:${idx}:${post.name}`,

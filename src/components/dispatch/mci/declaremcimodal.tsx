@@ -2,13 +2,13 @@
 
 import React, { useMemo, useState } from 'react';
 import { ModalHeader, ModalBody, ModalFooter, Button, Input, Checkbox, RadioGroup, Radio } from '@heroui/react';
-import type { Event, MciColor, MciTreatmentArea, MciZone } from '@/app/types';
+import type { Event, MciTreatmentArea, MciZone } from '@/app/types';
 import { getEventClinics } from '@/lib/clinics';
 import { getVenueZones } from '@/lib/zones';
-import { deriveMci, isDuplicateMciName, MCI_COLORS, mciTarpName as tarpName, newMciId, regularClinicCount, type DeclareMciInput } from '@/lib/mci';
+import { deriveMci, isDuplicateMciName, newMciId, regularClinicCount, type DeclareMciInput } from '@/lib/mci';
 import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
 import HelpTip from '@/components/ui/helptip';
-import { MCI_CANCEL_BUTTON, MCI_CHECKBOX_CLASSNAMES, MCI_INPUT_CLASSNAMES, MciColorDot, MciModal } from './mciparts';
+import { MCI_CANCEL_BUTTON, MCI_CHECKBOX_CLASSNAMES, MCI_INPUT_CLASSNAMES, MciModal } from './mciparts';
 
 type Props = {
   isOpen: boolean;
@@ -104,15 +104,13 @@ function DeclareMciForm({ event, onClose, onDeclare }: Omit<Props, 'isOpen'>) {
   );
   const dispatchZoneIds = useMemo(() => new Set((event.dispatchZones || []).map((z) => z.id)), [event.dispatchZones]);
 
-  // Treatment locations: a tarp per color (the earlier one when there is one), then clinics and earlier locations.
+  // Treatment locations: earlier locations, then clinics. Any other location is named and added here, and placed on the map later.
   const earlierAreas = useMemo(() => [...(existing?.areas ?? []), ...(existing?.retiredAreas ?? [])], [existing?.areas, existing?.retiredAreas]);
-  const tarpFor = (c: MciColor) => earlierAreas.find((a) => a.color === c);
   const otherAreas = useMemo(() => {
-    const earlier = earlierAreas.filter((a) => !a.color);
     const clinics = getEventClinics(event.clinics)
-      .filter((c) => !earlier.some((a) => a.id === c.id || a.clinicId === c.id))
+      .filter((c) => !earlierAreas.some((a) => a.id === c.id || a.clinicId === c.id))
       .map((c): MciTreatmentArea => ({ id: c.id, name: c.name, clinicId: c.id }));
-    return [...earlier, ...clinics];
+    return [...earlierAreas, ...clinics];
   }, [earlierAreas, event.clinics]);
 
   const [zoneIds, setZoneIds] = useState<Set<string>>(
@@ -123,9 +121,8 @@ function DeclareMciForm({ event, onClose, onDeclare }: Omit<Props, 'isOpen'>) {
       ])
   );
   const [areaIds, setAreaIds] = useState<Set<string>>(
-    () => new Set([...(existing?.areas ?? []).filter((a) => !a.color).map((a) => a.id), ...otherAreas.filter((a) => a.clinicId && !existing?.retiredAreas?.some((r) => r.id === a.id)).map((a) => a.id)])
+    () => new Set([...(existing?.areas ?? []).map((a) => a.id), ...otherAreas.filter((a) => a.clinicId && !existing?.retiredAreas?.some((r) => r.id === a.id)).map((a) => a.id)])
   );
-  const [tarps, setTarps] = useState<Set<MciColor>>(() => new Set(MCI_COLORS.filter((c) => !existing?.retiredAreas?.some((a) => a.color === c))));
   const [addedZones, setAddedZones] = useState<string[]>([]);
   const [addedAreas, setAddedAreas] = useState<string[]>([]);
   const [zoneDraft, setZoneDraft] = useState('');
@@ -141,10 +138,7 @@ function DeclareMciForm({ event, onClose, onDeclare }: Omit<Props, 'isOpen'>) {
     ...earlierZones.filter((z) => zoneOn(z.id)),
     ...venueZones.filter((z) => zoneIds.has(z.id)).map((z) => ({ id: z.id, name: z.name, venueZoneId: z.id })),
   ];
-  const pickedAreas: MciTreatmentArea[] = [
-    ...MCI_COLORS.filter((c) => tarps.has(c) || (tarpFor(c) && locked('areas', tarpFor(c)!.id) > 0)).map((c) => tarpFor(c) ?? { id: `tarp-${c}`, name: tarpName(c), color: c }),
-    ...otherAreas.filter((a) => areaOn(a.id)),
-  ];
+  const pickedAreas: MciTreatmentArea[] = otherAreas.filter((a) => areaOn(a.id));
   const zoneDraftTaken = isDuplicateMciName([...pickedZones, ...addedZones.map((name) => ({ name }))], zoneDraft);
   const areaDraftTaken = isDuplicateMciName([...pickedAreas, ...addedAreas.map((name) => ({ name }))], areaDraft);
   // MCI zone names must be unique; two ticked venue zones can share one.
@@ -171,7 +165,7 @@ function DeclareMciForm({ event, onClose, onDeclare }: Omit<Props, 'isOpen'>) {
     try {
       const zones: MciZone[] = [...pickedZones, ...addedZones.map((name) => ({ id: `mci-zone-${newMciId()}`, name }))];
       const areas: MciTreatmentArea[] = [
-        ...pickedAreas.map((a) => (a.id.startsWith('tarp-') && !earlierAreas.some((e) => e.id === a.id) ? { ...a, id: `mci-area-${newMciId()}` } : a)),
+        ...pickedAreas,
         ...addedAreas.map((name) => ({ id: `mci-area-${newMciId()}`, name })),
       ];
       await onDeclare({ zones, areas, trackPatients, ...(redeclare && mode ? { mode } : {}) });
@@ -231,24 +225,9 @@ function DeclareMciForm({ event, onClose, onDeclare }: Omit<Props, 'isOpen'>) {
         <section aria-label={t('Treatment locations')} className="flex flex-col gap-2">
           <div className="flex items-center gap-1">
             <h3 className="text-base font-semibold">{t('Treatment locations')}</h3>
-            <HelpTip text="A color's treatment zone (a tarp) only takes patients tagged that color. Clinics and other locations take any color. Zones are drawn on the map later." label="About treatment locations" />
+            <HelpTip text="Every location takes patients of any color. Pick clinics or add a location by name; place it on the map from its card later." label="About treatment locations" />
           </div>
-          <p className="text-surface-faint">Select or add treatment areas below.</p>
-          <div className="grid grid-cols-2 gap-x-4 gap-y-2" data-testid="mci-declare-tarps">
-            {MCI_COLORS.map((c) => {
-              const earlier = tarpFor(c);
-              const held = earlier ? locked('areas', earlier.id) : 0;
-              return (
-                <Pick key={c} checked={tarps.has(c) || held > 0} disabled={held > 0} onChange={(on) => setTarps((prev) => toggled(prev, c, on))} testId={`mci-declare-tarp-${c}`}>
-                  <span className="inline-flex items-center gap-1.5">
-                    <MciColorDot color={c} />
-                    {earlier?.name ?? tarpName(c)}
-                  </span>
-                  {lockedNote(held)}
-                </Pick>
-              );
-            })}
-          </div>
+          <p className="text-surface-faint">Select or add treatment locations below.</p>
           {otherAreas.map((area) => {
             const regular = area.clinicId ? regularClinicCount(event, { clinicId: area.clinicId }) : 0;
             return (

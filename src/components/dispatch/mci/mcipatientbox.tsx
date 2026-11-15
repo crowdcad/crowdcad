@@ -196,8 +196,7 @@ export default function MciPatientBox({ patient, zoneName, readOnly, teamListId,
   const { details } = patient;
   const color = MCI_COLOR_STYLES[patient.color];
   const label = mciPatientLabel(details) || 'patient';
-  // A tarp of another color can't take them; retriage moves them to their new color's tarp.
-  const otherAreas = areas.filter((a) => a.id !== patient.areaId && (!a.color || a.color === patient.color));
+  const otherAreas = areas.filter((a) => a.id !== patient.areaId);
 
   const commitPriority = (text: string) => {
     const n = Number.parseInt(text, 10);

@@ -4,7 +4,7 @@ import React, { useId, useMemo, useState } from 'react';
 import { CornerDownLeft } from 'lucide-react';
 import { Button, Checkbox, Input } from '@heroui/react';
 import type { Event, MciColor } from '@/app/types';
-import { deriveMci, mciMapLayers, mciQuickMoveAreas, mciRouteArea, mciShapeOf, mciTransportUnits, mciUnitsByAssignment, type MciCounts } from '@/lib/mci';
+import { deriveMci, mciMapLayers, mciPointOf, mciQuickMoveAreas, mciRouteArea, mciShapeOf, mciTransportUnits, mciUnitsByAssignment, type MciCounts } from '@/lib/mci';
 import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
 import type { MciActions } from './usemciactions';
 import MciTotalsStrip from './mcitotalsstrip';
@@ -14,16 +14,23 @@ import MciReassignModal, { type MciReassignRequest } from './mcireassignmodal';
 import MciMoveModal from './mcimovemodal';
 import MciTransportModal from './mcitransportmodal';
 import MciDrawZoneModal, { type MciDrawTarget } from './mcidrawzonemodal';
-import MciLogDrawer from './mcilogdrawer';
 import { MCI_CHECKBOX_CLASSNAMES, MCI_INPUT_CLASSNAMES } from './mciparts';
 import HelpTip from '@/components/ui/helptip';
 
 type Props = {
   event: Event;
   actions: MciActions;
-  /** Opens the role logins dialog (#142); omitted where role logins aren't available (Lite, PocketBase). */
-  onOpenRoleLogins?: () => void;
+  /** Shows MCI Logistics, where the log and role logins are. */
+  onOpenLogistics: () => void;
+  /** Whether role logins (#142) are available here (not Lite or PocketBase), for the button's label. */
+  roleLogins?: boolean;
 };
+
+/** Zone grid columns: thirds for up to three zones, quarters from four, never narrower than 12rem (then they wrap). */
+function zoneGridColumns(count: number): string {
+  const cols = count >= 4 ? 4 : 3;
+  return `repeat(auto-fill, minmax(min(100%, max(12rem, calc((100% - ${(cols - 1) * 0.75}rem) / ${cols}))), 1fr))`;
+}
 
 /** One-line "add by name" form, for zones and treatment areas added after declaring. */
 function AddByName({ label, testId, onAdd }: { label: string; testId: string; onAdd: (name: string) => Promise<boolean> }) {
@@ -58,7 +65,7 @@ function AddByName({ label, testId, onAdd }: { label: string; testId: string; on
  * The MCI tab. Every number comes from `deriveMci` (the log is the source of
  * truth). After stand down it stays, read-only, so the record can be reviewed.
  */
-export default function MciTab({ event, actions, onOpenRoleLogins }: Props) {
+export default function MciTab({ event, actions, onOpenLogistics, roleLogins = false }: Props) {
   const { t } = useDispatchTerms();
   const mci = event.mci;
   // Memoized on what each helper reads, not on `event`, which is a new object on every snapshot.
@@ -85,7 +92,6 @@ export default function MciTab({ event, actions, onOpenRoleLogins }: Props) {
   // A shape the dispatcher chose to draw or edit; otherwise the first zone or area still without one is offered.
   const [drawChoice, setDrawChoice] = useState<{ kind: 'zone' | 'area'; id: string } | null>(null);
   const [, setSkippedTick] = useState(0);
-  const [showLog, setShowLog] = useState(false);
   // Quick move destinations the dispatcher picked on a zone card, this browser only; otherwise the log decides.
   const [quickTargets, setQuickTargets] = useState<Record<string, string>>({});
   const [reassign, setReassign] = useState<MciReassignRequest | null>(null);
@@ -99,6 +105,8 @@ export default function MciTab({ event, actions, onOpenRoleLogins }: Props) {
   const mapLayers = mciMapLayers(event.venue);
   const mapEnabled = mapLayers.length > 0;
   const shapeOf = (item: { id: string; venueZoneId?: string }) => mciShapeOf(event.venue, item);
+  // A treatment location is a point; one drawn as a shape on an older event counts as placed too.
+  const placedOf = (kind: 'zone' | 'area', item: { id: string; venueZoneId?: string }) => (kind === 'zone' ? shapeOf(item) : mciPointOf(event.venue, item.id) ?? shapeOf(item));
   const skipKey = (kind: string, id: string) => `ccad-mci-draw-skipped:${event.id}:${kind}:${id}`;
   const wasSkipped = (kind: string, id: string) => {
     try {
@@ -111,8 +119,8 @@ export default function MciTab({ event, actions, onOpenRoleLogins }: Props) {
     if (!mapEnabled || readOnly) return null;
     const zone = mci.zones.find((z) => !shapeOf(z) && !wasSkipped('zone', z.id));
     if (zone) return { kind: 'zone', id: zone.id, name: zone.name, venueZoneId: zone.venueZoneId };
-    const area = mci.areas.find((a) => !a.clinicId && !shapeOf(a) && !wasSkipped('area', a.id));
-    return area ? { kind: 'area', id: area.id, name: area.name, venueZoneId: area.venueZoneId, color: area.color } : null;
+    const area = mci.areas.find((a) => !a.clinicId && !placedOf('area', a) && !wasSkipped('area', a.id));
+    return area ? { kind: 'area', id: area.id, name: area.name, venueZoneId: area.venueZoneId } : null;
   })();
   const chosenItem = drawChoice ? (drawChoice.kind === 'zone' ? mci.zones : mci.areas).find((x) => x.id === drawChoice.id) : undefined;
   const drawTarget: MciDrawTarget | null =
@@ -145,21 +153,19 @@ export default function MciTab({ event, actions, onOpenRoleLogins }: Props) {
     void actions.setTagged(zoneId, color, total);
   };
   const handleStandDown = () => {
-    if (!window.confirm('Stand down the MCI? Teams in Triage, Treatment or Unavailable return to Available. The counts are kept.')) return;
+    if (!window.confirm('Stand down the MCI? Teams in Triage, Treatment or Unavailable return to Available. Patients still in a treatment location move to the clinic tracker. The counts are kept.')) return;
     void actions.standDown();
   };
   const handleMove = async (zoneId: string, areaId: string | undefined, counts: MciCounts) => {
     await actions.move(zoneId, areaId, counts);
   };
-  const areaOptions = derived.areas.map((a) => ({ id: a.area.id, name: a.name, ...(a.area.color ? { color: a.area.color } : {}) }));
-  // '' (picked on the card) means each color to its own tarp.
+  const areaOptions = derived.areas.map((a) => ({ id: a.area.id, name: a.name }));
   const quickMoveAreaOf = (zoneId: string): string | undefined => {
     const picked = quickTargets[zoneId];
-    if (picked !== undefined) return picked && mci.areas.some((a) => a.id === picked) ? picked : undefined;
-    return lastMoveArea(zoneId);
+    return picked && mci.areas.some((a) => a.id === picked) ? picked : lastMoveArea(zoneId);
   };
   const handleQuickMove = (zoneId: string, color: MciColor) => {
-    const area = mciRouteArea(mci, color, quickMoveAreaOf(zoneId));
+    const area = mciRouteArea(mci, quickMoveAreaOf(zoneId));
     if (area) void actions.move(zoneId, area.id, { [color]: 1 });
   };
 
@@ -193,13 +199,8 @@ export default function MciTab({ event, actions, onOpenRoleLogins }: Props) {
       <div className="sticky top-0 z-20 -mb-2 flex flex-wrap items-start justify-between gap-3 bg-surface-deep pb-2" data-testid="mci-top-bar">
         <MciTotalsStrip mci={mci} totals={derived.totals} />
         <div className="flex items-center gap-2">
-          {!readOnly && onOpenRoleLogins && (
-            <Button size="sm" variant="flat" radius="lg" onPress={onOpenRoleLogins} data-testid="mci-role-logins">
-              Role logins
-            </Button>
-          )}
-          <Button size="sm" variant="flat" radius="lg" onPress={() => setShowLog((v) => !v)} aria-expanded={showLog} data-testid="mci-log-toggle">
-            Log
+          <Button size="sm" variant="flat" radius="lg" onPress={onOpenLogistics} title="Open MCI Logistics" data-testid="mci-open-logistics">
+            {roleLogins && !readOnly ? 'Log & logins' : 'Log'}
           </Button>
           {!readOnly && (
             <Button size="sm" radius="lg" className="bg-status-red text-surface-light" onPress={handleStandDown} data-testid="mci-stand-down">
@@ -215,8 +216,6 @@ export default function MciTab({ event, actions, onOpenRoleLogins }: Props) {
         </p>
       )}
 
-      {showLog && <MciLogDrawer mci={mci} readOnly={readOnly} onUndo={(id) => void actions.undo(id)} />}
-
       <section className="flex flex-col gap-2" aria-label={t('Zones')}>
         <div className="flex items-center justify-between gap-2">
           <span className="flex items-center gap-1">
@@ -225,8 +224,8 @@ export default function MciTab({ event, actions, onOpenRoleLogins }: Props) {
           </span>
           {!readOnly && <AddByName label={t('Add zone')} testId="mci-add-zone" onAdd={actions.addZone} />}
         </div>
-        {/* Each card is at most a third of the row (auto-fill keeps the empty columns, so one zone doesn't stretch); below 14rem each a new row starts. */}
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,max(14rem,calc((100%-1.5rem)/3))),1fr))] gap-3">
+        {/* Up to three zones, each card is a third of the row (auto-fill keeps the empty columns, so one zone doesn't stretch); a fourth makes all four a quarter. Below 12rem a new row starts. */}
+        <div className="grid gap-3" style={{ gridTemplateColumns: zoneGridColumns(derived.zones.length) }}>
           {derived.zones.map((stats) => (
             <MciZoneCard
               key={stats.zone.id}
@@ -275,7 +274,7 @@ export default function MciTab({ event, actions, onOpenRoleLogins }: Props) {
               readOnly={readOnly}
               onTransport={setTransportAreaId}
               mapEnabled={mapEnabled && !readOnly}
-              hasShape={!!shapeOf(stats.area)}
+              hasShape={!!placedOf('area', stats.area)}
               onDraw={(id) => setDrawChoice({ kind: 'area', id })}
               patients={patientHandlers}
             />
@@ -297,7 +296,7 @@ export default function MciTab({ event, actions, onOpenRoleLogins }: Props) {
       <MciDrawZoneModal
         target={readOnly ? null : drawTarget}
         layers={mapLayers}
-        existing={drawTarget && chosenItem ? shapeOf(chosenItem) : undefined}
+        existing={drawTarget && chosenItem ? placedOf(drawTarget.kind, chosenItem) : undefined}
         onSave={async (shape) => {
           if (drawTarget) await actions.saveShape(drawTarget.kind, drawTarget.id, shape);
         }}
