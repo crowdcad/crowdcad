@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useId, useState } from 'react';
-import { ModalHeader, ModalBody, ModalFooter, Button, Checkbox, Input } from '@heroui/react';
+import { ModalHeader, ModalBody, ModalFooter, Autocomplete, AutocompleteItem, Button, Checkbox, Input } from '@heroui/react';
+import { staticSelectorButtonProps } from '@/lib/heroStatic';
 import type { MciColor } from '@/app/types';
 import { MCI_COLORS, emptyCounts, mciPatientLabel, sumCounts, type MciAreaStats, type MciCounts } from '@/lib/mci';
 import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
@@ -12,7 +13,7 @@ type Props = {
   area: MciAreaStats | null;
   /** Ambulance numbers already used this MCI, offered as suggestions. */
   units: string[];
-  /** Hospitals from the Logistics tab, offered as destinations: a transport to one counts as sent there. */
+  /** Hospitals from the Logistics tab, offered as destinations (another name can be typed): a transport to one counts as sent there. */
   hospitals?: string[];
   /** Patients are tracked: pick them by name (priority order), with a count only for black (D14). */
   trackPatients?: boolean;
@@ -27,7 +28,6 @@ const NAMED_COLORS = new Set<MciColor>(['red', 'yellow', 'green']);
 function TransportForm({ area, units, hospitals = [], trackPatients = false, onClose, onTransport }: Omit<Props, 'area'> & { area: MciAreaStats }) {
   const { t } = useDispatchTerms();
   const listId = useId();
-  const hospitalListId = useId();
   const [unit, setUnit] = useState('');
   const [destination, setDestination] = useState('');
   const [counts, setCounts] = useState<MciCounts>(emptyCounts);
@@ -38,7 +38,7 @@ function TransportForm({ area, units, hospitals = [], trackPatients = false, onC
 
 
   const total = sumCounts(counts) + picked.size;
-  const canSubmit = !submitting && unit.trim().length > 0 && total > 0;
+  const canSubmit = !submitting && unit.trim().length > 0 && destination.trim().length > 0 && total > 0;
   const submit = async () => {
     if (!canSubmit) return;
     setSubmitting(true);
@@ -55,7 +55,7 @@ function TransportForm({ area, units, hospitals = [], trackPatients = false, onC
       <ModalHeader className="text-xl font-bold text-surface">
         {t('Transport')}: {area.name}
       </ModalHeader>
-      <ModalBody className="gap-4 py-4">
+      <ModalBody className="gap-4 overflow-x-hidden py-4">
         <div className="flex flex-col gap-1">
           <Input
             label={t('Ambulance number')}
@@ -82,28 +82,28 @@ function TransportForm({ area, units, hospitals = [], trackPatients = false, onC
           </datalist>
         </div>
 
-        <Input
-          label={`${t('Destination')} (optional)`}
+        <Autocomplete
+          label={t('Destination')}
           size="sm"
           radius="lg"
-          value={destination}
-          onValueChange={setDestination}
-          list={hospitalListId}
-          maxLength={80}
-          classNames={MCI_INPUT_CLASSNAMES}
-          data-testid="mci-transport-destination"
-        />
-        <datalist id={hospitalListId}>
+          isRequired
+          allowsCustomValue
+          inputValue={destination}
+          onInputChange={setDestination}
+          onSelectionChange={(key) => key && setDestination(String(key))}
+          selectorButtonProps={staticSelectorButtonProps}
+          inputProps={{ classNames: MCI_INPUT_CLASSNAMES, maxLength: 80, 'data-testid': 'mci-transport-destination' } as React.ComponentProps<typeof Input>}
+        >
           {hospitals.map((h) => (
-            <option key={h} value={h} />
+            <AutocompleteItem key={h}>{h}</AutocompleteItem>
           ))}
-        </datalist>
+        </Autocomplete>
 
         {trackPatients && (
           <div className="flex flex-col gap-1" data-testid="mci-transport-patients">
             <span className="text-xs text-surface-faint">Patients, in transport order</span>
             {namedPatients.length === 0 && <p className="text-sm italic text-surface-faint">No red, yellow or green patients here.</p>}
-            <div className="minimal-scrollbar flex max-h-64 flex-col gap-0.5 overflow-y-auto">
+            <div className="minimal-scrollbar flex max-h-64 flex-col gap-0.5 overflow-y-auto overflow-x-hidden">
               {namedPatients.map((p) => (
                 <Checkbox
                   key={p.id}
@@ -117,7 +117,7 @@ function TransportForm({ area, units, hospitals = [], trackPatients = false, onC
                       return next;
                     })
                   }
-                  classNames={{ base: 'm-0 max-w-full rounded-md px-1 py-0.5 hover:bg-surface-liner/50', label: 'flex min-w-0 items-center gap-2 text-sm normal-case tracking-normal' }}
+                  classNames={{ base: 'm-0 w-full max-w-full rounded-md px-1 py-0.5 hover:bg-surface-liner/50', label: 'flex min-w-0 flex-1 items-center gap-2 text-sm normal-case tracking-normal' }}
                   data-testid={`mci-transport-patient-${p.color}`}
                 >
                   <span className="w-5 text-center text-xs font-semibold tabular-nums text-surface-faint">{p.rank ?? ''}</span>

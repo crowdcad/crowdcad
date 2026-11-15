@@ -238,6 +238,7 @@ When('I mark {string} patient {int} in {string} transported in ambulance {string
   const box = patientBox(page, color, n, area);
   await box.getByTestId('mci-patient-transport').click();
   await box.getByTestId('mci-patient-transport-unit').fill(unit);
+  await box.getByTestId('mci-patient-transport-destination').fill('General');
   await box.getByTestId('mci-patient-transport-confirm').click();
 });
 

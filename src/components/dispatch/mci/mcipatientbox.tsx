@@ -129,10 +129,12 @@ function TransportRow({ units, hospitals, onCancel, onConfirm }: { units: string
   const hospitalListId = useId();
   const [unit, setUnit] = useState('');
   const [destination, setDestination] = useState('');
+  // A destination is required; Logistics' hospitals are suggested, any name can be typed.
+  const ready = destination.trim().length > 0;
   const keys = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
       e.preventDefault();
-      onConfirm({ unit, destination });
+      if (ready) onConfirm({ unit, destination });
     } else if (e.key === 'Escape') onCancel();
   };
   return (
@@ -162,7 +164,9 @@ function TransportRow({ units, hospitals, onCancel, onConfirm }: { units: string
         onChange={(e) => setDestination(e.target.value)}
         onKeyDown={keys}
         list={hospitalListId}
+        required
         className={`${CELL} w-24 flex-1`}
+        data-testid="mci-patient-transport-destination"
       />
       <datalist id={hospitalListId}>
         {hospitals.map((h) => (
@@ -172,7 +176,8 @@ function TransportRow({ units, hospitals, onCancel, onConfirm }: { units: string
       <button
         type="button"
         onClick={() => onConfirm({ unit, destination })}
-        className="h-6 shrink-0 rounded-md bg-accent px-2 text-xs text-surface-light"
+        disabled={!ready}
+        className="h-6 shrink-0 rounded-md bg-accent px-2 text-xs text-surface-light disabled:opacity-40"
         data-testid="mci-patient-transport-confirm"
       >
         Transported

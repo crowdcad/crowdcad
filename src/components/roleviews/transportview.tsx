@@ -143,7 +143,7 @@ export default function TransportView({ mci }: { mci: MciState }) {
             <button type="button" className={`${SECONDARY_BUTTON} flex-1`} onClick={() => setPicked(null)}>
               Cancel
             </button>
-            <button type="button" className={`${PRIMARY_BUTTON} flex-[2]`} disabled={actions.busy} onClick={() => void record()} data-testid="role-transport-record">
+            <button type="button" className={`${PRIMARY_BUTTON} flex-[2]`} disabled={actions.busy || !destination.trim()} onClick={() => void record()} data-testid="role-transport-record">
               Record transport
             </button>
           </div>
