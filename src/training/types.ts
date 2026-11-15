@@ -59,6 +59,11 @@ export interface TrainingStep {
   done?: (event: Event) => boolean;
   /** Done when this anchor is on screen (opening a menu or a modal: no data changes). */
   doneWhenVisible?: Anchor;
+  /**
+   * For a UI step, what "Do it for me" clicks, in order (e.g. a menu, then its
+   * option). Defaults to the step's anchor.
+   */
+  doClicks?: Anchor[];
   /** The event after this step, done for the trainee ("Do it for me", jumping ahead, CI). */
   apply?: (event: Event) => Event;
   /** Lift the write gate for this step only (e.g. "try a call of your own"). */

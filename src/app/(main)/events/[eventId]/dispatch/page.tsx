@@ -3909,7 +3909,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     : selectedRightTab === 'logistics' ? t('MCI Logistics')
     : clinics.find((c) => c.id === selectedRightTab)?.name ?? t('Calls');
   const desktopLeftPane = (
-    <div className="h-full rounded-xl flex flex-col">
+    <div className="h-full rounded-xl flex flex-col" data-testid="left-panel">
       {/* Header with Select and Action Buttons */}
       <div className="flex w-full justify-between items-center pt-2 pb-2 border-b border-surface-liner shrink-0">
         <Select
@@ -3919,6 +3919,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
             setSelectedLeftTab(selected);
           }}
           aria-label="Select section"
+          data-testid="left-panel-select"
           className="w-auto min-w-[180px]"
           classNames={{
             trigger: "bg-surface-deep border border-surface-liner rounded-full hover:bg-surface-liner h-10 min-h-10",
@@ -3926,10 +3927,10 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
             popoverContent: "bg-surface-deep border-surface-liner",
           }}
         >
-          <SelectItem key="teams">{t('Teams')}</SelectItem>
-          <SelectItem key="supervisors">{t('Supervisors')}</SelectItem>
-          <SelectItem key="equipment">{t('Equipment')}</SelectItem>
-          <SelectItem key="log">{t('Log')}</SelectItem>
+          <SelectItem key="teams" data-testid="left-panel-option-teams">{t('Teams')}</SelectItem>
+          <SelectItem key="supervisors" data-testid="left-panel-option-supervisors">{t('Supervisors')}</SelectItem>
+          <SelectItem key="equipment" data-testid="left-panel-option-equipment">{t('Equipment')}</SelectItem>
+          <SelectItem key="log" data-testid="left-panel-option-log">{t('Log')}</SelectItem>
         </Select>
 
         <div className="flex items-center gap-1.5">
@@ -3976,7 +3977,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
   );
 
   const desktopRightPane = (
-    <div className="h-full flex flex-col overflow-hidden pt-2 pb-2">
+    <div className="h-full flex flex-col overflow-hidden pt-2 pb-2" data-testid="right-panel">
       <div className="w-full flex flex-col flex-1 min-h-0">
         <div className="relative z-0 mx-1.5 pb-0 flex items-start justify-between gap-1 h-10 shrink-0">
           <div className="flex items-end gap-1 min-w-0">
@@ -3998,7 +3999,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
                 })()}
               </PanelTab>
             )}
-            <PanelTab active={selectedRightTab === 'calls'} onSelect={() => setSelectedRightTab('calls')}>
+            <PanelTab active={selectedRightTab === 'calls'} onSelect={() => setSelectedRightTab('calls')} data-testid="calls-tab-button">
               {dispatchZones.length > 0 ? callZoneFilterLabel : t('Calls')} ({getActiveCallsForZoneSelection(callZoneFilter).length})
             </PanelTab>
 
@@ -4007,6 +4008,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
                 key={clinic.id}
                 active={selectedRightTab === clinic.id}
                 onSelect={() => setSelectedRightTab(clinic.id)}
+                data-testid={`clinic-tab-${clinic.id}`}
               >
                 {clinic.name} ({getClinicCalls(clinic.id).filter(c => !c.outcome).length})
               </PanelTab>
@@ -4018,6 +4020,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
                   active={selectedRightTab === 'map'}
                   onSelect={() => setSelectedRightTab('map')}
                   aria-label={t('Map')}
+                  data-testid="map-tab-button"
                 >
                   <MapIcon className="h-4 w-4" />
                 </PanelTab>
@@ -4179,6 +4182,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
                       variant="flat"
                       className="rounded-full bg-surface-deep border border-surface-liner hover:bg-surface-liner"
                       aria-label={t('Add Patient')}
+                      data-testid="clinic-add-patient"
                       onPress={() => setShowQuickClinicCallForm(true)}
                     >
                       {t('Add Patient')}

@@ -44,14 +44,22 @@ function testIdsInSource() {
 const ids = testIdsInSource();
 const idExists = (id: string) => ids.literal.has(id) || [...ids.prefixes].some((p) => p && id.startsWith(p));
 
-/** The test ids an anchor refers to. */
-function anchorIds(anchor: string): string[] {
-  if (!anchor.startsWith('css:')) return [anchor];
-  return [...anchor.matchAll(/data-testid="([^"]+)"/g)].map((m) => m[1]);
+/** Whether some test id in src starts with `prefix` (a `[data-testid^="..."]` selector). */
+const idPrefixExists = (prefix: string) =>
+  [...ids.literal].some((id) => id.startsWith(prefix)) || [...ids.prefixes].some((p) => p.startsWith(prefix) || prefix.startsWith(p));
+
+/** Whether every test id an anchor refers to exists. */
+function anchorResolves(anchor: string): { ok: boolean; missing: string[] } {
+  if (!anchor.startsWith('css:')) return idExists(anchor) ? { ok: true, missing: [] } : { ok: false, missing: [anchor] };
+  const missing = [
+    ...[...anchor.matchAll(/data-testid="([^"]+)"/g)].map((m) => m[1]).filter((id) => !idExists(id)),
+    ...[...anchor.matchAll(/data-testid\^="([^"]+)"/g)].map((m) => m[1]).filter((p) => !idPrefixExists(p)),
+  ];
+  return { ok: missing.length === 0, missing };
 }
 
 function anchorsOf(module: TrainingModule): string[] {
-  return module.steps.flatMap((s) => [...(s.anchors ?? []), ...(s.anchor ? [s.anchor] : []), ...(s.doneWhenVisible ? [s.doneWhenVisible] : [])]);
+  return module.steps.flatMap((s) => [...(s.anchors ?? []), ...(s.anchor ? [s.anchor] : []), ...(s.doneWhenVisible ? [s.doneWhenVisible] : []), ...(s.doClicks ?? [])]);
 }
 
 describe('training registry', () => {
@@ -91,7 +99,7 @@ describe.each(MODULES.map((m) => [m.id, m] as const))('training module %s', (_id
 
   it('points only at test ids that exist', () => {
     for (const anchor of anchorsOf(module)) {
-      for (const id of anchorIds(anchor)) expect(idExists(id), `${module.id}: no data-testid "${id}" in src`).toBe(true);
+      expect(anchorResolves(anchor).missing, `${module.id}: anchor ${anchor} has no matching data-testid in src`).toEqual([]);
     }
   });
 

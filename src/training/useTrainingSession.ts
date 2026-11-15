@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { LiteTrackingFeed, LiteWriteGate } from '@/lib/LiteContext';
 import { normalizeLiteDraftToEvent, toLiteDraftFromEvent } from '@/lib/liteEventAdapters';
 import type { UnitTracking } from '@/lib/unitTracking';
-import { findAnchor } from './anchors';
+import { clickSequence, findAnchor, findStepTarget } from './anchors';
 import { createMemoryLiteStore, type MemoryLiteStore } from './memoryStore';
 import { boardAtStep, gateVerdict, stepDone, stepKind } from './replay';
 import { markModuleComplete, markStepDone } from './progress';
@@ -114,7 +114,11 @@ export function useTrainingSession(module: TrainingModule, startIndex = 0, track
   const writeGate = useCallback<LiteWriteGate>(
     (current, next) => {
       const verdict = gateVerdict(module, stateRef.current, current, next);
-      if (!verdict.ok) setRejected(verdict.rejected);
+      if (!verdict.ok) {
+        setRejected(verdict.rejected);
+        // For whoever maintains a module: the text the gate turned away (src/training/gate.ts SYSTEM_TEXT).
+        if (process.env.NODE_ENV !== 'production') console.info('[training] write gate turned away:', verdict.rejected);
+      }
       return verdict.ok;
     },
     [module]
@@ -143,9 +147,12 @@ export function useTrainingSession(module: TrainingModule, startIndex = 0, track
     const kind = stepKind(step);
     if (kind === 'read') return finishStep(index);
     if (kind === 'ui') {
-      // Click the control the step points at; the step finishes when its target opens.
-      const el = (step.anchors ?? []).concat(step.anchor ? [step.anchor] : []).map(findAnchor).find(Boolean);
-      el?.click();
+      // Click what the step asks for; the step finishes when its target opens.
+      if (step.doClicks) {
+        void clickSequence(step.doClicks);
+        return;
+      }
+      findStepTarget(step)?.click();
       return;
     }
     const draft = store.peek(eventId);

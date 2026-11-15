@@ -74,7 +74,7 @@ export default function TransportUnitModal({
               {t('Enter Transport Unit')}
             </ModalHeader>
 
-            <ModalBody>
+            <ModalBody data-testid="transport-unit-modal">
               <Input
                 autoFocus
                 label={t('Transport Unit #')}
@@ -88,6 +88,7 @@ export default function TransportUnitModal({
                 value={value}
                 onValueChange={onValueChange}
                 aria-label="Transport Unit #"
+                data-testid="transport-unit-input"
               />
             </ModalBody>
 

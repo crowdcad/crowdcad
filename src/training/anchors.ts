@@ -38,3 +38,24 @@ export function findStepTarget(step: TrainingStep): HTMLElement | null {
   }
   return null;
 }
+
+/** Waits for an anchor to be on screen, up to `timeoutMs`. */
+export async function waitForAnchor(anchor: Anchor, timeoutMs = 2000): Promise<HTMLElement | null> {
+  const until = Date.now() + timeoutMs;
+  for (;;) {
+    const el = findAnchor(anchor);
+    if (el || Date.now() > until) return el;
+    await new Promise((r) => setTimeout(r, 100));
+  }
+}
+
+/** Clicks each anchor in turn, waiting for it to appear (a menu opening). */
+export async function clickSequence(anchors: Anchor[]): Promise<boolean> {
+  for (const anchor of anchors) {
+    const el = await waitForAnchor(anchor);
+    if (!el) return false;
+    el.click();
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  return true;
+}

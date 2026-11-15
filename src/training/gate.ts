@@ -22,7 +22,7 @@ const SKIP_KEYS = new Set([
 ]);
 
 /** Words the board itself writes as locations or labels. */
-export const SYSTEM_TEXT = ['unknown', 'clinic', 'roaming', 'en route', 'on scene'];
+export const SYSTEM_TEXT = ['unknown', 'clinic', 'roaming', 'en route', 'on scene', 'walkup'];
 
 function skipKey(key: string): boolean {
   return SKIP_KEYS.has(key) || /Id$/.test(key) || /Ids$/.test(key);

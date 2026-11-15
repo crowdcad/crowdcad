@@ -1,5 +1,7 @@
 import type { TrainingModule, TrainingTrack, TrackId } from './types';
 import callAssignment from './modules/callAssignment';
+import clinicPatients from './modules/clinicPatients';
+import orientation from './modules/orientation';
 
 /**
  * Every training track and module, in catalog order. Adding a module: write
@@ -39,7 +41,7 @@ export const TRACKS: TrainingTrack[] = [
   },
 ];
 
-export const MODULES: TrainingModule[] = [callAssignment];
+export const MODULES: TrainingModule[] = [orientation, callAssignment, clinicPatients];
 
 /**
  * Preview (unreleased) modules are shown only with NEXT_PUBLIC_TRAINING_PREVIEW=on

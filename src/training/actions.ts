@@ -138,3 +138,42 @@ export function setUnitStatus(event: Event, team: string, status: string, locati
 }
 
 export const isResolved = (call: Call | undefined) => !!call && RESOLVED_CALL.includes(call.status);
+
+/** The clinic's Add Patient (walk-up) form. */
+export function addWalkup(event: Event, input: { age?: string; gender?: string; chiefComplaint: string; clinicId?: string }, now = Date.now()): Event {
+  const order = (event.calls || []).reduce((m, c) => Math.max(m, typeof c.order === 'number' ? c.order : 0), 0) + 1;
+  const call: Call = {
+    id: `${now}`,
+    order,
+    status: 'Delivered',
+    location: 'Clinic',
+    assignedTeam: [],
+    chiefComplaint: input.chiefComplaint,
+    source: 'Walkup',
+    ...(input.age && { age: input.age }),
+    ...(input.gender && { gender: input.gender }),
+    clinic: true,
+    clinicId: input.clinicId ?? event.clinics?.[0]?.id,
+    log: [{ timestamp: now, message: `${hhmm(now)} - Clinic walkup call created` }],
+  };
+  return { ...event, calls: [...(event.calls || []), call] };
+}
+
+/** A clinic patient's status pill. */
+export function setClinicOutcome(event: Event, complaint: string, outcome: Call['outcome'] | 'In Clinic', transportUnit?: string): Event {
+  return {
+    ...event,
+    calls: event.calls.map((c) =>
+      c.clinic && c.chiefComplaint.toLowerCase() === complaint.toLowerCase()
+        ? {
+            ...c,
+            outcome: outcome === 'In Clinic' ? undefined : outcome,
+            ...(transportUnit ? { transportUnit } : {}),
+          }
+        : c
+    ),
+  };
+}
+
+export const clinicPatient = (event: Event, complaint: string) =>
+  (event.calls || []).find((c) => c.clinic && c.chiefComplaint.toLowerCase() === complaint.toLowerCase());
