@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useId, useMemo, useState } from 'react';
-import { CornerDownLeft } from 'lucide-react';
+import { ChevronDown, CornerDownLeft } from 'lucide-react';
 import { Button, Checkbox, Input } from '@heroui/react';
 import type { Event, MciColor } from '@/app/types';
 import { deriveMci, mciMapLayers, mciPointOf, mciQuickMoveAreas, mciRouteArea, mciShapeOf, mciTransportUnits, mciUnitsByAssignment, type MciCounts } from '@/lib/mci';
@@ -93,10 +93,14 @@ export default function MciTab({ event, actions, onOpenLogins }: Props) {
   // Quick move destinations the dispatcher picked on a zone card, this browser only; otherwise the log decides.
   const [quickTargets, setQuickTargets] = useState<Record<string, string>>({});
   const [reassign, setReassign] = useState<MciReassignRequest | null>(null);
+  // Zones stay open until every one is cleared; then they can be folded away.
+  const [zonesFolded, setZonesFolded] = useState(false);
 
   if (!mci) return null;
   const readOnly = !mci.active;
   const moveZone = derived.zones.find((z) => z.zone.id === moveZoneId) ?? null;
+  const allZonesCleared = derived.zones.length > 0 && derived.zones.every((z) => z.cleared);
+  const zonesHidden = allZonesCleared && zonesFolded;
   const transportArea = derived.areas.find((a) => a.area.id === transportAreaId) ?? null;
 
   // Drawing is offered only when the venue has a map.
@@ -219,12 +223,27 @@ export default function MciTab({ event, actions, onOpenLogins }: Props) {
       <section className="flex flex-col gap-2" aria-label={t('Zones')}>
         <div className="flex items-center justify-between gap-2">
           <span className="flex items-center gap-1">
-            <h2 className="text-base font-bold text-surface-light">{t('Zones')}</h2>
-            <HelpTip text="Count tags per zone. The plus beside Moved sends one patient to treatment: each color to its own treatment zone unless the card picks a location that takes any color." label="About zones" />
+            {allZonesCleared ? (
+              <button
+                type="button"
+                onClick={() => setZonesFolded((v) => !v)}
+                aria-expanded={!zonesHidden}
+                className="flex items-center gap-1 text-base font-bold text-surface-light"
+                data-testid="mci-zones-toggle"
+              >
+                <ChevronDown className={`h-4 w-4 transition-transform ${zonesHidden ? '-rotate-90' : ''}`} aria-hidden />
+                {t('Zones')}
+                <span className="text-xs font-normal text-surface-faint">(all clear)</span>
+              </button>
+            ) : (
+              <h2 className="text-base font-bold text-surface-light">{t('Zones')}</h2>
+            )}
+            <HelpTip text="Count tags per zone. The plus beside Moved sends one patient to the location picked on the card. Once every zone is clear, the section can be folded away." label="About zones" />
           </span>
           {!readOnly && <AddByName label={t('Add zone')} testId="mci-add-zone" onAdd={actions.addZone} />}
         </div>
         {/* Up to three zones, each card is a third of the row (auto-fill keeps the empty columns, so one zone doesn't stretch); a fourth makes all four a quarter. Below 12rem a new row starts. */}
+        {!zonesHidden && (
         <div className="grid gap-3" style={{ gridTemplateColumns: zoneGridColumns(derived.zones.length) }}>
           {derived.zones.map((stats) => (
             <MciZoneCard
@@ -248,6 +267,7 @@ export default function MciTab({ event, actions, onOpenLogins }: Props) {
           ))}
           {derived.zones.length === 0 && <p className="text-sm italic text-surface-faint">No zones yet. Add one by name.</p>}
         </div>
+        )}
       </section>
 
       <section className="flex flex-col gap-2" aria-label={t('Treatment locations')}>
