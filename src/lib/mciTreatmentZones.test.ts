@@ -6,12 +6,14 @@ import {
   declareMci,
   deriveMci,
   mciCsvLines,
+  mciPointOf,
   mciQuickMoveArea,
   mciRecords,
   mciRouteArea,
   mciSeries,
   movePatch,
   movePatientInOrderPatch,
+  mciShapePatch,
   reassignPatientPatch,
   routedMovePatch,
   standDownMci,
@@ -177,5 +179,23 @@ describe('re-declaring after a stand-down', () => {
   it('without an earlier MCI ignores the mode and adds to what is there', () => {
     const patch = declareMci(base(), { zones: [{ id: 'za', name: 'Zone A' }], areas: [], mode: 'new' }, 500);
     expect((patch.mci as MciState).earlier).toBeUndefined();
+  });
+});
+
+describe('treatment location points', () => {
+  it('places a location as a marked post, and placing it again moves it to the new layer', () => {
+    const layers = [
+      { id: 'l1', name: 'Ground', mapUrl: 'x.png', posts: ['Gate'] },
+      { id: 'l2', name: 'Upper', mapUrl: 'y.png', posts: [] },
+    ];
+    let e = { ...declared(), venue: { id: 'v', name: 'V', equipment: [], userId: 'u', layers } } as unknown as Event;
+    e = apply(e, mciShapePatch(e, { kind: 'area', id: 'red' }, { layerId: 'l1', points: [{ x: 10, y: 20 }] }));
+    expect(mciPointOf(e.venue, 'red')).toMatchObject({ layer: { id: 'l1' }, post: { name: 'Red treatment', x: 10, y: 20, mciAreaId: 'red' } });
+    expect(e.venue!.layers![0]!.posts).toContain('Gate');
+    e = apply(e, mciShapePatch(e, { kind: 'area', id: 'red' }, { layerId: 'l2', points: [{ x: 50, y: 50 }] }));
+    expect(mciPointOf(e.venue, 'red')?.layer.id).toBe('l2');
+    expect(e.venue!.layers![0]!.posts).toEqual(['Gate']);
+    // Never a clinic.
+    expect(mciPointOf(e.venue, 'red')?.post.isClinic).toBeUndefined();
   });
 });

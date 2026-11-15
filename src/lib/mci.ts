@@ -1,6 +1,7 @@
 import type {
   Event,
   Layer,
+  Post,
   MciAssignment,
   MciColor,
   MciEarlier,
@@ -17,6 +18,7 @@ import type {
 import { getEventClinics, isClinicCallResolved } from '@/lib/clinics';
 import { teamVisualStatusResolver } from '@/lib/statusColors';
 import { isGeoLayer } from '@/lib/geo/layers';
+import { postAt } from '@/lib/geo/positions';
 
 // Mass casualty incident (MCI) mode. The log on `event.mci` is the only source
 // of counts: every number on screen is derived here, nothing is stored as a
@@ -1441,10 +1443,19 @@ export function mciShapeOf(
   return undefined;
 }
 
+/** A treatment location's map point: the post on a venue layer that carries its id. */
+export function mciPointOf(venue: Pick<Venue, 'layers'> | undefined | null, areaId: string): { layer: Layer; post: Exclude<Post, string> } | undefined {
+  for (const layer of venue?.layers || []) {
+    const post = (layer.posts || []).find((p): p is Exclude<Post, string> => typeof p !== 'string' && p.mciAreaId === areaId);
+    if (post) return { layer, post };
+  }
+  return undefined;
+}
+
 /**
- * Stores a drawn shape for a zone or treatment area on a layer of the event's
- * venue, replacing any earlier shape (on any layer) so a redraw moves it.
- * Allowed after stand down too, so the record's map can be tidied.
+ * Stores where a zone or treatment location is on a layer of the event's venue, replacing any earlier one (on
+ * any layer) so placing it again moves it. A zone is a drawn shape; a treatment location is a point (the first
+ * of `shape`), kept as a post marked with its id. Allowed after stand down too, so the record's map can be tidied.
  */
 export function mciShapePatch(event: Pick<Event, 'venue' | 'mci'>, target: { kind: 'zone' | 'area'; id: string }, shape: MciShape): MciWrite {
   const mci = event.mci;
@@ -1452,7 +1463,18 @@ export function mciShapePatch(event: Pick<Event, 'venue' | 'mci'>, target: { kin
   if (!mci || !layers) return { patch: {}, error: 'invalid' };
   const item = (target.kind === 'zone' ? mci.zones : mci.areas).find((x) => x.id === target.id);
   if (!item) return { patch: {}, error: target.kind === 'zone' ? 'unknown-zone' : 'unknown-area' };
-  if (!layers.some((l) => l.id === shape.layerId)) return { patch: {}, error: 'invalid' };
+  const layer = layers.find((l) => l.id === shape.layerId);
+  if (!layer) return { patch: {}, error: 'invalid' };
+  if (target.kind === 'area') {
+    const coord = shape.coords?.[0];
+    const point = shape.points[0];
+    if (!coord && !point) return { patch: {}, error: 'invalid' };
+    const blank: Exclude<Post, string> = { name: item.name, x: point?.x ?? null, y: point?.y ?? null, mciAreaId: item.id };
+    const post = coord ? postAt(blank, coord, layer) : blank;
+    const others = (l: Layer) => (l.posts || []).filter((p) => typeof p === 'string' || p.mciAreaId !== item.id);
+    const nextLayers = layers.map((l) => ({ ...l, posts: l.id === layer.id ? [...others(l), post] : others(l) }));
+    return { patch: { venue: { ...event.venue, layers: nextLayers } } };
+  }
   if (shape.points.length < 3 && (shape.coords?.length ?? 0) < 3) return { patch: {}, error: 'invalid' };
 
   const shapeId = mciShapeId(item);
@@ -1475,7 +1497,7 @@ export function mciShapePatch(event: Pick<Event, 'venue' | 'mci'>, target: { kin
   return {
     patch: {
       venue: { ...event.venue, layers: nextLayers },
-      mci: { ...mci, zones: target.kind === 'zone' ? link(mci.zones) : mci.zones, areas: target.kind === 'area' ? link(mci.areas) : mci.areas },
+      mci: { ...mci, zones: link(mci.zones) },
     },
   };
 }

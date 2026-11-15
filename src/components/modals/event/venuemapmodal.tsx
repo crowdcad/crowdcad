@@ -1,7 +1,7 @@
 'use client';
 import React, { useState, useRef, useEffect } from 'react';
 import Image from 'next/image';
-import { MapPin, ShieldPlus, ShieldUser, Briefcase, HousePlus, ArrowBigDown } from 'lucide-react';
+import { MapPin, ShieldPlus, ShieldUser, Briefcase, BriefcaseMedical, HousePlus, ArrowBigDown } from 'lucide-react';
 import { Post, Staff, Supervisor, Equipment, Layer, Call, Clinic } from '@/app/types';
 import { isClinicPost } from '@/lib/clinics';
 import { getEquipmentIconType } from '@/lib/equipmentIcon';
@@ -35,7 +35,7 @@ function StatusTimer({ since }: { since: number }) {
   );
 }
 
-function isPostObject(post: unknown): post is { name: string; x: number; y: number } {
+function isPostObject(post: unknown): post is { name: string; x: number; y: number; mciAreaId?: string } {
   return (
     typeof post === "object" &&
     post !== null &&
@@ -118,7 +118,7 @@ export function PostMarker({ post, rect, scale, isSelected, onAddCall }: PostMar
 
   // Check if this is a clinic location
   const isClinic = isClinicPost(post);
-  const Icon = isClinic ? HousePlus : MapPin;
+  const Icon = isClinic ? HousePlus : post.mciAreaId ? BriefcaseMedical : MapPin;
   const iconSize = isClinic ? 26 : 22;
   const emphasis = (hovered ? MARKER_ENLARGE : 1) / scale;
 

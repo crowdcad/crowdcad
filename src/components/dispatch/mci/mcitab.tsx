@@ -4,7 +4,7 @@ import React, { useId, useMemo, useState } from 'react';
 import { CornerDownLeft } from 'lucide-react';
 import { Button, Checkbox, Input } from '@heroui/react';
 import type { Event, MciColor } from '@/app/types';
-import { deriveMci, mciMapLayers, mciQuickMoveAreas, mciRouteArea, mciShapeOf, mciTransportUnits, mciUnitsByAssignment, type MciCounts } from '@/lib/mci';
+import { deriveMci, mciMapLayers, mciPointOf, mciQuickMoveAreas, mciRouteArea, mciShapeOf, mciTransportUnits, mciUnitsByAssignment, type MciCounts } from '@/lib/mci';
 import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
 import type { MciActions } from './usemciactions';
 import MciTotalsStrip from './mcitotalsstrip';
@@ -105,6 +105,8 @@ export default function MciTab({ event, actions, onOpenRoleLogins }: Props) {
   const mapLayers = mciMapLayers(event.venue);
   const mapEnabled = mapLayers.length > 0;
   const shapeOf = (item: { id: string; venueZoneId?: string }) => mciShapeOf(event.venue, item);
+  // A treatment location is a point; one drawn as a shape on an older event counts as placed too.
+  const placedOf = (kind: 'zone' | 'area', item: { id: string; venueZoneId?: string }) => (kind === 'zone' ? shapeOf(item) : mciPointOf(event.venue, item.id) ?? shapeOf(item));
   const skipKey = (kind: string, id: string) => `ccad-mci-draw-skipped:${event.id}:${kind}:${id}`;
   const wasSkipped = (kind: string, id: string) => {
     try {
@@ -117,7 +119,7 @@ export default function MciTab({ event, actions, onOpenRoleLogins }: Props) {
     if (!mapEnabled || readOnly) return null;
     const zone = mci.zones.find((z) => !shapeOf(z) && !wasSkipped('zone', z.id));
     if (zone) return { kind: 'zone', id: zone.id, name: zone.name, venueZoneId: zone.venueZoneId };
-    const area = mci.areas.find((a) => !a.clinicId && !shapeOf(a) && !wasSkipped('area', a.id));
+    const area = mci.areas.find((a) => !a.clinicId && !placedOf('area', a) && !wasSkipped('area', a.id));
     return area ? { kind: 'area', id: area.id, name: area.name, venueZoneId: area.venueZoneId } : null;
   })();
   const chosenItem = drawChoice ? (drawChoice.kind === 'zone' ? mci.zones : mci.areas).find((x) => x.id === drawChoice.id) : undefined;
@@ -279,7 +281,7 @@ export default function MciTab({ event, actions, onOpenRoleLogins }: Props) {
               readOnly={readOnly}
               onTransport={setTransportAreaId}
               mapEnabled={mapEnabled && !readOnly}
-              hasShape={!!shapeOf(stats.area)}
+              hasShape={!!placedOf('area', stats.area)}
               onDraw={(id) => setDrawChoice({ kind: 'area', id })}
               patients={patientHandlers}
             />
@@ -301,7 +303,7 @@ export default function MciTab({ event, actions, onOpenRoleLogins }: Props) {
       <MciDrawZoneModal
         target={readOnly ? null : drawTarget}
         layers={mapLayers}
-        existing={drawTarget && chosenItem ? shapeOf(chosenItem) : undefined}
+        existing={drawTarget && chosenItem ? placedOf(drawTarget.kind, chosenItem) : undefined}
         onSave={async (shape) => {
           if (drawTarget) await actions.saveShape(drawTarget.kind, drawTarget.id, shape);
         }}

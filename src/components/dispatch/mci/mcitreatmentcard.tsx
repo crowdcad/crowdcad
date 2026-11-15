@@ -187,7 +187,7 @@ export default function MciTreatmentCard({ stats, teams, readOnly, onTransport, 
           <div className="truncate text-[15px] font-semibold text-surface-light sm:text-base">{name}</div>
           {isClinic && <span className="shrink-0 rounded-md border border-status-card-ring-blue bg-status-card-blue px-2 py-0.5 text-xs text-surface-light">Clinic</span>}
           {mapEnabled && !isClinic && onDraw && (
-            <MciMapButton name={name} hasShape={hasShape} onPress={() => onDraw(stats.area.id)} testId={`mci-area-draw-${name}`} />
+            <MciMapButton name={name} hasShape={hasShape} verb="Place" onPress={() => onDraw(stats.area.id)} testId={`mci-area-draw-${name}`} />
           )}
         </div>
 

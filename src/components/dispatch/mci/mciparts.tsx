@@ -65,7 +65,7 @@ export function MciModal({
 }
 
 /** The draw/edit-on-map pin beside a zone or treatment location name. */
-export function MciMapButton({ name, hasShape, onPress, testId }: { name: string; hasShape: boolean; onPress: () => void; testId: string }) {
+export function MciMapButton({ name, hasShape, onPress, testId, verb = 'Draw' }: { name: string; hasShape: boolean; onPress: () => void; testId: string; verb?: string }) {
   return (
     <button
       type="button"
@@ -73,8 +73,8 @@ export function MciMapButton({ name, hasShape, onPress, testId }: { name: string
         e.stopPropagation();
         onPress();
       }}
-      aria-label={`${hasShape ? 'Edit' : 'Draw'} ${name} on the map`}
-      title={hasShape ? 'Edit on the map' : 'Draw on the map'}
+      aria-label={`${hasShape ? 'Edit' : verb} ${name} on the map`}
+      title={hasShape ? 'Edit on the map' : `${verb} on the map`}
       className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md hover:bg-surface-liner ${hasShape ? 'text-surface-faint' : 'text-status-orange'}`}
       data-testid={testId}
     >

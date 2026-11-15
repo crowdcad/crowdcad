@@ -13,6 +13,8 @@ export type Post =
     // provenance from a GIS import and rendering uses x/y.
     lat?: number | null;
     lng?: number | null;
+    /** Set on the map point of an MCI treatment location (that location's id): drawn with a medical icon, never a clinic. */
+    mciAreaId?: string;
   };
 
 export interface Clinic {
@@ -146,7 +148,7 @@ export interface MciTreatmentArea {
   name: string;
   /** Set when this area is an existing event clinic. */
   clinicId?: string;
-  /** The map zone drawn for this area, in the event venue's layers (older events). */
+  /** The map zone drawn for this area, in the event venue's layers (older events; now a point, see `mciPointOf`). */
   venueZoneId?: string;
 }
 
