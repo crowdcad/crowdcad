@@ -42,6 +42,9 @@ export function useStepTargetRect(step: TrainingStep | null): Rect | null {
   return rect;
 }
 
+/** Just above React Aria's overlay z-index (100000). */
+const COACHMARK_Z = 100001;
+
 const PAD = 6;
 const TIP_W = 240;
 
@@ -80,7 +83,9 @@ export default function Coachmark({ step, label }: { step: TrainingStep | null; 
           : { right: -6, top: 14 };
 
   return (
-    <div aria-hidden className="pointer-events-none fixed inset-0 z-[1000]">
+    // Above React Aria's popovers (HeroUI dropdowns, selects), which position themselves at an inline z-index of
+    // 100000: the ring must show on top of an open menu. It never takes clicks, so the menu still works underneath.
+    <div aria-hidden className="pointer-events-none fixed inset-0" style={{ zIndex: COACHMARK_Z }} data-testid="training-coachmark">
       <div
         // The ring is an outline: the box-shadow is the dimmed surround, and Tailwind's ring is a box-shadow too.
         className="absolute rounded-lg outline outline-2 outline-accent transition-all duration-150"
