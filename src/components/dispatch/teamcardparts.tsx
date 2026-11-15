@@ -296,7 +296,7 @@ function TrackedLocation({ location }: { location: string }) {
   const { t } = useDispatchTerms();
   return (
     <div
-      className="flex h-8 min-w-0 items-center gap-1 rounded-full border border-surface-liner bg-surface-deep px-3 text-sm text-surface-light"
+      className="flex h-10 min-h-10 min-w-0 items-center gap-1 rounded-full border border-surface-liner bg-surface-deep px-3 text-sm text-surface-light"
       title={`${location || t('No location')} (live from TAK; not editable while connected)`}
       aria-label="Location (live)"
       data-testid="unit-live-location"
