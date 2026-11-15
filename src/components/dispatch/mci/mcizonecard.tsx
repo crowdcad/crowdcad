@@ -206,6 +206,7 @@ export default function MciZoneCard({
                   onClick={() => onTag(zone.id, color, 1)}
                   aria-label={`Add one ${label.toLowerCase()} to ${name}`}
                   className={STEP_BUTTON}
+                  data-testid={`mci-zone-${name}-${color}-add`}
                 >
                   <Plus className="h-3.5 w-3.5" />
                 </button>

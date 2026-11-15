@@ -32,6 +32,9 @@ function testIdsInSource() {
         for (const m of text.matchAll(/data-testid=["']([^"']+)["']/g)) literal.add(m[1]);
         for (const m of text.matchAll(/data-testid=\{`([^`$]*)(\$\{)?/g)) (m[2] ? prefixes : literal).add(m[1]);
         for (const m of text.matchAll(/data-testid=\{["']([^"']+)["']\}/g)) literal.add(m[1]);
+        // Components that forward a `testId` prop to data-testid (MciModal, Pick, ...).
+        for (const m of text.matchAll(/testId=["']([^"']+)["']/g)) literal.add(m[1]);
+        for (const m of text.matchAll(/testId=\{`([^`$]*)(\$\{)?/g)) (m[2] ? prefixes : literal).add(m[1]);
       }
     }
   };

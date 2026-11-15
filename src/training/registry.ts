@@ -1,6 +1,7 @@
 import type { TrainingModule, TrainingTrack, TrackId } from './types';
 import callAssignment from './modules/callAssignment';
 import clinicPatients from './modules/clinicPatients';
+import mciResponse from './modules/mciResponse';
 import orientation from './modules/orientation';
 
 /**
@@ -41,7 +42,7 @@ export const TRACKS: TrainingTrack[] = [
   },
 ];
 
-export const MODULES: TrainingModule[] = [orientation, callAssignment, clinicPatients];
+export const MODULES: TrainingModule[] = [orientation, callAssignment, clinicPatients, mciResponse];
 
 /**
  * Preview (unreleased) modules are shown only with NEXT_PUBLIC_TRAINING_PREVIEW=on
