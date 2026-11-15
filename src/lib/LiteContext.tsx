@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext } from 'react';
-import type { Event } from '@/app/types';
+import type { Event, Layer } from '@/app/types';
 import type { UnitTracking } from '@/lib/unitTracking';
 import { indexedDbLiteStore, type LiteEventStore } from '@/lib/liteEventStore';
 
@@ -17,8 +17,11 @@ import { indexedDbLiteStore, type LiteEventStore } from '@/lib/liteEventStore';
 export interface LiteTrackingFeed {
   /** Calls `onTracking` with each new set of positions; returns an unsubscribe. */
   subscribe(onTracking: (tracking: UnitTracking | null) => void): () => void;
-  /** Shown over the map while the feed runs (e.g. a "Simulated TAK feed" badge). */
-  chrome?: React.ReactNode;
+  /**
+   * Shown over the map while the feed runs: a badge, or (training's TAK module)
+   * the TAK panel on practice data, given the board's event, layers and positions.
+   */
+  chrome?: React.ReactNode | ((ctx: { event: Event; layers: Layer[]; tracking: UnitTracking | null }) => React.ReactNode);
 }
 
 /** Returns false to drop a write (the page keeps the event as it was). */

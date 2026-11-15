@@ -13,6 +13,7 @@ import {
 } from './takStore';
 import { loadAlignments, loadVenueAlignments } from './alignmentStore';
 import type { TakMapAlignment } from '../types';
+import { useTakDemo } from './demo';
 
 /**
  * One shared, reference-counted set of subscriptions per event, so the map
@@ -76,9 +77,11 @@ export function refreshAlignments(eventId: string): void {
 }
 
 export function useTakEvent(eventId: string | undefined): TakEventState {
+  // Training's practice data (./demo.ts): no subscriptions at all.
+  const demo = useTakDemo();
   const [state, setState] = useState<TakEventState>(() => (eventId && entries.get(eventId)?.state) || EMPTY);
   useEffect(() => {
-    if (!eventId) return;
+    if (!eventId || demo) return;
     let entry = entries.get(eventId);
     if (!entry) {
       entry = open(eventId);
@@ -93,6 +96,6 @@ export function useTakEvent(eventId: string | undefined): TakEventState {
         entries.delete(eventId);
       }
     };
-  }, [eventId]);
-  return state;
+  }, [eventId, demo]);
+  return demo ? demo.state : state;
 }

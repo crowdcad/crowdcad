@@ -15,8 +15,6 @@ export interface TrainingTrack {
   id: TrackId;
   title: string;
   summary: string;
-  /** Who it is for, shown on the catalog page. */
-  audience: string;
   /** Unreleased features: listed only where preview modules are shown (see `previewModulesShown`). */
   release: 'stable' | 'preview';
 }
@@ -101,4 +99,6 @@ export interface TrackingScript {
   /** Called every tick with elapsed seconds. */
   at: (elapsedSec: number, event: Event) => UnitTracking;
   tickMs?: number;
+  /** Show the TAK module's own map panel, on practice data, when the build includes TAK. */
+  takPanel?: boolean;
 }

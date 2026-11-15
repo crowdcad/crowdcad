@@ -7,6 +7,7 @@ import { allowedText, checkWrite } from './gate';
 import { MODULES, TRACKS, sectionsOf, unlockIndex } from './registry';
 import { boardAtStep, gateVerdict, stepKind } from './replay';
 import { parseStepText } from './text';
+import { PANEL_STEPS } from './modules/takLiveTracking';
 import type { TrainingModule } from './types';
 
 /**
@@ -64,6 +65,13 @@ function anchorResolves(anchor: string): { ok: boolean; missing: string[] } {
 function anchorsOf(module: TrainingModule): string[] {
   return module.steps.flatMap((s) => [...(s.anchors ?? []), ...(s.anchor ? [s.anchor] : []), ...(s.doneWhenVisible ? [s.doneWhenVisible] : []), ...(s.doClicks ?? [])]);
 }
+
+describe('TAK panel steps (builds with TAK only)', () => {
+  it('point only at test ids that exist', () => {
+    const anchors = PANEL_STEPS.flatMap((s) => [...(s.anchors ?? []), ...(s.anchor ? [s.anchor] : []), ...(s.doneWhenVisible ? [s.doneWhenVisible] : []), ...(s.doClicks ?? [])]);
+    for (const anchor of anchors) expect(anchorResolves(anchor).missing, `anchor ${anchor}`).toEqual([]);
+  });
+});
 
 describe('training registry', () => {
   it('has unique module ids, each on a known track', () => {

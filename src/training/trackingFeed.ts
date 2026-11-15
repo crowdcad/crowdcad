@@ -29,6 +29,8 @@ const lerp = (a: LatLng, b: LatLng, f: number): LatLng => ({ lat: a.lat + (b.lat
 
 export interface FeedOptions {
   label?: string;
+  /** Show the TAK module's map panel on practice data (builds with TAK only). */
+  takPanel?: boolean;
   /** Units that walk a small loop around their post. */
   wandering?: string[];
   /** Whether a unit's device has stopped reporting, from the board's state. */
@@ -37,8 +39,9 @@ export interface FeedOptions {
 
 export function scriptedTakFeed(options: FeedOptions = {}): TrackingScript {
   return {
-    label: options.label ?? 'Simulated TAK feed (practice positions)',
+    label: options.label ?? 'Practice positions (no real TAK server)',
     tickMs: 1500,
+    takPanel: options.takPanel,
     at(elapsedSec: number, event: Event): UnitTracking {
       const coords = postCoords(event);
       const find = (name?: string) => (name ? coords.get(name.trim().toLowerCase()) : undefined);

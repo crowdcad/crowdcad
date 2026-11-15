@@ -18,6 +18,7 @@ export { default as TakBasemapToolbar, type TakBasemapToolbarProps } from './com
 export { default as TakEventSummary, type TakEventSummaryProps } from './components/TakEventSummary'; // (k) event summary, D57
 export { default as TakMapModeChoice, type TakMapModeChoiceProps } from './components/TakMapModeChoice'; // (b) event creation
 export { default as TakAdminSection, type TakAdminSectionProps } from './components/TakAdminSection'; // (c) Admin settings
+export { default as TakTrainingPanel, type TakTrainingPanelProps, PRACTICE_UNMATCHED_DEVICE } from './components/TakTrainingPanel'; // CrowdCAD Training: the map panel on practice data
 export { onEventEnded } from './lifecycle'; // (d) end-event flow
 export { saveEventConfig, type TakEventConfig } from './data/takStore'; // (b) a new event's TAK config, saved once the event exists
 

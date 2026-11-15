@@ -47,7 +47,7 @@ export interface TrainingSession {
   dismissRejected(): void;
 }
 
-export function useTrainingSession(module: TrainingModule, startIndex = 0, trackingChrome?: React.ReactNode): TrainingSession {
+export function useTrainingSession(module: TrainingModule, startIndex = 0, trackingChrome?: LiteTrackingFeed['chrome']): TrainingSession {
   // A deep link lands on the start of its step's section, where the board is set up for it.
   const requested = Math.max(0, Math.min(startIndex, module.steps.length - 1));
   const start = sectionsOf(module).find((sec) => requested >= sec.start && requested <= sec.end)?.start ?? 0;

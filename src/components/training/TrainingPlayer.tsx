@@ -1,11 +1,11 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Button, Chip } from '@heroui/react';
 import { ArrowLeftRight, ChevronDown, ChevronUp, Lock, LockOpen, RotateCcw, X } from 'lucide-react';
 import DispatchPage from '@/app/(main)/events/[eventId]/dispatch/page';
-import { LiteProvider } from '@/lib/LiteContext';
+import { LiteProvider, type LiteTrackingFeed } from '@/lib/LiteContext';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useDispatchVocabulary } from '@/hooks/useDispatchVocabulary';
 import { sectionsOf, visibleModules } from '@/training/registry';
@@ -16,6 +16,11 @@ import Coachmark from './Coachmark';
 import HelpButton from './HelpButton';
 import StepsMenu from './StepsMenu';
 import StepText from './StepText';
+
+// The TAK module's map panel, on practice data (src/features/tak/components/TakTrainingPanel.tsx). Like every core
+// touchpoint, a dynamic import behind the inline flag check, so builds without TAK compile it out.
+const TakTrainingPanel =
+  process.env.NEXT_PUBLIC_TAK === 'on' ? lazy(() => import('@/features/tak').then((m) => ({ default: m.TakTrainingPanel }))) : null;
 
 /**
  * The dispatch page reads its params with `use()`. A promise already marked
@@ -38,15 +43,29 @@ function fulfilled<T>(value: T): Promise<T> {
 export default function TrainingPlayer({ module, startIndex = 0 }: { module: TrainingModule; startIndex?: number }) {
   const { activePreset } = useDispatchVocabulary();
   const t = useCallback((key: string) => activePreset.terms[key] ?? key, [activePreset]);
-  const trackingChrome = useMemo(
-    () =>
-      module.tracking ? (
-        <div className="pointer-events-none absolute left-3 top-3 z-20 rounded-full bg-surface-deepest/85 px-3 py-1 text-xs text-surface-light shadow">
-          {module.tracking.label}
-        </div>
-      ) : undefined,
-    [module]
-  );
+  // Over the map on a module with a tracking feed: a badge saying the positions are practice ones, and, when the
+  // TAK module is compiled in, its real map panel on practice data.
+  const trackingChrome = useMemo<LiteTrackingFeed['chrome']>(() => {
+    const script = module.tracking;
+    if (!script) return undefined;
+    const badge = (
+      <div className="pointer-events-none absolute left-3 top-3 z-20 rounded-full bg-surface-deepest/85 px-3 py-1 text-xs text-surface-light shadow">
+        {script.label}
+      </div>
+    );
+    if (!script.takPanel || !TakTrainingPanel) return badge;
+    const Panel = TakTrainingPanel;
+    return function TrainingTakChrome(ctx) {
+      return (
+        <>
+          {badge}
+          <Suspense fallback={null}>
+            <Panel event={ctx.event} layers={ctx.layers} tracking={ctx.tracking} />
+          </Suspense>
+        </>
+      );
+    };
+  }, [module]);
   const session = useTrainingSession(module, startIndex, trackingChrome);
   const params = useMemo(() => fulfilled({ eventId: session.eventId }), [session.eventId]);
   const [cardSide, setCardSide] = useState<'left' | 'right'>('right');
@@ -138,7 +157,7 @@ export default function TrainingPlayer({ module, startIndex = 0 }: { module: Tra
           <div data-testid="training-complete">
             <h2 className="text-base font-semibold text-surface">Module complete</h2>
             <p className="mt-1 text-surface-light/85">
-              The board is yours now: type anything, try other features. It still stays in this browser and is gone when you leave.
+              You can now try anything on this board. It is still practice data and is cleared when you leave.
             </p>
             <ul className="mt-2 list-disc space-y-1 pl-5 text-surface-light/85">
               {module.practice.map((p) => (
@@ -175,7 +194,7 @@ export default function TrainingPlayer({ module, startIndex = 0 }: { module: Tra
             )}
             {session.rejected && (
               <div role="alert" className="mt-3 rounded-lg border border-status-yellow/50 bg-status-yellow/10 px-3 py-2 text-xs" data-testid="training-gate-nudge">
-                That wasn&apos;t saved: while this lesson is guided, the board only takes the values shown in the step
+                Not saved. For now, type only the values shown in this step
                 {step.values?.length ? (
                   <>
                     {' '}(
@@ -188,7 +207,7 @@ export default function TrainingPlayer({ module, startIndex = 0 }: { module: Tra
                     )
                   </>
                 ) : null}
-                . You can type anything once you finish the module.
+. Once you finish the module you can type anything.
               </div>
             )}
             <div className="mt-3 flex items-center justify-between gap-2">

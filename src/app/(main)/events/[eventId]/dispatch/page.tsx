@@ -3412,7 +3412,10 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
         }
       : event.mapMode === 'tak' && isLiteMode && liteTracking
         // Training: a scripted feed stands in for TAK (src/training/trackingFeed.ts); same positions shape, no server.
-        ? { unitTracking: unitTracking ?? { positions: {}, alignments: {} }, chrome: liteTracking.chrome }
+        ? {
+            unitTracking: unitTracking ?? { positions: {}, alignments: {} },
+            chrome: typeof liteTracking.chrome === 'function' ? liteTracking.chrome({ event, layers: venueLayers, tracking: unitTracking }) : liteTracking.chrome,
+          }
         : undefined;
 
   // TAK background work (call state, auto-linking) for the whole page, not only the Map tab.
