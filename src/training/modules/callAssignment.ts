@@ -1,9 +1,9 @@
 import { addCall, assignTeam, findCall, isResolved, setTeamStatus, setUnitStatus, teamOf } from '../actions';
-import { festivalBoard, POSTS } from '../fixtures';
+import { trainingBoard, POSTS } from '../fixtures';
 import type { TrainingModule } from '../types';
 
-const LOCATION = POSTS.gateB;
-const TEAM = 'Team 3';
+const LOCATION = POSTS.satherGate;
+const TEAM = 'MRC3';
 const teamCard = [`team-card-${TEAM}`, `team-card-condensed-${TEAM}`];
 
 const callAssignment: TrainingModule = {
@@ -13,7 +13,7 @@ const callAssignment: TrainingModule = {
   title: 'Add a call and assign a team',
   summary: "Log a call, send a team, follow it to the clinic and put the team back in service.",
   release: 'stable',
-  seed: () => festivalBoard('call-assignment'),
+  seed: () => trainingBoard('call-assignment'),
   practice: [
     'Log a second call of your own and assign it from the Add Call form directly.',
     'Send two teams to one call, then resolve it with Treat and Release.',
@@ -24,7 +24,7 @@ const callAssignment: TrainingModule = {
       id: 'intro',
       section: 'Add a call',
       title: 'Read the scenario',
-      body: "Someone radios in: a man near **Gate B** feels dizzy. You will log the {{Call}}, send a {{Team}} and follow it until the patient reaches the First Aid Tent.",
+      body: "Someone radios in: a man near **Sather Gate** feels dizzy. You will log the {{Call}}, send a {{Team}} and follow it until the patient reaches the Dwinelle Tent.",
       estSec: 20,
     },
     {
@@ -43,12 +43,12 @@ const callAssignment: TrainingModule = {
       id: 'fill-call',
       section: 'Add a call',
       title: 'Add a call',
-      body: "Type exactly what is shown: {{Location}} `Gate B`, {{Source}} `Radio`, {{Age/Sex}} `34M` and {{Chief Complaint}} `Dizzy`. Leave {{Assign Team}} empty, then click **Submit**.",
+      body: "Type exactly what is shown: {{Location}} `Sather Gate`, {{Source}} `Radio`, {{Age/Sex}} `34M` and {{Chief Complaint}} `Dizzy`. Leave {{Assign Team}} empty, then click **Submit**.",
       // The open form; if it was closed, the button that opens it again.
       anchors: ['quick-call-modal', 'add-call-button'],
       placement: 'right',
       estSec: 60,
-      values: ['Gate B', 'Radio', '34M', 'Dizzy'],
+      values: ['Sather Gate', 'Radio', '34M', 'Dizzy'],
       intents: ['call details', 'chief complaint', 'age sex', 'call location'],
       done: (e) => !!findCall(e, LOCATION),
       apply: (e) => addCall(e, { location: LOCATION, source: 'Radio', age: '34', gender: 'M', chiefComplaint: 'Dizzy' }),
@@ -78,7 +78,7 @@ const callAssignment: TrainingModule = {
       id: 'assign-team',
       section: 'Assign a team',
       title: 'Assign a team',
-      body: "{{Team}} 3 is posted at Gate B, so it is closest. Point to **{{Add Team}}** and pick **Team 3**.",
+      body: "MRC3 is posted at Sather Gate, so it is closest. Point to **{{Add Team}}** and pick **MRC3**.",
       anchors: [`call-add-team-${TEAM}`, 'call-add-team'],
       placement: 'right',
       estSec: 20,
@@ -98,7 +98,7 @@ const callAssignment: TrainingModule = {
       id: 'on-scene',
       section: 'Update the team status',
       title: 'Set On Scene',
-      body: "Team 3 says they have reached the patient. Click their status on the call and pick **{{On Scene}}**.",
+      body: "MRC3 says they have reached the patient. Click their status on the call and pick **{{On Scene}}**.",
       anchors: ['team-status-option-On Scene', `team-status-${TEAM}`],
       placement: 'right',
       estSec: 20,
@@ -123,7 +123,7 @@ const callAssignment: TrainingModule = {
       id: 'delivered',
       section: 'Update the team status',
       title: 'Set Delivered to Clinic',
-      body: "The patient has arrived at the First Aid Tent. Change the status to **Delivered to Clinic**. The call closes and the patient moves to the clinic tab.",
+      body: "The patient has arrived at the Dwinelle Tent. Change the status to **Delivered to Clinic**. The call closes and the patient moves to the clinic tab.",
       anchors: ['team-status-option-Delivered', `team-status-${TEAM}`],
       placement: 'right',
       estSec: 15,
@@ -135,13 +135,13 @@ const callAssignment: TrainingModule = {
       id: 'available',
       section: 'Set the team to Available',
       title: 'Set the team to Available',
-      body: "Team 3 is now **In Clinic**. When they leave, set the status on their card to **{{Available}}** so they can take calls again. If they go back to their post, set their {{Location}} to it too.",
+      body: "MRC3 is now **In Clinic**. When they leave, set the status on their card to **{{Available}}** so they can take calls again. If they go back to their post, set their {{Location}} to it too.",
       anchors: [`unit-status-${TEAM}`, ...teamCard],
       placement: 'right',
       estSec: 20,
       intents: ['team available', 'back in service', 'team status'],
       done: (e) => teamOf(e, TEAM)?.status === 'Available',
-      apply: (e) => setUnitStatus(e, TEAM, 'Available', POSTS.gateB),
+      apply: (e) => setUnitStatus(e, TEAM, 'Available', POSTS.satherGate),
       liveSafe: true,
     },
   ],

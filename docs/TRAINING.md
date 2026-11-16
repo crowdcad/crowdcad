@@ -45,7 +45,7 @@ const callAssignment: TrainingModule = {
   track: 'dispatcher',
   title: 'Regular call assignment flow',
   release: 'stable',
-  seed: () => festivalBoard('call-assignment'),
+  seed: () => trainingBoard('call-assignment'),
   practice: ['Log a second call of your own ...'],
   steps: [
     {
@@ -63,12 +63,12 @@ const callAssignment: TrainingModule = {
       id: 'fill-call',
       section: 'Take the call',
       title: 'Fill in the call',
-      body: 'Type {{Location}} `Gate B` ... then click **Submit**.',
+      body: 'Type {{Location}} `Sather Gate` ... then click **Submit**.',
       anchors: ['quick-call-modal', 'add-call-button'],
       estSec: 60,
-      values: ['Gate B', 'Radio', '34M', 'Dizzy'],
-      done: (e) => !!findCall(e, 'Gate B'),
-      apply: (e) => addCall(e, { location: 'Gate B', ... }),
+      values: ['Sather Gate', 'Radio', '34M', 'Dizzy'],
+      done: (e) => !!findCall(e, 'Sather Gate'),
+      apply: (e) => addCall(e, { location: 'Sather Gate', ... }),
     },
   ],
 };
@@ -92,7 +92,23 @@ Fields worth knowing:
 - `liveSafe`: the step only points at a control that exists on any board, so Help may show it on a live event.
 - `version`: bump it when steps change meaning. Progress saved for an older version is dropped.
 
-Shared pieces: `src/training/fixtures.ts` (the practice festival), `src/training/actions.ts` (what clicks do to the event, for `apply`) and the helpers in `src/lib/` (MCI steps use `src/lib/mci.ts`'s own patch functions).
+Shared pieces: `src/training/fixtures.ts` (the practice event, on the training map below), `src/training/actions.ts` (what clicks do to the event, for `apply`) and the helpers in `src/lib/` (MCI steps use `src/lib/mci.ts`'s own patch functions).
+
+## The training map
+
+Every module runs on one map: `src/training/maps/practice-map.json`, a GeoJSON file read by `src/training/practiceMap.ts`. To change it, open the file in a GeoJSON editor ([geojson.io](https://geojson.io) works, no account), draw, then save over it as GeoJSON, keeping the `.json` name. Each feature says what it is with one property:
+
+| Draw | Property | Becomes |
+| --- | --- | --- |
+| Point | `"Location": "Sather Gate"` | a post |
+| Point | `"Clinic": "Dwinelle Tent"` | a clinic: a post with its own clinic tab |
+| Polygon | `"Zone": "Glade"` (optional `"color"` or `"fill"`) | a zone; MCI zones come from these |
+| Polygon | `"Area": "Campus"` (optional) | the event's map area; without one, the box around everything plus a margin |
+| Line | `"TAKPath": "MRC2"` | the route that team's marker follows in TAK modules when it travels somewhere within 150 m of the line's end; draw it from the team's post toward the destination |
+
+Teams are named `MRC1` to `MRC5` (`teamName` in `fixtures.ts`), which is also their practice TAK callsign and the name a `TAKPath` uses. Where each team is posted, and the places the scripts name, are in `fixtures.ts` (`POSTS`, `baseStaff`). The main clinic (`POSTS.clinic`) is listed first, so it is the MCI move dialog's default. Renaming a place on the map means renaming it in `POSTS` and in the step text that mentions it; `src/training/modules.test.ts` fails with the missing name until they match, and also flags features without one of the properties above and paths that name no team.
+
+The street basemap under the map needs internet; everything else is in the file.
 
 ## Adding or changing a module
 

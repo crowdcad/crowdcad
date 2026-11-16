@@ -1,6 +1,6 @@
 import type { Event } from '@/app/types';
 import { addCall, setTeamStatus } from '../actions';
-import { festivalBoardAfter, POSTS } from '../fixtures';
+import { trainingBoardAfter, POSTS } from '../fixtures';
 import type { TrainingModule } from '../types';
 
 const surgeStarted = (e: Event, at: number): Event => ({
@@ -30,17 +30,17 @@ const surgeAndLog: TrainingModule = {
   release: 'stable',
   // Three of five teams already out on calls (60%, just under the 70% limit, so the board doesn't surge by itself).
   seed: () =>
-    festivalBoardAfter('surge-and-log', (e) => {
+    trainingBoardAfter('surge-and-log', (e) => {
       const t = Date.now() - 6 * 60 * 1000;
-      let next = addCall(e, { location: POSTS.mainStage, chiefComplaint: 'Fall', assignedTeam: 'Team 1' }, t);
-      next = addCall(next, { location: POSTS.gateA, chiefComplaint: 'Dehydration', assignedTeam: 'Team 2' }, t + 60_000);
-      next = addCall(next, { location: POSTS.foodCourt, chiefComplaint: 'Allergic reaction', assignedTeam: 'Team 4' }, t + 120_000);
-      next = setTeamStatus(next, POSTS.mainStage, 'Team 1', 'On Scene', t + 180_000);
-      return setTeamStatus(next, POSTS.foodCourt, 'Team 4', 'On Scene', t + 200_000);
+      let next = addCall(e, { location: POSTS.lowerSproul, chiefComplaint: 'Fall', assignedTeam: 'MRC1' }, t);
+      next = addCall(next, { location: POSTS.doeWest, chiefComplaint: 'Dehydration', assignedTeam: 'MRC2' }, t + 60_000);
+      next = addCall(next, { location: POSTS.socialSciences, chiefComplaint: 'Allergic reaction', assignedTeam: 'MRC4' }, t + 120_000);
+      next = setTeamStatus(next, POSTS.lowerSproul, 'MRC1', 'On Scene', t + 180_000);
+      return setTeamStatus(next, POSTS.socialSciences, 'MRC4', 'On Scene', t + 200_000);
     }),
   practice: [
     'Switch the Log filter to show only one kind of entry.',
-    'Log a new call and send Team 5: watch the strip cross the surge limit and surge switch on by itself.',
+    'Log a new call and send MRC5: watch the strip cross the surge limit and surge switch on by itself.',
   ],
   steps: [
     {
@@ -103,7 +103,7 @@ const surgeAndLog: TrainingModule = {
       id: 'search-log',
       section: 'Use the Log',
       title: 'Search the Log',
-      body: "The Log lists everything that happened, newest first, including your surge. Type `Gate A` in the search box to see only what happened there.",
+      body: "The Log lists everything that happened, newest first, including your surge. Type `Lower Sproul` in the search box to see only what happened there.",
       anchor: 'event-log-search',
       placement: 'right',
       estSec: 25,

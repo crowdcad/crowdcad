@@ -1,5 +1,5 @@
 import { addWalkup, clinicPatient, setClinicOutcome } from '../actions';
-import { CLINIC_ID, festivalBoard } from '../fixtures';
+import { CLINIC_ID, trainingBoard } from '../fixtures';
 import type { TrainingModule } from '../types';
 
 const COMPLAINT = 'Bee sting';
@@ -12,7 +12,7 @@ const clinicPatients: TrainingModule = {
   title: 'Add a clinic patient and record transport',
   summary: "Add a patient who walks into the clinic, mark them as waiting for an ambulance and record the transport.",
   release: 'stable',
-  seed: () => festivalBoard('clinic-patients'),
+  seed: () => trainingBoard('clinic-patients'),
   practice: [
     'Add another walk-up and discharge them.',
     'Reopen a resolved patient with the arrow next to their status.',
@@ -23,19 +23,19 @@ const clinicPatients: TrainingModule = {
       id: 'intro',
       section: 'Add a walk-up patient',
       title: 'Read the scenario',
-      body: "A person walks into the First Aid Tent with a **bee sting**. No {{Team}} brought her, so you add her on the clinic tab.",
+      body: "A person walks into the Dwinelle Tent with a **bee sting**. No {{Team}} brought her, so you add her on the clinic tab.",
       estSec: 15,
     },
     {
       id: 'open-clinic',
       section: 'Add a walk-up patient',
       title: 'Open the clinic tab',
-      body: 'Click the **First Aid Tent** tab.',
+      body: 'Click the **Dwinelle Tent** tab.',
       anchor: `clinic-tab-${CLINIC_ID}`,
       placement: 'bottom',
       estSec: 10,
       doneWhenVisible: 'clinic-add-patient',
-      intents: ['open clinic', 'clinic tab', 'first aid tent'],
+      intents: ['open clinic', 'clinic tab'],
       liveSafe: true,
     },
     {

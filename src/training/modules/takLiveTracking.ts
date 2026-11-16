@@ -1,14 +1,15 @@
 import { addCall, assignTeam, findCall } from '../actions';
-import { festivalBoard, POSTS } from '../fixtures';
+import { trainingBoard, POSTS } from '../fixtures';
 import { scriptedTakFeed } from '../trackingFeed';
 import type { TrainingModule, TrainingStep } from '../types';
 
-const CALL_AT = POSTS.northField;
-const TEAM = 'Team 1';
-const DROPS = 'Team 2';
+const CALL_AT = POSTS.bancroftSteps;
+// MRC2 is closest to the call, and has a drawn path on the training map (src/training/maps/practice-map.json).
+const TEAM = 'MRC2';
+const DROPS = 'MRC3';
 
 const TAK_PANEL = process.env.NEXT_PUBLIC_TAK === 'on';
-// The practice device with no matching team (src/features/tak/components/TakTrainingPanel.tsx), and Team 5's id.
+// The practice device with no matching team (src/features/tak/components/TakTrainingPanel.tsx), and MRC5's id.
 const UNMATCHED = 'practice-medic-7';
 const LINK_TEAM_ID = 'training-team-5';
 
@@ -40,7 +41,7 @@ export const PANEL_STEPS: TrainingStep[] = [
     id: 'link-device',
     section: 'Use the TAK panel',
     title: 'Link a device to a team',
-    body: "The device **MEDIC-7** doesn't match a team name, so it isn't linked. Under **Unassigned TAK devices**, pick **Team 5** for it.",
+    body: "The device **MEDIC-7** doesn't match a team name, so it isn't linked. Under **Unassigned TAK devices**, pick **MRC5** for it.",
     anchors: [`tak-assign-option-${LINK_TEAM_ID}`, `tak-assign-${UNMATCHED}`],
     placement: 'right',
     estSec: 25,
@@ -69,7 +70,7 @@ const takLiveTracking: TrainingModule = {
   summary: 'What to set up before a TAK event, the TAK panel, dispatching with live positions, and what to do when a device drops off.',
   release: 'preview',
   seed: () => {
-    const board = festivalBoard('tak-live-tracking', { tak: true });
+    const board = trainingBoard('tak-live-tracking', { tak: true });
     // A call already waiting, so the lesson starts with a decision.
     const now = Date.now();
     board.calls = [
@@ -89,13 +90,14 @@ const takLiveTracking: TrainingModule = {
   },
   tracking: scriptedTakFeed({
     takPanel: true,
-    wandering: ['Team 4'],
-    // Team 2's device drops off once Team 1 has been sent: the lesson's last section.
+    wandering: ['MRC4'],
+    // MRC3's device drops off once MRC2 has been sent: the lesson's last section.
     stale: (unit, event) => unit === DROPS && !!findCall(event, CALL_AT)?.assignedTeam?.includes(TEAM),
   }),
   practice: [
     'Send another team to a new call and watch it travel on the map.',
-    'Set Team 2\'s Location by hand now that its device is offline.',
+    'Set MRC3\'s Location by hand now that its device is offline.',
+    'Send MRC5 to a new call at Sather Gate and watch it follow its path on the map.',
     'Click a team marker on the map to see its card.',
   ],
   steps: [
@@ -119,7 +121,7 @@ const takLiveTracking: TrainingModule = {
       id: 'setup-devices',
       section: 'Set up TAK',
       title: 'Set device callsigns',
-      body: 'On each phone or radio, set the TAK callsign to the team\'s name, for example "Team 1". CrowdCAD then links the device to that team by itself.',
+      body: 'On each phone or radio, set the TAK callsign to the team\'s name, for example "MRC1". CrowdCAD then links the device to that team by itself.',
       estSec: 25,
       intents: ['link device', 'callsign', 'tak device team'],
     },
@@ -128,7 +130,7 @@ const takLiveTracking: TrainingModule = {
       section: 'Track live positions',
       title: 'Read a live Location',
       body: 'This practice event runs as a TAK event. The radio icon on a card means TAK sets that team\'s {{Location}}. You can\'t edit it while the device is connected.',
-      anchors: card('Team 1', ' [data-testid="unit-live-location"]'),
+      anchors: card(TEAM, ' [data-testid="unit-live-location"]'),
       placement: 'right',
       estSec: 20,
       intents: ['location not editable', 'live location', 'radio icon'],
@@ -138,7 +140,7 @@ const takLiveTracking: TrainingModule = {
       id: 'open-map',
       section: 'Track live positions',
       title: 'Open the map',
-      body: 'Click the **map** tab. Each team shows where its device last reported. Team 4 is walking around the Food Court.',
+      body: 'Click the **map** tab. Each team shows where its device last reported. MRC4 is walking around the Social Sciences Side Entrance.',
       anchor: 'map-tab-button',
       placement: 'bottom',
       estSec: 20,
@@ -152,7 +154,7 @@ const takLiveTracking: TrainingModule = {
       id: 'closest',
       section: 'Dispatch by position',
       title: 'Find the closest team',
-      body: 'A call is waiting at **North Field**: someone fainted. The map shows Team 1, at the Main Stage, is closest. Go back to the **Calls** tab.',
+      body: 'A call is waiting at **Bancroft Main Steps**: someone fainted. The map shows MRC2, at the Doe West Walkway, is closest. Go back to the **Calls** tab.',
       anchor: 'calls-tab-button',
       placement: 'bottom',
       estSec: 25,
@@ -163,7 +165,7 @@ const takLiveTracking: TrainingModule = {
       id: 'send',
       section: 'Dispatch by position',
       title: 'Assign the closest team',
-      body: 'On the call, click **+**, point to **{{Add Team}}** and pick **Team 1**.',
+      body: 'On the call, click **+**, point to **{{Add Team}}** and pick **MRC2**.',
       anchors: [`call-add-team-${TEAM}`, 'call-add-team', 'css:[data-testid="call-row-1"] [data-testid="call-add-menu"]'],
       placement: 'left',
       estSec: 20,
@@ -174,7 +176,7 @@ const takLiveTracking: TrainingModule = {
       id: 'watch',
       section: 'Dispatch by position',
       title: 'Track a team on the map',
-      body: 'Open the map again. Team 1 moves toward North Field as its device reports, so you can see they are on the way without calling them.',
+      body: 'Open the map again. MRC2 moves toward Bancroft Main Steps along its usual route as its device reports, so you can see they are on the way without calling them.',
       anchor: 'map-tab-button',
       placement: 'bottom',
       estSec: 30,
@@ -183,7 +185,7 @@ const takLiveTracking: TrainingModule = {
       id: 'dropped',
       section: 'Handle a dropped device',
       title: 'Handle a dropped device',
-      body: 'Team 2\'s device has stopped reporting. Its map marker fades and its {{Location}} can be edited again. Ask them on the radio where they are and set it by hand until the device reconnects.',
+      body: 'MRC3\'s device has stopped reporting. Its map marker fades and its {{Location}} can be edited again. Ask them on the radio where they are and set it by hand until the device reconnects.',
       anchors: card(DROPS),
       placement: 'right',
       estSec: 30,

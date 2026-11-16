@@ -1,4 +1,4 @@
-import { festivalBoard } from '../fixtures';
+import { trainingBoard } from '../fixtures';
 import type { TrainingModule } from '../types';
 
 /** Start here: a guided look around the board, before any lesson changes it. */
@@ -9,7 +9,7 @@ const orientation: TrainingModule = {
   title: 'Tour the dispatch board',
   summary: "Where teams, calls, clinics and the map are, and what the buttons at the top do.",
   release: 'stable',
-  seed: () => festivalBoard('orientation'),
+  seed: () => trainingBoard('orientation'),
   practice: [
     'Switch the left panel between Teams, Supervisors, Equipment and the Log.',
     'Open the map and click a team marker.',
@@ -20,7 +20,7 @@ const orientation: TrainingModule = {
       id: 'welcome',
       section: 'Read the board',
       title: 'Start the tour',
-      body: "This is the dispatch board for a practice event: a music festival with five {{Teams}}, one {{Supervisor}} and a First Aid Tent. Click **Next** to go through the tour.",
+      body: "This is the dispatch board for a practice event: a campus event with five {{Teams}} (MRC1 to MRC5), one {{Supervisor}} and three clinics. Click **Next** to go through the tour.",
       estSec: 15,
     },
     {
@@ -119,7 +119,7 @@ const orientation: TrainingModule = {
       anchor: 'clinic-tab-training-clinic',
       placement: 'bottom',
       estSec: 15,
-      intents: ['clinic patients', 'first aid tent', 'clinic tab'],
+      intents: ['clinic patients', 'clinic tab'],
     },
     {
       id: 'map-tab',

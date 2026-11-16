@@ -8,6 +8,9 @@ import { MODULES, TRACKS, sectionsOf, unlockIndex } from './registry';
 import { boardAtStep, gateVerdict, stepKind } from './replay';
 import { parseStepText } from './text';
 import { PANEL_STEPS } from './modules/takLiveTracking';
+import { baseStaff, POSTS } from './fixtures';
+import { alongRoute, parsePracticeMap, PRACTICE_MAP } from './practiceMap';
+import { travelRoute } from './trackingFeed';
 import type { TrainingModule } from './types';
 
 /**
@@ -140,18 +143,18 @@ describe('write gate', () => {
 
   it('turns away text the script did not ask for', () => {
     const next = addCall(board, { location: 'Jane Doe, 42 Elm St', chiefComplaint: 'Chest pain' });
-    const verdict = checkWrite(board, next, allowedText(['Gate B', 'Dizzy']));
+    const verdict = checkWrite(board, next, allowedText(['Sather Gate', 'Dizzy']));
     expect(verdict.ok).toBe(false);
     expect(verdict.rejected).toEqual(expect.arrayContaining(['jane doe, 42 elm st', 'chest pain']));
   });
 
   it('accepts scripted values in any case and their Age/Sex parts', () => {
-    const next = addCall(board, { location: 'gate b', age: '34', gender: 'M', chiefComplaint: 'DIZZY' });
-    expect(checkWrite(board, next, allowedText(['Gate B', '34M', 'Dizzy'])).ok).toBe(true);
+    const next = addCall(board, { location: 'sather gate', age: '34', gender: 'M', chiefComplaint: 'DIZZY' });
+    expect(checkWrite(board, next, allowedText(['Sather Gate', '34M', 'Dizzy'])).ok).toBe(true);
   });
 
   it('accepts text that was already on the board', () => {
-    const next = addCall(board, { location: 'Main Stage' });
+    const next = addCall(board, { location: 'Lower Sproul' });
     expect(checkWrite(board, next, allowedText([])).ok).toBe(true);
   });
 
@@ -160,5 +163,58 @@ describe('write gate', () => {
     expect(gateVerdict(lesson, { index: 1, unlocked: false, complete: false }, board, next).ok).toBe(false);
     expect(gateVerdict(lesson, { index: 1, unlocked: true, complete: false }, board, next).ok).toBe(true);
     expect(gateVerdict(lesson, { index: lesson.steps.length - 1, unlocked: false, complete: true }, board, next).ok).toBe(true);
+  });
+});
+
+describe('training map (src/training/maps/practice-map.json)', () => {
+  const places = new Set([...PRACTICE_MAP.posts, ...PRACTICE_MAP.clinics].map((p) => p.name));
+
+  it('has every feature in a form the loader knows', () => {
+    expect(PRACTICE_MAP.unknown, 'features with no Location, Clinic, Zone, Area or TAKPath property').toEqual([]);
+  });
+
+  it('has every place the module scripts name (rename a place on the map and in fixtures.ts POSTS together)', () => {
+    for (const [key, name] of Object.entries(POSTS)) expect(places.has(name), `POSTS.${key} "${name}" is not on the map`).toBe(true);
+    expect(PRACTICE_MAP.clinics.some((c) => c.name === POSTS.clinic), `the main clinic "${POSTS.clinic}" must be a Clinic point`).toBe(true);
+  });
+
+  it('has the zone the MCI module uses', () => {
+    expect(PRACTICE_MAP.zones.map((z) => z.name)).toContain('South Zone');
+  });
+
+  it('names an existing team on every TAK path', () => {
+    const teams = new Set(baseStaff().map((t) => t.team));
+    for (const team of Object.keys(PRACTICE_MAP.paths)) expect(teams.has(team), `TAKPath "${team}" matches no team`).toBe(true);
+  });
+
+  it('reads Location, Clinic, Zone and TAKPath features, any case', () => {
+    const map = parsePracticeMap({
+      features: [
+        { type: 'Feature', properties: { location: 'A' }, geometry: { type: 'Point', coordinates: [-122, 37] } },
+        { type: 'Feature', properties: { Clinic: 'Tent' }, geometry: { type: 'Point', coordinates: [-122.001, 37] } },
+        { type: 'Feature', properties: { Zone: 'Z', fill: '#123456' }, geometry: { type: 'Polygon', coordinates: [[[-122, 37], [-122.001, 37], [-122.001, 37.001], [-122, 37]]] } },
+        { type: 'Feature', properties: { TAKPath: 'MRC1' }, geometry: { type: 'LineString', coordinates: [[-122, 37], [-122.001, 37.001]] } },
+        { type: 'Feature', properties: { note: 'x' }, geometry: { type: 'Point', coordinates: [-122, 37] } },
+      ],
+    });
+    expect(map.posts).toEqual([{ name: 'A', lat: 37, lng: -122 }]);
+    expect(map.clinics[0].name).toBe('Tent');
+    expect(map.zones[0]).toMatchObject({ name: 'Z', color: '#123456' });
+    expect(map.zones[0].coords).toHaveLength(3); // GeoJSON's closing point dropped
+    expect(map.paths.MRC1).toHaveLength(2);
+    expect(map.unknown).toHaveLength(1);
+    expect(map.area).toHaveLength(4); // the box around everything
+  });
+
+  it('sends a team along its path when the path ends near where it is going', () => {
+    const home = { lat: 37, lng: -122 };
+    const path = [{ lat: 37, lng: -122.001 }, { lat: 37.001, lng: -122.001 }];
+    expect(travelRoute(home, { lat: 37.001, lng: -122.001 }, path)).toHaveLength(3);
+    expect(travelRoute(home, { lat: 36.99, lng: -122 }, path)).toHaveLength(2); // the path leads elsewhere: straight there
+    // Legs of about 89 m then 111 m: halfway by distance is just past the corner, on the second leg.
+    const half = alongRoute([home, ...path], 0.5);
+    expect(half.lng).toBeCloseTo(-122.001, 6);
+    expect(half.lat).toBeGreaterThan(37);
+    expect(alongRoute([home, ...path], 1)).toEqual(path[1]);
   });
 });
