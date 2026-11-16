@@ -92,5 +92,5 @@ export function helpSuggestions(ctx: HelpContext = {}, t?: (key: string) => stri
   return [...boosted, ...rest].filter((e) => (seen.has(e.module.id) ? false : (seen.add(e.module.id), true))).slice(0, 6);
 }
 
-/** The deep link that practises a step in its module. */
+/** The deep link that practices a step in its module. */
 export const practiceHref = (e: Pick<HelpEntry, 'module' | 'step'>) => `/training/${e.module.id}?step=${encodeURIComponent(e.step.id)}`;

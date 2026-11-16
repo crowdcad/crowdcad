@@ -25,7 +25,7 @@ const surgeAndLog: TrainingModule = {
   id: 'surge-and-log',
   version: 1,
   track: 'dispatcher',
-  title: 'Busy moments: surge and the Log',
+  title: 'Surge and the Log',
   summary: "Check how busy your teams are, record a surge and find what happened in the Log.",
   release: 'stable',
   // Three of five teams already out on calls (60%, just under the 70% limit, so the board doesn't surge by itself).
@@ -45,15 +45,15 @@ const surgeAndLog: TrainingModule = {
   steps: [
     {
       id: 'intro',
-      section: 'How stretched are we?',
-      title: 'A busy stretch',
+      section: 'Check availability',
+      title: 'Read the scenario',
       body: "Three of your five {{Teams}} are out on calls. Check how many you have left.",
       estSec: 15,
     },
     {
       id: 'strip',
-      section: 'How stretched are we?',
-      title: 'Read the strip',
+      section: 'Check availability',
+      title: 'Read the availability bar',
       body: "**3** teams are on calls and **2** are available, so 60% are busy. At 70% the bar turns red and surge turns on by itself.",
       anchor: 'availability-surge-strip',
       placement: 'right',
@@ -63,7 +63,7 @@ const surgeAndLog: TrainingModule = {
     },
     {
       id: 'surge-on',
-      section: 'Surge',
+      section: 'Start and end a surge',
       title: 'Start a surge',
       body: "Your supervisor says there are more calls than teams can handle. Click **Surge** and confirm. The start time is recorded for the event summary.",
       anchor: 'surge-toggle-button',
@@ -76,8 +76,8 @@ const surgeAndLog: TrainingModule = {
     },
     {
       id: 'surge-off',
-      section: 'Surge',
-      title: 'End the surge',
+      section: 'Start and end a surge',
+      title: 'End a surge',
       body: "Things have calmed down. Click the same button again and confirm to end the surge.",
       anchor: 'surge-toggle-button',
       placement: 'bottom',
@@ -88,7 +88,7 @@ const surgeAndLog: TrainingModule = {
     },
     {
       id: 'open-log',
-      section: 'The Log',
+      section: 'Use the Log',
       title: 'Open the Log',
       body: "Open the menu at the top of the left side and choose **{{Log}}**.",
       anchors: ['left-panel-option-log', 'left-panel-select'],
@@ -101,8 +101,8 @@ const surgeAndLog: TrainingModule = {
     },
     {
       id: 'search-log',
-      section: 'The Log',
-      title: 'Search it',
+      section: 'Use the Log',
+      title: 'Search the Log',
       body: "The Log lists everything that happened, newest first, including your surge. Type `Gate A` in the search box to see only what happened there.",
       anchor: 'event-log-search',
       placement: 'right',
@@ -112,8 +112,8 @@ const surgeAndLog: TrainingModule = {
     },
     {
       id: 'filter-log',
-      section: 'The Log',
-      title: 'Filter it',
+      section: 'Use the Log',
+      title: 'Filter the Log',
       body: "This button shows only some kinds of entries, like calls or teams. Searching and filtering don't change anything on the board.",
       anchor: 'event-log-filter',
       placement: 'right',

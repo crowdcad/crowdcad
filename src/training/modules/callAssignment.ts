@@ -10,7 +10,7 @@ const callAssignment: TrainingModule = {
   id: 'call-assignment',
   version: 1,
   track: 'dispatcher',
-  title: 'Regular call assignment flow',
+  title: 'Add a call and assign a team',
   summary: "Log a call, send a team, follow it to the clinic and put the team back in service.",
   release: 'stable',
   seed: () => festivalBoard('call-assignment'),
@@ -22,14 +22,14 @@ const callAssignment: TrainingModule = {
   steps: [
     {
       id: 'intro',
-      section: 'Take the call',
-      title: 'The scenario',
-      body: "Someone radios in: a man near **Gate B** feels dizzy. You will log the {{Call}}, send a {{Team}} and follow it until the patient reaches the First Aid Tent. This is practice data and stays in your browser.",
+      section: 'Add a call',
+      title: 'Read the scenario',
+      body: "Someone radios in: a man near **Gate B** feels dizzy. You will log the {{Call}}, send a {{Team}} and follow it until the patient reaches the First Aid Tent.",
       estSec: 20,
     },
     {
       id: 'open-add-call',
-      section: 'Take the call',
+      section: 'Add a call',
       title: 'Open Add Call',
       body: "Click **{{Add Call}}**. You can also press Ctrl+Enter anywhere on the board.",
       anchor: 'add-call-button',
@@ -41,8 +41,8 @@ const callAssignment: TrainingModule = {
     },
     {
       id: 'fill-call',
-      section: 'Take the call',
-      title: 'Fill in the call',
+      section: 'Add a call',
+      title: 'Add a call',
       body: "Type exactly what is shown: {{Location}} `Gate B`, {{Source}} `Radio`, {{Age/Sex}} `34M` and {{Chief Complaint}} `Dizzy`. Leave {{Assign Team}} empty, then click **Submit**.",
       // The open form; if it was closed, the button that opens it again.
       anchors: ['quick-call-modal', 'add-call-button'],
@@ -56,7 +56,7 @@ const callAssignment: TrainingModule = {
     {
       id: 'pending',
       section: 'Assign a team',
-      title: 'A pending call',
+      title: 'Read a pending call',
       body: "The call is **{{Pending}}**, which means no {{Team}} is on it yet. The timer shows how long it has been waiting.",
       anchor: 'call-row-1',
       placement: 'bottom',
@@ -77,7 +77,7 @@ const callAssignment: TrainingModule = {
     {
       id: 'assign-team',
       section: 'Assign a team',
-      title: 'Send Team 3',
+      title: 'Assign a team',
       body: "{{Team}} 3 is posted at Gate B, so it is closest. Point to **{{Add Team}}** and pick **Team 3**.",
       anchors: [`call-add-team-${TEAM}`, 'call-add-team'],
       placement: 'right',
@@ -96,8 +96,8 @@ const callAssignment: TrainingModule = {
     },
     {
       id: 'on-scene',
-      section: 'Track the team',
-      title: 'On Scene',
+      section: 'Update the team status',
+      title: 'Set On Scene',
       body: "Team 3 says they have reached the patient. Click their status on the call and pick **{{On Scene}}**.",
       anchors: ['team-status-option-On Scene', `team-status-${TEAM}`],
       placement: 'right',
@@ -109,8 +109,8 @@ const callAssignment: TrainingModule = {
     },
     {
       id: 'transporting',
-      section: 'Track the team',
-      title: 'Transporting',
+      section: 'Update the team status',
+      title: 'Set Transporting to Clinic',
       body: "They are bringing the patient to the tent. Change the status to **Transporting to Clinic**.",
       anchors: ['team-status-option-Transporting', `team-status-${TEAM}`],
       placement: 'right',
@@ -121,8 +121,8 @@ const callAssignment: TrainingModule = {
     },
     {
       id: 'delivered',
-      section: 'Track the team',
-      title: 'Delivered',
+      section: 'Update the team status',
+      title: 'Set Delivered to Clinic',
       body: "The patient has arrived at the First Aid Tent. Change the status to **Delivered to Clinic**. The call closes and the patient moves to the clinic tab.",
       anchors: ['team-status-option-Delivered', `team-status-${TEAM}`],
       placement: 'right',
@@ -133,8 +133,8 @@ const callAssignment: TrainingModule = {
     },
     {
       id: 'available',
-      section: 'Back in service',
-      title: 'Back to Available',
+      section: 'Set the team to Available',
+      title: 'Set the team to Available',
       body: "Team 3 is now **In Clinic**. When they leave, set the status on their card to **{{Available}}** so they can take calls again. If they go back to their post, set their {{Location}} to it too.",
       anchors: [`unit-status-${TEAM}`, ...teamCard],
       placement: 'right',

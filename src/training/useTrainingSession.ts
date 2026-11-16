@@ -13,7 +13,7 @@ import type { TrainingModule, TrainingStep } from './types';
 
 /**
  * One trainee's run through a module: which step they are on, whether the
- * write gate is still locked, and the in-memory board they practise on.
+ * write gate is still locked, and the in-memory board they practice on.
  */
 
 export { boardAtStep, stepDone, stepKind, type StepKind } from './replay';
@@ -44,6 +44,8 @@ export interface TrainingSession {
   doIt(): void;
   /** Restart at the first step of a section (or of the module), with the board as it would be there. */
   jumpTo(index: number): void;
+  /** Undo the last step: back to the previous step, with the board as it was before it. */
+  back(): void;
   dismissRejected(): void;
 }
 
@@ -63,6 +65,8 @@ export function useTrainingSession(module: TrainingModule, startIndex = 0, track
   // Refs so the gate and listeners (handed to the page once) always see the latest state.
   const stateRef = useRef({ index, unlocked, complete });
   stateRef.current = { index, unlocked, complete };
+  // After Back, what the undone step opened (a modal, a menu) takes a moment to close: don't count it as done again.
+  const settleUntil = useRef(0);
 
   const finishStep = useCallback(
     (at: number) => {
@@ -99,7 +103,7 @@ export function useTrainingSession(module: TrainingModule, startIndex = 0, track
     const target = step.doneWhenVisible;
     const at = index;
     const id = window.setInterval(() => {
-      if (findAnchor(target)) finishStep(at);
+      if (Date.now() >= settleUntil.current && findAnchor(target)) finishStep(at);
     }, 250);
     return () => window.clearInterval(id);
   }, [step, index, complete, finishStep]);
@@ -135,6 +139,18 @@ export function useTrainingSession(module: TrainingModule, startIndex = 0, track
     },
     [module, store]
   );
+
+  const back = useCallback(() => {
+    const { index: at, complete: done } = stateRef.current;
+    const target = done ? module.steps.length - 1 : at - 1;
+    if (target < 0) return;
+    closeOverlays();
+    settleUntil.current = Date.now() + 800;
+    store.put(boardAtStep(module, target));
+    setRejected(null);
+    setComplete(false);
+    setIndex(target);
+  }, [module, store]);
 
   const next = useCallback(() => {
     if (stepKind(step) === 'read') finishStep(index);
@@ -198,6 +214,7 @@ export function useTrainingSession(module: TrainingModule, startIndex = 0, track
     restartSection,
     doIt,
     jumpTo,
+    back,
     dismissRejected: () => setRejected(null),
   };
 }

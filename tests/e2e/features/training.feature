@@ -41,7 +41,7 @@ Feature: CrowdCAD Training
   Scenario: The steps menu restarts a later section with its board set up
     Given I open the training module "call-assignment"
     When I open the training steps menu and pick section 3
-    Then the training step should be "On Scene"
+    Then the training step should be "Set On Scene"
     And a call at "Gate B" should be logged
 
   Scenario: Help finds a step and points at it on the board

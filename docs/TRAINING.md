@@ -20,7 +20,7 @@ The dispatch page reads the store, gate and feed from `useLiteMode()`. Lite rout
 
 ### The TAK panel on practice data
 
-In builds with TAK (`NEXT_PUBLIC_TAK=on`), the TAK module shows the TAK module's own map panel (`TakEventPanel`) on the practice map, so trainees see the real controls: the TAK server, location history, the live tracking switch and device links. `src/features/tak/components/TakTrainingPanel.tsx` wraps it in a `TakDemoContext` (`src/features/tak/data/demo.ts`): inside it, `useTakEvent` returns practice data instead of subscribing to Firestore, and the panel's writes change only that practice data. The practice data has a linked practice server, one device per unit (auto-linked by callsign, positioned by the tracking feed) and one device, MEDIC-7, that matches no team, for practising a manual link. The player loads the panel with the same flag-guarded dynamic import as other TAK touchpoints, so builds without TAK leave it out, and the module's panel steps (`PANEL_STEPS`) are included only in those builds.
+In builds with TAK (`NEXT_PUBLIC_TAK=on`), the TAK module shows the TAK module's own map panel (`TakEventPanel`) on the practice map, so trainees see the real controls: the TAK server, location history, the live tracking switch and device links. `src/features/tak/components/TakTrainingPanel.tsx` wraps it in a `TakDemoContext` (`src/features/tak/data/demo.ts`): inside it, `useTakEvent` returns practice data instead of subscribing to Firestore, and the panel's writes change only that practice data. The practice data has a linked practice server, one device per unit (auto-linked by callsign, positioned by the tracking feed) and one device, MEDIC-7, that matches no team, for practicing a manual link. The player loads the panel with the same flag-guarded dynamic import as other TAK touchpoints, so builds without TAK leave it out, and the module's panel steps (`PANEL_STEPS`) are included only in those builds.
 
 ### What trainees can type
 
@@ -28,11 +28,11 @@ The point of the gate is that the hosted site never invites anyone to type real 
 
 - During the guided steps, a write may only add text that the current or earlier steps list in `values` (shown in the step as chips), text already on the board, or the board's own words (`SYSTEM_TEXT`). Anything else is dropped and the step card says why.
 - Once the module is complete, or after its `unlockAfter` step, the gate is off for good and the board is free practice.
-- A step with `free: true` lifts the gate for that step only (standing down an MCI writes the board's own text into the clinic tracker).
+- A step with `free: true` lifts the gate for that step only (ending an MCI writes the board's own text into the clinic tracker).
 
 Ids, statuses, timestamps and logs are never checked (`SKIP_KEYS`). Logs only repeat text that already passed. In development the console shows what the gate turned away.
 
-The sandbox stays in the browser either way, and `/training` says so.
+The sandbox stays in the browser either way.
 
 ## Modules are data
 
@@ -118,13 +118,13 @@ A PR that changes the board's UI or data should keep all three passing. A new di
 
 ## Help
 
-`src/training/help.ts` searches every visible step's `intents`, title and text, one result per section, ranked toward what the board is doing (an active MCI, a TAK event). A result offers:
+The navbar's **?** opens a dropdown: "What would you like to do?", a search box, common results and a link to all modules. `src/training/help.ts` searches every visible step's `intents`, title and text, one result per section, ranked toward what the board is doing (an active MCI, a TAK event). Step titles are what Help lists, so keep them short and action-first, using the control's own name ("Add a call", "Search the Log", "End the MCI"). Each result shows:
 
-- **Show me**: a coachmark on the current page, for `liveSafe` steps whose control is on screen. It moves on to the module's next `liveSafe` step when the control opens. It never writes to the event.
-- **Practise**: the step's section in its module, in a new tab.
+- **The title**: when the step is `liveSafe` and its control is on screen, clicking it shows a coachmark on the current page (Show me). It moves on to the module's next `liveSafe` step when the control opens, and never writes to the event.
+- **Module N**: a link to the step's section in its module (a new tab when opened from a dispatch board).
 
 ## Limits
 
-- Adding a TAK server needs a real server and admin accounts, so the TAK module explains those steps. The panel and the board side are practised on practice data.
-- The summary page and MCI role logins are cloud features with no Lite path. They are not practised yet.
+- Adding a TAK server needs a real server and admin accounts, so the TAK module explains those steps. The panel and the board side are practiced on practice data.
+- The summary page and MCI role logins are cloud features with no Lite path. They are not practiced yet.
 - Progress is per browser. Nothing records who completed what.

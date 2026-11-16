@@ -24,7 +24,7 @@ import {
   NavbarMenuToggle,
 } from '@heroui/react';
 import { LogOut, Menu, Moon, Sun, UserRound } from 'lucide-react';
-import { LiveClock, LoginModalLazy, MobileMenuAccountItems, useThemeToggle } from '@/components/layout/navbarshared';
+import { LiveClock, LoginModalLazy, MobileMenuAccountItems, NAVBAR_ICON_BUTTON_CLASS, useThemeToggle } from '@/components/layout/navbarshared';
 import HelpButton from '@/components/training/HelpButton';
 
 const liteNavItems = [
@@ -221,7 +221,7 @@ export default function LiteNavbar() {
                 isIconOnly
                 variant="flat"
                 aria-label={isDarkTheme ? 'Switch to light mode' : 'Switch to dark mode'}
-                className="h-8 w-8 min-w-8 !rounded-circle bg-surface-deeper/70 text-surface-light hover:bg-surface-deeper"
+                className={NAVBAR_ICON_BUTTON_CLASS}
                 onPress={toggleTheme}
               >
                 {isDarkTheme ? <Sun className="size-4" /> : <Moon className="size-4" />}

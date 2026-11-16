@@ -5,7 +5,7 @@ import { Button, Dropdown, DropdownItem, DropdownMenu, DropdownSection, Dropdown
 import { ListFilter, Search } from 'lucide-react';
 import type { Event } from '@/app/types';
 import { ALL_EVENT_LOG, EVENT_LOG_KINDS, EVENT_LOG_WINDOWS, eventLogRows, filterEventLog, type EventLogFilter, type EventLogKind } from '@/lib/eventLog';
-import { currentLog, isMciActive, undoneIds } from '@/lib/mci';
+import { currentLog, isMciActive, mciPeriodEntries, undoneIds } from '@/lib/mci';
 import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
 import { describeMciEntry } from './mci/mcilogdrawer';
 import { MCI_INPUT_CLASSNAMES, formatClock } from './mci/mciparts';
@@ -76,6 +76,8 @@ export default function EventLog({ event, filter = ALL_EVENT_LOG, onUndoMci }: {
   const rows = useMemo(() => {
     const out: Row[] = eventLogRows({ staff, supervisor, calls, eventLog });
     if (mci) {
+      // Declaring and ending an MCI are moments in the timeline too.
+      for (const p of mciPeriodEntries(mci)) out.push({ key: `mci-period:${p.t}:${p.ended ? 'end' : 'start'}`, t: p.t, source: 'MCI', kind: 'mci', text: p.text });
       const log = currentLog(mci);
       const undone = undoneIds(log);
       const active = isMciActive({ mci });

@@ -240,7 +240,7 @@ export const DISPATCH_TERMS: DispatchTerm[] = [
     'MCI Logistics',
     'Log',
     'Declare MCI',
-    'Stand down',
+    'End MCI',
     'Tagged',
     'Moved',
     'In zone',

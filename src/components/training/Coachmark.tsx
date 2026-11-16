@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { findStepTarget } from '@/training/anchors';
 import type { TrainingStep } from '@/training/types';
 
@@ -27,7 +27,8 @@ export function useStepTargetRect(step: TrainingStep | null): Rect | null {
     let frame = 0;
     let last: Rect | null = null;
     const loop = () => {
-      const el = findStepTarget(step);
+      // Hidden while the Help dropdown is open, so it never covers the results.
+      const el = document.querySelector('[data-testid="help-panel"]') ? null : findStepTarget(step);
       const r = el?.getBoundingClientRect();
       const next = r ? { top: Math.round(r.top), left: Math.round(r.left), width: Math.round(r.width), height: Math.round(r.height) } : null;
       if (!sameRect(last, next) && (last || next)) {
@@ -44,12 +45,22 @@ export function useStepTargetRect(step: TrainingStep | null): Rect | null {
 
 /** Just above React Aria's overlay z-index (100000). */
 const COACHMARK_Z = 100001;
+/** The step card (and Help's guide card) sit above the coachmark, so its dimmed surround never covers them. */
+export const TRAINING_CARD_Z = COACHMARK_Z + 1;
 
 const PAD = 6;
-const TIP_W = 240;
+/** The callout fits its text, up to this width. */
+const TIP_MAX_W = 320;
 
 export default function Coachmark({ step, label }: { step: TrainingStep | null; label: string }) {
   const rect = useStepTargetRect(step);
+  // The callout's rendered width, for placing it: it grows with the label.
+  const tipRef = useRef<HTMLDivElement>(null);
+  const [tipW, setTipW] = useState(TIP_MAX_W);
+  useLayoutEffect(() => {
+    const w = tipRef.current?.offsetWidth;
+    if (w) setTipW(w);
+  }, [label, rect]);
   if (!step || !rect) return null;
 
   const vw = typeof window !== 'undefined' ? window.innerWidth : 1280;
@@ -60,24 +71,24 @@ export default function Coachmark({ step, label }: { step: TrainingStep | null; 
   const room = { bottom: vh - (ring.top + ring.height), top: ring.top, right: vw - (ring.left + ring.width), left: ring.left };
   let side = step.placement ?? 'bottom';
   if ((side === 'bottom' || side === 'top') && room[side] < 70) side = side === 'bottom' ? 'top' : 'bottom';
-  if ((side === 'left' || side === 'right') && room[side] < TIP_W + 24) side = room.bottom > 70 ? 'bottom' : 'top';
+  if ((side === 'left' || side === 'right') && room[side] < tipW + 24) side = room.bottom > 70 ? 'bottom' : 'top';
 
-  const clampX = (x: number) => Math.max(8, Math.min(vw - TIP_W - 8, x));
+  const clampX = (x: number) => Math.max(8, Math.min(vw - tipW - 8, x));
   const clampY = (y: number) => Math.max(8, Math.min(vh - 60, y));
   const tipStyle: React.CSSProperties =
     side === 'bottom'
-      ? { top: ring.top + ring.height + 10, left: clampX(ring.left + ring.width / 2 - TIP_W / 2) }
+      ? { top: ring.top + ring.height + 10, left: clampX(ring.left + ring.width / 2 - tipW / 2) }
       : side === 'top'
-        ? { top: ring.top - 10, left: clampX(ring.left + ring.width / 2 - TIP_W / 2), transform: 'translateY(-100%)' }
+        ? { top: ring.top - 10, left: clampX(ring.left + ring.width / 2 - tipW / 2), transform: 'translateY(-100%)' }
         : side === 'right'
           ? { top: clampY(ring.top + ring.height / 2 - 20), left: ring.left + ring.width + 12 }
-          : { top: clampY(ring.top + ring.height / 2 - 20), left: ring.left - TIP_W - 12 };
+          : { top: clampY(ring.top + ring.height / 2 - 20), left: ring.left - tipW - 12 };
 
   const arrow: React.CSSProperties =
     side === 'bottom'
-      ? { top: -6, left: Math.max(10, Math.min(TIP_W - 22, ring.left + ring.width / 2 - (tipStyle.left as number) - 6)) }
+      ? { top: -6, left: Math.max(10, Math.min(tipW - 22, ring.left + ring.width / 2 - (tipStyle.left as number) - 6)) }
       : side === 'top'
-        ? { bottom: -6, left: Math.max(10, Math.min(TIP_W - 22, ring.left + ring.width / 2 - (tipStyle.left as number) - 6)) }
+        ? { bottom: -6, left: Math.max(10, Math.min(tipW - 22, ring.left + ring.width / 2 - (tipStyle.left as number) - 6)) }
         : side === 'right'
           ? { left: -6, top: 14 }
           : { right: -6, top: 14 };
@@ -93,8 +104,9 @@ export default function Coachmark({ step, label }: { step: TrainingStep | null; 
       />
       <div
         role="note"
-        className="absolute rounded-lg bg-accent px-3 py-2 text-xs font-medium leading-snug text-accent-foreground shadow-lg"
-        style={{ ...tipStyle, width: TIP_W }}
+        ref={tipRef}
+        className="absolute w-max rounded-lg bg-accent px-3 py-2 text-base font-medium leading-snug text-accent-foreground shadow-lg"
+        style={{ ...tipStyle, maxWidth: TIP_MAX_W }}
       >
         <span className="absolute h-3 w-3 rotate-45 bg-accent" style={arrow} />
         <span className="relative">{label}</span>

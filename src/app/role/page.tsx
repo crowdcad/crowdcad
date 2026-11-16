@@ -80,7 +80,7 @@ export default function RolePage() {
         <p className="text-xs uppercase tracking-wide text-surface-faint">{account.eventName}</p>
         <h1 className="text-2xl font-bold">{EVENT_ROLE_INFO[account.role]?.label}</h1>
         <p className="text-sm text-surface-faint" data-testid="role-no-mci">
-          {mci ? 'The MCI has stood down. Thank you.' : 'Waiting for the MCI to start.'}
+          {mci ? 'The MCI has ended. Thank you.' : 'Waiting for the MCI to start.'}
         </p>
         {signOut}
       </RoleCard>

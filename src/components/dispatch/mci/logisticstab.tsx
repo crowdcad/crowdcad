@@ -34,7 +34,7 @@ import MciTotalsStrip from './mcitotalsstrip';
 type UpdateEvent = (updates: Partial<Event> | ((current: Event) => Partial<Event>)) => Promise<void>;
 
 const ERRORS: Record<NonNullable<LogisticsResult['error']>, string> = {
-  inactive: 'The MCI has stood down.',
+  inactive: 'The MCI has ended.',
   invalid: 'Give the team a name.',
   duplicate: 'A team with that name already exists.',
   missing: 'That team is no longer in the list.',

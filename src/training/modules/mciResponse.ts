@@ -17,10 +17,10 @@ const areaId = (event: Event) => areaStats(event)?.area.id ?? CLINIC_ID;
 /** Mass casualty incident, start to finish, from the dispatcher's board. */
 const mciResponse: TrainingModule = {
   id: 'mci-response',
-  version: 1,
+  version: 2,
   track: 'mci',
-  title: 'MCI response: declare, count, move, transport',
-  summary: "Declare an MCI, count patients by triage color, move them to treatment, send an ambulance and stand down.",
+  title: 'Declare and run an MCI',
+  summary: "Declare an MCI, count patients by triage color, move them to treatment, send an ambulance and end the MCI.",
   release: 'preview',
   seed: () => festivalBoard('mci-response'),
   practice: [
@@ -31,14 +31,14 @@ const mciResponse: TrainingModule = {
   steps: [
     {
       id: 'intro',
-      section: 'Declare',
-      title: 'The scenario',
+      section: 'Declare an MCI',
+      title: 'Read the scenario',
       body: "A barrier falls at the front of the **North Lawn** crowd and several people are hurt. You will declare an MCI, count patients, move them to the First Aid Tent and send them to hospital.",
       estSec: 20,
     },
     {
       id: 'open-declare',
-      section: 'Declare',
+      section: 'Declare an MCI',
       title: 'Open Declare MCI',
       body: 'Click **Declare MCI**.',
       anchor: 'mci-declare-button',
@@ -50,8 +50,8 @@ const mciResponse: TrainingModule = {
     },
     {
       id: 'declare',
-      section: 'Declare',
-      title: 'Zones and treatment',
+      section: 'Declare an MCI',
+      title: 'Declare an MCI',
       body: "Tick **North Lawn** and **South Lawn** under zones. Zones are where patients are found. **First Aid Tent** is already ticked as a treatment location. Click **Declare MCI**.",
       anchors: ['mci-declare-modal', 'mci-declare-button'],
       placement: 'left',
@@ -65,8 +65,8 @@ const mciResponse: TrainingModule = {
     },
     {
       id: 'tag-red',
-      section: 'Count patients',
-      title: 'Tag three red',
+      section: 'Tag patients',
+      title: 'Tag red patients',
       body: "Triage reports **3 red** patients (most urgent) on the North Lawn. Click **+** on the red row 3 times.",
       anchor: `mci-zone-${ZONE}-red-add`,
       placement: 'right',
@@ -77,8 +77,8 @@ const mciResponse: TrainingModule = {
     },
     {
       id: 'tag-yellow',
-      section: 'Count patients',
-      title: 'Tag two yellow',
+      section: 'Tag patients',
+      title: 'Tag yellow patients',
       body: "Then **2 yellow** patients (can wait). Click **+** on the yellow row 2 times.",
       anchor: `mci-zone-${ZONE}-yellow-add`,
       placement: 'right',
@@ -88,8 +88,8 @@ const mciResponse: TrainingModule = {
     },
     {
       id: 'in-zone',
-      section: 'Count patients',
-      title: 'Still in the zone',
+      section: 'Tag patients',
+      title: 'Read the In zone count',
       body: "This column shows how many patients are still in the zone and not yet moved.",
       anchor: `mci-zone-${ZONE}-inzone-total`,
       placement: 'left',
@@ -97,8 +97,8 @@ const mciResponse: TrainingModule = {
     },
     {
       id: 'open-move',
-      section: 'Move to treatment',
-      title: 'Move to treatment',
+      section: 'Move patients to treatment',
+      title: 'Open Move to treatment',
       body: "Teams carry all 5 patients to the First Aid Tent. Click **Move to treatment** on the North Lawn card.",
       anchor: `mci-zone-move-${ZONE}`,
       placement: 'top',
@@ -109,8 +109,8 @@ const mciResponse: TrainingModule = {
     },
     {
       id: 'move',
-      section: 'Move to treatment',
-      title: 'Confirm the move',
+      section: 'Move patients to treatment',
+      title: 'Move patients to treatment',
       body: "The numbers are already filled in. Click **Move**.",
       anchors: ['mci-move-confirm', `mci-zone-move-${ZONE}`],
       placement: 'top',
@@ -120,8 +120,8 @@ const mciResponse: TrainingModule = {
     },
     {
       id: 'clear-zone',
-      section: 'Move to treatment',
-      title: 'Mark the zone clear',
+      section: 'Move patients to treatment',
+      title: 'Mark a zone clear',
       body: "No one is left on the North Lawn. Click **Clear?** to mark the zone empty.",
       anchor: `mci-zone-clear-${ZONE}`,
       placement: 'bottom',
@@ -133,8 +133,8 @@ const mciResponse: TrainingModule = {
     },
     {
       id: 'open-transport',
-      section: 'Transport',
-      title: 'An ambulance arrives',
+      section: 'Transport patients',
+      title: 'Open Transport',
       body: "An ambulance arrives at the First Aid Tent. Click **Transport** on the First Aid Tent card.",
       anchor: `mci-area-transport-${AREA}`,
       placement: 'top',
@@ -145,8 +145,8 @@ const mciResponse: TrainingModule = {
     },
     {
       id: 'transport',
-      section: 'Transport',
-      title: 'Send two reds',
+      section: 'Transport patients',
+      title: 'Transport patients',
       body: "Type ambulance `A14`, pick **two red** patients, type destination `County General`, then confirm. The most urgent patients are listed first.",
       anchors: ['mci-transport-modal', `mci-area-transport-${AREA}`],
       placement: 'left',
@@ -156,15 +156,15 @@ const mciResponse: TrainingModule = {
       apply: (e) => patched(e, transportPatch(e, areaId(e), { red: 2 }, { unit: 'A14', destination: 'County General' }, ctx())),
     },
     {
-      id: 'stand-down',
-      section: 'Stand down',
-      title: 'Stand down',
-      body: "When the incident is over, click **Stand down** and confirm. Teams go back to Available and any patients still being treated move to the clinic tab. The counts are kept.",
+      id: 'end-mci',
+      section: 'End the MCI',
+      title: 'End the MCI',
+      body: "When the incident is over, click **End MCI** and confirm. Teams go back to Available and any patients still being treated move to the clinic tab. The counts are kept.",
       anchor: 'mci-stand-down',
       placement: 'bottom',
       estSec: 20,
-      intents: ['stand down mci', 'end mci'],
-      // Standing down writes the board's own text (the clinic tracker rows it imports), so the gate is off here.
+      intents: ['end mci', 'stand down mci', 'mci over'],
+      // Ending the MCI writes the board's own text (the clinic tracker rows it imports), so the gate is off here.
       free: true,
       done: (e) => !!e.mci && !isMciActive(e),
       apply: (e) => ({ ...e, ...standDownMci(e, Date.now()) }),

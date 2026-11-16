@@ -29,7 +29,7 @@ import {
 
 import { Menu, Moon, UserRound, LogOut, Sun } from "lucide-react";
 import HelpButton from '@/components/training/HelpButton';
-import { LiveClock, LoginModalLazy, MobileMenuAccountItems, useThemeToggle } from '@/components/layout/navbarshared';
+import { LiveClock, LoginModalLazy, MobileMenuAccountItems, NAVBAR_ICON_BUTTON_CLASS, useThemeToggle } from '@/components/layout/navbarshared';
 
 export default function AppNavbar() {
   const router = useRouter();
@@ -252,7 +252,7 @@ export default function AppNavbar() {
                 isIconOnly
                 variant="flat"
                 aria-label={isDarkTheme ? "Switch to light mode" : "Switch to dark mode"}
-                className="h-8 w-8 min-w-8 !rounded-circle bg-surface-deeper/70 text-surface-light hover:bg-surface-deeper"
+                className={NAVBAR_ICON_BUTTON_CLASS}
                 onPress={toggleTheme}
               >
                 {isDarkTheme ? <Sun className="size-4" /> : <Moon className="size-4" />}

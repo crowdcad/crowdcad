@@ -28,10 +28,9 @@ A short guide to CrowdCAD's main workflows for dispatchers, supervisors and even
 ## Training
 
 - Open `/training` for interactive modules that teach the dispatch board on a practice event: a tour of the board, the call flow, clinic patients and more, each with an estimated time.
-- A module guides you step by step and points at each control. "Do it for me" does a step for you, and the **Steps** menu restarts any section.
-- While a module is guided the board takes only the values the step asks you to type, so nobody types real patient details into a practice board. Once you finish, the board is yours to practise on freely.
-- Practice boards live only in the browser tab: nothing is saved or sent anywhere. Your progress through the modules is remembered in this browser.
-- The **?** button in the navbar finds the step for what you are trying to do. It can point at the control on your own board ("Show me", which never changes anything) or open the step as practice.
+- A module guides you step by step and points at each control. "Do it for me" does a step for you, the back arrow undoes the last step, and the **Steps** menu restarts any section.
+- While a module is guided the board takes only the values the step asks you to type, so nobody types real patient details into a practice board. Once you finish, the board is yours to practice on freely.
+- The **?** button in the navbar asks what you would like to do. Pick a result to be pointed at the control on your own board (this never changes anything), or open its module with the **Module N** link.
 - Maintainers: see [`TRAINING.md`](TRAINING.md) for how modules are built and tested.
 
 ## Basic concepts

@@ -395,7 +395,7 @@ describe('declare and stand down', () => {
     expect(e.staff.map((s) => s.status)).toEqual(['Available', 'Available', 'Available', 'En Route', 'On Break']);
     expect(e.staff.every((s) => s.mciAssignment === undefined)).toBe(true);
     expect(e.staff[0].location).toBe('Gate A');
-    expect(e.staff[0].log?.at(-1)?.message).toContain('MCI stand down');
+    expect(e.staff[0].log?.at(-1)?.message).toContain('MCI ended');
     expect(e.supervisor[0]).toMatchObject({ status: 'Available' });
     expect(e.supervisor[0].mciAssignment).toBeUndefined();
     expect(zone(e, 'za').taggedTotal).toBe(2);
@@ -519,7 +519,7 @@ describe('CSV rows', () => {
       'MCI,Zone A,T2000,"moved red 2 to Clinic"',
       'MCI,Zone A,T3000,"undo moved red 2 to Clinic"',
       'MCI,Zone B,T3500,"zone_cleared"',
-      'MCI,-,T61000,"MCI stood down (active for 1 min)"',
+      'MCI,-,T61000,"MCI ended (active for 1 min)"',
     ]);
   });
 
