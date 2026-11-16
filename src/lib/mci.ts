@@ -52,7 +52,7 @@ export function emptyMci(): MciState {
   return { active: false, periods: [], zones: [], areas: [], log: [] };
 }
 
-/** True while an MCI is declared and not stood down. */
+/** True while an MCI is declared and not ended. */
 export function isMciActive(event: Pick<Event, 'mci'> | null | undefined): boolean {
   return event?.mci?.active === true;
 }
@@ -111,6 +111,15 @@ export function undoneIds(log: readonly MciLogEntry[]): Set<string> {
 export function currentLog(mci: Pick<MciState, 'log' | 'earlier'>): MciLogEntry[] {
   const since = mci.earlier?.length ? mci.earlier[mci.earlier.length - 1].until : undefined;
   return since === undefined ? mci.log : mci.log.filter((entry) => entry.t >= since);
+}
+
+/** When each MCI on the event was declared and ended, oldest first: the Log and the CSV export show these as entries. */
+export function mciPeriodEntries(mci: Pick<MciState, 'periods' | 'earlier'>): { t: number; text: string; ended: boolean }[] {
+  const periods = [...(mci.earlier ?? []).flatMap((e) => e.periods), ...mci.periods];
+  return periods.flatMap((p) => [
+    { t: p.startedAt, text: 'MCI declared', ended: false },
+    ...(p.endedAt !== undefined ? [{ t: p.endedAt, text: `MCI ended (active for ${Math.round((p.endedAt - p.startedAt) / 60000)} min)`, ended: true }] : []),
+  ]);
 }
 
 /**
@@ -818,7 +827,7 @@ export function mciClinicImports(event: Pick<Event, 'mci' | 'calls' | 'clinics'>
         clinic: true,
         ...(stats.area.clinicId ? { clinicId: stats.area.clinicId } : {}),
         notes,
-        log: [{ timestamp: now, message: `${hhmm(now)} - Imported from the MCI at stand down: ${color} tag at ${stats.name}, from ${who}` }],
+        log: [{ timestamp: now, message: `${hhmm(now)} - Imported from the MCI when it ended: ${color} tag at ${stats.name}, from ${who}` }],
       });
     }
   }
@@ -847,7 +856,7 @@ export function standDownMci(event: Event, now: number, tracked: ReadonlySet<str
     const targetName = assigned ? mciAssignmentName(base, assigned) : undefined;
     const restore = unit.originalPost || event.pendingAssignments?.[unit.team]?.post;
     if (!tracked.has(unit.team) && restore && targetName && unit.location === targetName) next.location = restore;
-    next.log = [...(unit.log || []), { timestamp: now, message: `${hhmm(now)} - status changed to Available (MCI stand down)` }];
+    next.log = [...(unit.log || []), { timestamp: now, message: `${hhmm(now)} - status changed to Available (MCI ended)` }];
     return next;
   };
 
@@ -1421,7 +1430,7 @@ function recordCsvLines(mci: MciState, formatTimestamp: (ms: number) => string, 
     rows.push({ t: period.startedAt, order: -1, line: `MCI,-,${formatTimestamp(period.startedAt)},${csvQuote(named('MCI declared'))}` });
     if (period.endedAt !== undefined) {
       const minutes = Math.round((period.endedAt - period.startedAt) / 60000);
-      rows.push({ t: period.endedAt, order: 1e9 + i, line: `MCI,-,${formatTimestamp(period.endedAt)},${csvQuote(named(`MCI stood down (active for ${minutes} min)`))}` });
+      rows.push({ t: period.endedAt, order: 1e9 + i, line: `MCI,-,${formatTimestamp(period.endedAt)},${csvQuote(named(`MCI ended (active for ${minutes} min)`))}` });
     }
   });
   mci.log.forEach((entry, i) => {

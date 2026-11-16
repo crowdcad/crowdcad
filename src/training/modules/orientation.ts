@@ -1,4 +1,4 @@
-import { festivalBoard } from '../fixtures';
+import { trainingBoard } from '../fixtures';
 import type { TrainingModule } from '../types';
 
 /** Start here: a guided look around the board, before any lesson changes it. */
@@ -6,10 +6,10 @@ const orientation: TrainingModule = {
   id: 'orientation',
   version: 1,
   track: 'start',
-  title: 'Find your way around the board',
+  title: 'Tour the dispatch board',
   summary: "Where teams, calls, clinics and the map are, and what the buttons at the top do.",
   release: 'stable',
-  seed: () => festivalBoard('orientation'),
+  seed: () => trainingBoard('orientation'),
   practice: [
     'Switch the left panel between Teams, Supervisors, Equipment and the Log.',
     'Open the map and click a team marker.',
@@ -18,15 +18,15 @@ const orientation: TrainingModule = {
   steps: [
     {
       id: 'welcome',
-      section: 'The two halves',
-      title: 'Welcome',
-      body: "This is the dispatch board for a practice event: a music festival with five {{Teams}}, one {{Supervisor}} and a First Aid Tent. Click **Next** to go through the tour. Nothing here is saved.",
+      section: 'Read the board',
+      title: 'Start the tour',
+      body: "This is the dispatch board for a practice event: a campus event with five {{Teams}} (MRC1 to MRC5), one {{Supervisor}} and three clinics. Click **Next** to go through the tour.",
       estSec: 15,
     },
     {
       id: 'left-panel',
-      section: 'The two halves',
-      title: 'Units on the left',
+      section: 'Read the board',
+      title: 'Read the team list',
       body: "The left side lists your {{Teams}}. Each card shows the team's status, {{Location}} and how long it has had that status.",
       anchor: 'left-panel',
       placement: 'right',
@@ -36,8 +36,8 @@ const orientation: TrainingModule = {
     },
     {
       id: 'availability',
-      section: 'The two halves',
-      title: 'Availability at a glance',
+      section: 'Read the board',
+      title: 'Read the availability bar',
       body: "This bar counts teams that are **Available**, **On Break or in the Clinic**, and **On Calls**. It turns red when too many teams are on calls.",
       anchor: 'availability-surge-strip',
       placement: 'right',
@@ -47,8 +47,8 @@ const orientation: TrainingModule = {
     },
     {
       id: 'right-panel',
-      section: 'The two halves',
-      title: 'Work on the right',
+      section: 'Read the board',
+      title: 'Read the right panel',
       body: "The right side has a tab for calls, a tab for each clinic and a map.",
       anchor: 'right-panel',
       placement: 'left',
@@ -56,8 +56,8 @@ const orientation: TrainingModule = {
     },
     {
       id: 'switch-to-equipment',
-      section: 'The left panel',
-      title: 'Switch to Equipment',
+      section: 'Switch the left panel',
+      title: 'Open Equipment',
       body: "Open the menu at the top of the left side and choose **{{Equipment}}**.",
       anchors: ['left-panel-option-equipment', 'left-panel-select'],
       placement: 'right',
@@ -69,8 +69,8 @@ const orientation: TrainingModule = {
     },
     {
       id: 'equipment',
-      section: 'The left panel',
-      title: 'Equipment',
+      section: 'Switch the left panel',
+      title: 'Read the equipment list',
       body: "This list shows where each piece of equipment is and who has it. It updates when teams pick it up or drop it off.",
       anchor: 'css:[data-testid^="equipment-card-"]',
       placement: 'right',
@@ -78,7 +78,7 @@ const orientation: TrainingModule = {
     },
     {
       id: 'switch-to-log',
-      section: 'The left panel',
+      section: 'Switch the left panel',
       title: 'Open the Log',
       body: "Open the menu again and choose **{{Log}}**. It lists everything that happened, newest first, and you can search it.",
       anchors: ['left-panel-option-log', 'left-panel-select'],
@@ -91,8 +91,8 @@ const orientation: TrainingModule = {
     },
     {
       id: 'back-to-teams',
-      section: 'The left panel',
-      title: 'Back to Teams',
+      section: 'Switch the left panel',
+      title: 'Open Teams',
       body: "Switch the menu back to **{{Teams}}**.",
       anchors: ['left-panel-option-teams', 'left-panel-select'],
       placement: 'right',
@@ -102,8 +102,8 @@ const orientation: TrainingModule = {
     },
     {
       id: 'calls-tab',
-      section: 'Calls, clinics and the map',
-      title: 'The Calls tab',
+      section: 'Use the right panel',
+      title: 'Read the Calls tab',
       body: "Each open {{Call}} is a row here, with its {{Teams}} and how long it has been open. The number on the tab counts open calls.",
       anchor: 'calls-tab-button',
       placement: 'bottom',
@@ -113,18 +113,18 @@ const orientation: TrainingModule = {
     },
     {
       id: 'clinic-tab',
-      section: 'Calls, clinics and the map',
-      title: 'A clinic tab',
+      section: 'Use the right panel',
+      title: 'Read a clinic tab',
       body: "Each clinic has its own tab with the patients it is treating.",
       anchor: 'clinic-tab-training-clinic',
       placement: 'bottom',
       estSec: 15,
-      intents: ['clinic patients', 'first aid tent', 'clinic tab'],
+      intents: ['clinic patients', 'clinic tab'],
     },
     {
       id: 'map-tab',
-      section: 'Calls, clinics and the map',
-      title: 'The map',
+      section: 'Use the right panel',
+      title: 'Open the map',
       body: "The map shows posts, {{Teams}} and equipment. Press Alt+M to open it. The street map needs internet.",
       anchor: 'map-tab-button',
       placement: 'bottom',
@@ -134,8 +134,8 @@ const orientation: TrainingModule = {
     },
     {
       id: 'surge',
-      section: 'The toolbar',
-      title: 'Surge',
+      section: 'Use the toolbar',
+      title: 'Find Surge',
       body: "Press **Surge** when there are more calls than teams can handle. It records the time for the event summary. It also turns on by itself when too many teams are on calls.",
       anchor: 'surge-toggle-button',
       placement: 'bottom',
@@ -145,8 +145,8 @@ const orientation: TrainingModule = {
     },
     {
       id: 'focus',
-      section: 'The toolbar',
-      title: 'Full screen',
+      section: 'Use the toolbar',
+      title: 'Make a panel full screen',
       body: "This button makes the right side full screen, or opens it in a new window for a second screen.",
       anchor: 'focus-toggle',
       placement: 'bottom',
@@ -156,8 +156,8 @@ const orientation: TrainingModule = {
     },
     {
       id: 'add-call',
-      section: 'The toolbar',
-      title: 'Add Call, from anywhere',
+      section: 'Use the toolbar',
+      title: 'Find Add Call',
       body: "New calls start here, or press **Ctrl+Enter** anywhere. The next module shows you how.",
       anchor: 'add-call-button',
       placement: 'bottom',

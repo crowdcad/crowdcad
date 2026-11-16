@@ -71,7 +71,7 @@ Then('the training module should be complete', async ({ page }) => {
 });
 
 Then('the board should be in free practice', async ({ page }) => {
-  await expect(page.getByTestId('training-gate-state')).toHaveText(/Free practice/);
+  await expect(page.getByTestId('training-card')).toHaveAttribute('data-gate', 'free');
 });
 
 When('I add a call at {string} with complaint {string}', async ({ page }, location: string, complaint: string) => {

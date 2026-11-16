@@ -155,7 +155,7 @@ export default function MciTab({ event, actions, onOpenLogins }: Props) {
     void actions.setTagged(zoneId, color, total);
   };
   const handleStandDown = () => {
-    if (!window.confirm('Stand down the MCI? Teams in Triage, Treatment or Unavailable return to Available. Patients still in a treatment location move to the clinic tracker. The counts are kept.')) return;
+    if (!window.confirm('End the MCI? Teams in Triage, Treatment or Unavailable return to Available. Patients still in a treatment location move to the clinic tracker. The counts are kept.')) return;
     void actions.standDown();
   };
   const handleMove = async (zoneId: string, areaId: string | undefined, counts: MciCounts) => {
@@ -197,7 +197,7 @@ export default function MciTab({ event, actions, onOpenLogins }: Props) {
 
   return (
     <div className="tab-scroll minimal-scrollbar flex min-h-0 flex-1 flex-col gap-4" data-testid="mci-tab">
-      {/* Duration to Stand down stays in view while the tab scrolls. */}
+      {/* Duration to End MCI stays in view while the tab scrolls. */}
       <div className="sticky top-0 z-20 -mb-2 flex flex-wrap items-start justify-between gap-3 bg-surface-deep pb-2" data-testid="mci-top-bar">
         <MciTotalsStrip mci={mci} totals={derived.totals} />
         <div className="flex items-center gap-2">
@@ -208,7 +208,7 @@ export default function MciTab({ event, actions, onOpenLogins }: Props) {
           )}
           {!readOnly && (
             <Button size="sm" radius="lg" className="bg-status-red text-surface-light" onPress={handleStandDown} data-testid="mci-stand-down">
-              {t('Stand down')}
+              {t('End MCI')}
             </Button>
           )}
         </div>
@@ -216,7 +216,7 @@ export default function MciTab({ event, actions, onOpenLogins }: Props) {
 
       {readOnly && (
         <p className="rounded-md border border-surface-liner px-3 py-1.5 text-sm text-surface-faint" data-testid="mci-stood-down">
-          This MCI has stood down. The record below is read-only.
+          This MCI has ended. The record below is read-only.
         </p>
       )}
 

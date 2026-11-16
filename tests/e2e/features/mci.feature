@@ -22,8 +22,8 @@ Feature: MCI mode on the dispatch board
     Then I should see the text "Zone clear"
     When I transport 2 "red" patients from "Clinic" in ambulance "A14"
     Then the treatment location "Clinic" should read "0 regular + 3 MCI"
-    When I stand down the MCI
-    Then I should see the text "This MCI has stood down"
+    When I end the MCI
+    Then I should see the text "This MCI has ended"
     When I open the MCI summary from the event summary
     Then the MCI summary should list zone "Zone A" with 5 tagged and 5 moved
     And the MCI summary should list treatment location "Clinic" with 2 transported
@@ -49,7 +49,7 @@ Feature: MCI mode on the dispatch board
     And the "yellow" column in "Clinic" should list 0 patients
     And the treatment location "Clinic" should read "0 regular + 2 MCI"
     And the MCI log should mention "worse breathing"
-    When I stand down the MCI
+    When I end the MCI
     And I open the MCI summary from the event summary
     Then the MCI summary patients should include "chest pain"
     And the MCI summary patients should include "A14"
@@ -83,12 +83,12 @@ Feature: MCI mode on the dispatch board
     And I undo the arrival of "MRC1"
     Then incoming team "MRC1" should be back on the list
 
-  Scenario: Declare an entirely new MCI after a stand-down
+  Scenario: Declare an entirely new MCI after ending the MCI
     When I declare an MCI with zones "Zone A" and "Zone B" and the default clinic
     And I tag 2 "red" patients in zone "Zone A"
-    And I stand down the MCI
+    And I end the MCI
     And I declare the MCI again as an entirely new MCI
     Then zone "Zone A" should show 0 "red" patients in the zone
-    When I stand down the MCI
+    When I end the MCI
     And I open the MCI summary from the event summary
     Then the MCI summary should show 2 MCIs

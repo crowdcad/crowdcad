@@ -11,6 +11,10 @@ export const LoginModalLazy = dynamic(() => import('@/components/modals/auth/log
 
 export type LoginMode = 'login' | 'signup';
 
+/** The round icon buttons on the navbar's right (Help, light/dark): the same outline as the profile button. */
+export const NAVBAR_ICON_BUTTON_CLASS =
+  'h-8 w-8 min-w-8 !rounded-circle border border-surface-liner bg-surface-base text-surface-light hover:bg-surface-deeper';
+
 /** HH:mm:ss wall clock shown next to the logo on dispatch pages. */
 export function LiveClock() {
   const [now, setNow] = useState<Date>(() => new Date());

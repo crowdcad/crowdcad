@@ -2,8 +2,8 @@
 
 import React, { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { Button, Chip } from '@heroui/react';
-import { ArrowLeftRight, ChevronDown, ChevronUp, Lock, LockOpen, RotateCcw, X } from 'lucide-react';
+import { Button } from '@heroui/react';
+import { ChevronDown, ChevronUp, RotateCcw, Undo2, X } from 'lucide-react';
 import DispatchPage from '@/app/(main)/events/[eventId]/dispatch/page';
 import { LiteProvider, type LiteTrackingFeed } from '@/lib/LiteContext';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -12,7 +12,7 @@ import { sectionsOf, visibleModules } from '@/training/registry';
 import { plainStepText } from '@/training/text';
 import type { TrainingModule } from '@/training/types';
 import { stepKind, useTrainingSession } from '@/training/useTrainingSession';
-import Coachmark from './Coachmark';
+import Coachmark, { TRAINING_CARD_Z } from './Coachmark';
 import HelpButton from './HelpButton';
 import StepsMenu from './StepsMenu';
 import StepText from './StepText';
@@ -68,7 +68,6 @@ export default function TrainingPlayer({ module, startIndex = 0 }: { module: Tra
   }, [module]);
   const session = useTrainingSession(module, startIndex, trackingChrome);
   const params = useMemo(() => fulfilled({ eventId: session.eventId }), [session.eventId]);
-  const [cardSide, setCardSide] = useState<'left' | 'right'>('right');
   const [minimized, setMinimized] = useState(false);
   const isMobile = useIsMobile();
 
@@ -96,15 +95,6 @@ export default function TrainingPlayer({ module, startIndex = 0 }: { module: Tra
             <div className="h-full bg-accent transition-all" style={{ width: `${pct}%` }} />
           </div>
         </div>
-        <Chip
-          size="sm"
-          variant="flat"
-          startContent={session.unlocked || complete ? <LockOpen className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
-          className="hidden md:flex"
-          data-testid="training-gate-state"
-        >
-          {session.unlocked || complete ? 'Free practice' : 'Guided'}
-        </Chip>
         <StepsMenu module={module} index={index} complete={complete} onJump={session.jumpTo} />
         <HelpButton />
       </header>
@@ -121,9 +111,12 @@ export default function TrainingPlayer({ module, startIndex = 0 }: { module: Tra
         aria-live="polite"
         data-testid="training-card"
         data-step-id={complete ? 'complete' : step.id}
+        data-gate={session.unlocked || complete ? 'free' : 'guided'}
         // Top layer: pressing the card while a board modal is open must not dismiss that modal and swallow the press.
         data-react-aria-top-layer="true"
-        className={`pointer-events-auto fixed bottom-4 z-[1100] w-[min(380px,calc(100vw-2rem))] rounded-xl border border-surface-liner bg-surface-deep/95 p-4 text-sm text-surface-light shadow-2xl backdrop-blur ${cardSide === 'right' ? 'right-4' : 'left-4'}`}
+        // Above everything, the coachmark's dimmed surround included.
+        style={{ zIndex: TRAINING_CARD_Z }}
+        className="pointer-events-auto fixed bottom-4 right-4 w-[min(380px,calc(100vw-2rem))] rounded-xl border border-surface-liner bg-surface-deep p-4 text-sm text-surface-light shadow-2xl"
       >
         <div className="mb-1 flex items-center justify-between gap-2 text-xs uppercase tracking-wide text-surface-light/60">
           <span className="truncate">
@@ -142,11 +135,14 @@ export default function TrainingPlayer({ module, startIndex = 0 }: { module: Tra
             </button>
             <button
               type="button"
-              aria-label="Move this card to the other side"
-              className="rounded p-1 hover:bg-surface-liner"
-              onClick={() => setCardSide((s) => (s === 'right' ? 'left' : 'right'))}
+              aria-label="Back: undo the last step"
+              title="Back: undo the last step"
+              disabled={!complete && index === 0}
+              className="rounded p-1 hover:bg-surface-liner disabled:pointer-events-none disabled:opacity-30"
+              onClick={session.back}
+              data-testid="training-back"
             >
-              <ArrowLeftRight className="h-3.5 w-3.5" />
+              <Undo2 className="h-3.5 w-3.5" />
             </button>
           </span>
         </div>
@@ -156,9 +152,7 @@ export default function TrainingPlayer({ module, startIndex = 0 }: { module: Tra
         ) : complete ? (
           <div data-testid="training-complete">
             <h2 className="text-base font-semibold text-surface">Module complete</h2>
-            <p className="mt-1 text-surface-light/85">
-              You can now try anything on this board. It is still practice data and is cleared when you leave.
-            </p>
+            <p className="mt-1 text-surface-light/85">You can now try anything on this board.</p>
             <ul className="mt-2 list-disc space-y-1 pl-5 text-surface-light/85">
               {module.practice.map((p) => (
                 <li key={p}>{p}</li>

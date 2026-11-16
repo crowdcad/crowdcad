@@ -83,7 +83,7 @@ export interface TrainingModule {
   steps: TrainingStep[];
   /**
    * The step after which the write gate turns off for good and the sandbox is
-   * free to practise in. Defaults to the last step: the gate is off once the
+   * free to practice in. Defaults to the last step: the gate is off once the
    * module is complete.
    */
   unlockAfter?: string;

@@ -1,5 +1,5 @@
 import { addWalkup, clinicPatient, setClinicOutcome } from '../actions';
-import { CLINIC_ID, festivalBoard } from '../fixtures';
+import { CLINIC_ID, trainingBoard } from '../fixtures';
 import type { TrainingModule } from '../types';
 
 const COMPLAINT = 'Bee sting';
@@ -9,10 +9,10 @@ const clinicPatients: TrainingModule = {
   id: 'clinic-patients',
   version: 1,
   track: 'dispatcher',
-  title: 'Clinic walk-ups and outcomes',
+  title: 'Add a clinic patient and record transport',
   summary: "Add a patient who walks into the clinic, mark them as waiting for an ambulance and record the transport.",
   release: 'stable',
-  seed: () => festivalBoard('clinic-patients'),
+  seed: () => trainingBoard('clinic-patients'),
   practice: [
     'Add another walk-up and discharge them.',
     'Reopen a resolved patient with the arrow next to their status.',
@@ -21,27 +21,27 @@ const clinicPatients: TrainingModule = {
   steps: [
     {
       id: 'intro',
-      section: 'A walk-up patient',
-      title: 'The scenario',
-      body: "A person walks into the First Aid Tent with a **bee sting**. No {{Team}} brought her, so you add her on the clinic tab.",
+      section: 'Add a walk-up patient',
+      title: 'Read the scenario',
+      body: "A person walks into the Dwinelle Tent with a **bee sting**. No {{Team}} brought her, so you add her on the clinic tab.",
       estSec: 15,
     },
     {
       id: 'open-clinic',
-      section: 'A walk-up patient',
+      section: 'Add a walk-up patient',
       title: 'Open the clinic tab',
-      body: 'Click the **First Aid Tent** tab.',
+      body: 'Click the **Dwinelle Tent** tab.',
       anchor: `clinic-tab-${CLINIC_ID}`,
       placement: 'bottom',
       estSec: 10,
       doneWhenVisible: 'clinic-add-patient',
-      intents: ['open clinic', 'clinic tab', 'first aid tent'],
+      intents: ['open clinic', 'clinic tab'],
       liveSafe: true,
     },
     {
       id: 'open-walkup',
-      section: 'A walk-up patient',
-      title: 'Add a patient',
+      section: 'Add a walk-up patient',
+      title: 'Open Add Patient',
       body: 'Click **{{Add Patient}}**.',
       anchor: 'clinic-add-patient',
       placement: 'bottom',
@@ -52,8 +52,8 @@ const clinicPatients: TrainingModule = {
     },
     {
       id: 'fill-walkup',
-      section: 'A walk-up patient',
-      title: 'Fill in the patient',
+      section: 'Add a walk-up patient',
+      title: 'Add a walk-up patient',
       body: "Type {{Age/Sex}} `19F` and {{Chief Complaint}} `Bee sting`, then submit. Never type names.",
       anchors: ['clinic-walkup-modal', 'clinic-add-patient'],
       placement: 'right',
@@ -64,8 +64,8 @@ const clinicPatients: TrainingModule = {
     },
     {
       id: 'pending-transport',
-      section: 'Outcomes',
-      title: 'Waiting for an ambulance',
+      section: 'Record the outcome',
+      title: 'Set Pending Ambulance',
       body: "Her reaction is getting worse and she needs a hospital. Click her status and pick **Pending Ambulance**.",
       anchors: ['clinic-status-option-Pending Transport', 'clinic-status-1'],
       placement: 'right',
@@ -77,8 +77,8 @@ const clinicPatients: TrainingModule = {
     },
     {
       id: 'open-transported',
-      section: 'Outcomes',
-      title: 'The ambulance arrives',
+      section: 'Record the outcome',
+      title: 'Set Transferred to Ambulance',
       body: "The ambulance is here. Click her status again and pick **Transferred to Ambulance**.",
       anchors: ['clinic-status-option-Transported', 'clinic-status-1'],
       placement: 'right',
@@ -89,8 +89,8 @@ const clinicPatients: TrainingModule = {
     },
     {
       id: 'unit-number',
-      section: 'Outcomes',
-      title: 'Record the unit',
+      section: 'Record the outcome',
+      title: 'Enter the ambulance number',
       body: "Type the ambulance number `Medic 12` and confirm. She leaves the list of current patients.",
       anchors: ['transport-unit-modal', 'clinic-status-1'],
       placement: 'right',
@@ -101,8 +101,8 @@ const clinicPatients: TrainingModule = {
     },
     {
       id: 'resolved',
-      section: 'Outcomes',
-      title: 'Resolved patients',
+      section: 'Record the outcome',
+      title: 'Show resolved patients',
       body: "Patients who have left are hidden, not deleted. Click this to show them again.",
       anchor: 'clinic-resolved-toggle',
       placement: 'top',

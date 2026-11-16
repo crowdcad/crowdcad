@@ -91,7 +91,7 @@ export interface RoleActionResult {
 }
 
 const ERROR_TEXT: Record<string, string> = {
-  inactive: 'The MCI has stood down.',
+  inactive: 'The MCI has ended.',
   'unknown-zone': 'That zone no longer exists.',
   'unknown-area': 'That treatment location no longer exists.',
   'unknown-patient': 'That patient is no longer here.',

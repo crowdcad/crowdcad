@@ -23,7 +23,7 @@ export const TRACKS: TrainingTrack[] = [
   {
     id: 'dispatcher',
     title: 'Dispatcher essentials',
-    summary: 'Calls, clinic patients and busy moments.',
+    summary: 'Calls, clinic patients, surge and the Log.',
     release: 'stable',
   },
   {
@@ -95,4 +95,9 @@ export function sectionsOf(module: TrainingModule): { name: string; start: numbe
 export function unlockIndex(module: TrainingModule): number {
   const i = module.unlockAfter ? module.steps.findIndex((s) => s.id === module.unlockAfter) : -1;
   return i >= 0 ? i : module.steps.length - 1;
+}
+
+/** A module's number in the catalog ("Module 3"): its place among the visible modules. */
+export function moduleNumber(module: TrainingModule): number {
+  return visibleModules().findIndex((m) => m.id === module.id) + 1;
 }

@@ -2,9 +2,9 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Check, Clock, PlayCircle, ShieldCheck } from 'lucide-react';
+import { Check, Clock, PlayCircle } from 'lucide-react';
 import { moduleProgress, onProgressChange, readProgress, resetProgress, type TrainingProgress } from '@/training/progress';
-import { moduleSeconds, previewModulesShown, sectionsOf, trackSeconds, visibleModules, visibleTracks } from '@/training/registry';
+import { moduleNumber, moduleSeconds, previewModulesShown, sectionsOf, trackSeconds, visibleModules, visibleTracks } from '@/training/registry';
 import { formatDuration } from '@/training/text';
 import type { TrainingModule } from '@/training/types';
 
@@ -22,7 +22,7 @@ function useProgress(): TrainingProgress {
   return progress;
 }
 
-function ModuleCard({ module, number, progress }: { module: TrainingModule; number: string; progress: TrainingProgress }) {
+function ModuleCard({ module, progress }: { module: TrainingModule; progress: TrainingProgress }) {
   const p = moduleProgress(progress, module.id, module.version);
   const done = !!p?.completedAt;
   const started = !done && !!p?.done.length;
@@ -35,7 +35,7 @@ function ModuleCard({ module, number, progress }: { module: TrainingModule; numb
     >
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="text-xs text-surface-light/60">{number}</div>
+          <div className="text-xs text-surface-light/60">Module {moduleNumber(module)}</div>
           <h3 className="text-base font-semibold text-surface group-hover:text-accent">{module.title}</h3>
         </div>
         <span className="flex shrink-0 items-center gap-1 text-xs text-surface-light/70">
@@ -67,7 +67,7 @@ function ModuleCard({ module, number, progress }: { module: TrainingModule; numb
           <span className="text-surface-light/60">Not started</span>
         )}
         <span className="flex items-center gap-1 text-accent">
-          <PlayCircle className="h-4 w-4" /> {done ? 'Practise again' : started ? 'Continue' : 'Start'}
+          <PlayCircle className="h-4 w-4" /> {done ? 'Practice again' : started ? 'Continue' : 'Start'}
         </span>
       </div>
       {module.release === 'preview' && <span className="self-start rounded bg-status-yellow/20 px-1.5 py-0.5 text-[11px] text-surface">Preview</span>}
@@ -96,10 +96,7 @@ export default function TrainingCatalog() {
             <Clock className="h-4 w-4" /> {formatDuration(totalSec)} in all
           </span>
           <span className="flex items-center gap-1.5">
-            <Check className="h-4 w-4" /> {completed} of {all.length} completed in this browser
-          </span>
-          <span className="flex items-center gap-1.5" data-testid="training-privacy-note">
-            <ShieldCheck className="h-4 w-4" /> Practice data only: nothing you do here is saved or sent anywhere
+            <Check className="h-4 w-4" /> {completed} of {all.length} completed
           </span>
         </div>
 
@@ -118,8 +115,8 @@ export default function TrainingCatalog() {
               </div>
               <p className="mt-2 text-sm text-surface-light/80">{track.summary}</p>
               <div className="mt-4 grid grid-cols-1 gap-px md:grid-cols-2">
-                {modules.map((m, mi) => (
-                  <ModuleCard key={m.id} module={m} number={`${ti + 1}.${mi + 1}`} progress={progress} />
+                {modules.map((m) => (
+                  <ModuleCard key={m.id} module={m} progress={progress} />
                 ))}
               </div>
             </section>
@@ -127,9 +124,7 @@ export default function TrainingCatalog() {
         })}
 
         <div className="mt-12 flex flex-wrap items-center justify-between gap-3 border-t border-surface-liner pt-4 text-xs text-surface-light/60">
-          <span>
-            Progress is kept in this browser only.{previewModulesShown() ? ' Preview modules cover features that are not released yet.' : ''}
-          </span>
+          <span>{previewModulesShown() ? 'Preview modules cover features that are not released yet.' : ''}</span>
           {completed > 0 && (
             <button type="button" className="hover:text-surface" onClick={() => resetProgress()}>
               Reset my progress
