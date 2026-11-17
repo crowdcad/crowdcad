@@ -8,7 +8,7 @@ import DispatchPage from '@/app/(main)/events/[eventId]/dispatch/page';
 import { LiteProvider, type LiteTrackingFeed } from '@/lib/LiteContext';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useDispatchVocabulary } from '@/hooks/useDispatchVocabulary';
-import { sectionsOf, visibleModules } from '@/training/registry';
+import { visibleModules } from '@/training/registry';
 import { plainStepText } from '@/training/text';
 import type { TrainingModule } from '@/training/types';
 import { stepKind, useTrainingSession } from '@/training/useTrainingSession';
@@ -35,7 +35,7 @@ function fulfilled<T>(value: T): Promise<T> {
 }
 
 /**
- * A training module: the real dispatch board, running as a Lite event on an
+ * A training module: the real dispatch interface, running as a Lite event on an
  * in-memory store, with a step card and a coachmark guiding the trainee.
  * Nothing on this page reads or writes Firebase, IndexedDB or anything else
  * outside this tab.
@@ -75,7 +75,6 @@ export default function TrainingPlayer({ module, startIndex = 0 }: { module: Tra
   // A new step (or the end) always shows its instruction, even if the card was hidden.
   useEffect(() => setMinimized(false), [index, complete]);
   const kind = stepKind(step);
-  const section = sectionsOf(module).find((s) => index >= s.start && index <= s.end);
   const nextModule = useMemo(() => {
     const list = visibleModules();
     return list[list.findIndex((m) => m.id === module.id) + 1];
@@ -120,7 +119,7 @@ export default function TrainingPlayer({ module, startIndex = 0 }: { module: Tra
       >
         <div className="mb-1 flex items-center justify-between gap-2 text-xs uppercase tracking-wide text-surface-light/60">
           <span className="truncate">
-            {complete ? 'Complete' : `${section?.name ?? ''} · Step ${index + 1} of ${module.steps.length}`}
+            {complete ? 'Complete' : `Step ${index + 1} of ${module.steps.length}`}
           </span>
           <span className="flex shrink-0 items-center gap-0.5">
             <button

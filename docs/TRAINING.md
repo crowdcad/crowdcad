@@ -1,10 +1,30 @@
 # CrowdCAD Training
 
-CrowdCAD Training teaches dispatchers the board by having them use it. Each module puts the trainee on the real dispatch page with a practice event and walks them through one job, step by step, with a pointer on each control. A Help button in the navbar finds the step for whatever the dispatcher is trying to do, then points at it on their own board or opens it as practice.
+CrowdCAD Training teaches dispatchers the dispatch interface by having them use it. Each module puts the trainee on the real dispatch page with a practice event and walks them through one job, step by step, with a pointer on each control. A Help button in the navbar finds the step for whatever the dispatcher is trying to do, then points at it on their own board or opens it as practice.
 
-- `/training`: the catalog. Tracks in order, each module with its estimated time, its sections and this browser's progress.
+- `/training`: the catalog. Tracks in order, each module one row with its estimated time and a check whose ring fills with this browser's progress.
 - `/training/<module id>`: a module. `?step=<step id>` (or a step number) opens the section that step is in.
 - The Help button: in core's navbar, Lite's navbar and the training bar.
+
+## Tracks and modules
+
+The catalog (`TRACKS` and `MODULES` in `src/training/registry.ts`) is three sections, numbered in this order:
+
+1. **Basic Dispatch Features**
+   - Module 1: Dispatch layout basics (`orientation`)
+   - Module 2: Add a call and assign a team (`call-assignment`)
+   - Module 3: Add a helper team to deliver equipment (`equipment-delivery`)
+   - Module 4: Add a clinic patient and record transport (`clinic-patients`)
+   - Module 5: Posting schedules (not built yet, see To do)
+   - Module 6: Surge and the log (`surge-and-log`)
+2. **Mass Casualty Incident Features**: Declare and run an MCI (`mci-response`)
+3. **TAK Features**: Set up and run a TAK event (`tak-live-tracking`)
+
+Module numbers in the catalog count the visible modules in order, so until Posting schedules exists, Surge and the log shows as Module 5. All three tracks are released (`release: 'stable'`).
+
+## To do
+
+- **Module 5: Posting schedules.** A Basic Dispatch Features module on posting schedules, between `clinic-patients` and `surge-and-log` in `MODULES`. Not designed or built yet.
 
 ## How it works
 
@@ -84,7 +104,7 @@ There are three kinds of step:
 
 Fields worth knowing:
 
-- `body`: `{{Term}}` shows the org's word for a dispatch term (`src/lib/dispatchVocabulary`), `**bold**` is bold and `` `value` `` is a value to type.
+- `body`: `{{Term}}` shows the org's word for a dispatch term (`src/lib/dispatchVocabulary`), and `{{term}}` (lowercase first letter) shows it lowercased for the middle of a sentence. `**bold**` is bold and `` `value` `` is a value to type. Write labels in sentence case: "the log", "the calls tab", "a {{team}}". Keep a control's exact label (`**{{Log}}**` as a menu option) only where it names that control.
 - `anchor` / `anchors`: a `data-testid`, or `css:` and any selector. The first one on screen is used, so list the specific one first and a fallback after it (the open form, then the button that opens it).
 - `section`: steps with the same section form one entry in the steps menu. Picking a section rebuilds the board by applying every earlier step's `apply` to the seed, so any section can be started directly.
 - `estSec`: seconds for a first-timer. Module, track and catalog times are sums of these.
@@ -137,7 +157,7 @@ A PR that changes the board's UI or data should keep all three passing. A new di
 The navbar's **?** opens a dropdown: "What would you like to do?", a search box, common results and a link to all modules. `src/training/help.ts` searches every visible step's `intents`, title and text, one result per section, ranked toward what the board is doing (an active MCI, a TAK event). Step titles are what Help lists, so keep them short and action-first, using the control's own name ("Add a call", "Search the Log", "End the MCI"). Each result shows:
 
 - **The title**: when the step is `liveSafe` and its control is on screen, clicking it shows a coachmark on the current page (Show me). It moves on to the module's next `liveSafe` step when the control opens, and never writes to the event.
-- **Module N**: a link to the step's section in its module (a new tab when opened from a dispatch board).
+- **Module N**: a link to the step's section in its module (a new tab when opened from a dispatch interface).
 
 ## Limits
 

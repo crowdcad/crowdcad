@@ -83,7 +83,7 @@ function LiveGuide({ entry, onClose, t }: { entry: HelpEntry; onClose: () => voi
         <p className="mt-1 leading-relaxed text-surface-light/90">
           <StepText text={step.body} t={t} />
         </p>
-        {!found && <p className="mt-2 text-xs text-status-yellow">That control isn&apos;t on screen right now. It may be on another tab of the board.</p>}
+        {!found && <p className="mt-2 text-xs text-status-yellow">That control isn&apos;t on screen right now. It may be on another tab of the dispatch interface.</p>}
         <div className="mt-3 flex items-center justify-between gap-2">
           <Button as={Link} href={practiceHref({ module: entry.module, step })} target="_blank" size="sm" variant="light" startContent={<GraduationCap className="h-3.5 w-3.5" />}>
             Module {moduleNumber(entry.module)}

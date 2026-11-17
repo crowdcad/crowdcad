@@ -993,6 +993,19 @@ export function mciTransportUnits(mci: MciState | undefined): string[] {
 const tidy = (text: string, max: number) => text.trim().replace(/\s+/g, ' ').slice(0, max);
 
 /**
+ * A transport to a hospital that isn't on the Logistics tab's list adds it there, so the list grows with
+ * wherever patients actually went (and counts them as sent there). Names match ignoring case and spacing.
+ */
+export function withDestinationHospital(mci: MciState, destination: string, now: number): MciState {
+  const name = destination.trim();
+  if (!name) return mci;
+  const hospitals = mci.logistics?.hospitals ?? [];
+  if (hospitals.some((h) => h.name.trim().toLowerCase() === name.toLowerCase())) return mci;
+  const id = `hospital-${now.toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+  return { ...mci, logistics: { incoming: [], ...mci.logistics, hospitals: [...hospitals, { id, name }] } };
+}
+
+/**
  * Sends patients off site from a treatment location in an ambulance. Named patients (`patientIds`) leave as
  * one entry each; `counts` take the patients of each color who arrived first. Each is clamped to who is in
  * that location; the ambulance number is required. All entries share the unit and destination, so a single
@@ -1034,7 +1047,8 @@ export function transportPatch(
     if (n > 0) entries.push(makeEntry(ctx, { kind: 'transported', areaId, color, n, ...tripFields }));
   }
   if (entries.length === 0) return { patch: {}, clamped, error: 'invalid' };
-  return { patch: { mci: appendMciEntries(event.mci, entries) }, ...(clamped ? { clamped } : {}) };
+  const mci = withDestinationHospital(appendMciEntries(event.mci, entries), destination, ctx.now);
+  return { patch: { mci }, ...(clamped ? { clamped } : {}) };
 }
 
 // ---------------------------------------------------------------------------
@@ -1135,7 +1149,7 @@ export function transportPatientPatch(
     ...(unit ? { unit } : {}),
     ...(destination ? { destination } : {}),
   });
-  return { patch: { mci: appendMciEntries(event.mci, [entry]) } };
+  return { patch: { mci: withDestinationHospital(appendMciEntries(event.mci, [entry]), destination, ctx.now) } };
 }
 
 export type MciPatientField = 'age' | 'sex' | 'complaint' | 'team';
