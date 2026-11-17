@@ -29,7 +29,7 @@ function ProgressCheck({ done, total, complete }: { done: number; total: number;
   const frac = complete ? 1 : total ? Math.min(1, done / total) : 0;
   const label = complete ? 'Completed' : `${done} of ${total} steps done`;
   return (
-    <span role="img" aria-label={label} title={label} className="relative inline-flex h-6 w-6 shrink-0 items-center justify-center" data-testid="training-module-progress">
+    <span role="img" aria-label={label} title={label} className="relative inline-flex h-6 w-6 shrink-0 items-center justify-center" data-testid="training-progress-check">
       <svg viewBox="0 0 24 24" className="h-6 w-6 -rotate-90">
         <circle cx="12" cy="12" r={r} fill="none" strokeWidth="2.5" className="stroke-surface-liner" />
         {frac > 0 && (
