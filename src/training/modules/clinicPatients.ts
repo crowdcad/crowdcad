@@ -23,7 +23,7 @@ const clinicPatients: TrainingModule = {
       id: 'intro',
       section: 'Add a walk-up patient',
       title: 'Read the scenario',
-      body: "A person walks into the Dwinelle Tent with a **bee sting**. No {{Team}} brought her, so you add her on the clinic tab.",
+      body: "A person walks into the Dwinelle Tent with a **bee sting**. No {{team}} brought her, so you add her on the clinic tab.",
       estSec: 15,
     },
     {

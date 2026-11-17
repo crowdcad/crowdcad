@@ -13,7 +13,7 @@ type Props = {
   area: MciAreaStats | null;
   /** Ambulance numbers already used this MCI, offered as suggestions. */
   units: string[];
-  /** Hospitals from the Logistics tab, offered as destinations (another name can be typed): a transport to one counts as sent there. */
+  /** Hospitals from the Logistics tab, offered as destinations. Another name can be typed, and the transport adds it to that list (withDestinationHospital, src/lib/mci.ts). */
   hospitals?: string[];
   /** Patients are tracked: pick them by name (priority order), with a count only for black (D14). */
   trackPatients?: boolean;
@@ -88,6 +88,7 @@ function TransportForm({ area, units, hospitals = [], trackPatients = false, onC
           radius="lg"
           isRequired
           allowsCustomValue
+          description={t('A hospital not on the list is added to Logistics.')}
           inputValue={destination}
           onInputChange={setDestination}
           onSelectionChange={(key) => key && setDestination(String(key))}

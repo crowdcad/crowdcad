@@ -21,12 +21,12 @@ const mciResponse: TrainingModule = {
   track: 'mci',
   title: 'Declare and run an MCI',
   summary: "Declare an MCI, count patients by triage color, move them to treatment, send an ambulance and end the MCI.",
-  release: 'preview',
+  release: 'stable',
   seed: () => trainingBoard('mci-response'),
   practice: [
     'Declare a new MCI with a treatment location of your own, then tag and quick-move patients one at a time with the small + in the Moved column.',
     'Fill in a patient box (age, sex, chief complaint) in the Dwinelle Tent and give it a transport priority.',
-    'Open the Logistics tab and add a hospital, then transport patients to it.',
+    'Open the logistics tab and add a hospital, then transport patients to it.',
   ],
   steps: [
     {

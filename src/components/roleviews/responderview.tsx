@@ -206,7 +206,7 @@ function TriageMode({ mci, unit, me }: { mci: MciState; unit: string; me: MciUni
             color: c,
             text: confirm === 'move' ? String(move[c]) : `${draft[c] > 0 ? '+' : ''}${draft[c]}`,
           }))}
-          note={`Check the zone and counts. This updates the dispatch board and is logged as ${unit}.`}
+          note={`Check the zone and counts. This updates the dispatch interface and is logged as ${unit}.`}
           busy={actions.busy}
           onNo={() => setConfirm(null)}
           onYes={() => void (confirm === 'move' ? submitMove() : submitCounts())}
@@ -431,7 +431,7 @@ function TreatmentMode({ mci, unit, me, units, lead = false }: { mci: MciState; 
         <ErrorBanner error={actions.error} onClose={actions.clearError} />
         <span className="flex items-center gap-1.5 text-2xl font-bold">
           {lead ? 'Which treatment location do you lead?' : 'Which treatment location are you working in?'}
-          <HelpTip text={`The dispatch board shows ${unit} there. You can switch at any time.`} label="About choosing a location" />
+          <HelpTip text={`The dispatch interface shows ${unit} there. You can switch at any time.`} label="About choosing a location" />
         </span>
         {choices.length === 0 && <span className="text-base text-surface-faint" data-testid="role-no-areas">No treatment location yet. Ask the dispatcher.</span>}
         {choices.map((a) => (

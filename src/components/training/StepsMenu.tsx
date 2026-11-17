@@ -32,7 +32,9 @@ export default function StepsMenu({
           Steps
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[320px] max-h-[70vh] overflow-y-auto bg-surface-deep p-2 text-surface-light">
+      {/* justify-start: HeroUI centers popover content, which pushes the top of a list taller than the popover out of
+          view. The top padding keeps the first section off the popover's edge when it scrolls. */}
+      <PopoverContent className="minimal-scrollbar w-[320px] max-h-[min(70vh,calc(100dvh-5rem))] justify-start overflow-y-auto bg-surface-deep px-2 pb-2 pt-3 text-surface-light">
         <ol className="flex w-full flex-col gap-1">
           {sections.map((section, si) => {
             const secs = module.steps.slice(section.start, section.end + 1).reduce((s, x) => s + x.estSec + 10, 0);

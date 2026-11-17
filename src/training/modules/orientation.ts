@@ -1,17 +1,17 @@
 import { trainingBoard } from '../fixtures';
 import type { TrainingModule } from '../types';
 
-/** Start here: a guided look around the board, before any lesson changes it. */
+/** Module 1: a guided look around the dispatch interface, before any lesson changes it. */
 const orientation: TrainingModule = {
   id: 'orientation',
   version: 1,
-  track: 'start',
-  title: 'Tour the dispatch board',
-  summary: "Where teams, calls, clinics and the map are, and what the buttons at the top do.",
+  track: 'dispatcher',
+  title: 'Dispatch layout basics',
+  summary: 'Where teams, calls, clinics and the map are, and what the buttons at the top do.',
   release: 'stable',
   seed: () => trainingBoard('orientation'),
   practice: [
-    'Switch the left panel between Teams, Supervisors, Equipment and the Log.',
+    'Switch the left panel between Teams, Supervisors, Equipment and Log.',
     'Open the map and click a team marker.',
     'Press Ctrl+Enter to open Add Call from anywhere, then cancel it.',
   ],
@@ -20,14 +20,14 @@ const orientation: TrainingModule = {
       id: 'welcome',
       section: 'Read the board',
       title: 'Start the tour',
-      body: "This is the dispatch board for a practice event: a campus event with five {{Teams}} (MRC1 to MRC5), one {{Supervisor}} and three clinics. Click **Next** to go through the tour.",
+      body: "This is the dispatch interface for a practice event: a campus event with five {{teams}} (MRC1 to MRC5), one {{supervisor}} and three clinics. Click **Next** to go through the tour.",
       estSec: 15,
     },
     {
       id: 'left-panel',
       section: 'Read the board',
       title: 'Read the team list',
-      body: "The left side lists your {{Teams}}. Each card shows the team's status, {{Location}} and how long it has had that status.",
+      body: "The left side lists your {{teams}}. Each card shows the team's status, {{location}} and how long it has had that status.",
       anchor: 'left-panel',
       placement: 'right',
       estSec: 20,
@@ -38,7 +38,7 @@ const orientation: TrainingModule = {
       id: 'availability',
       section: 'Read the board',
       title: 'Read the availability bar',
-      body: "This bar counts teams that are **Available**, **On Break or in the Clinic**, and **On Calls**. It turns red when too many teams are on calls.",
+      body: "This bar counts teams that are **Available**, **On Break or in the Clinic**, and **On Calls**. It turns red when a pre-designated percentage of teams are on calls.",
       anchor: 'availability-surge-strip',
       placement: 'right',
       estSec: 20,
@@ -79,8 +79,8 @@ const orientation: TrainingModule = {
     {
       id: 'switch-to-log',
       section: 'Switch the left panel',
-      title: 'Open the Log',
-      body: "Open the menu again and choose **{{Log}}**. It lists everything that happened, newest first, and you can search it.",
+      title: 'Open the log',
+      body: "Open the menu again and choose **{{Log}}**. The log lists everything that happened, newest first, and you can search it.",
       anchors: ['left-panel-option-log', 'left-panel-select'],
       placement: 'right',
       estSec: 15,
@@ -103,8 +103,8 @@ const orientation: TrainingModule = {
     {
       id: 'calls-tab',
       section: 'Use the right panel',
-      title: 'Read the Calls tab',
-      body: "Each open {{Call}} is a row here, with its {{Teams}} and how long it has been open. The number on the tab counts open calls.",
+      title: 'Read the calls tab',
+      body: "Each open {{call}} is a row here, with its {{teams}} and how long it has been open. The number on the tab counts open calls.",
       anchor: 'calls-tab-button',
       placement: 'bottom',
       estSec: 15,
@@ -125,7 +125,7 @@ const orientation: TrainingModule = {
       id: 'map-tab',
       section: 'Use the right panel',
       title: 'Open the map',
-      body: "The map shows posts, {{Teams}} and equipment. Press Alt+M to open it. The street map needs internet.",
+      body: "The map shows posts, {{teams}} and equipment. Press Alt+M to open it. The street map needs internet.",
       anchor: 'map-tab-button',
       placement: 'bottom',
       estSec: 15,
@@ -136,7 +136,7 @@ const orientation: TrainingModule = {
       id: 'surge',
       section: 'Use the toolbar',
       title: 'Find Surge',
-      body: "Press **Surge** when there are more calls than teams can handle. It records the time for the event summary. It also turns on by itself when too many teams are on calls.",
+      body: "Press **Surge** when there are more calls than teams can handle. It records the time for the event summary. It also turns on automatically when a pre-designated percentage of teams are on calls.",
       anchor: 'surge-toggle-button',
       placement: 'bottom',
       estSec: 20,

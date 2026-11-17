@@ -89,7 +89,7 @@ export default function SurgeCriteriaSection({ eventData, setEventData, inputCla
       <div>
         <FieldLabel
           text="Surge Limit"
-          tooltip="Percent of teams on calls at which the dispatch board's surge display turns red."
+          tooltip="Percent of teams on calls at which the dispatch interface's surge display turns red."
           className={inputClassNames.label}
         />
         <Input

@@ -68,7 +68,7 @@ const takLiveTracking: TrainingModule = {
   track: 'tak',
   title: 'Set up and run a TAK event',
   summary: 'What to set up before a TAK event, the TAK panel, dispatching with live positions, and what to do when a device drops off.',
-  release: 'preview',
+  release: 'stable',
   seed: () => {
     const board = trainingBoard('tak-live-tracking', { tak: true });
     // A call already waiting, so the lesson starts with a decision.
@@ -96,7 +96,7 @@ const takLiveTracking: TrainingModule = {
   }),
   practice: [
     'Send another team to a new call and watch it travel on the map.',
-    'Set MRC3\'s Location by hand now that its device is offline.',
+    'Set MRC3\'s location by hand now that its device is offline.',
     'Send MRC5 to a new call at Sather Gate and watch it follow its path on the map.',
     'Click a team marker on the map to see its card.',
   ],
@@ -128,8 +128,8 @@ const takLiveTracking: TrainingModule = {
     {
       id: 'live-card',
       section: 'Track live positions',
-      title: 'Read a live Location',
-      body: 'This practice event runs as a TAK event. The radio icon on a card means TAK sets that team\'s {{Location}}. You can\'t edit it while the device is connected.',
+      title: 'Read a live location',
+      body: 'This practice event runs as a TAK event. The radio icon on a card means TAK sets that team\'s {{location}}. You can\'t edit it while the device is connected.',
       anchors: card(TEAM, ' [data-testid="unit-live-location"]'),
       placement: 'right',
       estSec: 20,
@@ -154,7 +154,7 @@ const takLiveTracking: TrainingModule = {
       id: 'closest',
       section: 'Dispatch by position',
       title: 'Find the closest team',
-      body: 'A call is waiting at **Bancroft Main Steps**: someone fainted. The map shows MRC2, at the Doe West Walkway, is closest. Go back to the **Calls** tab.',
+      body: 'A call is waiting at **Bancroft Main Steps**: someone fainted. The map shows MRC2, at the Doe West Walkway, is closest. Go back to the calls tab.',
       anchor: 'calls-tab-button',
       placement: 'bottom',
       estSec: 25,
@@ -185,7 +185,7 @@ const takLiveTracking: TrainingModule = {
       id: 'dropped',
       section: 'Handle a dropped device',
       title: 'Handle a dropped device',
-      body: 'MRC3\'s device has stopped reporting. Its map marker fades and its {{Location}} can be edited again. Ask them on the radio where they are and set it by hand until the device reconnects.',
+      body: 'MRC3\'s device has stopped reporting. Its map marker fades and its {{location}} can be edited again. Ask them on the radio where they are and set it by hand until the device reconnects.',
       anchors: card(DROPS),
       placement: 'right',
       estSec: 30,

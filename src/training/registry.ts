@@ -1,6 +1,7 @@
 import type { TrainingModule, TrainingTrack, TrackId } from './types';
 import callAssignment from './modules/callAssignment';
 import clinicPatients from './modules/clinicPatients';
+import equipmentDelivery from './modules/equipmentDelivery';
 import mciResponse from './modules/mciResponse';
 import orientation from './modules/orientation';
 import surgeAndLog from './modules/surgeAndLog';
@@ -15,32 +16,28 @@ import takLiveTracking from './modules/takLiveTracking';
 
 export const TRACKS: TrainingTrack[] = [
   {
-    id: 'start',
-    title: 'Start here',
-    summary: 'A quick tour of the dispatch board.',
-    release: 'stable',
-  },
-  {
     id: 'dispatcher',
-    title: 'Dispatcher essentials',
-    summary: 'Calls, clinic patients, surge and the Log.',
+    title: 'Basic Dispatch Features',
+    summary: 'The layout, calls, helper teams, clinic patients, surge and the log.',
     release: 'stable',
   },
   {
     id: 'mci',
-    title: 'MCI response',
+    title: 'Mass Casualty Incident Features',
     summary: 'Declare an MCI, count patients, move them to treatment and send them to hospital.',
-    release: 'preview',
+    release: 'stable',
   },
   {
     id: 'tak',
-    title: 'TAK live tracking',
+    title: 'TAK Features',
     summary: "Events where teams' positions come from TAK devices.",
-    release: 'preview',
+    release: 'stable',
   },
 ];
 
-export const MODULES: TrainingModule[] = [orientation, callAssignment, clinicPatients, surgeAndLog, mciResponse, takLiveTracking];
+// Basic Dispatch Features, in order. Still to build: "Posting schedules", between clinic patients and surge
+// (docs/TRAINING.md, "To do").
+export const MODULES: TrainingModule[] = [orientation, callAssignment, equipmentDelivery, clinicPatients, surgeAndLog, mciResponse, takLiveTracking];
 
 /**
  * Preview (unreleased) modules are shown only with NEXT_PUBLIC_TRAINING_PREVIEW=on

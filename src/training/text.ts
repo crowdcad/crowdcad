@@ -12,8 +12,18 @@ export type TextPart =
 
 const TOKEN = /(\*\*[^*]+\*\*|`[^`]+`)/g;
 
+/**
+ * `{{Team}}` is the org's label as written ("Team"). `{{team}}`, starting
+ * lowercase, is the same term mid-sentence: the label is looked up by its
+ * capitalized key and lowercased, unless it is an acronym ("MRC", "EMT").
+ */
 export function withTerms(text: string, t: (key: string) => string): string {
-  return text.replace(/\{\{([^}]+)\}\}/g, (_m, key: string) => t(key.trim()));
+  return text.replace(/\{\{([^}]+)\}\}/g, (_m, raw: string) => {
+    const key = raw.trim();
+    if (!/^[a-z]/.test(key)) return t(key);
+    const label = t(key.charAt(0).toUpperCase() + key.slice(1));
+    return /^[A-Z]{2,}/.test(label) ? label : label.toLowerCase();
+  });
 }
 
 export function parseStepText(text: string, t: (key: string) => string): TextPart[] {

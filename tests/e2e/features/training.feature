@@ -1,13 +1,14 @@
 @public
 Feature: CrowdCAD Training
-  The training catalog and every module, walked end to end on the real dispatch board.
+  The training catalog and every module, walked end to end on the real dispatch interface.
   A module that a UI change breaks (a moved control, a renamed test id) fails here.
   See docs/TRAINING.md.
 
   Scenario: The catalog lists tracks with durations
     Given I open the training catalog
-    Then I should see the training track "start"
-    And I should see the training track "dispatcher"
+    Then I should see the training track "dispatcher"
+    And I should see the training track "mci"
+    And I should see the training track "tak"
     And every listed module should show an estimated time
 
   Scenario Outline: Module "<module>" can be completed step by step
@@ -17,13 +18,14 @@ Feature: CrowdCAD Training
     And the board should be in free practice
 
     Examples:
-      | module            |
-      | orientation       |
-      | call-assignment   |
-      | clinic-patients   |
-      | surge-and-log     |
-      | mci-response      |
-      | tak-live-tracking |
+      | module             |
+      | orientation        |
+      | call-assignment    |
+      | equipment-delivery |
+      | clinic-patients    |
+      | surge-and-log      |
+      | mci-response       |
+      | tak-live-tracking  |
 
   Scenario: The board takes only the script's values while a lesson is guided
     Given I open the training module "call-assignment"

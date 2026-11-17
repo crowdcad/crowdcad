@@ -785,6 +785,22 @@ describe('patients in treatment locations', () => {
     expect(transportPatientPatch(e, a, {}, ctx(3200)).error).toBe('unknown-patient');
   });
 
+  it('adds a transport destination missing from the Logistics hospitals, once', () => {
+    let e = withPatients();
+    e = { ...e, mci: { ...e.mci!, logistics: { incoming: [], hospitals: [{ id: 'h1', name: 'General' }] } } };
+    const [a, b, c] = patientsOf(e, 'c1').map((p) => p.id);
+    e = apply(e, transportPatientPatch(e, a, { destination: 'general' }, ctx(3000)));
+    expect(e.mci!.logistics!.hospitals!.map((h) => h.name)).toEqual(['General']);
+    e = apply(e, transportPatientPatch(e, b, { destination: ' Alta  Bates ' }, ctx(3100)));
+    e = apply(e, transportPatch(e, 'c1', {}, { unit: 'A2', destination: 'alta bates' }, ctx(3200), [c]));
+    expect(e.mci!.logistics!.hospitals!.map((h) => h.name)).toEqual(['General', 'Alta Bates']);
+    // No destination adds nothing.
+    const before = e.mci!.logistics!.hospitals!.length;
+    e = apply(e, arrivePatch(e, 'c1', 'red', 1, ctx(3300)));
+    e = apply(e, transportPatch(e, 'c1', { red: 1 }, { unit: 'A3' }, ctx(3400)));
+    expect(e.mci!.logistics!.hospitals!.length).toBe(before);
+  });
+
   it('transports picked patients and counted ones in one trip', () => {
     let e = withPatients();
     e = apply(e, arrivePatch(e, 'c1', 'black', 2, ctx(2100)));

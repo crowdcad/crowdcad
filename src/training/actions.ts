@@ -1,4 +1,5 @@
 import type { Call, Event, Staff } from '@/app/types';
+import { assignEquipment, fleetOf, handOffEquipment, pickUpEquipment, type Fleet } from '@/lib/equipmentCustody';
 
 /**
  * What a trainee's clicks do to the event, for a step's `apply` ("Do it for
@@ -177,3 +178,52 @@ export function setClinicOutcome(event: Event, complaint: string, outcome: Call[
 
 export const clinicPatient = (event: Event, complaint: string) =>
   (event.calls || []).find((c) => c.clinic && c.chiefComplaint.toLowerCase() === complaint.toLowerCase());
+
+const withFleet = (event: Event, fleet: Fleet): Event => ({ ...event, eventEquipment: fleet.eventEquipment, staff: fleet.staff, supervisor: fleet.supervisor });
+
+/** The call row's + menu > Add Equipment > a piece of equipment > the unit to bring it. */
+export function sendEquipment(event: Event, location: string, equipmentName: string, unit: string, now = Date.now()): Event {
+  const call = findCall(event, location);
+  if (!call) return event;
+  const out = assignEquipment(event, { callId: call.id, equipmentName, unit, t: now });
+  return out ? { ...withFleet(event, out), calls: out.calls } : event;
+}
+
+/** The helper unit's status on the call: 'En Route Eq' (picked it up) or 'Delivered Eq' (left it with the care team). */
+export function setEquipmentRunStatus(event: Event, location: string, unit: string, status: 'En Route Eq' | 'Delivered Eq', now = Date.now()): Event {
+  const call = findCall(event, location);
+  if (!call) return event;
+  const before = (event.staff || []).find((s) => s.team === unit);
+  const staff = event.staff.map((s) =>
+    s.team !== unit
+      ? s
+      : status === 'Delivered Eq'
+        ? { ...s, status: 'Available', location: s.originalPost || 'Unknown', statusSince: now }
+        : { ...s, status, location: call.location, statusSince: now }
+  );
+  let fleet: Fleet = { ...fleetOf(event), staff };
+  let calls = event.calls;
+  if (status === 'En Route Eq') {
+    fleet = pickUpEquipment(fleet, event, unit, now);
+  } else {
+    const assignedTeam = (call.assignedTeam || []).filter((u) => u !== unit);
+    const careTeam = assignedTeam.find((u) => !call.equipmentTeams?.includes(u)) ?? null;
+    const equipmentNames = (event.eventEquipment || []).filter((eq) => eq.assignedTeam === unit).map((eq) => eq.name);
+    fleet = handOffEquipment(fleet, event, unit, careTeam, call.location, now);
+    calls = event.calls.map((c) =>
+      c.id !== call.id
+        ? c
+        : {
+            ...c,
+            assignedTeam,
+            equipmentTeams: (c.equipmentTeams || []).filter((u) => u !== unit),
+            detachedTeams: [
+              ...(c.detachedTeams || []),
+              { team: unit, reason: 'Delivered Eq', kind: 'equipment' as const, previousStatus: before?.status || 'En Route Eq', previousLocation: before?.location, equipmentNames },
+            ],
+            log: [...(c.log || []), { timestamp: now, message: `${hhmm(now)} - ${unit} Delivered ${equipmentNames.join(', ')}` }],
+          }
+    );
+  }
+  return { ...withFleet(event, fleet), calls };
+}
