@@ -23,7 +23,7 @@ async function openModule(page: Page, id: string, step?: string) {
 
 Given('I open the training catalog', async ({ page }) => {
   await page.goto('/training');
-  await expect(page.getByRole('heading', { name: 'Learn the dispatch board by using it' })).toBeVisible({ timeout: NAV_TIMEOUT });
+  await expect(page.getByRole('heading', { name: 'Learn the dispatch interface by using it' })).toBeVisible({ timeout: NAV_TIMEOUT });
 });
 
 Then('I should see the training track {string}', async ({ page }, track: string) => {

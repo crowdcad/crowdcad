@@ -127,7 +127,7 @@ export default function AddSupervisorModal({
                 label={
                   <span className="inline-flex items-center gap-1">
                     {t("Supervisor Call Sign")}
-                    <Tooltip content="The radio call sign this supervisor unit will be identified by on the dispatch board, not a person's name." placement="top">
+                    <Tooltip content="The radio call sign this supervisor unit will be identified by on the dispatch interface, not a person's name." placement="top">
                       <CircleHelp className="w-3.5 h-3.5 text-surface-faint" />
                     </Tooltip>
                   </span>

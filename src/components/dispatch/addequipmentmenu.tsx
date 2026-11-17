@@ -60,7 +60,7 @@ export default function AddEquipmentSubmenu({
 
   return (
     <DropdownMenuSub>
-      <DropdownMenuSubTrigger className="hover:bg-surface-liner focus:bg-surface-liner cursor-pointer">
+      <DropdownMenuSubTrigger className="hover:bg-surface-liner focus:bg-surface-liner cursor-pointer" data-testid="call-add-equipment">
         {t('Add Equipment')}
       </DropdownMenuSubTrigger>
       <DropdownMenuSubContent className="bg-surface-deep border-surface-liner">
@@ -95,6 +95,7 @@ export default function AddEquipmentSubmenu({
                     <DropdownMenuItem
                       key={u.team}
                       className={`${itemClass} ${u.status !== 'Available' ? 'bg-status-card-blue' : ''}`}
+                      data-testid={`add-equipment-unit-${u.team}`}
                       onClick={() => void assign(eq.name, u.team)}
                     >
                       {u.team}

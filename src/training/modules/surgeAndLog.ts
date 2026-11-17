@@ -25,8 +25,8 @@ const surgeAndLog: TrainingModule = {
   id: 'surge-and-log',
   version: 1,
   track: 'dispatcher',
-  title: 'Surge and the Log',
-  summary: "Check how busy your teams are, record a surge and find what happened in the Log.",
+  title: 'Surge and the log',
+  summary: "Check how busy your teams are, record a surge and find what happened in the log.",
   release: 'stable',
   // Three of five teams already out on calls (60%, just under the 70% limit, so the board doesn't surge by itself).
   seed: () =>
@@ -39,7 +39,7 @@ const surgeAndLog: TrainingModule = {
       return setTeamStatus(next, POSTS.socialSciences, 'MRC4', 'On Scene', t + 200_000);
     }),
   practice: [
-    'Switch the Log filter to show only one kind of entry.',
+    'Switch the log filter to show only one kind of entry.',
     'Log a new call and send MRC5: watch the strip cross the surge limit and surge switch on by itself.',
   ],
   steps: [
@@ -47,7 +47,7 @@ const surgeAndLog: TrainingModule = {
       id: 'intro',
       section: 'Check availability',
       title: 'Read the scenario',
-      body: "Three of your five {{Teams}} are out on calls. Check how many you have left.",
+      body: "Three of your five {{teams}} are out on calls. Check how many you have left.",
       estSec: 15,
     },
     {
@@ -88,8 +88,8 @@ const surgeAndLog: TrainingModule = {
     },
     {
       id: 'open-log',
-      section: 'Use the Log',
-      title: 'Open the Log',
+      section: 'Use the log',
+      title: 'Open the log',
       body: "Open the menu at the top of the left side and choose **{{Log}}**.",
       anchors: ['left-panel-option-log', 'left-panel-select'],
       placement: 'right',
@@ -101,9 +101,9 @@ const surgeAndLog: TrainingModule = {
     },
     {
       id: 'search-log',
-      section: 'Use the Log',
-      title: 'Search the Log',
-      body: "The Log lists everything that happened, newest first, including your surge. Type `Lower Sproul` in the search box to see only what happened there.",
+      section: 'Use the log',
+      title: 'Search the log',
+      body: "The log lists everything that happened, newest first, including your surge. Type `Lower Sproul` in the search box to see only what happened there.",
       anchor: 'event-log-search',
       placement: 'right',
       estSec: 25,
@@ -112,8 +112,8 @@ const surgeAndLog: TrainingModule = {
     },
     {
       id: 'filter-log',
-      section: 'Use the Log',
-      title: 'Filter the Log',
+      section: 'Use the log',
+      title: 'Filter the log',
       body: "This button shows only some kinds of entries, like calls or teams. Searching and filtering don't change anything on the board.",
       anchor: 'event-log-filter',
       placement: 'right',
