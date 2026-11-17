@@ -123,7 +123,7 @@ export default function TrainingCatalog() {
         })}
 
         <div className="mt-12 flex flex-wrap items-center justify-between gap-3 border-t border-surface-liner pt-4 text-xs text-surface-light/60">
-          <span>{previewModulesShown() ? 'Preview modules cover features that are not released yet.' : ''}</span>
+          <span>{previewModulesShown() && all.some((m) => m.release === 'preview') ? 'Preview modules cover features that are not released yet.' : ''}</span>
           {completed > 0 && (
             <button type="button" className="hover:text-surface" onClick={() => resetProgress()}>
               Reset my progress
