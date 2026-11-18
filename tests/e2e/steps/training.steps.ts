@@ -17,8 +17,14 @@ const stepTitle = (page: Page) => page.getByTestId('training-step-title');
 async function openModule(page: Page, id: string, step?: string) {
   await page.goto(`/training/${id}${step ? `?step=${step}` : ''}`);
   await expect(page.getByTestId('training-card')).toBeVisible({ timeout: NAV_TIMEOUT });
-  // The board renders from the in-memory store; wait for its first panel.
-  await expect(page.getByTestId('right-panel')).toBeVisible({ timeout: NAV_TIMEOUT });
+  // The board (or a role login's view) renders from the in-memory store; wait for it. A phone module on a
+  // computer shows it inside a phone-sized frame (docs/TRAINING.md, Phone modules).
+  const screen = '[data-testid="right-panel"], [data-testid="mobile-dispatch"], [data-testid^="role-view-"]';
+  const frame = page.getByTestId('training-phone-iframe');
+  await expect(page.locator(`${screen}, [data-testid="training-phone-iframe"] >> visible=true`).first()).toBeVisible({ timeout: NAV_TIMEOUT });
+  if (await frame.isVisible()) {
+    await expect(page.frameLocator('[data-testid="training-phone-iframe"]').locator(`${screen} >> visible=true`).first()).toBeVisible({ timeout: NAV_TIMEOUT });
+  }
 }
 
 Given('I open the training catalog', async ({ page }) => {
@@ -60,7 +66,8 @@ When('I complete every step with {string}', async ({ page }) => {
     // The step moves on once its control opened what it should, or the board changed.
     await expect(async () => {
       const done = await page.getByTestId('training-complete').isVisible();
-      const now = done ? null : await stepTitle(page).textContent();
+      // The title goes away when the module completes between the two checks: don't wait for it.
+      const now = done ? null : await stepTitle(page).textContent({ timeout: 500 }).catch(() => null);
       expect(done || now !== title, `stuck on step "${title}"`).toBe(true);
     }).toPass({ timeout: 10_000 });
   }

@@ -167,6 +167,8 @@ function LivePlayer({ module, startIndex, embed }: { module: TrainingModule; sta
 function FramedPlayer({ module, startIndex }: { module: TrainingModule; startIndex: number }) {
   const frameRef = useRef<HTMLIFrameElement>(null);
   const [state, setState] = useState<TrainingCardState>({ index: startIndex, complete: false, unlocked: false, rejected: null });
+  // The card waits for the frame's first state: a press before the frame listens would be lost.
+  const [ready, setReady] = useState(false);
   // The frame's height follows the window, up to a tall phone's.
   const [height, setHeight] = useState(PHONE_VIEWPORT.height);
   useEffect(() => {
@@ -180,6 +182,7 @@ function FramedPlayer({ module, startIndex }: { module: TrainingModule; startInd
       if (e.origin !== window.location.origin || !isFrameState(e.data, module.id)) return;
       const { index, complete, unlocked, rejected } = e.data;
       setState({ index, complete, unlocked, rejected });
+      setReady(true);
     };
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
@@ -211,7 +214,11 @@ function FramedPlayer({ module, startIndex }: { module: TrainingModule; startInd
             data-testid="training-phone-iframe"
           />
         </div>
-        <TrainingCard module={module} state={state} actions={actions} layout="inline" />
+        {ready ? (
+          <TrainingCard module={module} state={state} actions={actions} layout="inline" />
+        ) : (
+          <div className="w-[min(380px,100%)] text-sm text-surface-light/60">Loading the phone…</div>
+        )}
       </div>
     </div>
   );

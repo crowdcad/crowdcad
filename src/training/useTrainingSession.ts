@@ -179,11 +179,13 @@ export function useTrainingSession(module: TrainingModule, startIndex = 0, track
     const draft = store.peek(eventId);
     if (!draft || !step.apply) return;
     closeOverlays();
+    // A popover inside a modal (a combobox's list) takes the first Escape; the second closes the modal.
+    window.setTimeout(closeOverlays, 30);
     // Let the modal close before the board changes under it.
     window.setTimeout(() => {
       const latest = store.peek(eventId) ?? draft;
       store.put(toLiteDraftFromEvent(step.apply!(normalizeLiteDraftToEvent(latest)), latest));
-    }, 50);
+    }, 80);
   }, [step, index, store, eventId, finishStep]);
 
   const tracking = useMemo<LiteTrackingFeed | undefined>(() => {
