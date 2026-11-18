@@ -120,10 +120,10 @@ const takLiveTracking: TrainingModule = {
     {
       id: 'setup-devices',
       section: 'Set up TAK',
-      title: 'Set device callsigns',
-      body: 'On each phone or radio, set the TAK callsign to the team\'s name, for example "MRC1". CrowdCAD then links the device to that team by itself.',
+      title: 'Set device call signs',
+      body: 'On each phone or radio, set the TAK call sign to the team\'s name, for example "MRC1". CrowdCAD then links the device to that team by itself.',
       estSec: 25,
-      intents: ['link device', 'callsign', 'tak device team'],
+      intents: ['link device', 'call sign', 'callsign', 'tak device team'],
     },
     {
       id: 'live-card',

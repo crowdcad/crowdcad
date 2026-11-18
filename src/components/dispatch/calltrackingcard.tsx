@@ -118,6 +118,7 @@ export default function CallTrackingCard({
 
   return (
     <Card
+      data-testid={`call-card-${callDisplayNumber}`}
       className={`dispatch-shell-card ${expanded ? 'dispatch-shell-card--open' : ''} w-full border-0 transition-colors duration-200 ${expanded ? 'rounded-lg bg-surface-deep shadow-sm' : 'rounded-none bg-transparent shadow-none hover:bg-surface-deep'}`}
     >
       {/* HEADER */}

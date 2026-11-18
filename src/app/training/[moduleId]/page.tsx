@@ -8,7 +8,8 @@ import { findModule } from '@/training/registry';
 
 /**
  * /training/<moduleId>[?step=<step id or number>]: one training module.
- * `?step=` lands on that step's section (the Help search links here).
+ * `?step=` lands on that step's section (the Help search links here). `?embed=phone` is the module inside a
+ * phone module's frame (TrainingPlayer): no header or card, its state posted to the page around it.
  */
 export default function TrainingModulePage({ params }: { params: Promise<{ moduleId: string }> }) {
   const { moduleId } = use(params);
@@ -32,5 +33,6 @@ export default function TrainingModulePage({ params }: { params: Promise<{ modul
   const start = byId >= 0 ? byId : byNumber >= 0 ? byNumber : 0;
 
   // Keyed so a different module or ?step= link starts a fresh session.
-  return <TrainingPlayer key={`${trainingModule.id}:${start}`} module={trainingModule} startIndex={start} />;
+  const embed = search?.get('embed') === 'phone';
+  return <TrainingPlayer key={`${trainingModule.id}:${start}`} module={trainingModule} startIndex={start} embed={embed} />;
 }

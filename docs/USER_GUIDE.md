@@ -28,6 +28,7 @@ A short guide to CrowdCAD's main workflows for dispatchers, supervisors and even
 ## Training
 
 - Open `/training` for interactive modules that teach the dispatch interface on a practice event: its layout, the call flow, clinic patients and more, each with an estimated time.
+- Phone tutorials (dispatching from a phone, and the Responder, Treatment Lead and Transport logins) show a phone-sized screen on a computer and run full screen on a phone. The MCI section also has a tutorial for each role login and for making and sending the logins.
 - A module guides you step by step and points at each control. "Do it for me" does a step for you, the back arrow undoes the last step, and the **Steps** menu restarts any section.
 - While a module is guided the board takes only the values the step asks you to type, so nobody types real patient details into a practice board. Once you finish, the board is yours to practice on freely.
 - The **?** button in the navbar asks what you would like to do. Pick a result to be pointed at the control on your own board (this never changes anything), or open its module with the **Module N** link.

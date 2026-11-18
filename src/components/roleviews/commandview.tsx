@@ -40,7 +40,7 @@ export default function CommandView({ mci, units }: { mci: MciState; units: MciU
   const showing = hidden.length === 0 ? 'Everyone' : everyone.length - hidden.length === 0 ? 'No one' : `${everyone.length - hidden.length} of ${everyone.length}`;
 
   const totals = (
-    <section className={PANEL}>
+    <section className={PANEL} data-testid="role-command-patients">
       <div className={PANEL_HEAD}>
         <span className="text-lg font-bold">Patients</span>
       </div>
@@ -84,7 +84,7 @@ export default function CommandView({ mci, units }: { mci: MciState; units: MciU
   );
 
   const zones = (
-    <section className={PANEL}>
+    <section className={PANEL} data-testid="role-command-zones">
       <div className={PANEL_HEAD}>
         <span className="text-lg font-bold">Zones</span>
       </div>
@@ -110,7 +110,7 @@ export default function CommandView({ mci, units }: { mci: MciState; units: MciU
   );
 
   const areas = (
-    <section className={PANEL}>
+    <section className={PANEL} data-testid="role-command-areas">
       <div className={PANEL_HEAD}>
         <span className="text-lg font-bold">Treatment locations</span>
       </div>
@@ -129,7 +129,7 @@ export default function CommandView({ mci, units }: { mci: MciState; units: MciU
   );
 
   const transportsPanel = (
-    <section className={PANEL}>
+    <section className={PANEL} data-testid="role-command-transports">
       <div className={PANEL_HEAD}>
         <span className="text-lg font-bold">Transports</span>
       </div>
@@ -179,7 +179,7 @@ export default function CommandView({ mci, units }: { mci: MciState; units: MciU
   );
 
   const incomingPanel = (
-    <section className={PANEL}>
+    <section className={PANEL} data-testid="role-command-incoming">
       <div className={PANEL_HEAD}>
         <span className="text-lg font-bold">Incoming Staff</span>
       </div>
@@ -197,14 +197,14 @@ export default function CommandView({ mci, units }: { mci: MciState; units: MciU
   );
 
   const activity = (
-    <section className={`${PANEL} lg:h-full`}>
+    <section className={`${PANEL} lg:h-full`} data-testid="role-command-activity">
       <div className={`${PANEL_HEAD} relative`}>
         <span className="text-lg font-bold">Activity</span>
         <button type="button" onClick={() => setMenuOpen((v) => !v)} aria-expanded={menuOpen} aria-haspopup="true" className="flex h-10 min-w-48 items-center justify-between gap-2 border border-surface-liner bg-surface-deepest px-2.5 text-base font-semibold" data-testid="role-activity-filter">
           Showing: {showing} <span aria-hidden>▾</span>
         </button>
         {menuOpen && (
-          <div className="absolute right-3.5 top-14 z-10 w-56 border border-surface-liner bg-surface-deep py-1.5 shadow-[0_8px_24px_rgba(0,0,0,0.5)]">
+          <div className="absolute right-3.5 top-14 z-10 w-56 border border-surface-liner bg-surface-deep py-1.5 shadow-[0_8px_24px_rgba(0,0,0,0.5)]" data-testid="role-activity-menu">
             <label className="flex cursor-pointer items-center gap-2.5 border-b border-surface-liner px-3.5 py-2 text-base font-bold">
               <input type="checkbox" className="h-[18px] w-[18px] accent-accent" checked={hidden.length === 0} onChange={() => setHidden(hidden.length === 0 ? everyone : [])} />
               Everyone
@@ -276,7 +276,7 @@ export default function CommandView({ mci, units }: { mci: MciState; units: MciU
       <div className="flex flex-1 flex-col lg:hidden">
         <div className="flex border-b border-surface-liner" role="tablist">
           {(['overview', 'units', 'log'] as const).map((k) => (
-            <button key={k} type="button" role="tab" aria-selected={tab === k} onClick={() => setTab(k)} className={`h-12 flex-1 border-b-[3px] text-lg font-bold capitalize ${tab === k ? 'border-accent bg-surface-deep' : 'border-transparent'}`}>
+            <button key={k} type="button" role="tab" aria-selected={tab === k} onClick={() => setTab(k)} className={`h-12 flex-1 border-b-[3px] text-lg font-bold capitalize ${tab === k ? 'border-accent bg-surface-deep' : 'border-transparent'}`} data-testid={`role-command-tab-${k}`}>
               {k}
             </button>
           ))}

@@ -59,7 +59,7 @@ export const ZONES: Zone[] = PRACTICE_MAP.zones.map((z, i) => ({
 
 const T0 = () => Date.now() - 45 * 60 * 1000;
 
-/** A team's name: also the TAK callsign its practice device uses, and the key of its path on the map. */
+/** A team's name: also the TAK call sign its practice device uses, and the key of its path on the map. */
 export const teamName = (n: number) => `MRC${n}`;
 
 const team = (n: number, location: string, members: string[]): Staff => ({

@@ -12,8 +12,8 @@ import TakEventPanel from './TakEventPanel';
 /**
  * The real TAK map panel on a training board (core src/training), fed with
  * practice data instead of a TAK server: a linked practice server, one device
- * per unit (auto-linked by callsign, positioned by training's scripted feed)
- * and one device whose callsign matches no team, for practicing a manual
+ * per unit (auto-linked by call sign, positioned by training's scripted feed)
+ * and one device whose call sign matches no team, for practicing a manual
  * link. Changes made in the panel live in this component's state only.
  */
 export interface TakTrainingPanelProps {
@@ -31,7 +31,7 @@ const PRACTICE_BRIDGE: TakBridge = {
   recordId: 'practice-bridge',
 };
 
-/** The practice device with no matching team (callsign MEDIC-7). */
+/** The practice device with no matching team (call sign MEDIC-7). */
 export const PRACTICE_UNMATCHED_DEVICE = 'practice-medic-7';
 
 export default function TakTrainingPanel({ event, layers, tracking }: TakTrainingPanelProps) {

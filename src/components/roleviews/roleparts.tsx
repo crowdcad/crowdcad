@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import type { MciColor } from '@/app/types';
 import { MCI_COLOR_STYLES, MCI_PILL_STYLES } from '@/components/dispatch/mci/mciparts';
 import { sendRoleAction } from '@/lib/roleActionClient';
@@ -18,15 +18,27 @@ export const chipState = (on: boolean) => (on ? 'border-accent bg-accent/15 text
 export const PRIMARY_BUTTON = 'h-14 bg-accent px-4 text-lg font-bold text-surface-deepest disabled:bg-surface-liner disabled:text-surface-faint disabled:cursor-not-allowed';
 export const SECONDARY_BUTTON = 'h-14 border border-surface-liner bg-surface-deep px-4 text-base font-semibold text-surface-light disabled:opacity-50';
 
+/**
+ * Set by training (src/components/training/RolePractice.tsx): role views send their actions here, applied to
+ * practice data in the browser with the same helpers /api/mci-role uses, instead of to the server.
+ */
+export interface RolePractice {
+  send(action: RoleAction): Promise<void>;
+}
+const RolePracticeContext = createContext<RolePractice | null>(null);
+export const RolePracticeProvider = RolePracticeContext.Provider;
+export const useRolePractice = () => useContext(RolePracticeContext);
+
 /** Sends role actions with one busy flag and the last error, shown in the view. */
 export function useRoleActions() {
+  const practice = useRolePractice();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const send = async (...actions: RoleAction[]): Promise<boolean> => {
     setBusy(true);
     setError(null);
     try {
-      for (const action of actions) await sendRoleAction(action);
+      for (const action of actions) await (practice ? practice.send(action) : sendRoleAction(action));
       return true;
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not save.');
@@ -75,14 +87,14 @@ export function ColorStepper({
   const step = size === 'lg' ? 'h-14 w-14 text-3xl' : 'h-11 w-11 text-2xl';
   return (
     <div className={`flex items-center justify-between ${size === 'lg' ? 'h-14' : 'h-11'} ${MCI_PILL_STYLES[color].pill}`} data-testid={`role-stepper-${color}`}>
-      <button type="button" className={`${step} flex items-center justify-center font-bold hover:bg-black/20 disabled:cursor-not-allowed disabled:opacity-40`} onClick={onMinus} disabled={minusDisabled} aria-label={`Remove one ${label}`}>
+      <button type="button" className={`${step} flex items-center justify-center font-bold hover:bg-black/20 disabled:cursor-not-allowed disabled:opacity-40`} onClick={onMinus} disabled={minusDisabled} aria-label={`Remove one ${label}`} data-testid={`role-stepper-${color}-minus`}>
         −
       </button>
       <span className="flex flex-col items-center">
         <span className={`min-w-[3.2rem] bg-black/25 px-1.5 text-center font-mono font-bold tabular-nums ${size === 'lg' ? 'text-2xl' : 'text-xl'}`}>{value}</span>
         {caption && <span className="text-[11px] font-bold uppercase tracking-[0.1em]">{caption}</span>}
       </span>
-      <button type="button" className={`${step} flex items-center justify-center font-bold hover:bg-black/20 disabled:cursor-not-allowed disabled:opacity-40`} onClick={onPlus} disabled={plusDisabled} aria-label={`Add one ${label}`}>
+      <button type="button" className={`${step} flex items-center justify-center font-bold hover:bg-black/20 disabled:cursor-not-allowed disabled:opacity-40`} onClick={onPlus} disabled={plusDisabled} aria-label={`Add one ${label}`} data-testid={`role-stepper-${color}-plus`}>
         +
       </button>
     </div>
@@ -93,8 +105,22 @@ export function ColorTag({ color, className = '' }: { color: MciColor; className
   return <span className={`inline-flex items-center justify-center px-2 py-0.5 text-xs font-bold uppercase tracking-[0.08em] ${MCI_PILL_STYLES[color].pill} ${className}`}>{MCI_COLOR_STYLES[color].label}</span>;
 }
 
+/** Escape closes a sheet or dialog (a keyboard, and training's "Do it for me" closing what is open). */
+function useEscape(onEscape: () => void) {
+  const ref = useRef(onEscape);
+  ref.current = onEscape;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') ref.current();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, []);
+}
+
 /** A sheet that slides up from the bottom of the role view. */
 export function BottomSheet({ title, children, onClose, testId }: { title: React.ReactNode; children: React.ReactNode; onClose: () => void; testId?: string }) {
+  useEscape(onClose);
   return (
     <div className="fixed inset-0 z-40 flex flex-col justify-end bg-black/60" onClick={onClose} data-testid={testId}>
       <div className="flex max-h-[92vh] flex-col gap-3 overflow-y-auto border-t border-surface-liner bg-surface-deep px-4 pb-6 pt-4" onClick={(e) => e.stopPropagation()} role="dialog" aria-label={typeof title === 'string' ? title : undefined}>
@@ -121,6 +147,7 @@ export function ConfirmDialog({
   onYes: () => void;
   onNo: () => void;
 }) {
+  useEscape(onNo);
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-5">
       <div role="alertdialog" aria-label={title} className="flex w-full max-w-md flex-col gap-3 border border-surface-liner bg-surface-deep p-5" data-testid="role-confirm">

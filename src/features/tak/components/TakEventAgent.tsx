@@ -17,7 +17,7 @@ import { getEventVenueLayers } from '@/lib/zones';
  * Background work for an open TAK event's dispatch page, with no UI. It runs
  * whichever tab is showing:
  * - gives teams created before team ids existed an id (TAK events only);
- * - auto-links devices (remembered mapping first, then a unique callsign);
+ * - auto-links devices (remembered mapping first, then a unique call sign);
  * - fills every connected unit's Location from its position, whatever its
  *   status: the post it is at, or near, in words, steadied by capture and
  *   anchoring (D65, D66, D71);

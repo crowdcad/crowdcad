@@ -5,7 +5,7 @@ import { Button, Select, SelectItem } from '@heroui/react';
 import { Check, Copy, KeyRound, Mail, Share2 } from 'lucide-react';
 import HelpTip from '@/components/ui/helptip';
 import { effectiveRole, EVENT_ROLE_INFO, EVENT_ROLES, roleLoginLink, roleLoginMessage, type EventRole, type RoleAccount } from '@/lib/roleAccounts';
-import { createRoleLogin, resetRoleLoginPassword, setRoleLoginAssignment, setRoleLoginDisabled, subscribeRoleLogins } from '@/lib/roleAccountStore';
+import { useRoleLoginBackend } from '@/lib/roleLoginBackend';
 import { LOGI } from './logisticsstyles';
 
 /**
@@ -120,6 +120,7 @@ function HolderInput({ account, disabled, onSave }: { account: RoleAccount; disa
 
 export default function RoleLogins({ eventId, eventName, units, uid }: { eventId: string; eventName: string; units: RoleLoginUnit[]; uid?: string }) {
   const manage = !!uid;
+  const backend = useRoleLoginBackend();
   const [accounts, setAccounts] = useState<RoleAccount[]>([]);
   const [listError, setListError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -129,8 +130,8 @@ export default function RoleLogins({ eventId, eventName, units, uid }: { eventId
   const origin = typeof window === 'undefined' ? '' : window.location.origin;
 
   useEffect(
-    () => subscribeRoleLogins(eventId, (a) => { setAccounts(a); setListError(null); }, (e) => setListError(e.message)),
-    [eventId],
+    () => backend.subscribe(eventId, (a) => { setAccounts(a); setListError(null); }, (e) => setListError(e.message)),
+    [eventId, backend],
   );
 
   const activeFor = (name: string) => accounts.find((a) => !a.disabled && a.unitName === name);
@@ -152,16 +153,16 @@ export default function RoleLogins({ eventId, eventName, units, uid }: { eventId
   };
   const show = (f: Fresh) => setFresh((prev) => [...prev.filter((p) => p.unitName !== f.unitName), f]);
   const create = async (unit: { name: string; id?: string }, role: EventRole, label?: string) => {
-    const creds = await createRoleLogin({ eventId, eventName, role, label, unitName: unit.name, unitId: unit.id, createdBy: uid! });
+    const creds = await backend.create({ eventId, eventName, role, label, unitName: unit.name, unitId: unit.id, createdBy: uid! });
     show({ ...creds, role, unitName: unit.name });
   };
   const reset = (a: RoleAccount) =>
     run(`reset:${a.uid}`, async () => {
-      const creds = await resetRoleLoginPassword(eventId, a.uid);
+      const creds = await backend.reset(eventId, a.uid);
       if (creds) return show({ ...creds, role: effectiveRole(a.role), unitName: a.unitName ?? '' });
       // No server to change the password (emulator, no credentials): a dispatcher replaces the login instead.
       if (!manage) throw new Error('Resetting a password needs the server. Ask the dispatcher.');
-      await setRoleLoginDisabled(eventId, a.uid, true);
+      await backend.setDisabled(eventId, a.uid, true);
       await create({ name: a.unitName ?? '', id: a.unitId }, effectiveRole(a.role), a.label);
     });
 
@@ -206,6 +207,11 @@ export default function RoleLogins({ eventId, eventName, units, uid }: { eventId
         </div>
       )}
 
+      {backend.practice && (
+        <p className={LOGI.meta} data-testid="role-login-practice">
+          Practice: these logins are made up and don&apos;t sign in anywhere.
+        </p>
+      )}
       {error && <p className="text-sm text-status-red" data-testid="role-login-error">{error}</p>}
       {listError && <p className="text-sm text-status-red">Couldn&apos;t load logins: {listError}</p>}
 
@@ -231,7 +237,7 @@ export default function RoleLogins({ eventId, eventName, units, uid }: { eventId
                     onSelectionChange={(keys) => {
                       const next = Array.from(keys as Set<string>)[0] as Choice;
                       if (!a) return setChoices((c) => ({ ...c, [u.name]: next }));
-                      if (next !== 'none' && next !== effectiveRole(a.role)) void run(`role:${a.uid}`, () => setRoleLoginAssignment(eventId, a.uid, { role: next }));
+                      if (next !== 'none' && next !== effectiveRole(a.role)) void run(`role:${a.uid}`, () => backend.setAssignment(eventId, a.uid, { role: next }));
                     }}
                     data-testid={`role-assign-${u.name}-role`}
                   >
@@ -240,7 +246,7 @@ export default function RoleLogins({ eventId, eventName, units, uid }: { eventId
                 ) : (
                   <span className="text-sm">{a ? EVENT_ROLE_INFO[a.role]?.label ?? a.role : '–'}</span>
                 )}
-                {manage && (a ? <HolderInput account={a} disabled={!!busy} onSave={(label) => void run(`label:${a.uid}`, () => setRoleLoginAssignment(eventId, a.uid, { label }))} /> : <span />)}
+                {manage && (a ? <HolderInput account={a} disabled={!!busy} onSave={(label) => void run(`label:${a.uid}`, () => backend.setAssignment(eventId, a.uid, { label }))} /> : <span />)}
                 <span className={`truncate text-sm text-surface-faint ${a ? 'font-mono' : ''}`} data-testid={a ? `role-login-row-${a.username}` : undefined}>
                   {a ? (
                     <>
@@ -264,7 +270,7 @@ export default function RoleLogins({ eventId, eventName, units, uid }: { eventId
                       className="bg-status-red/20 text-status-red"
                       isDisabled={!!busy}
                       isLoading={busy === `toggle:${a.uid}`}
-                      onPress={() => void run(`toggle:${a.uid}`, () => setRoleLoginDisabled(eventId, a.uid, true))}
+                      onPress={() => void run(`toggle:${a.uid}`, () => backend.setDisabled(eventId, a.uid, true))}
                       data-testid={`role-login-toggle-${a.username}`}
                     >
                       Disable
@@ -294,7 +300,7 @@ export default function RoleLogins({ eventId, eventName, units, uid }: { eventId
                   className="ml-auto"
                   isDisabled={!!busy}
                   isLoading={busy === `toggle:${a.uid}`}
-                  onPress={() => void run(`toggle:${a.uid}`, () => setRoleLoginDisabled(eventId, a.uid, !a.disabled))}
+                  onPress={() => void run(`toggle:${a.uid}`, () => backend.setDisabled(eventId, a.uid, !a.disabled))}
                   data-testid={`role-login-toggle-${a.username}`}
                 >
                   {a.disabled ? 'Enable' : 'Disable'}

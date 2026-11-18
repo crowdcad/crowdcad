@@ -8,7 +8,7 @@ import { Moon, Sun } from 'lucide-react';
 import { authService } from '@/lib/services';
 import { useThemeToggle } from '@/components/layout/navbarshared';
 import VenueMapTab from '@/components/dispatch/venuemaptab';
-import { MapBackFab, MapFab } from './roleparts';
+import { MapBackFab, MapFab, useRolePractice } from './roleparts';
 
 const TakRolePositions =
   process.env.NEXT_PUBLIC_TAK === 'on' ? lazy(() => import('@/features/tak').then((m) => ({ default: m.TakRolePositions }))) : null;
@@ -40,6 +40,7 @@ export default function RoleShell({
   mapBottomClass?: string;
   headerExtra?: React.ReactNode;
 }) {
+  const practice = !!useRolePractice();
   const [mapOpen, setMapOpen] = useState(false);
   const { isDarkTheme, toggleTheme } = useThemeToggle();
   const [tracking, setTracking] = useState<UnitTracking>({ positions: {}, alignments: {} });
@@ -70,9 +71,11 @@ export default function RoleShell({
           >
             {isDarkTheme ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
           </button>
-          <button type="button" className="min-h-11 text-base text-accent" onClick={() => void authService.signOut()} data-testid="role-signout">
-            Sign out
-          </button>
+          {!practice && (
+            <button type="button" className="min-h-11 text-base text-accent" onClick={() => void authService.signOut()} data-testid="role-signout">
+              Sign out
+            </button>
+          )}
         </div>
       </header>
       {children}
@@ -85,7 +88,7 @@ export default function RoleShell({
           }}
         />
       )}
-      {TakRolePositions && layers.length > 0 && (
+      {TakRolePositions && !practice && layers.length > 0 && (
         <Suspense fallback={null}>
           <TakRolePositions eventId={eventId} units={units} layers={layers} onTracking={onTracking} />
         </Suspense>

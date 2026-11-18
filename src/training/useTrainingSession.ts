@@ -20,8 +20,12 @@ export { boardAtStep, stepDone, stepKind, type StepKind } from './replay';
 
 /** Closes any open modal or menu (HeroUI listens for Escape) before the board changes underneath it. */
 function closeOverlays() {
-  const target = document.activeElement ?? document.body;
-  target.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  const escape = (el: Element) => el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  escape(document.activeElement ?? document.body);
+  // A modal listens on itself, and focus may be on the step card instead (pressing "Do it for me"): send
+  // Escape to each open dialog too, topmost first.
+  const dialogs = [...document.querySelectorAll('[role="dialog"], [role="alertdialog"]')].filter((el) => !el.closest('[data-testid="training-card"]'));
+  for (const el of dialogs.reverse()) escape(el);
 }
 
 export interface TrainingSession {
@@ -175,11 +179,13 @@ export function useTrainingSession(module: TrainingModule, startIndex = 0, track
     const draft = store.peek(eventId);
     if (!draft || !step.apply) return;
     closeOverlays();
+    // A popover inside a modal (a combobox's list) takes the first Escape; the second closes the modal.
+    window.setTimeout(closeOverlays, 30);
     // Let the modal close before the board changes under it.
     window.setTimeout(() => {
       const latest = store.peek(eventId) ?? draft;
       store.put(toLiteDraftFromEvent(step.apply!(normalizeLiteDraftToEvent(latest)), latest));
-    }, 50);
+    }, 80);
   }, [step, index, store, eventId, finishStep]);
 
   const tracking = useMemo<LiteTrackingFeed | undefined>(() => {

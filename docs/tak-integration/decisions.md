@@ -39,15 +39,15 @@ CrowdCAD has no organization model. A bridge belongs to the user who creates it,
 For TAK purposes, the bridge record stands in for an organization. Remembered device-to-team-name mappings and the default history mode live under it.
 
 ### D6. The bridge never reads event documents
-Callsign-to-team matching runs in the dispatcher's browser.
+Call sign-to-team matching runs in the dispatcher's browser.
 
 - **The bridge reads only:** the event's TAK config (linked bridge, enabled, closed, history mode) and device links (device UID to an opaque team id, linked time, method).
 - **It writes only:** live device docs, history docs and status.
 - **History** is aggregated per (device, team) segment, so a device reassigned mid-event starts a new segment.
 
 ### D7. Device linking
-- Devices are keyed on TAK UID; the callsign is what's displayed.
-- Auto-link when the callsign matches a team name, ignoring case and spaces.
+- Devices are keyed on TAK UID; the call sign is what's displayed.
+- Auto-link when the call sign matches a team name, ignoring case and spaces.
 - Unmatched devices appear in an "Unassigned TAK devices" list with a team dropdown.
 - Mappings are remembered per bridge and pre-link devices at the next event.
 - Multiple devices per team; team position = most recent fix.
@@ -405,7 +405,7 @@ The same end-to-end scenario runs against the Firebase emulator and a local Pock
 
 ### D69. Trackers on equipment link like teams
 - **Requested** 2026-10-12 by the maintainer (phase 5 of the equipment plan).
-- **How.** A device link's `teamId` may be `equipment:<EventEquipment.id>`. Team ids are opaque to the bridge and the rules only require a string, so no rules, bridge or contract shape changes; the prefix keeps it apart from `Staff`/`Supervisor` ids. Links are made in the TAK panel (equipment appears as "Name (equipment)") or automatically by a unique callsign match, like teams.
+- **How.** A device link's `teamId` may be `equipment:<EventEquipment.id>`. Team ids are opaque to the bridge and the rules only require a string, so no rules, bridge or contract shape changes; the prefix keeps it apart from `Staff`/`Supervisor` ids. Links are made in the TAK panel (equipment appears as "Name (equipment)") or automatically by a unique call sign match, like teams.
 - **Effect.** A tracked item is drawn at its tracker (faded when stale), not with its holder, and its "view on map" goes there. Its custody still follows statuses. The bridge keeps history for it like a team, shown by the item's name on the summary.
 
 ### D70. Live tracking is per unit, not per event (amends D66)

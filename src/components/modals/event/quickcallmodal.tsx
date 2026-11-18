@@ -154,7 +154,7 @@ export default function QuickCallModal({
       };
 
       // Update staff or supervisor if one was assigned — the assignee is
-      // either a staff team or a supervisor callsign (never both), so only
+      // either a staff team or a supervisor call sign (never both), so only
       // one of these actually changes anything.
       let updatedStaff: Staff[] | undefined = event?.staff;
       let updatedSupervisor: Supervisor[] | undefined = event?.supervisor;
