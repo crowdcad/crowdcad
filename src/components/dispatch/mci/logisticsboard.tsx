@@ -162,7 +162,7 @@ function IncomingRow({ team, now, readOnly, handlers }: { team: IncomingTeam; no
   const overdue = !reported && isOverdue(team.eta, now);
   const testId = `incoming-${team.name}`;
   return (
-    <div className={`${LOGI.card} ${reported ? '!border-status-green/70' : overdue ? '!border-status-red/60' : ''}`} data-testid={testId}>
+    <div className={`${LOGI.card} ${reported ? '!border-status-green/70' : overdue ? '!border-status-red/60' : ''}`} data-testid={`incoming-${team.name}`}>
       <div className="flex flex-wrap items-center gap-2">
         <span className={`${LOGI.title} min-w-[5rem] flex-1`}>{team.name}</span>
         {overdue && <span className={`${LOGI.badge} text-status-red`}>Overdue</span>}
@@ -176,7 +176,7 @@ function IncomingRow({ team, now, readOnly, handlers }: { team: IncomingTeam; no
         <EtaEditor eta={team.eta} disabled={readOnly} testId={testId} onChange={(eta) => handlers.incomingUpdate(team.id, { eta })} />
         {!readOnly && (
           <div className="ml-auto flex gap-1.5">
-            <button type="button" className={LOGI.goodButton} onClick={() => handlers.incomingArrived(team.id)} data-testid={`${testId}-arrived`}>
+            <button type="button" className={LOGI.goodButton} onClick={() => handlers.incomingArrived(team.id)} data-testid={`incoming-${team.name}-arrived`}>
               {reported ? 'Confirm arrival' : 'Arrived'}
             </button>
             <button type="button" className={LOGI.button} onClick={() => handlers.incomingCancel(team.id)} data-testid={`${testId}-cancel`}>

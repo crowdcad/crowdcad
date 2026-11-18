@@ -50,7 +50,7 @@ export default function TransportView({ mci }: { mci: MciState }) {
       <ErrorBanner error={actions.error} onClose={actions.clearError} />
       <div className="flex border-b border-surface-liner" role="tablist">
         {(['waiting', 'left'] as const).map((t) => (
-          <button key={t} type="button" role="tab" aria-selected={tab === t} onClick={() => setTab(t)} className={`h-12 flex-1 border-b-[3px] text-lg font-bold ${tab === t ? 'border-accent bg-surface-deep' : 'border-transparent'}`}>
+          <button key={t} type="button" role="tab" aria-selected={tab === t} onClick={() => setTab(t)} className={`h-12 flex-1 border-b-[3px] text-lg font-bold ${tab === t ? 'border-accent bg-surface-deep' : 'border-transparent'}`} data-testid={`role-transport-tab-${t}`}>
             {t === 'waiting' ? `Waiting (${waiting.length})` : `Left (${left.length})`}
           </button>
         ))}
@@ -112,7 +112,7 @@ export default function TransportView({ mci }: { mci: MciState }) {
           </label>
           <label className={`${ROLE_LABEL} flex flex-col gap-1`}>
             Destination
-            <input className="h-12 border border-surface-liner bg-surface-deepest px-3 text-lg normal-case tracking-normal text-surface-light" value={destination} placeholder="Hospital" onChange={(e) => setDestination(e.target.value)} />
+            <input className="h-12 border border-surface-liner bg-surface-deepest px-3 text-lg normal-case tracking-normal text-surface-light" value={destination} placeholder="Hospital" onChange={(e) => setDestination(e.target.value)} data-testid="role-transport-destination" />
           </label>
           {hospitals.length + destinations.length > 0 && (
             <div className="flex flex-wrap gap-1.5">

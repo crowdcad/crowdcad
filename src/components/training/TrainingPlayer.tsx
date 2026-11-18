@@ -1,21 +1,20 @@
 'use client';
 
-import React, { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import React, { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { Button } from '@heroui/react';
-import { ChevronDown, ChevronUp, RotateCcw, Undo2, X } from 'lucide-react';
+import { X } from 'lucide-react';
 import DispatchPage from '@/app/(main)/events/[eventId]/dispatch/page';
 import { LiteProvider, type LiteTrackingFeed } from '@/lib/LiteContext';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { useDispatchVocabulary } from '@/hooks/useDispatchVocabulary';
-import { visibleModules } from '@/training/registry';
-import { plainStepText } from '@/training/text';
+import { createPracticeRoleLoginBackend, RoleLoginBackendProvider } from '@/lib/roleLoginBackend';
+import { isFrameCommand, isFrameState, PHONE_VIEWPORT, type FrameCommand, type FrameState } from '@/training/frameBridge';
 import type { TrainingModule } from '@/training/types';
-import { stepKind, useTrainingSession } from '@/training/useTrainingSession';
-import Coachmark, { TRAINING_CARD_Z } from './Coachmark';
+import { useTrainingSession, type TrainingSession } from '@/training/useTrainingSession';
+import Coachmark from './Coachmark';
 import HelpButton from './HelpButton';
+import RolePracticeView from './RolePracticeView';
 import StepsMenu from './StepsMenu';
-import StepText from './StepText';
+import TrainingCard, { type TrainingCardActions, type TrainingCardState } from './TrainingCard';
 
 // The TAK module's map panel, on practice data (src/features/tak/components/TakTrainingPanel.tsx). Like every core
 // touchpoint, a dynamic import behind the inline flag check, so builds without TAK compile it out.
@@ -34,15 +33,49 @@ function fulfilled<T>(value: T): Promise<T> {
   return p;
 }
 
+/** The bar above every module: back to the catalog, the title with a progress bar, the steps menu and Help. */
+function PlayerHeader({ module, index, complete, onJump }: { module: TrainingModule; index: number; complete: boolean; onJump: (index: number) => void }) {
+  const pct = Math.round(((complete ? module.steps.length : index) / module.steps.length) * 100);
+  return (
+    <header className="z-[300] flex h-14 shrink-0 items-center gap-3 border-b border-surface-liner bg-surface-deep px-4">
+      <Link href="/training" className="flex items-center gap-2 text-sm text-surface-light/80 hover:text-surface" data-testid="training-exit">
+        <X className="h-4 w-4" />
+        <span className="hidden sm:inline">Training</span>
+      </Link>
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-sm font-semibold text-surface">{module.title}</div>
+        <div className="mt-1 h-1 w-full max-w-[320px] overflow-hidden rounded-full bg-surface-liner">
+          <div className="h-full bg-accent transition-all" style={{ width: `${pct}%` }} />
+        </div>
+      </div>
+      <StepsMenu module={module} index={index} complete={complete} onJump={onJump} />
+      <HelpButton />
+    </header>
+  );
+}
+
+const cardState = (s: TrainingSession): TrainingCardState => ({ index: s.index, complete: s.complete, unlocked: s.unlocked, rejected: s.rejected });
+
 /**
- * A training module: the real dispatch interface, running as a Lite event on an
- * in-memory store, with a step card and a coachmark guiding the trainee.
- * Nothing on this page reads or writes Firebase, IndexedDB or anything else
- * outside this tab.
+ * A training module: the real dispatch interface (or, for a role module, an MCI role login's view), running
+ * as a Lite event on an in-memory store, with a step card and a coachmark guiding the trainee. Nothing on this
+ * page reads or writes Firebase, IndexedDB or anything else outside this tab.
+ *
+ * A phone module (`device: 'phone'`) opened on a computer shows a phone-sized frame holding the same module
+ * (`embed`), with the step card beside it; see src/training/frameBridge.ts.
  */
-export default function TrainingPlayer({ module, startIndex = 0 }: { module: TrainingModule; startIndex?: number }) {
-  const { activePreset } = useDispatchVocabulary();
-  const t = useCallback((key: string) => activePreset.terms[key] ?? key, [activePreset]);
+export default function TrainingPlayer({ module, startIndex = 0, embed = false }: { module: TrainingModule; startIndex?: number; embed?: boolean }) {
+  // Whether this window is wider than a phone: decided once mounted, so a phone never loads the frame first.
+  const [wide, setWide] = useState<boolean | null>(null);
+  useEffect(() => setWide(window.innerWidth >= 700), []);
+  if (module.device === 'phone' && !embed) {
+    if (wide === null) return <div className="h-dvh bg-surface-deepest" />;
+    if (wide) return <FramedPlayer module={module} startIndex={startIndex} />;
+  }
+  return <LivePlayer module={module} startIndex={startIndex} embed={embed} />;
+}
+
+function LivePlayer({ module, startIndex, embed }: { module: TrainingModule; startIndex: number; embed: boolean }) {
   // Over the map on a module with a tracking feed: a badge saying the positions are practice ones, and, when the
   // TAK module is compiled in, its real map panel on practice data.
   const trackingChrome = useMemo<LiteTrackingFeed['chrome']>(() => {
@@ -68,158 +101,118 @@ export default function TrainingPlayer({ module, startIndex = 0 }: { module: Tra
   }, [module]);
   const session = useTrainingSession(module, startIndex, trackingChrome);
   const params = useMemo(() => fulfilled({ eventId: session.eventId }), [session.eventId]);
-  const [minimized, setMinimized] = useState(false);
+  // Logins made in this module stay in memory (the Logins tutorial, the Logistics role).
+  const [loginBackend] = useState(createPracticeRoleLoginBackend);
   const isMobile = useIsMobile();
 
-  const { step, index, complete } = session;
-  // A new step (or the end) always shows its instruction, even if the card was hidden.
-  useEffect(() => setMinimized(false), [index, complete]);
-  const kind = stepKind(step);
-  const nextModule = useMemo(() => {
-    const list = visibleModules();
-    return list[list.findIndex((m) => m.id === module.id) + 1];
-  }, [module]);
-  const pct = Math.round(((complete ? module.steps.length : index) / module.steps.length) * 100);
+  // In a phone frame: post the state to the card beside the frame and take its presses.
+  const sessionRef = useRef(session);
+  sessionRef.current = session;
+  const { index, complete, unlocked, rejected } = session;
+  useEffect(() => {
+    if (!embed || window.parent === window) return;
+    const msg: FrameState = { type: 'crowdcad-training-state', moduleId: module.id, index, complete, unlocked, rejected };
+    window.parent.postMessage(msg, window.location.origin);
+  }, [embed, module.id, index, complete, unlocked, rejected]);
+  useEffect(() => {
+    if (!embed) return;
+    const onMessage = (e: MessageEvent) => {
+      if (e.origin !== window.location.origin || !isFrameCommand(e.data, module.id)) return;
+      const s = sessionRef.current;
+      const c = e.data;
+      if (c.cmd === 'jumpTo') s.jumpTo(c.index);
+      else if (c.cmd === 'dismissRejected') s.dismissRejected();
+      else s[c.cmd]();
+    };
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, [embed, module.id]);
+
+  const phone = module.device === 'phone';
+  const phoneDirect = phone && isMobile;
+  return (
+    <div className="flex h-dvh flex-col bg-surface-deepest">
+      {!embed && <PlayerHeader module={module} index={index} complete={complete} onJump={session.jumpTo} />}
+      {/* On a phone, a phone module's card sits above the screen, in the page, so it never covers a bottom bar. */}
+      {!embed && phoneDirect && <TrainingCard module={module} state={cardState(session)} actions={session} layout="top" />}
+
+      <div className={`relative min-h-0 flex-1 ${module.surface ? "overflow-y-auto" : ""}`}>
+        <RoleLoginBackendProvider backend={loginBackend}>
+          {module.surface ? (
+            <RolePracticeView store={session.store} eventId={session.eventId} surface={module.surface} />
+          ) : (
+            <LiteProvider isLiteMode store={session.store} writeGate={session.writeGate} tracking={session.tracking} isTraining>
+              <DispatchPage params={params} />
+            </LiteProvider>
+          )}
+        </RoleLoginBackendProvider>
+      </div>
+
+      {!complete && <Coachmark step={session.step} label={session.step.title} />}
+
+      {!embed && !phoneDirect && (
+        <TrainingCard
+          module={module}
+          state={cardState(session)}
+          actions={session}
+          layout="floating"
+          note={isMobile && !phone ? "Best on a computer: the board's phone layout hides some of the controls these steps point at." : undefined}
+        />
+      )}
+    </div>
+  );
+}
+
+/** A phone module on a computer: the module in a phone-sized frame, the step card beside it. */
+function FramedPlayer({ module, startIndex }: { module: TrainingModule; startIndex: number }) {
+  const frameRef = useRef<HTMLIFrameElement>(null);
+  const [state, setState] = useState<TrainingCardState>({ index: startIndex, complete: false, unlocked: false, rejected: null });
+  // The frame's height follows the window, up to a tall phone's.
+  const [height, setHeight] = useState(PHONE_VIEWPORT.height);
+  useEffect(() => {
+    const fit = () => setHeight(Math.max(560, Math.min(PHONE_VIEWPORT.height, window.innerHeight - 56 - 48)));
+    fit();
+    window.addEventListener('resize', fit);
+    return () => window.removeEventListener('resize', fit);
+  }, []);
+  useEffect(() => {
+    const onMessage = (e: MessageEvent) => {
+      if (e.origin !== window.location.origin || !isFrameState(e.data, module.id)) return;
+      const { index, complete, unlocked, rejected } = e.data;
+      setState({ index, complete, unlocked, rejected });
+    };
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, [module.id]);
+
+  const actions = useMemo<TrainingCardActions>(() => {
+    const send = (cmd: FrameCommand) => frameRef.current?.contentWindow?.postMessage(cmd, window.location.origin);
+    const base = { type: 'crowdcad-training-cmd' as const, moduleId: module.id };
+    return {
+      next: () => send({ ...base, cmd: 'next' }),
+      doIt: () => send({ ...base, cmd: 'doIt' }),
+      back: () => send({ ...base, cmd: 'back' }),
+      restartSection: () => send({ ...base, cmd: 'restartSection' }),
+      jumpTo: (index: number) => send({ ...base, cmd: 'jumpTo', index }),
+    };
+  }, [module.id]);
 
   return (
     <div className="flex h-dvh flex-col bg-surface-deepest">
-      <header className="z-[300] flex h-14 shrink-0 items-center gap-3 border-b border-surface-liner bg-surface-deep px-4">
-        <Link href="/training" className="flex items-center gap-2 text-sm text-surface-light/80 hover:text-surface" data-testid="training-exit">
-          <X className="h-4 w-4" />
-          <span className="hidden sm:inline">Training</span>
-        </Link>
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-semibold text-surface">{module.title}</div>
-          <div className="mt-1 h-1 w-full max-w-[320px] overflow-hidden rounded-full bg-surface-liner">
-            <div className="h-full bg-accent transition-all" style={{ width: `${pct}%` }} />
-          </div>
+      <PlayerHeader module={module} index={state.index} complete={state.complete} onJump={actions.jumpTo} />
+      <div className="flex min-h-0 flex-1 items-center justify-center gap-8 overflow-auto p-6">
+        <div className="shrink-0 rounded-[2.75rem] border-[10px] border-surface-liner bg-black p-0 shadow-2xl" data-testid="training-phone-frame">
+          <iframe
+            ref={frameRef}
+            title={`${module.title} on a phone`}
+            src={`/training/${module.id}?embed=phone&step=${startIndex + 1}`}
+            style={{ width: PHONE_VIEWPORT.width, height }}
+            className="block rounded-[2rem] bg-surface-deepest"
+            data-testid="training-phone-iframe"
+          />
         </div>
-        <StepsMenu module={module} index={index} complete={complete} onJump={session.jumpTo} />
-        <HelpButton />
-      </header>
-
-      <div className="relative min-h-0 flex-1">
-        <LiteProvider isLiteMode store={session.store} writeGate={session.writeGate} tracking={session.tracking} isTraining>
-          <DispatchPage params={params} />
-        </LiteProvider>
+        <TrainingCard module={module} state={state} actions={actions} layout="inline" />
       </div>
-
-      {!complete && <Coachmark step={step} label={step.title} />}
-
-      <aside
-        aria-live="polite"
-        data-testid="training-card"
-        data-step-id={complete ? 'complete' : step.id}
-        data-gate={session.unlocked || complete ? 'free' : 'guided'}
-        // Top layer: pressing the card while a board modal is open must not dismiss that modal and swallow the press.
-        data-react-aria-top-layer="true"
-        // Above everything, the coachmark's dimmed surround included.
-        style={{ zIndex: TRAINING_CARD_Z }}
-        className="pointer-events-auto fixed bottom-4 right-4 w-[min(380px,calc(100vw-2rem))] rounded-xl border border-surface-liner bg-surface-deep p-4 text-sm text-surface-light shadow-2xl"
-      >
-        <div className="mb-1 flex items-center justify-between gap-2 text-xs uppercase tracking-wide text-surface-light/60">
-          <span className="truncate">
-            {complete ? 'Complete' : `Step ${index + 1} of ${module.steps.length}`}
-          </span>
-          <span className="flex shrink-0 items-center gap-0.5">
-            <button
-              type="button"
-              aria-label={minimized ? 'Show the step' : 'Hide the step to see the board'}
-              aria-expanded={!minimized}
-              className="rounded p-1 hover:bg-surface-liner"
-              onClick={() => setMinimized((m) => !m)}
-              data-testid="training-card-toggle"
-            >
-              {minimized ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-            </button>
-            <button
-              type="button"
-              aria-label="Back: undo the last step"
-              title="Back: undo the last step"
-              disabled={!complete && index === 0}
-              className="rounded p-1 hover:bg-surface-liner disabled:pointer-events-none disabled:opacity-30"
-              onClick={session.back}
-              data-testid="training-back"
-            >
-              <Undo2 className="h-3.5 w-3.5" />
-            </button>
-          </span>
-        </div>
-
-        {minimized ? (
-          <div className="truncate font-semibold text-surface">{complete ? 'Module complete' : step.title}</div>
-        ) : complete ? (
-          <div data-testid="training-complete">
-            <h2 className="text-base font-semibold text-surface">Module complete</h2>
-            <p className="mt-1 text-surface-light/85">You can now try anything on this board.</p>
-            <ul className="mt-2 list-disc space-y-1 pl-5 text-surface-light/85">
-              {module.practice.map((p) => (
-                <li key={p}>{p}</li>
-              ))}
-            </ul>
-            <div className="mt-3 flex flex-wrap justify-end gap-2">
-              <Button size="sm" variant="flat" startContent={<RotateCcw className="h-3.5 w-3.5" />} onPress={() => session.jumpTo(0)}>
-                Start over
-              </Button>
-              {nextModule ? (
-                <Button as={Link} href={`/training/${nextModule.id}`} size="sm" color="primary">
-                  Next: {nextModule.title}
-                </Button>
-              ) : (
-                <Button as={Link} href="/training" size="sm" color="primary">
-                  All modules
-                </Button>
-              )}
-            </div>
-          </div>
-        ) : (
-          <>
-            <h2 className="text-base font-semibold text-surface" data-testid="training-step-title">
-              {step.title}
-            </h2>
-            <p className="mt-1 leading-relaxed text-surface-light/90" aria-label={plainStepText(step.body, t)}>
-              <StepText text={step.body} t={t} />
-            </p>
-            {isMobile && (
-              <p className="mt-2 text-xs text-surface-light/60">
-                Best on a computer: the board&apos;s phone layout hides some of the controls these steps point at.
-              </p>
-            )}
-            {session.rejected && (
-              <div role="alert" className="mt-3 rounded-lg border border-status-yellow/50 bg-status-yellow/10 px-3 py-2 text-xs" data-testid="training-gate-nudge">
-                Not saved. For now, type only the values shown in this step
-                {step.values?.length ? (
-                  <>
-                    {' '}(
-                    {step.values.map((v, i) => (
-                      <React.Fragment key={v}>
-                        {i > 0 && ', '}
-                        <code className="font-mono">{v}</code>
-                      </React.Fragment>
-                    ))}
-                    )
-                  </>
-                ) : null}
-. Once you finish the module you can type anything.
-              </div>
-            )}
-            <div className="mt-3 flex items-center justify-between gap-2">
-              <Button
-                size="sm"
-                variant="light"
-                startContent={<RotateCcw className="h-3.5 w-3.5" />}
-                onPress={session.restartSection}
-                data-testid="training-restart-section"
-              >
-                Restart section
-              </Button>
-              <Button size="sm" color="primary" onPress={kind === 'read' ? session.next : session.doIt} data-testid="training-primary">
-                {kind === 'read' ? 'Next' : 'Do it for me'}
-              </Button>
-            </div>
-          </>
-        )}
-      </aside>
     </div>
   );
 }

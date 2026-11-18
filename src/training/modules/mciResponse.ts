@@ -2,6 +2,7 @@ import type { Event } from '@/app/types';
 import { getVenueZones } from '@/lib/zones';
 import { clearZonePatch, declareMci, deriveMci, isMciActive, movePatch, standDownMci, tagPatch, transportPatch, type MciWrite } from '@/lib/mci';
 import { CLINIC_ID, CLINICS, trainingBoard, POSTS } from '../fixtures';
+import { asRole } from '../mciScenario';
 import type { TrainingModule } from '../types';
 
 const ZONE = 'South Zone';
@@ -13,11 +14,13 @@ const zoneStats = (event: Event) => deriveMci(event).zones.find((z) => z.zone.na
 const areaStats = (event: Event) => deriveMci(event).areas.find((a) => a.name === AREA || a.area.clinicId === CLINIC_ID);
 const zoneId = (event: Event) => event.mci?.zones.find((z) => z.name === ZONE)?.id ?? '';
 const areaId = (event: Event) => areaStats(event)?.area.id ?? CLINIC_ID;
+const assignmentOf = (event: Event, team: string) => event.staff.find((s) => s.team === team)?.mciAssignment;
+const TRIAGE_TEAM = 'MRC2';
 
 /** Mass casualty incident, start to finish, from the dispatcher's board. */
 const mciResponse: TrainingModule = {
   id: 'mci-response',
-  version: 3,
+  version: 4,
   track: 'mci',
   title: 'Declare and run an MCI',
   summary: "Declare an MCI, count patients by triage color, move them to treatment, send an ambulance and end the MCI.",
@@ -62,6 +65,18 @@ const mciResponse: TrainingModule = {
         const zones = getVenueZones(e.venue).map((z) => ({ id: z.id, name: z.name, venueZoneId: z.id }));
         return { ...e, ...declareMci(e, { zones, areas: CLINICS.map((c) => ({ id: c.id, name: c.name, clinicId: c.id })), trackPatients: true }, Date.now()) };
       },
+    },
+    {
+      id: 'assign-triage',
+      section: 'Declare an MCI',
+      title: 'Send a team to triage',
+      body: "Send MRC2 to find and tag patients. On MRC2's card, click its status, choose **{{Triage}}**, then pick **South Zone**.",
+      anchors: ['css:[aria-label="Select triage zone"]', 'unit-status-option-Triage', `unit-status-${TRIAGE_TEAM}`],
+      placement: 'right',
+      estSec: 20,
+      intents: ['assign team to zone', 'triage team', 'mci status'],
+      done: (e) => assignmentOf(e, TRIAGE_TEAM)?.kind === 'zone' && assignmentOf(e, TRIAGE_TEAM)?.id === zoneId(e),
+      apply: (e) => asRole(e, 'responder', TRIAGE_TEAM, { type: 'assign', assignment: { kind: 'zone', id: zoneId(e) } }),
     },
     {
       id: 'tag-red',
@@ -132,6 +147,18 @@ const mciResponse: TrainingModule = {
       liveSafe: true,
     },
     {
+      id: 'reassign',
+      section: 'Move patients to treatment',
+      title: 'Reassign the zone’s team',
+      body: "MRC2 has no one left to triage, so you're asked where it goes next. **Treatment: Dwinelle Tent** is already picked. Click **Reassign**.",
+      anchors: ['mci-clear-reassign-confirm', `unit-status-${TRIAGE_TEAM}`],
+      placement: 'left',
+      estSec: 15,
+      intents: ['zone clear reassign', 'move team to treatment'],
+      done: (e) => assignmentOf(e, TRIAGE_TEAM)?.kind === 'area',
+      apply: (e) => asRole(e, 'responder', TRIAGE_TEAM, { type: 'assign', assignment: { kind: 'area', id: areaId(e) } }),
+    },
+    {
       id: 'open-transport',
       section: 'Transport patients',
       title: 'Open Transport',
@@ -154,6 +181,68 @@ const mciResponse: TrainingModule = {
       values: ['A14', 'County General'],
       done: (e) => (areaStats(e)?.transported.red ?? 0) >= 2,
       apply: (e) => patched(e, transportPatch(e, areaId(e), { red: 2 }, { unit: 'A14', destination: 'County General' }, ctx())),
+    },
+    {
+      id: 'open-logistics',
+      section: 'MCI Logistics',
+      title: 'Open MCI Logistics',
+      body: 'Click the **MCI Logistics** tab. It keeps what the MCI needs besides patients: equipment, hospitals, staff on their way and the role logins.',
+      anchor: 'logistics-tab-button',
+      placement: 'bottom',
+      estSec: 15,
+      doneWhenVisible: 'logistics-tab',
+      intents: ['mci logistics', 'logistics tab'],
+      liveSafe: true,
+    },
+    {
+      id: 'logistics-equipment',
+      section: 'MCI Logistics',
+      title: 'Read the equipment',
+      body: "**Equipment** lists every item by the team holding it. **Give** hands an item (a trauma bag, a gurney, or anything you type) to a team, and it shows on that team's card. **Return** sends it back to staging.",
+      anchor: 'logistics-give',
+      placement: 'left',
+      estSec: 25,
+      intents: ['give equipment mci', 'mci equipment'],
+    },
+    {
+      id: 'logistics-hospitals',
+      section: 'MCI Logistics',
+      title: 'Read the hospitals',
+      body: "**Hospitals** shows where patients went. County General is here because you typed it in the transport. Set each hospital's **Capacity** when it tells you how many it can take; **Sent** counts the transports to it.",
+      anchor: 'hospitals',
+      placement: 'left',
+      estSec: 25,
+      intents: ['hospital capacity'],
+    },
+    {
+      id: 'logistics-incoming',
+      section: 'MCI Logistics',
+      title: 'Read incoming staff',
+      body: "**Incoming staff** is for teams on their way to help, with an ETA and notes. **Arrived** puts the team on the dispatch interface as Available.",
+      anchor: 'css:[aria-label="Incoming Staff"]',
+      placement: 'left',
+      estSec: 20,
+      intents: ['incoming staff', 'mutual aid'],
+    },
+    {
+      id: 'logistics-roles',
+      section: 'MCI Logistics',
+      title: 'Read about role logins',
+      body: "**Logins** gives teams their own logins for the MCI, so they enter information themselves: Responders send triage counts and treatment notes, the Treatment Lead sets the transport order, Transport records each ambulance, Logistics keeps this tab, and Incident Command watches it all. Each has its own tutorial in this section, and **Make role logins and send them to teams** shows how to hand them out.",
+      anchor: 'logistics-logins-toggle',
+      placement: 'bottom',
+      estSec: 35,
+      intents: ['role logins', 'mci roles'],
+    },
+    {
+      id: 'back-to-mci',
+      section: 'End the MCI',
+      title: 'Go back to MCI Patients',
+      body: 'Click the **MCI Patients** tab.',
+      anchor: 'mci-tab-button',
+      placement: 'bottom',
+      estSec: 10,
+      doneWhenVisible: 'mci-stand-down',
     },
     {
       id: 'end-mci',

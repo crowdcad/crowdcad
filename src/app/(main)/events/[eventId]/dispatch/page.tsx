@@ -3646,6 +3646,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
       return (
         <>
           <Select
+            data-testid="mobile-teams-subtab"
             selectedKeys={[mobileTeamsSubTab]}
             onSelectionChange={(keys) => {
               const selected = Array.from(keys)[0] as 'teams' | 'supervisors' | 'log';
@@ -3718,6 +3719,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
                   className="rounded-full bg-transparent hover:bg-surface-liner text-base"
                   aria-label={t('Add Call')}
                   onPress={() => openAddCallModal()}
+                  data-testid="mobile-add-call"
                 >
                   {t('Add Call')}
                 </Button>
@@ -4443,7 +4445,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
           </div>
 
           {/* Mobile/Tablet Layout - Bottom Tabs */}
-          <div className="lg:hidden">
+          <div className="lg:hidden" data-testid="mobile-dispatch">
             <div className="sticky top-14 z-40 bg-surface-deepest">
               {event && (isMciActive(event) ? <MciAvailabilityStrip event={event} /> : <AvailabilitySurgeStrip event={event} />)}
               {mobileActiveTab !== 'map' && (

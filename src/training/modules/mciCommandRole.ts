@@ -1,0 +1,91 @@
+import { mciRoleBoard } from '../mciScenario';
+import type { TrainingModule } from '../types';
+
+/** The Incident Command role login on a desktop: a read-only picture of the whole MCI. */
+const mciCommandRole: TrainingModule = {
+  id: 'mci-role-incident-command',
+  version: 1,
+  track: 'mci',
+  title: 'Incident Command login: the whole picture',
+  summary: "Read the MCI's patients, zones, treatment locations, hospitals, incoming staff and activity on one screen.",
+  release: 'stable',
+  device: 'desktop',
+  surface: { role: 'incident_command', unit: 'Sup 1' },
+  seed: () => mciRoleBoard('mci-role-incident-command'),
+  practice: ['Filter the activity to one team, then back to everyone.', 'Find which teams are working the South Zone.'],
+  steps: [
+    {
+      id: 'intro',
+      section: 'Read the MCI',
+      title: 'Read the scenario',
+      body: "The **Incident Command** login is for whoever runs the incident. It shows everything as it happens and changes nothing: to change something, ask the dispatcher or the team that owns it.",
+      estSec: 20,
+    },
+    {
+      id: 'patients',
+      section: 'Read the MCI',
+      title: 'Read the patient totals',
+      body: 'How many patients were tagged, how many are still in zones, in treatment and gone by ambulance, and the same by color.',
+      anchor: 'role-command-patients',
+      placement: 'right',
+      estSec: 20,
+      intents: ['mci totals'],
+    },
+    {
+      id: 'zones',
+      section: 'Read the MCI',
+      title: 'Read the zones',
+      body: 'Each zone shows the patients still there by color and the teams working it. A zone turns green when the dispatcher marks it clear.',
+      anchor: 'role-command-zones',
+      placement: 'left',
+      estSec: 20,
+    },
+    {
+      id: 'areas',
+      section: 'Read the MCI',
+      title: 'Read the treatment locations',
+      body: 'Each treatment location shows its patients, how many are waiting for an ambulance and the teams working there.',
+      anchor: 'role-command-areas',
+      placement: 'left',
+      estSec: 15,
+    },
+    {
+      id: 'hospitals',
+      section: 'Hospitals and staff',
+      title: 'Read the hospitals',
+      body: 'Patients sent to each hospital against its capacity, as Logistics and Transport record them.',
+      anchor: 'role-command-hospitals',
+      placement: 'right',
+      estSec: 15,
+    },
+    {
+      id: 'incoming',
+      section: 'Hospitals and staff',
+      title: 'Read incoming staff',
+      body: 'Teams on their way, with the ETA Logistics keeps.',
+      anchor: 'role-command-incoming',
+      placement: 'right',
+      estSec: 10,
+    },
+    {
+      id: 'filter',
+      section: 'Activity',
+      title: 'Filter the activity',
+      body: 'Every entry from the dispatcher and each role login is listed newest first, with who sent it. Click **Showing** to pick whose entries to see.',
+      anchor: 'role-activity-filter',
+      placement: 'left',
+      estSec: 15,
+      intents: ['activity log', 'filter by team'],
+      doneWhenVisible: 'role-activity-menu',
+    },
+    {
+      id: 'phone',
+      section: 'Activity',
+      title: 'On a phone',
+      body: 'On a phone the same information is under three tabs: **Overview**, **Units** (each team and where it is working) and **Log**.',
+      estSec: 10,
+    },
+  ],
+};
+
+export default mciCommandRole;

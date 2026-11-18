@@ -127,7 +127,7 @@ function TriageMode({ mci, unit, me }: { mci: MciState; unit: string; me: MciUni
             Not sent yet: {describe(draft, true)}
           </p>
         )}
-        <div className="flex flex-col gap-1.5">
+        <div className="flex flex-col gap-1.5" data-testid="role-sent">
           <span className={ROLE_LABEL}>Sent by {unit}</span>
           {sent.length === 0 && <span className="text-base text-surface-faint">Nothing yet.</span>}
           {sent.map((e) => (
@@ -164,7 +164,7 @@ function TriageMode({ mci, unit, me }: { mci: MciState; unit: string; me: MciUni
           <span className={ROLE_LABEL}>To</span>
           <div className="grid grid-cols-2 gap-2">
             {mci.areas.map((a) => (
-              <button key={a.id} type="button" className={`${ROLE_CHIP} flex items-center gap-2 ${chipState(a.id === dest)}`} onClick={() => setDest(a.id)}>
+              <button key={a.id} type="button" className={`${ROLE_CHIP} flex items-center gap-2 ${chipState(a.id === dest)}`} onClick={() => setDest(a.id)} data-testid={`role-move-area-${a.name}`}>
                 {a.name}
               </button>
             ))}
@@ -284,6 +284,7 @@ function PatientSheet({
             aria-pressed={form.color === c}
             onClick={() => set({ color: c })}
             className={`h-11 flex-1 text-sm font-bold uppercase disabled:opacity-30 ${MCI_PILL_STYLES[c].pill} ${form.color === c ? 'ring-[3px] ring-inset ring-white' : ''}`}
+            data-testid={`role-patient-color-${c}`}
           >
             {MCI_COLOR_STYLES[c].label}
           </button>
@@ -296,6 +297,7 @@ function PatientSheet({
             key={t}
             type="button"
             className={`h-10 border px-3 text-base font-semibold ${chipState(!otherTeam && form.team === t)}`}
+            data-testid={`role-patient-team-${t}`}
             onClick={() => {
               setOtherTeam(false);
               set({ team: t });
@@ -337,7 +339,7 @@ function PatientSheet({
           <span className={ROLE_LABEL}>Sex</span>
           <div className="flex gap-1.5">
             {['M', 'F', 'X'].map((x) => (
-              <button key={x} type="button" className={`h-12 flex-1 border text-base font-semibold ${chipState(form.sex === x)}`} onClick={() => set({ sex: form.sex === x ? '' : x })}>
+              <button key={x} type="button" className={`h-12 flex-1 border text-base font-semibold ${chipState(form.sex === x)}`} onClick={() => set({ sex: form.sex === x ? '' : x })} data-testid={`role-patient-sex-${x}`}>
                 {x}
               </button>
             ))}
@@ -455,7 +457,7 @@ function TreatmentMode({ mci, unit, me, units, lead = false }: { mci: MciState; 
       <ErrorBanner error={actions.error} onClose={actions.clearError} />
       <div className="flex items-center justify-between border-b border-surface-liner px-4 py-2.5">
         <span className="text-xl font-bold">{stats.name}</span>
-        <button type="button" className="min-h-11 text-base font-semibold text-accent" onClick={() => setChoosing(true)}>
+        <button type="button" className="min-h-11 text-base font-semibold text-accent" onClick={() => setChoosing(true)} data-testid="role-change-area">
           Change location
         </button>
       </div>
@@ -483,7 +485,7 @@ function TreatmentMode({ mci, unit, me, units, lead = false }: { mci: MciState; 
         )}
         {shown.map((p) => (
           <div key={p.id} className="flex min-h-[4.25rem] items-stretch border border-surface-liner bg-surface-deep" data-testid="role-patient">
-            <button type="button" onClick={() => setEditing(p)} className="flex min-w-0 flex-1 items-stretch text-left">
+            <button type="button" onClick={() => setEditing(p)} className="flex min-w-0 flex-1 items-stretch text-left" data-testid="role-patient-open">
               <span className={`flex w-14 shrink-0 items-center justify-center font-mono text-xl font-bold ${MCI_PILL_STYLES[p.color].pill}`}>#{p.rank ?? stats.patients.indexOf(p) + 1}</span>
               <span className="flex min-w-0 flex-1 flex-col justify-center gap-0.5 px-3 py-2">
                 <span className="text-lg font-bold">{mciPatientLabel(p.details) || 'Tap to add details'}</span>

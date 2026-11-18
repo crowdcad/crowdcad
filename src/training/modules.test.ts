@@ -127,6 +127,8 @@ describe.each(MODULES.map((m) => [m.id, m] as const))('training module %s', (_id
   });
 
   it("passes the write gate with the script's own values", () => {
+    // A role module's view writes through its own practice sender, not the dispatch page's gated store.
+    if (module.surface) return;
     module.steps.forEach((step, i) => {
       if (!step.apply || step.free || i > unlockIndex(module)) return;
       const before = normalizeLiteDraftToEvent(boardAtStep(module, i));

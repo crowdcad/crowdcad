@@ -1,4 +1,5 @@
 import type { Event } from '@/app/types';
+import type { EventRole } from '@/lib/roleAccounts';
 import type { LiteEventDraft } from '@/lib/liteEventStore';
 import type { UnitTracking } from '@/lib/unitTracking';
 
@@ -91,6 +92,21 @@ export interface TrainingModule {
   practice: string[];
   /** A scripted position feed (TAK modules). Started when the player mounts. */
   tracking?: TrackingScript;
+  /**
+   * The screen the module is made for. `phone`: on a computer it runs inside a phone-sized frame, with the
+   * step card beside it, so the page lays out exactly as on a phone; on a phone it runs full screen.
+   * `laptop` and `desktop` (the default) run in the window.
+   */
+  device?: 'phone' | 'laptop' | 'desktop';
+  /** Show an MCI role login's view (src/app/role) of the practice event instead of the dispatch interface. */
+  surface?: RoleSurface;
+}
+
+/** A role login, on practice data: what it sees and which unit it belongs to. */
+export interface RoleSurface {
+  role: EventRole;
+  /** The team or supervisor holding the login; must be on the seed's board. */
+  unit: string;
 }
 
 /** A scripted stand-in for TAK: positions as a function of seconds since the module began. */

@@ -2,6 +2,13 @@ import type { TrainingModule, TrainingTrack, TrackId } from './types';
 import callAssignment from './modules/callAssignment';
 import clinicPatients from './modules/clinicPatients';
 import equipmentDelivery from './modules/equipmentDelivery';
+import mobileTour from './modules/mobileTour';
+import mciLogins from './modules/mciLogins';
+import mciResponderRole from './modules/mciResponderRole';
+import mciLeadRole from './modules/mciLeadRole';
+import mciTransportRole from './modules/mciTransportRole';
+import mciLogisticsRole from './modules/mciLogisticsRole';
+import mciCommandRole from './modules/mciCommandRole';
 import mciResponse from './modules/mciResponse';
 import orientation from './modules/orientation';
 import surgeAndLog from './modules/surgeAndLog';
@@ -18,13 +25,13 @@ export const TRACKS: TrainingTrack[] = [
   {
     id: 'dispatcher',
     title: 'Basic Dispatch Features',
-    summary: 'The layout, calls, helper teams, clinic patients, surge and the log.',
+    summary: 'The layout, calls, helper teams, clinic patients, surge, the log and dispatching from a phone.',
     release: 'stable',
   },
   {
     id: 'mci',
     title: 'Mass Casualty Incident Features',
-    summary: 'Declare an MCI, count patients, move them to treatment and send them to hospital.',
+    summary: 'Run an MCI from the dispatch interface, hand out role logins, and what each role login does.',
     release: 'stable',
   },
   {
@@ -37,7 +44,23 @@ export const TRACKS: TrainingTrack[] = [
 
 // Basic Dispatch Features, in order. Still to build: "Posting schedules", between clinic patients and surge
 // (docs/TRAINING.md, "To do").
-export const MODULES: TrainingModule[] = [orientation, callAssignment, equipmentDelivery, clinicPatients, surgeAndLog, mciResponse, takLiveTracking];
+export const MODULES: TrainingModule[] = [
+  orientation,
+  callAssignment,
+  equipmentDelivery,
+  clinicPatients,
+  surgeAndLog,
+  mobileTour,
+  // Mass Casualty Incident Features: the dispatcher's MCI, the logins, then each role login's own screen.
+  mciResponse,
+  mciLogins,
+  mciResponderRole,
+  mciLeadRole,
+  mciTransportRole,
+  mciLogisticsRole,
+  mciCommandRole,
+  takLiveTracking,
+];
 
 /**
  * Preview (unreleased) modules are shown only with NEXT_PUBLIC_TRAINING_PREVIEW=on

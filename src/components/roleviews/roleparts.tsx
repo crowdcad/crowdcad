@@ -87,14 +87,14 @@ export function ColorStepper({
   const step = size === 'lg' ? 'h-14 w-14 text-3xl' : 'h-11 w-11 text-2xl';
   return (
     <div className={`flex items-center justify-between ${size === 'lg' ? 'h-14' : 'h-11'} ${MCI_PILL_STYLES[color].pill}`} data-testid={`role-stepper-${color}`}>
-      <button type="button" className={`${step} flex items-center justify-center font-bold hover:bg-black/20 disabled:cursor-not-allowed disabled:opacity-40`} onClick={onMinus} disabled={minusDisabled} aria-label={`Remove one ${label}`}>
+      <button type="button" className={`${step} flex items-center justify-center font-bold hover:bg-black/20 disabled:cursor-not-allowed disabled:opacity-40`} onClick={onMinus} disabled={minusDisabled} aria-label={`Remove one ${label}`} data-testid={`role-stepper-${color}-minus`}>
         −
       </button>
       <span className="flex flex-col items-center">
         <span className={`min-w-[3.2rem] bg-black/25 px-1.5 text-center font-mono font-bold tabular-nums ${size === 'lg' ? 'text-2xl' : 'text-xl'}`}>{value}</span>
         {caption && <span className="text-[11px] font-bold uppercase tracking-[0.1em]">{caption}</span>}
       </span>
-      <button type="button" className={`${step} flex items-center justify-center font-bold hover:bg-black/20 disabled:cursor-not-allowed disabled:opacity-40`} onClick={onPlus} disabled={plusDisabled} aria-label={`Add one ${label}`}>
+      <button type="button" className={`${step} flex items-center justify-center font-bold hover:bg-black/20 disabled:cursor-not-allowed disabled:opacity-40`} onClick={onPlus} disabled={plusDisabled} aria-label={`Add one ${label}`} data-testid={`role-stepper-${color}-plus`}>
         +
       </button>
     </div>
