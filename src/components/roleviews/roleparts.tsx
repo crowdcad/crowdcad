@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { createContext, useContext, useState } from 'react';
 import type { MciColor } from '@/app/types';
 import { MCI_COLOR_STYLES, MCI_PILL_STYLES } from '@/components/dispatch/mci/mciparts';
 import { sendRoleAction } from '@/lib/roleActionClient';
@@ -18,15 +18,27 @@ export const chipState = (on: boolean) => (on ? 'border-accent bg-accent/15 text
 export const PRIMARY_BUTTON = 'h-14 bg-accent px-4 text-lg font-bold text-surface-deepest disabled:bg-surface-liner disabled:text-surface-faint disabled:cursor-not-allowed';
 export const SECONDARY_BUTTON = 'h-14 border border-surface-liner bg-surface-deep px-4 text-base font-semibold text-surface-light disabled:opacity-50';
 
+/**
+ * Set by training (src/components/training/RolePractice.tsx): role views send their actions here, applied to
+ * practice data in the browser with the same helpers /api/mci-role uses, instead of to the server.
+ */
+export interface RolePractice {
+  send(action: RoleAction): Promise<void>;
+}
+const RolePracticeContext = createContext<RolePractice | null>(null);
+export const RolePracticeProvider = RolePracticeContext.Provider;
+export const useRolePractice = () => useContext(RolePracticeContext);
+
 /** Sends role actions with one busy flag and the last error, shown in the view. */
 export function useRoleActions() {
+  const practice = useRolePractice();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const send = async (...actions: RoleAction[]): Promise<boolean> => {
     setBusy(true);
     setError(null);
     try {
-      for (const action of actions) await sendRoleAction(action);
+      for (const action of actions) await (practice ? practice.send(action) : sendRoleAction(action));
       return true;
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not save.');

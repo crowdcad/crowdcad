@@ -39,6 +39,7 @@ import { isRowToggleClick } from '@/components/dispatch/trackingtablebase';
 import DeclareMciModal from '@/components/dispatch/mci/declaremcimodal';
 import LogisticsTab from '@/components/dispatch/mci/logisticstab';
 import { ROLE_LOGINS_SUPPORTED } from '@/lib/roleAccountStore';
+import { useRoleLoginBackend } from '@/lib/roleLoginBackend';
 import MciAvailabilityStrip from '@/components/dispatch/mci/mciavailabilitystrip';
 import MciTab from '@/components/dispatch/mci/mcitab';
 import MciToggleButton from '@/components/dispatch/mci/mcitogglebutton';
@@ -155,6 +156,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
   // };
   const { eventId } = use(params);
   const { isLiteMode: layoutLiteMode, store: liteStore, writeGate, tracking: liteTracking } = useLiteMode();
+  const roleLoginBackend = useRoleLoginBackend();
   const isLiteMode = layoutLiteMode;
   // Cloud events on Firebase keep MCI state in its own document (#143, src/lib/mciDoc.ts); Lite and PocketBase keep it inline.
   const mciDocMode = !isLiteMode && !isPocketbaseBackend;
@@ -3903,7 +3905,8 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
   );
 
 
-  const roleLoginsAvailable = ROLE_LOGINS_SUPPORTED && !isLiteMode && !!user;
+  // Training's practice logins (src/lib/roleLoginBackend.tsx) work without an account or the server.
+  const roleLoginsAvailable = roleLoginBackend.practice || (ROLE_LOGINS_SUPPORTED && !isLiteMode && !!user);
 
   // The desktop board's two sides, shared by the split layout and the full-screen (focus) view (#138).
   const rightTabLabel =
@@ -4057,6 +4060,17 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
             <MciTab
               event={event}
               actions={mciActions}
+              onReassignUnits={async (changes) => {
+                for (const c of changes) {
+                  const staff = event.staff.find((s) => s.team === c.unit);
+                  if (staff) {
+                    await handleStatusChange(staff, c.status, undefined, c.assignment);
+                    continue;
+                  }
+                  const sup = event.supervisor?.find((s) => s.team === c.unit);
+                  if (sup) await handleSupervisorStatusChange(sup as unknown as Staff, c.status, undefined, c.assignment);
+                }
+              }}
               onOpenLogins={
                 roleLoginsAvailable
                   ? () => {
@@ -4074,7 +4088,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
             <LogisticsTab
               event={event}
               updateEvent={updateEvent}
-              logins={roleLoginsAvailable && user && eventId ? { eventId, uid: user.uid } : undefined}
+              logins={roleLoginsAvailable && eventId && (user || roleLoginBackend.practice) ? { eventId, uid: user?.uid ?? 'practice' } : undefined}
               loginsOpen={loginsOpen}
               onLoginsOpenChange={setLoginsOpen}
             />

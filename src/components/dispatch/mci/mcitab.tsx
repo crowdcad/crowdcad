@@ -12,6 +12,7 @@ import MciZoneCard from './mcizonecard';
 import MciTreatmentCard, { type MciPatientHandlers } from './mcitreatmentcard';
 import MciReassignModal, { type MciReassignRequest } from './mcireassignmodal';
 import MciMoveModal from './mcimovemodal';
+import MciZoneClearModal, { type ZoneClearReassignment } from './mcizoneclearmodal';
 import MciTransportModal from './mcitransportmodal';
 import MciDrawZoneModal, { type MciDrawTarget } from './mcidrawzonemodal';
 import { MCI_CHECKBOX_CLASSNAMES, MCI_INPUT_CLASSNAMES } from './mciparts';
@@ -22,6 +23,8 @@ type Props = {
   actions: MciActions;
   /** Opens role logins in MCI Logistics (#142); omitted where they aren't available (Lite, PocketBase). */
   onOpenLogins?: () => void;
+  /** After a zone is marked clear: move the teams that were working it (Triage, Treatment or Available). */
+  onReassignUnits?: (changes: ZoneClearReassignment[]) => void | Promise<void>;
 };
 
 /** Zone grid columns: thirds for up to three zones, quarters from four, never narrower than 12rem (then they wrap). */
@@ -63,7 +66,7 @@ function AddByName({ label, testId, onAdd }: { label: string; testId: string; on
  * The MCI tab. Every number comes from `deriveMci` (the log is the source of
  * truth). After stand down it stays, read-only, so the record can be reviewed.
  */
-export default function MciTab({ event, actions, onOpenLogins }: Props) {
+export default function MciTab({ event, actions, onOpenLogins, onReassignUnits }: Props) {
   const { t } = useDispatchTerms();
   const mci = event.mci;
   // Memoized on what each helper reads, not on `event`, which is a new object on every snapshot.
@@ -86,6 +89,8 @@ export default function MciTab({ event, actions, onOpenLogins }: Props) {
     return lists.map((list, i) => ({ ...list, id: `${teamListBase}-teams-${i}` }));
   }, [mci?.zones, staff, supervisor, unitsAt, teamListBase]);
   const [moveZoneId, setMoveZoneId] = useState<string | null>(null);
+  // The zone just marked clear, with the teams still assigned there, for the reassign dialog.
+  const [clearedZone, setClearedZone] = useState<{ zoneId: string; zoneName: string; units: string[] } | null>(null);
   const [transportAreaId, setTransportAreaId] = useState<string | null>(null);
   // A shape the dispatcher chose to draw or edit; otherwise the first zone or area still without one is offered.
   const [drawChoice, setDrawChoice] = useState<{ kind: 'zone' | 'area'; id: string } | null>(null);
@@ -254,7 +259,11 @@ export default function MciTab({ event, actions, onOpenLogins }: Props) {
               onTag={handleTag}
               onSetTagged={handleSetTagged}
               onMove={setMoveZoneId}
-              onClear={(id) => void actions.clearZone(id)}
+              onClear={(id) => {
+                const units = unitsAt({ kind: 'zone', id });
+                void actions.clearZone(id);
+                if (onReassignUnits && units.length > 0) setClearedZone({ zoneId: id, zoneName: stats.zone.name, units });
+              }}
               onReopen={(id) => void actions.reopenZone(id)}
               mapEnabled={mapEnabled && !readOnly}
               hasShape={!!shapeOf(stats.zone)}
@@ -312,6 +321,13 @@ export default function MciTab({ event, actions, onOpenLogins }: Props) {
           </datalist>
         ))}
 
+      <MciZoneClearModal
+        cleared={readOnly ? null : clearedZone}
+        zones={derived.zones.filter((z) => !z.cleared && z.zone.id !== clearedZone?.zoneId).map((z) => ({ id: z.zone.id, name: z.zone.name }))}
+        areas={areaOptions}
+        onClose={() => setClearedZone(null)}
+        onReassign={(changes) => onReassignUnits?.(changes)}
+      />
       <MciMoveModal zone={readOnly ? null : moveZone} areas={derived.areas} onClose={() => setMoveZoneId(null)} onMove={handleMove} />
       <MciDrawZoneModal
         target={readOnly ? null : drawTarget}
