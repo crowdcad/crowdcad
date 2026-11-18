@@ -173,3 +173,8 @@ Requested by the maintainer after trying the role views.
 
 ### D35. Transport destination is required
 - **What.** Every transport (dialog, per-patient row, Transport role) needs a destination. The dialog offers the Logistics hospitals and takes any other name. A hospital's dropdown in Logistics lists each patient sent there (`hospitalPatients`).
+
+## 2026-11-18
+
+### D36. Clearing a zone asks where its teams go next
+- **What.** Marking a zone clear on the dispatcher's MCI tab opens a dialog listing the teams still assigned to it. Each has a choice of a treatment location (the first is preselected), another open zone, Available, or leave in the zone. **Reassign** applies them through the board's own status handlers (Treatment or Triage with the picked assignment, or Available), so the team cards, map and logs change as if each were set by hand. **Skip** leaves everyone as they were. Role logins can't clear zones, so the dialog is only on the dispatcher's tab (`mcizoneclearmodal.tsx`).

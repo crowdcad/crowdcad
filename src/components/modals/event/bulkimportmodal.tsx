@@ -34,7 +34,7 @@ type ParsedRow = {
 };
 
 const TEAM_TEMPLATE_HEADERS = ["team", "memberName", "cert", "lead"];
-const SUPERVISOR_TEMPLATE_HEADERS = ["callsign", "memberName", "cert"];
+const SUPERVISOR_TEMPLATE_HEADERS = ["call sign", "memberName", "cert"];
 
 export default function BulkImportModal({
   isOpen,
@@ -75,7 +75,7 @@ export default function BulkImportModal({
             { team: "Team 1", memberName: "Jane Doe", cert: "EMT-B", lead: "true" },
             { team: "Team 1", memberName: "John Smith", cert: "FA", lead: "false" },
           ]
-        : [{ callsign: "SAM 1", memberName: "Jane Doe", cert: "EMT-P" }];
+        : [{ "call sign": "SAM 1", memberName: "Jane Doe", cert: "EMT-P" }];
 
     const csv = Papa.unparse({ fields: headers, data: sample });
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
@@ -112,9 +112,9 @@ export default function BulkImportModal({
         return;
       }
 
-      const teamKey = mode === "team" ? "team" : "callsign";
+      // Supervisor files: "call sign", or "callsign" from templates made before it was two words.
       const parsed: ParsedRow[] = result.data.map((raw, idx) => {
-        const team = (raw[teamKey] || "").trim();
+        const team = ((mode === "team" ? raw.team : raw["call sign"] ?? raw.callsign) || "").trim();
         const memberName = (raw.memberName || "").trim();
         const certRaw = (raw.cert || "").trim();
         const cert = roles.find((r) => r.name.toUpperCase() === certRaw.toUpperCase())?.name || certRaw;

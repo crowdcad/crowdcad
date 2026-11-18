@@ -27,7 +27,7 @@ describe('normalizeName', () => {
 });
 
 describe('proposeAutoLinks', () => {
-  it('links callsigns that match exactly one team name, ignoring case and spaces', () => {
+  it('links call signs that match exactly one team name, ignoring case and spaces', () => {
     const live = [pos('A', 'medic1', 1), pos('B', 'SUP NORTH', 1), pos('C', 'Unknown', 1), pos('D', undefined, 1)];
     expect(proposeAutoLinks(live, [], teams, [])).toEqual([
       { deviceUid: 'A', teamId: 't1', method: 'auto', reason: 'callsign' },
@@ -46,7 +46,7 @@ describe('proposeAutoLinks', () => {
     expect(proposeAutoLinks([pos('E', 'BIKE', 1)], [], teams, [])).toEqual([]);
   });
 
-  it('prefers a remembered mapping over the callsign', () => {
+  it('prefers a remembered mapping over the call sign', () => {
     const live = [pos('A', 'Medic 1', 1)];
     expect(proposeAutoLinks(live, [], teams, [{ deviceUid: 'A', teamName: 'Medic 2' }])).toEqual([
       { deviceUid: 'A', teamId: 't2', method: 'auto', reason: 'remembered' },
@@ -57,7 +57,7 @@ describe('proposeAutoLinks', () => {
     expect(proposeAutoLinks([pos('A', 'Medic 1', 1)], [link('A', 't2')], teams, [])).toEqual([]);
   });
 
-  it('falls back to the callsign when a remembered team no longer exists', () => {
+  it('falls back to the call sign when a remembered team no longer exists', () => {
     const out = proposeAutoLinks([pos('A', 'Medic 1', 1)], [], teams, [{ deviceUid: 'A', teamName: 'Old Team' }]);
     expect(out).toEqual([{ deviceUid: 'A', teamId: 't1', method: 'auto', reason: 'callsign' }]);
   });

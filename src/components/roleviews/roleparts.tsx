@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import type { MciColor } from '@/app/types';
 import { MCI_COLOR_STYLES, MCI_PILL_STYLES } from '@/components/dispatch/mci/mciparts';
 import { sendRoleAction } from '@/lib/roleActionClient';
@@ -105,8 +105,22 @@ export function ColorTag({ color, className = '' }: { color: MciColor; className
   return <span className={`inline-flex items-center justify-center px-2 py-0.5 text-xs font-bold uppercase tracking-[0.08em] ${MCI_PILL_STYLES[color].pill} ${className}`}>{MCI_COLOR_STYLES[color].label}</span>;
 }
 
+/** Escape closes a sheet or dialog (a keyboard, and training's "Do it for me" closing what is open). */
+function useEscape(onEscape: () => void) {
+  const ref = useRef(onEscape);
+  ref.current = onEscape;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') ref.current();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, []);
+}
+
 /** A sheet that slides up from the bottom of the role view. */
 export function BottomSheet({ title, children, onClose, testId }: { title: React.ReactNode; children: React.ReactNode; onClose: () => void; testId?: string }) {
+  useEscape(onClose);
   return (
     <div className="fixed inset-0 z-40 flex flex-col justify-end bg-black/60" onClick={onClose} data-testid={testId}>
       <div className="flex max-h-[92vh] flex-col gap-3 overflow-y-auto border-t border-surface-liner bg-surface-deep px-4 pb-6 pt-4" onClick={(e) => e.stopPropagation()} role="dialog" aria-label={typeof title === 'string' ? title : undefined}>
@@ -133,6 +147,7 @@ export function ConfirmDialog({
   onYes: () => void;
   onNo: () => void;
 }) {
+  useEscape(onNo);
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-5">
       <div role="alertdialog" aria-label={title} className="flex w-full max-w-md flex-col gap-3 border border-surface-liner bg-surface-deep p-5" data-testid="role-confirm">

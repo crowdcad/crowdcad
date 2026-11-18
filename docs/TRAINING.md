@@ -17,10 +17,28 @@ The catalog (`TRACKS` and `MODULES` in `src/training/registry.ts`) is three sect
    - Module 4: Add a clinic patient and record transport (`clinic-patients`)
    - Module 5: Posting schedules (not built yet, see To do)
    - Module 6: Surge and the log (`surge-and-log`)
-2. **Mass Casualty Incident Features**: Declare and run an MCI (`mci-response`)
+   - Dispatch on a phone (`mobile-tour`, phone)
+2. **Mass Casualty Incident Features**
+   - Declare and run an MCI (`mci-response`): the dispatcher's MCI tabs, the zone-clear reassign prompt and MCI Logistics
+   - Make role logins and send them to teams (`mci-logins`)
+   - Responder login: triage and treatment (`mci-role-responder`, phone)
+   - Treatment Lead login: transport order (`mci-role-treatment-lead`, phone)
+   - Transport login: send patients to hospital (`mci-role-transport`, phone)
+   - Logistics login: staff, hospitals, equipment (`mci-role-logistics`, laptop)
+   - Incident Command login: the whole picture (`mci-role-incident-command`, desktop)
 3. **TAK Features**: Set up and run a TAK event (`tak-live-tracking`)
 
 Module numbers in the catalog count the visible modules in order, so until Posting schedules exists, Surge and the log shows as Module 5. All three tracks are released (`release: 'stable'`).
+
+### Phone modules
+
+A module with `device: 'phone'` is made for a phone's screen. Opened on a computer, the player (`src/components/training/TrainingPlayer.tsx`) shows a phone-sized frame: a same-origin iframe of the same module with `?embed=phone`, so media queries, `useIsMobile` and `position: fixed` all behave exactly as on a phone, and the step card sits beside the frame. The page in the frame runs the session, posts its state to the card, and takes the card's presses by `postMessage` (`src/training/frameBridge.ts`); the coachmark is drawn inside the frame. Opened on a phone, the module runs full screen with the card above the screen, so it never covers a bottom bar. `laptop` and `desktop` modules run in the window.
+
+### Role login modules
+
+A module with `surface: { role, unit }` shows an MCI role login's view (`src/app/role`) instead of the dispatch page, on the practice event (`src/components/training/RolePracticeView.tsx`). The view reads what a role login would: the MCI, the unit summary and equipment (`mciUnitsFor`, `mciEquipmentFor`) and the map, all derived from the practice event. Its actions go through a `RolePracticeProvider` (`src/components/roleviews/roleparts.tsx`) and are applied in the browser with `applyRoleAction`, the helper `/api/mci-role` runs on the server, as the module's unit. Role modules have no write gate (their view doesn't write through the Lite store), and Sign out and TAK positions are hidden. They all start from one MCI already under way (`src/training/mciScenario.ts`), played out with the same role actions.
+
+Logins in training (the Logins tutorial, and the Logistics login's list) use a practice login backend (`src/lib/roleLoginBackend.tsx`) that keeps made-up logins in memory and creates no accounts.
 
 ## To do
 
@@ -40,7 +58,7 @@ The dispatch page reads the store, gate and feed from `useLiteMode()`. Lite rout
 
 ### The TAK panel on practice data
 
-In builds with TAK (`NEXT_PUBLIC_TAK=on`), the TAK module shows the TAK module's own map panel (`TakEventPanel`) on the practice map, so trainees see the real controls: the TAK server, location history, the live tracking switch and device links. `src/features/tak/components/TakTrainingPanel.tsx` wraps it in a `TakDemoContext` (`src/features/tak/data/demo.ts`): inside it, `useTakEvent` returns practice data instead of subscribing to Firestore, and the panel's writes change only that practice data. The practice data has a linked practice server, one device per unit (auto-linked by callsign, positioned by the tracking feed) and one device, MEDIC-7, that matches no team, for practicing a manual link. The player loads the panel with the same flag-guarded dynamic import as other TAK touchpoints, so builds without TAK leave it out, and the module's panel steps (`PANEL_STEPS`) are included only in those builds.
+In builds with TAK (`NEXT_PUBLIC_TAK=on`), the TAK module shows the TAK module's own map panel (`TakEventPanel`) on the practice map, so trainees see the real controls: the TAK server, location history, the live tracking switch and device links. `src/features/tak/components/TakTrainingPanel.tsx` wraps it in a `TakDemoContext` (`src/features/tak/data/demo.ts`): inside it, `useTakEvent` returns practice data instead of subscribing to Firestore, and the panel's writes change only that practice data. The practice data has a linked practice server, one device per unit (auto-linked by call sign, positioned by the tracking feed) and one device, MEDIC-7, that matches no team, for practicing a manual link. The player loads the panel with the same flag-guarded dynamic import as other TAK touchpoints, so builds without TAK leave it out, and the module's panel steps (`PANEL_STEPS`) are included only in those builds.
 
 ### What trainees can type
 
@@ -126,7 +144,7 @@ Every module runs on one map: `src/training/maps/practice-map.json`, a GeoJSON f
 | Polygon | `"Area": "Campus"` (optional) | the event's map area; without one, the box around everything plus a margin |
 | Line | `"TAKPath": "MRC2"` | the route that team's marker follows in TAK modules when it travels somewhere within 150 m of the line's end; draw it from the team's post toward the destination |
 
-Teams are named `MRC1` to `MRC5` (`teamName` in `fixtures.ts`), which is also their practice TAK callsign and the name a `TAKPath` uses. Where each team is posted, and the places the scripts name, are in `fixtures.ts` (`POSTS`, `baseStaff`). The main clinic (`POSTS.clinic`) is listed first, so it is the MCI move dialog's default. Renaming a place on the map means renaming it in `POSTS` and in the step text that mentions it; `src/training/modules.test.ts` fails with the missing name until they match, and also flags features without one of the properties above and paths that name no team.
+Teams are named `MRC1` to `MRC5` (`teamName` in `fixtures.ts`), which is also their practice TAK call sign and the name a `TAKPath` uses. Where each team is posted, and the places the scripts name, are in `fixtures.ts` (`POSTS`, `baseStaff`). The main clinic (`POSTS.clinic`) is listed first, so it is the MCI move dialog's default. Renaming a place on the map means renaming it in `POSTS` and in the step text that mentions it; `src/training/modules.test.ts` fails with the missing name until they match, and also flags features without one of the properties above and paths that name no team.
 
 The street basemap under the map needs internet; everything else is in the file.
 

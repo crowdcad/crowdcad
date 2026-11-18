@@ -198,7 +198,7 @@ const mciResponse: TrainingModule = {
       id: 'logistics-equipment',
       section: 'MCI Logistics',
       title: 'Read the equipment',
-      body: "**Equipment** lists every item by the team holding it. **Give** hands an item (a trauma bag, a gurney, or anything you type) to a team, and it shows on that team's card. **Return** sends it back to staging.",
+      body: "**Equipment** lists every item by the team holding it. The box at the top hands an item (a trauma bag, a gurney, or anything you type) to a team, and it shows on that team's card. **Return** sends it back to staging.",
       anchor: 'logistics-give',
       placement: 'left',
       estSec: 25,

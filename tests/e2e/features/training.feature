@@ -18,14 +18,21 @@ Feature: CrowdCAD Training
     And the board should be in free practice
 
     Examples:
-      | module             |
-      | orientation        |
-      | call-assignment    |
-      | equipment-delivery |
-      | clinic-patients    |
-      | surge-and-log      |
-      | mci-response       |
-      | tak-live-tracking  |
+      | module                    |
+      | orientation               |
+      | call-assignment           |
+      | equipment-delivery        |
+      | clinic-patients           |
+      | surge-and-log             |
+      | mobile-tour               |
+      | mci-response              |
+      | mci-logins                |
+      | mci-role-responder        |
+      | mci-role-treatment-lead   |
+      | mci-role-transport        |
+      | mci-role-logistics        |
+      | mci-role-incident-command |
+      | tak-live-tracking         |
 
   Scenario: The board takes only the script's values while a lesson is guided
     Given I open the training module "call-assignment"

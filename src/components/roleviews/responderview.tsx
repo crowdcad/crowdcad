@@ -409,7 +409,10 @@ function TreatmentMode({ mci, unit, me, units, lead = false }: { mci: MciState; 
   const [choosing, setChoosing] = useState(!assigned);
   const [editing, setEditing] = useState<MciPatient | 'new' | null>(null);
   useEffect(() => {
-    if (assigned) setAreaId(assigned);
+    if (!assigned) return;
+    // Assigned from elsewhere (the dispatcher, another tab): show that location's patients.
+    setAreaId(assigned);
+    setChoosing(false);
   }, [assigned]);
   const stats = choices.find((a) => a.area.id === areaId);
   // Keep an open patient current as other phones change it.

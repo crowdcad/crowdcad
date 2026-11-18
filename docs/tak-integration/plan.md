@@ -53,7 +53,7 @@ Updated at the end of each phase.
   - **The TAK panel:**
     - status, and a recording indicator;
     - for the owner: link a bridge, choose the history mode, and align each map;
-    - for dispatchers: unassigned devices with auto-link (remembered mapping, then a unique case- and space-insensitive callsign match) and a team dropdown;
+    - for dispatchers: unassigned devices with auto-link (remembered mapping, then a unique case- and space-insensitive call sign match) and a team dropdown;
     - linked devices.
   - **Tests:** 44 core unit tests. They include the team-id source audit (new teams get ids, and updates keep them; both were mutation-checked), plus linking, team positions, backfill scope and credentials.
   - **Footprint against `main`:**
@@ -70,7 +70,7 @@ Updated at the end of each phase.
     - the event builder offering TAK to an allowed user.
 
     It found and fixed two defects: bridge creation ignored the Auth emulator, and the map-mode radio selection was invisible in the dark theme.
-  - **Real-device check (2026-10-07):** a phone's position appeared on the aligned dispatch map of a live TAK event, and the device auto-linked to the team named after its callsign. The test also showed that a segment's last position earned no time, so a short test left an empty heat map; the bridge now credits it (D58).
+  - **Real-device check (2026-10-07):** a phone's position appeared on the aligned dispatch map of a live TAK event, and the device auto-linked to the team named after its call sign. The test also showed that a segment's last position earned no time, so a short test left an empty heat map; the bridge now credits it (D58).
   - **Not yet done:**
     - Confirm live positions clear within a minute of ending the event, and the history view on the summary page (see [Maintainer actions](#maintainer-actions)).
     - Hosted bridge creation stays open (D24).
@@ -162,7 +162,7 @@ Run these yourself. The TAK password and the bridge's certificate stay on your m
 4. **Add the TAK server** in Profile > Admin > TAK. Choose **This computer (test)** (preselected on the emulators), enter the TAK Server address (the `host=` in the Enroll QR link, not the TAK Portal address), the username and the password, and paste the script it shows into a terminal.
 5. **P1 check.** The checklist should reach **Connected to the TAK Server**, then **Receiving positions** once the phone reports. For the log-only variant, set `CROWDCAD_BACKEND=none` in the bridge's `.env`: each phone report should appear within 5 s as a `"msg":"position"` line.
 6. **P4 check.**
-   1. Create an event with **Map: TAK live tracking** and the bridge preselected, add a team whose name matches the phone's callsign, and align the map with 4 or more points.
+   1. Create an event with **Map: TAK live tracking** and the bridge preselected, add a team whose name matches the phone's call sign, and align the map with 4 or more points.
    2. On the dispatch Map tab, the device should auto-link to the team and appear on the aligned map. **Passed 2026-10-07.**
    3. Walk around for at least 5 minutes, then end the event. Within a minute, its live positions should be gone.
    4. On the event summary page, "Location history (TAK)" should show the heat map along the route and the team's tracked time.
@@ -335,8 +335,8 @@ TAK devices --TLS CoT--> TAK Server (8089) --TLS CoT--> tak-bridge (Docker, on t
 
 ### Device linking
 
-- Devices are keyed on TAK UID; the callsign is what's displayed.
-- **Auto-link** runs in the dispatcher's browser: a callsign that matches a team name, ignoring case and spaces, is linked to that team's `teamId`.
+- Devices are keyed on TAK UID; the call sign is what's displayed.
+- **Auto-link** runs in the dispatcher's browser: a call sign that matches a team name, ignoring case and spaces, is linked to that team's `teamId`.
 - Unmatched devices appear under **Unassigned TAK devices**, with a team dropdown.
 - **Remembered mappings** (device to team name) are kept per bridge and pre-link devices at the next event.
 - A team can have several devices; its position is the most recent fix.

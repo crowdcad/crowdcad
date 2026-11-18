@@ -10,7 +10,7 @@ export interface TakTeam {
   kind: 'team' | 'supervisor' | 'equipment';
 }
 
-/** Callsign/team-name matching ignores case and whitespace ("Medic 1" = "medic1"). */
+/** Call sign/team-name matching ignores case and whitespace ("Medic 1" = "medic1"). */
 export function normalizeName(name: string): string {
   return name.toLowerCase().replace(/\s+/g, '');
 }
@@ -24,7 +24,7 @@ export interface ProposedLink {
 
 /**
  * Links to make automatically for devices that have no link yet: first a
- * remembered mapping (device -> team name) for this bridge, then a callsign
+ * remembered mapping (device -> team name) for this bridge, then a call sign
  * that matches exactly one team name. Ambiguous matches are left for a
  * dispatcher.
  */
