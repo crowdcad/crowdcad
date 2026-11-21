@@ -11,6 +11,8 @@ interface MapZoomControlsProps {
   className?: string;
   buttonClassName?: string;
   resetButtonClassName?: string;
+  /** More round buttons after Reset (the dispatch map's Layers button). */
+  children?: React.ReactNode;
 }
 
 export default function MapZoomControls({
@@ -20,6 +22,7 @@ export default function MapZoomControls({
   className = 'absolute top-3 right-3 flex flex-row gap-1 z-20',
   buttonClassName = 'bg-surface-deepest/95',
   resetButtonClassName = 'bg-surface-deepest/95',
+  children,
 }: MapZoomControlsProps) {
   return (
     <div className={className}>
@@ -34,6 +37,7 @@ export default function MapZoomControls({
       <Button isIconOnly size="sm" radius="full" variant="flat" onPress={onReset} className={resetButtonClassName} aria-label="Reset zoom" title="Reset zoom">
         <RotateCcw className="h-4 w-4" />
       </Button>
+      {children}
     </div>
   );
 }

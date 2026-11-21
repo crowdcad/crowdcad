@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { firstOf } from '@/extensions';
 import { authService } from '@/lib/services';
 import {
   Modal,
@@ -74,7 +75,8 @@ export default function LoginModal({
       setSubmitting(true);
 
       if (mode === 'login') {
-        await authService.signIn(email, password);
+        // An extension may map what was typed to an account (a field login's username).
+        await authService.signIn(firstOf((x) => x.auth?.signInEmail?.(email)) ?? email, password);
       } else {
         await authService.signUp(email, password);
       }
@@ -85,7 +87,10 @@ export default function LoginModal({
       onClose();
 
       const redirectPath = sessionStorage.getItem('redirectPath');
-      if (redirectPath) {
+      const confined = mode === 'login' ? firstOf((x) => x.auth?.confinedTo?.(firstOf((y) => y.auth?.signInEmail?.(email)) ?? email)) : null;
+      if (confined) {
+        router.push(confined.home);
+      } else if (redirectPath) {
         sessionStorage.removeItem('redirectPath');
         router.push(redirectPath);
       } else {
@@ -194,12 +199,15 @@ export default function LoginModal({
               <ModalBody>
                 <Input
                   label="Email Address"
+                  description={mode === 'login' ? 'Or the role username you were given' : undefined}
                   labelPlacement="inside"
                   variant="flat"
                   color="default"
                   size="lg"
                   radius="lg"
-                  type="email"
+                  type={mode === 'login' ? 'text' : 'email'}
+                  autoComplete={mode === 'login' ? 'username' : 'email'}
+                  autoCapitalize="none"
                   classNames={inputClassNames}
                   value={email}
                   onValueChange={setEmail}

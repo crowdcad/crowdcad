@@ -88,9 +88,11 @@ export const DISPATCH_TERMS: DispatchTerm[] = [
     'Detached',
     'On Break',
     'In Clinic',
+    'Retrieving Eq',
     'Delivered Eq',
     'En Route Eq',
     'Assisting',
+    'Returning Eq',
   ]),
 
   // Equipment.
@@ -228,6 +230,11 @@ export const DISPATCH_TERMS: DispatchTerm[] = [
     'This event has ended',
     'Data collection is locked. Go to the Event Summary for a read-only record.',
     'Go to Event Summary',
+    'Log',
+    'Undo',
+    'Zone',
+    'Zones',
+    'Clear',
   ]),
 ].map((term) => (LABEL_OVERRIDES[term.key] ? { ...term, defaultLabel: LABEL_OVERRIDES[term.key] } : term));
 

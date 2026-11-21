@@ -14,7 +14,7 @@ import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
 
 import type { TeamSortMode } from '@/lib/teamSort';
 export type CardViewMode = 'normal' | 'condensed';
-export type LeftPanelTab = 'teams' | 'supervisors' | 'equipment';
+export type LeftPanelTab = 'teams' | 'supervisors' | 'equipment' | 'log';
 
 const SORT_MENU_CLASSNAMES = { content: 'min-w-[140px] w-[140px] max-w-[140px]' };
 const selectedItemClass = (selected: boolean) => (selected ? 'bg-surface-liner' : '');

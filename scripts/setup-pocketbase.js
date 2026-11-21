@@ -77,7 +77,7 @@ const SELF_OWNED_CREATE_RULE = `${AUTH_RULE} && @request.body.userId = @request.
 // dispatch fields (calls, staff/supervisor status, equipment) for
 // dispatching to work at all. Mirrors firestore.rules'
 // isEventProtectedFieldsUnchanged().
-const EVENT_PROTECTED_FIELDS = ['userId', 'sharedWith', 'isOrgEvent', 'ended', 'endedAt'];
+const EVENT_PROTECTED_FIELDS = ['userId', 'sharedWith', 'isOrgEvent', 'ended', 'endedAt', 'mapMode'];
 const EVENT_PROTECTED_FIELDS_UNTOUCHED = EVENT_PROTECTED_FIELDS.map(
   (field) => `@request.body.${field}:isset = false`,
 ).join(' && ');
@@ -87,6 +87,11 @@ const EVENT_UPDATE_RULE =
   `userId = @request.auth.id || @request.auth.isAdmin = true || ` +
   `((sharedWith ~ @request.auth.email || isOrgEvent = true) && ${EVENT_PROTECTED_FIELDS_UNTOUCHED})` +
   `)`;
+
+// TAK bridge accounts (in development, optional) are users with
+// role = 'bridge'. They never read or write events; see the TAK section at
+// the end of main() and docs/tak-integration/data-contract.md.
+const NOT_BRIDGE = "@request.auth.role != 'bridge'";
 
 // The built-in `users` auth collection. `isAdmin` is carved out of a
 // self-write everywhere below — without that, any signed-up user could set
@@ -100,11 +105,15 @@ const USERS_RULES = {
   viewRule: `${AUTH_RULE} && (id = @request.auth.id || @request.auth.isAdmin = true)`,
   // Left open for public sign-up (PocketBase's own default), but a create
   // request can't set isAdmin to true on the new account.
-  createRule: '(@request.body.isAdmin:isset = false || @request.body.isAdmin = false)',
+  // A create request can't set isAdmin, and only an admin can create a TAK
+  // bridge account (role = 'bridge').
+  createRule:
+    '(@request.body.isAdmin:isset = false || @request.body.isAdmin = false) && ' +
+    "(@request.body.role:isset = false || @request.body.role = '' || @request.auth.isAdmin = true)",
   updateRule:
     `${AUTH_RULE} && (` +
     `@request.auth.isAdmin = true || ` +
-    `(id = @request.auth.id && @request.body.isAdmin:isset = false)` +
+    `(id = @request.auth.id && @request.body.isAdmin:isset = false && @request.body.role:isset = false)` +
     `)`,
   deleteRule: `${AUTH_RULE} && (id = @request.auth.id || @request.auth.isAdmin = true)`,
 };
@@ -123,7 +132,7 @@ async function getAdminToken() {
   return token;
 }
 
-async function ensureCollection(headers, name, fields, rules) {
+async function ensureCollection(headers, name, fields, rules, indexes = []) {
   const check = await pbFetch(`/api/collections/${name}`, { headers });
   if (check.ok) {
     console.log(`  [skip]   ${name} — already exists`);
@@ -131,6 +140,7 @@ async function ensureCollection(headers, name, fields, rules) {
     // script, before its rules were tightened) — bring its rules up to
     // date too, instead of only ever setting them at creation time.
     await ensureRules(headers, name, rules);
+    await ensureIndexes(headers, name, indexes);
     return;
   }
 
@@ -149,6 +159,7 @@ async function ensureCollection(headers, name, fields, rules) {
       createRule: rules?.createRule ?? authRule,
       updateRule: rules?.updateRule ?? authRule,
       deleteRule: rules?.deleteRule ?? authRule,
+      indexes,
     }),
   });
 
@@ -157,6 +168,27 @@ async function ensureCollection(headers, name, fields, rules) {
     throw new Error(`Failed to create collection '${name}': ${res.status} — ${body}`);
   }
   console.log(`  [create] ${name}`);
+}
+
+/** Adds any of `indexes` (CREATE INDEX statements) missing from an existing collection. */
+async function ensureIndexes(headers, collectionName, indexes) {
+  if (!indexes || indexes.length === 0) return;
+  const res = await pbFetch(`/api/collections/${collectionName}`, { headers });
+  if (!res.ok) throw new Error(`Failed to read collection '${collectionName}': ${res.status}`);
+  const collection = await res.json();
+  const existing = collection.indexes || [];
+  const missing = indexes.filter((i) => !existing.includes(i));
+  if (missing.length === 0) return;
+  const patchRes = await pbFetch(`/api/collections/${collectionName}`, {
+    method: 'PATCH',
+    headers,
+    body: JSON.stringify({ indexes: [...existing, ...missing] }),
+  });
+  if (!patchRes.ok) {
+    const body = await patchRes.text();
+    throw new Error(`Failed to add indexes to '${collectionName}': ${patchRes.status} — ${body}`);
+  }
+  console.log(`  [update] ${collectionName} indexes`);
 }
 
 const RULE_KEYS = ['listRule', 'viewRule', 'createRule', 'updateRule', 'deleteRule'];
@@ -228,6 +260,7 @@ async function ensureField(headers, collectionName, field) {
   console.log(`  [add]    ${collectionName}.${field.name}`);
 }
 
+
 async function main() {
   console.log(`Connecting to PocketBase at ${PB_URL} ...`);
 
@@ -246,6 +279,10 @@ async function main() {
     'Content-Type': 'application/json',
     Authorization: `Bearer ${token}`,
   };
+
+  // `role` on `users` comes first: the rules below refer to
+  // @request.auth.role, and PocketBase rejects rules naming unknown fields.
+  await ensureField(headers, 'users', { name: 'role', type: 'text' });
 
   await ensureCollection(
     headers,
@@ -299,9 +336,11 @@ async function main() {
       { name: 'interactionSessions', type: 'json' },
       { name: 'clinics', type: 'json' },
       { name: 'dispatchZones', type: 'json' },
+      { name: 'eventLog', type: 'json' },
       { name: 'isOrgEvent', type: 'bool' },
       { name: 'ended', type: 'bool' },
       { name: 'endedAt', type: 'number' },
+      { name: 'mapMode', type: 'text' },
     ],
     {
       // Same reasoning as venues: read stays open, but update is
@@ -309,11 +348,12 @@ async function main() {
       // shared user or org-event member can dispatch (write ordinary
       // fields), but can't touch who owns/can see/can end the event. See
       // EVENT_UPDATE_RULE above (mirrors firestore.rules exactly).
-      listRule: AUTH_RULE,
-      viewRule: AUTH_RULE,
-      createRule: SELF_OWNED_CREATE_RULE,
-      updateRule: EVENT_UPDATE_RULE,
-      deleteRule: OWNER_OR_ADMIN_RULE,
+      // TAK bridge accounts never read or write events (NOT_BRIDGE).
+      listRule: `${AUTH_RULE} && ${NOT_BRIDGE}`,
+      viewRule: `${AUTH_RULE} && ${NOT_BRIDGE}`,
+      createRule: `${SELF_OWNED_CREATE_RULE} && ${NOT_BRIDGE}`,
+      updateRule: `${EVENT_UPDATE_RULE} && ${NOT_BRIDGE}`,
+      deleteRule: `${OWNER_OR_ADMIN_RULE} && ${NOT_BRIDGE}`,
     },
   );
 
@@ -322,6 +362,8 @@ async function main() {
   await ensureField(headers, 'events', { name: 'clinics', type: 'json' });
   // Same, for `dispatchZones` (map zones support).
   await ensureField(headers, 'events', { name: 'dispatchZones', type: 'json' });
+  // Same, for `eventLog` (notes typed into the dispatch Log view).
+  await ensureField(headers, 'events', { name: 'eventLog', type: 'json' });
 
   // `isOrgEvent`/`ended`/`endedAt` on `events` — set for deployments where
   // this collection already existed before these fields were added above.
@@ -332,6 +374,9 @@ async function main() {
   await ensureField(headers, 'events', { name: 'isOrgEvent', type: 'bool' });
   await ensureField(headers, 'events', { name: 'ended', type: 'bool' });
   await ensureField(headers, 'events', { name: 'endedAt', type: 'number' });
+  // `mapMode` on `events` ('standard' | 'tak'; unset means standard) — set
+  // for deployments where this collection existed before TAK support.
+  await ensureField(headers, 'events', { name: 'mapMode', type: 'text' });
 
   await ensureCollection(
     headers,
@@ -400,6 +445,7 @@ async function main() {
   // deliberately left alone otherwise — PocketBase's own default already
   // allows public sign-up, which this app depends on.
   await ensureRules(headers, 'users', USERS_RULES);
+
 
   console.log('\nDone. CrowdCAD collections are ready, with owner/admin-scoped access rules applied automatically.');
   console.log(

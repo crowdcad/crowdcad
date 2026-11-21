@@ -9,11 +9,30 @@ import { cn } from '@/lib/utils';
 type TrackingTextEntryProps = Omit<React.ComponentProps<typeof Textarea>, 'key'> & {
   mode: 'note' | 'log';
   maxRows: number;
+  /** Fill the box with surface-deep, for a field inside a highlighted (open) table row. */
+  filled?: boolean;
 };
+
+// The box is drawn by its border only and shows whatever it sits on. A solid
+// fill here used to show as a different shade while an opening card was still
+// fading its own background in, then matched once the fade finished (the
+// "flicker" on opening a call). Every place this is used sits on surface-deep,
+// so at rest it looks the same.
+// The <textarea> keeps HeroUI's bg-transparent too: HeroUI gives it
+// bg-clip-text, so a background on it is painted in the shape of the glyphs
+// (the old "ghost text"). The overrides use HeroUI's own flat-variant selectors
+// so tailwind-merge replaces them instead of stacking; the focus ring is
+// removed globally ([data-slot="input-wrapper"] in globals.css), and
+// disableAnimation drops the wrapper's background transition.
+// `filled` is for the open call/clinic table row, which takes a lighter background
+// (TRACKING_ROW_OPEN_CLASS) while its editable fields keep the table's own color.
+const FILL_EMPTY = 'bg-transparent data-[hover=true]:bg-transparent group-data-[focus=true]:bg-transparent';
+const FILL_SURFACE = 'bg-surface-deep data-[hover=true]:bg-surface-deep group-data-[focus=true]:bg-surface-deep';
 
 export default function TrackingTextEntry({
   mode,
   maxRows,
+  filled = false,
   className,
   classNames,
   variant,
@@ -22,18 +41,20 @@ export default function TrackingTextEntry({
   return (
     <Textarea
       {...props}
+      disableAnimation
       maxRows={maxRows}
       variant={variant ?? 'flat'}
       className={cn('min-w-0', className)}
       classNames={{
         ...classNames,
         input: cn(
-          'minimal-scrollbar bg-surface-deep text-surface-light outline-none focus:outline-none data-[focus=true]:outline-none focus:ring-0 focus-visible:ring-0 text-shadow-none [-webkit-text-fill-color:currentColor] !pr-0',
+          'minimal-scrollbar text-surface-light group-data-[has-value=true]:text-surface-light !pr-0',
           mode === 'log' ? 'text-sm' : undefined,
           classNames?.input
         ),
         inputWrapper: cn(
-          'bg-surface-deep shadow-none border border-surface-liner !py-1 !pr-1 group-data-[hover=true]:bg-surface-deep group-data-[focus=true]:bg-surface-deep group-data-[focus-visible=true]:bg-surface-deep group-data-[pressed=true]:bg-surface-deep group-data-[focus-visible=true]:ring-0 group-data-[focus-visible=true]:ring-offset-0 focus-within:ring-0',
+          filled ? FILL_SURFACE : FILL_EMPTY,
+          'shadow-none border border-surface-liner !py-1 !pr-1',
           classNames?.inputWrapper
         ),
       }}

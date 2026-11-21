@@ -5,6 +5,8 @@ import type { ServiceUser } from '@/lib/services';
 import AdminCertificationsSection from './admin-certifications-section';
 import AdminUsersSection from './admin-users-section';
 import AdminVenuesSection from './admin-venues-section';
+import { extensions } from '@/extensions';
+
 
 export default function AdminSection({ currentUser }: { currentUser: ServiceUser }) {
   const { isAdmin, loading } = useAdmin();
@@ -17,6 +19,10 @@ export default function AdminSection({ currentUser }: { currentUser: ServiceUser
       <AdminCertificationsSection />
       <AdminVenuesSection currentUser={currentUser} />
       <AdminUsersSection currentUser={currentUser} />
+      {/* Extension packs' own admin sections (e.g. TAK server setup). */}
+      {extensions.flatMap((x) => x.adminSections ?? []).map((Section, i) => (
+        <Section key={i} uid={currentUser.uid} />
+      ))}
     </div>
   );
 }

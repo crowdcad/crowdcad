@@ -13,7 +13,7 @@ A short guide to CrowdCAD's main workflows for dispatchers, supervisors and even
 1. Open the CrowdCAD address your organization gave you and sign in with your email and password.
 2. Pick a venue on **Venue Selection**, or click **Create Venue** to build one.
 3. Create an event at that venue and walk through the setup steps.
-4. Launch the event to open the dispatch board.
+4. Launch the event to open the dispatch interface.
 5. Log calls, assign teams and track clinic patients until the event ends.
 6. End the event and review or export the summary.
 
@@ -21,14 +21,23 @@ A short guide to CrowdCAD's main workflows for dispatchers, supervisors and even
 
 - Open `/lite` to use CrowdCAD Lite with no account or server.
 - Lite mode stores data in this browser on this device only. Clearing browser data deletes it, and other devices cannot see it.
-- Lite event setup covers event configuration, locations, staff assignments, equipment and the post schedule, then opens the same dispatch board as the full app.
+- Lite event setup covers event configuration, an optional map, locations, staff assignments, equipment and the post schedule, then opens the same dispatch interface as the full app.
+- The Lite **Map** step marks where the event is on the live map: find the place (or type coordinates such as `37.7694, -122.4862`) and click around the area. Locations and areas can then be placed on that map. The map needs an internet connection; everything else in Lite mode works offline. Map images, GIS import and live tracking are not available in Lite mode.
 - Use Lite mode to evaluate CrowdCAD, for training or when a small event has no network.
+
+## Training
+
+- Open `/training` for interactive modules that teach the dispatch interface on a practice event: its layout, the call flow, clinic patients and more, each with an estimated time.
+- A module guides you step by step and points at each control. "Do it for me" does a step for you, the back arrow undoes the last step, and the **Steps** menu restarts any section.
+- While a module is guided the board takes only the values the step asks you to type, so nobody types real patient details into a practice board. Once you finish, the board is yours to practice on freely.
+- The **?** button in the navbar asks what you would like to do. Pick a result to be pointed at the control on your own board (this never changes anything), or open its module with the **Module N** link.
+- Maintainers: see [`TRAINING.md`](TRAINING.md) for how modules are built and tested.
 
 ## Basic concepts
 
 - **Venue:** a physical site with one or more map floors. A venue holds locations (posts and clinics), map areas and default equipment, and is reused across events.
 - **Location / post:** a named marker on the venue map where a team can be stationed. A location can be marked as a clinic.
-- **Dispatch zone:** a map area drawn on the venue. Calls inside it are grouped under their own tab on the dispatch board.
+- **Dispatch zone:** a map area drawn on the venue. Calls inside it are grouped under their own tab on the dispatch interface.
 - **Event:** one operational period at a venue, with its own teams, supervisors, equipment, post schedule and log.
 - **Team:** a group of responders with a status (available, on a call, on break, in clinic and so on).
 - **Call:** a logged patient encounter or service request, with location, complaint, assigned teams and status.
@@ -41,7 +50,7 @@ A short guide to CrowdCAD's main workflows for dispatchers, supervisors and even
 Click **Create Venue** on Venue Selection. The venue wizard has five steps:
 
 1. **Venue Configuration:** name and basic details.
-2. **Map:** upload a map image per floor, or import a GIS map (see below). Draw areas with **Add Area** and check "Mark as Dispatch Zone" to give an area its own call tab.
+2. **Map:** upload a map image per floor, or import a GIS map (see below). Draw areas with **Add Area**: click the area's points in order, then click the first point's open circle to complete it, and check "Mark as Dispatch Zone" to give an area its own call tab (dispatch zones are drawn with diagonal stripes). A drawn map area works the same way.
 3. **Locations:** place post markers and mark clinics.
 4. **Equipment:** add equipment and set each item's default location.
 5. **Review:** confirm and save.
@@ -54,7 +63,7 @@ From a venue, start a new event. The event wizard has five steps:
 2. **Staff Assignments:** add teams and supervisors by hand, or import them from the CSV template.
 3. **Equipment:** choose venue equipment or add event-only items.
 4. **Post schedule:** choose posts (or **Enable All**) and generate the rotation schedule.
-5. **Review & launch:** check the summary and open the dispatch board.
+5. **Review & launch:** check the summary and open the dispatch interface.
 
 ### Run dispatch
 

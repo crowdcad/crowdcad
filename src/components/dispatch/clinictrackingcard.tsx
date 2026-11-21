@@ -57,8 +57,9 @@ export default function ClinicTrackingCard({
     if (call.detachedTeams && call.detachedTeams.length > 0) {
       return call.detachedTeams[0].team;
     }
-    return 'Walkup';
-  }, [call.assignedTeam, call.detachedTeams]);
+    // No team: where they came from (Walkup, or MCI: <team or zone> for a patient the MCI handed over).
+    return call.source || 'Walkup';
+  }, [call.assignedTeam, call.detachedTeams, call.source]);
 
   return (
     <Card
@@ -74,9 +75,9 @@ export default function ClinicTrackingCard({
         </div>
         
         {/* Right section: Timer and Menu aligned horizontally */}
-        <div className="absolute top-3 right-3 flex items-center gap-2">
+        <div className="absolute top-0 right-0 pt-3 pr-3 flex items-center gap-2 box-content h-6">
           {/* Timer */}
-          <div className="text-[15px] sm:text-base font-semibold text-surface-light tabular-nums">
+          <div className="ui-timer text-sm sm:text-[15px] font-semibold text-surface-light">
             {timer}
           </div>
 

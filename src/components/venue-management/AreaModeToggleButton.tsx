@@ -5,11 +5,13 @@ import { Shapes, MousePointer2 } from 'lucide-react';
 interface AreaModeToggleButtonProps {
   isAddAreaMode: boolean;
   onToggle: () => void;
+  className?: string;
 }
 
 export default function AreaModeToggleButton({
   isAddAreaMode,
   onToggle,
+  className = '',
 }: AreaModeToggleButtonProps) {
   return (
     <Button
@@ -24,7 +26,7 @@ export default function AreaModeToggleButton({
           <Shapes className="h-3.5 w-3.5" />
         )
       }
-      className={isAddAreaMode ? 'bg-accent hover:bg-accent/90' : ''}
+      className={`${isAddAreaMode ? 'bg-accent hover:bg-accent/90' : ''} ${className}`}
     >
       {isAddAreaMode ? 'Click to Draw' : 'Add Area'}
     </Button>

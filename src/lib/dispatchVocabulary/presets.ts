@@ -55,9 +55,11 @@ const CROWDCAD_FRENCH_TERMS: Record<string, string> = {
   Detached: 'Dégagé',
   'On Break': 'En pause',
   'In Clinic': 'À la clinique',
+  'Retrieving Eq': 'Récupération équipement',
   'Delivered Eq': 'Équipement livré',
   'En Route Eq': 'Équipement en route',
   Assisting: 'En assistance',
+  'Returning Eq': 'Retour équipement',
 
   // Equipment
   'In Use': 'En utilisation',

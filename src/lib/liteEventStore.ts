@@ -1,16 +1,7 @@
 'use client';
 
-import type {
-  Call,
-  Clinic,
-  DispatchZone,
-  Equipment,
-  EventEquipment,
-  PostAssignment,
-  Post,
-  Staff,
-  Supervisor,
-} from '@/app/types';
+import type { Call, Clinic, DispatchZone, Equipment, EventEquipment, PostAssignment, Post, Staff, Supervisor, SurgePeriod, TeamLogEntry, Zone } from '@/app/types';
+import type { MapArea } from '@/lib/geo/types';
 
 const DB_NAME = 'crowdcad-lite';
 const DB_VERSION = 1;
@@ -27,6 +18,10 @@ export interface LiteVenueSetup {
   name: string;
   posts: Post[];
   equipment: Equipment[];
+  /** The event's area on the live map (coordinates, no image); posts placed on it carry lat/lng. Needs internet to show. */
+  area?: MapArea;
+  /** Areas drawn on that map (some flagged as dispatch zones). */
+  zones?: Zone[];
 }
 
 export interface LiteEventDraft {
@@ -53,6 +48,15 @@ export interface LiteEventDraft {
   calls: Call[];
   clinics?: Clinic[];
   dispatchZones?: DispatchZone[];
+  /** Fields extension packs own on the event (CrowdcadExtension.eventFields), stored as they are on the event. */
+  [packField: string]: unknown;
+  eventLog?: TeamLogEntry[];
+  /** Set only on training events, which feed scripted positions (src/training); Lite itself has no live tracking. */
+  mapMode?: 'standard' | 'tak';
+  /** The Surge button's state and every surge period, as on cloud events. */
+  manualSurgeActive?: boolean;
+  manualSurgeStartedAt?: number;
+  surgeLog?: SurgePeriod[];
   status: 'draft' | 'active';
   createdAt: string;
   updatedAt: string;
@@ -371,3 +375,23 @@ export async function updateLiteEquipmentStatus(
   await saveLiteEvent(updated);
   return updated;
 }
+
+/**
+ * The storage a Lite dispatch page reads and writes. Lite routes use the
+ * browser's IndexedDB (`indexedDbLiteStore`); Training gives the same page an
+ * in-memory store instead (src/training/memoryStore.ts), so nothing a trainee
+ * types is ever kept. `subscribe`, when given, tells the page about changes
+ * made outside it (a training step filled in for the trainee).
+ */
+export interface LiteEventStore {
+  get(eventId: string): Promise<LiteEventDraft | null>;
+  save(event: LiteEventDraft): Promise<void>;
+  delete(eventId: string): Promise<void>;
+  subscribe?(eventId: string, onChange: (event: LiteEventDraft | null) => void): () => void;
+}
+
+export const indexedDbLiteStore: LiteEventStore = {
+  get: getLiteEvent,
+  save: saveLiteEvent,
+  delete: deleteLiteEvent,
+};

@@ -7,6 +7,10 @@ CrowdCAD supports two backends. Both are maintained in parallel and selected wit
 
 Beginner-friendly versions of both guides, with separate Mac and Windows steps, are at [crowdcad.org/docs](https://crowdcad.org/docs).
 
+
+
+`NEXT_PUBLIC_TAK_BASEMAPS` and `NEXT_PUBLIC_TAK_GEOCODER_URL` choose the basemaps and place search used for maps and aligning them. Both default to open OpenStreetMap-based services and accept `off`, which stops requests to outside map services. See `.env.example` and decision D55.
+
 ## Choosing a backend
 
 | | **Firebase** | **PocketBase** |

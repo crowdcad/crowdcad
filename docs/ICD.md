@@ -115,6 +115,7 @@ The central planning/dispatch record for a single event: a snapshot of the venue
 | `supervisor` | json (`Supervisor[]`) | Supervisory units. See §3.7. | Yes | `[{"team":"Supervisor 1","status":"Available",...}]` |
 | `calls` | json (`Call[]`) | Incidents/calls logged during the event. See §3.7. | Yes | `[{"id":"c1","order":1,"status":"Active",...}]` |
 | `dispatchZones` | json (`DispatchZone[]`) | Dispatch zones, one per dispatch-zone-flagged `venue.layers[].zones` entry. Each gets its own "{name} Calls" tab in the dispatch view. See §3.7. | Yes | `[{"id":"z1","name":"Zone 2"}]` |
+| `eventLog` | json (`TeamLogEntry[]`) | Notes typed into the dispatch board's Log view while it had a note box (it is a search now, so nothing new is written; earlier notes still show), each `{timestamp, message}` with `message` as "HHMM - text" like a team's log. The Log view itself is built from every team, supervisor, call and MCI log plus these (src/lib/eventLog.ts). | Yes | `[{"timestamp":1766000000000,"message":"1405 - Gate B closed"}]` |
 | `status` | text | Event lifecycle state. Observed values: `"draft"`, `"active"`. | Yes | `"active"` |
 | `eventPosts` | json (`Post[]`) | Posts as configured for this specific event (may diverge from the venue template). See §3.7. | Yes | `[{"name":"Gate A","x":12.5,"y":40.0}]` |
 | `eventEquipment` | json (`EventEquipment[]`) | Equipment inventory for this event. See §3.7. | Yes | `[{"id":"eq1","name":"AED #1","status":"Available","locationId":"Gate A"}]` |
@@ -164,11 +165,17 @@ PocketBase stores these as opaque `json` fields with no server-side schema; the 
 | Field | Type | Description |
 |---|---|---|
 | `name` | string | Post name. |
-| `x`, `y` | number \| null | Position as a percentage of map width/height. |
+| `x`, `y` | number \| null | Position as a percentage of map width/height. On a geo layer, null when the post is outside the image. |
+| `lat`, `lng` | number \| null (optional) | Real coordinates. On a geo layer (an aligned image or a drawn area) they are the post's position; on an image-only layer they are provenance from a GIS import, and rendering uses `x`/`y`. |
 | `isClinic` | bool (optional) | Marks this post as a clinic. |
 | `clinicId` | string (optional) | Stable id, generated once when `isClinic` first becomes true. Survives the post being renamed later; used to match this post against `events.clinics` entries. |
 
-**`Layer`**: `id`, `name`, `mapUrl?`, `posts: Post[]`, `zones?: Zone[]`, `geoBounds?` (present when the layer's `mapUrl` was georeferenced via a GIS import).
+**`Layer`**: `id`, `name`, `mapUrl?`, `posts: Post[]`, `zones?: Zone[]`, `geoBounds?` (present when the layer's `mapUrl` was georeferenced via a GIS import), and the real-world map fields below. A layer is a **geo layer** when its image has a current alignment or it has a drawn area (`src/lib/geo/layers.ts`); geo layers show on a live map in venue setup and dispatch.
+| Field | Type | Description |
+|---|---|---|
+| `alignment` | object (optional) | The image's real-world alignment: `mapUrl` (the image it was made for; it applies only while equal to the layer's), `naturalWidth`, `naturalHeight`, `controlPoints[]` (`x`, `y` in image percent, `lat`, `lon`), `origin` (`lat`, `lon`), `transform` (`a`..`f`: local meters east/north to image percent), `residualM` (estimated error in meters, null with 3 points), `ownerUid`, `updatedAt`. Set in venue setup's Map alignment step, or from `geoBounds` for a GIS import. |
+| `takAlignment` | object (optional) | The same shape, written while alignment was a TAK-only step. Read when `alignment` is absent; not written any more. |
+| `area` | `{ polygon: {lat,lng}[] }` (optional) | A drawn area of interest for a layer with no image: the layer is the live map centered on it. Three or more points. |
 
 **`Clinic`**: `id` (matches a clinic-flagged `Post.clinicId`), `name` (kept in sync with that post's current name). `events.clinics: Clinic[]` is populated additively from the event's `venue.posts` (see `src/lib/clinics.ts`'s `syncClinicsFromVenue`).
 
@@ -178,7 +185,8 @@ PocketBase stores these as opaque `json` fields with no server-side schema; the 
 | `id` | string | Stable id, generated once when the zone is drawn and kept through renames, recolors and edits. |
 | `name` | string | Zone name. |
 | `color` | string | Hex color used to render the polygon, e.g. `"#3b82f6"`. |
-| `points` | `{x,y}[]` | Polygon vertices, in order, each a percentage of map width/height (same coordinate system as `Post.x`/`Post.y`). |
+| `points` | `{x,y}[]` | Polygon vertices, in order, each a percentage of map width/height (same coordinate system as `Post.x`/`Post.y`). Empty for a zone drawn on a drawn-area layer. |
+| `coords` | `{lat,lng}[]` (optional) | The same polygon in real coordinates, on a geo layer. Zone membership on a geo layer is tested in coordinates. |
 | `isDispatchZone` | bool (optional) | Marks this zone as a dispatch zone with its own "{name} Calls" tab in the dispatch view. |
 
 **`DispatchZone`**: `id` (matches a dispatch-zone-flagged `Zone.id`), `name` (kept in sync with that zone's current name). `events.dispatchZones: DispatchZone[]` is populated additively from the event's `venue.layers[].zones` (see `src/lib/zones.ts`'s `syncDispatchZonesFromVenue`). A call is routed into a dispatch zone's tab purely by geometry: whether `call.location` names a post whose coordinates fall inside that zone's polygon (`src/lib/zones.ts`'s `findZonesForPost`/`getCallZoneIds`). `Call` has no `zoneId` field.
@@ -186,6 +194,11 @@ PocketBase stores these as opaque `json` fields with no server-side schema; the 
 **`Equipment`** (venue-level): `id`, `name`, `status` (free-text status string), `assignedTeam?`, `location?`.
 
 **`EventEquipment`** = `Equipment` + `locationId?`, `defaultLocation?`, `notes?`.
+
+Equipment custody (optional, on event equipment; written by `src/lib/equipmentCustody.ts`, absent on older data and derived from `status`/`assignedTeam`/`location` when missing):
+- `phase?`: `'staged' | 'retrieving' | 'carried' | 'with_care_team' | 'returning' | 'in_clinic'`.
+- `holder?`: `{ kind: 'post' | 'team' | 'clinic', name }`, who or what has it. `location` mirrors `holder.name`; `assignedTeam` is the unit fetching it (`retrieving`) or the holding unit.
+- `custodyLog?`: `{ t, phase, holder, team?, by: 'status' | 'dispatcher' | 'tracking' }[]`, the last 50 changes, oldest first.
 
 **`Staff`** (a field team / "unit"):
 | Field | Type | Description |
@@ -225,13 +238,14 @@ PocketBase stores these as opaque `json` fields with no server-side schema; the 
 
 **`InteractionSession`**: `sessionId`, `eventId`, `startTime` (epoch ms), `endTime?` (epoch ms), `mouseClicks: {timestamp:number}[]`, `keyStrokes: {timestamp:number}[]`.
 
+
 ## 4. Fields present in the app's TypeScript types but not in this PocketBase schema
 
 `src/app/types.ts`'s `Event` interface also declares `createdAt`, `postingStart`/`postingEnd`, `scheduleStart`/`scheduleEnd`, `startTime`/`endTime` and `start`/`end`. None of these appear in the `events` collection's actual field list (`scripts/setup-pocketbase.js`, `tests/e2e/pb_migrations/…created_events.js`). CrowdCAD supports both a Firebase and a PocketBase backend behind a common interface, and these fields appear to be write-only leftovers for the Firebase path: since PocketBase silently drops unknown fields on create/update (§2.2), sending them to a PocketBase-backed deployment has no effect. They are neither persisted nor returned. Do not rely on them being present in PocketBase `events` records.
 
 `isOrgEvent`, `ended` and `endedAt` **are** schema-backed `events` fields (§3.3). PocketBase persists them, unlike the Firebase-only fields listed above.
 
-`clinics` **is** a schema-backed `json` field on `events` (added alongside multi-clinic support) and persists on PocketBase. Same for `dispatchZones` (added alongside map zones support).
+`clinics` **is** a schema-backed `json` field on `events` (added alongside multi-clinic support) and persists on PocketBase. Same for `dispatchZones` (added alongside map zones support) and `mci` (added alongside MCI mode).
 
 ## 5. Notes
 

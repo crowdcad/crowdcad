@@ -1,14 +1,20 @@
-export type Post =
-  | string
-  | {
+import type { MapAlignment, MapArea } from '@/lib/geo/types';
+
+/** A venue location: a bare name, or a point on the map. */
+export type Post = string | PostPoint;
+
+export interface PostPoint {
     name: string;
     x: number | null; // percentage of width
     y: number | null; // percentage of height
     isClinic?: boolean;
     clinicId?: string; // stable id, set once when isClinic first becomes true
-    lat?: number | null; // source lat/long from a GIS import, for provenance only — rendering always uses x/y
+    // Real coordinates. On a geo layer (aligned image or drawn area, see src/lib/geo/layers.ts) they are the
+    // post's position, and x/y are set only when the post is inside the image. On an image layer they are
+    // provenance from a GIS import and rendering uses x/y.
+    lat?: number | null;
     lng?: number | null;
-  };
+}
 
 export interface Clinic {
   id: string;
@@ -21,6 +27,7 @@ export interface Zone {
   name: string;
   color: string; // hex, e.g. "#3b82f6"
   points: { x: number; y: number }[]; // percent-of-image polygon vertices, in order
+  coords?: { lat: number; lng: number }[]; // the same polygon in real coordinates, on a geo layer
   isDispatchZone?: boolean; // when true, gets its own "{name} Calls" tab in the dispatch view
 }
 
@@ -43,6 +50,12 @@ export interface Layer {
   posts: Post[];
   zones?: Zone[];
   geoBounds?: GeoBounds; // present when this layer's mapUrl was georeferenced via a GIS import
+  /** The image's real-world alignment (venue setup's Map alignment step). Makes this a geo layer. */
+  alignment?: MapAlignment;
+  /** The same, from venues aligned while this was a TAK-only step; still read. */
+  takAlignment?: MapAlignment;
+  /** A drawn area of interest for a layer with no image; makes this a geo layer centered on it. */
+  area?: MapArea;
 }
 
 export interface Venue {
@@ -103,12 +116,18 @@ export interface Event {
   /** Seconds an unassigned ("Pending") call may sit without a team before a surge alert fires. Defaults to 120 (2:00) when unset. */
   unassignedCallSurgeSeconds?: number;
 
+  /** Map mode: unset or 'standard' for a standard event; 'tak' loads the optional TAK live-tracking module. Core reads it only to decide whether to load that module. Owner/admin only. */
+  mapMode?: 'standard' | 'tak';
+
   /** Manually declared "surge" state for the ops team, toggled via the Surge button beside the Calls/Clinic tabs — distinct from the automatic `surgeLimitPercent` threshold indicator. */
   manualSurgeActive?: boolean;
   /** Epoch ms when the current manual surge was started; cleared when surge is turned off. */
   manualSurgeStartedAt?: number;
   /** Every surge period this event has had, oldest first. The last entry's `endedAt` is unset while a surge is currently active (mirrors `manualSurgeActive`/`manualSurgeStartedAt`). */
   surgeLog?: SurgePeriod[];
+
+  /** Notes typed into the dispatch board's Log view while it had a note box (it searches now); still shown there. "HHMM - text". */
+  eventLog?: TeamLogEntry[];
 }
 
 export interface SurgePeriod {
@@ -123,6 +142,8 @@ export interface TeamLogEntry {
 }
 
 export interface Staff {
+  /** Stable id, generated at creation and kept across renames (src/lib/teamId.ts). Read only by the optional TAK module; older teams may lack it. */
+  id?: string;
   team: string;
   location: string;
   status: string;
@@ -134,6 +155,8 @@ export interface Staff {
 }
 
 export interface Supervisor {
+  /** Stable id, generated at creation and kept across renames (src/lib/teamId.ts). Read by extension packs (e.g. live tracking); older entries may lack it. */
+  id?: string;
   team: string;
   location: string;
   status: string;
@@ -204,12 +227,42 @@ export interface CallLogEntry {
 
 export type EquipmentStatus = string;
 
+/**
+ * Where a piece of equipment is in its run (src/lib/equipmentCustody.ts):
+ * waiting at a post, being fetched, carried by a team, left with the care
+ * team on scene, on its way back, or in a clinic.
+ */
+export type EquipmentPhase = 'staged' | 'retrieving' | 'carried' | 'with_care_team' | 'returning' | 'in_clinic';
+
+/** Who or what has the equipment right now. Its map position follows this. */
+export interface EquipmentHolder {
+  kind: 'post' | 'team' | 'clinic';
+  /** Post or location name, unit name (Staff.team / Supervisor.team), or clinic name. */
+  name: string;
+}
+
+export interface EquipmentCustodyEntry {
+  /** Epoch ms. */
+  t: number;
+  phase: EquipmentPhase;
+  holder: EquipmentHolder;
+  /** The unit sent to fetch it, while `phase` is 'retrieving'. */
+  team?: string;
+  /** What caused the change: a unit's status, a dispatcher's manual edit, or a live-tracking suggestion they confirmed. */
+  by: 'status' | 'dispatcher' | 'tracking';
+}
+
 export interface Equipment {
   id: string;
   name: string;
   status: EquipmentStatus;
   assignedTeam?: string | null;
   location?: string;
+  /** Absent on equipment from before custody tracking; custodyOf() derives it from status, assignedTeam and location. */
+  phase?: EquipmentPhase;
+  holder?: EquipmentHolder;
+  /** Most recent custody changes, oldest first (capped). */
+  custodyLog?: EquipmentCustodyEntry[];
 }
 
 export type EventEquipment = Equipment & { locationId?: string; defaultLocation?: string; notes?: string };
@@ -257,6 +310,10 @@ export type EquipmentItem = {
   deliveryTeam?: string; // Team delivering the equipment
   needsRefresh?: boolean; // Whether equipment needs to be marked ready after clinic delivery
   notes?: string; // Additional details/notes about the equipment
+  phase?: EquipmentPhase;
+  holder?: EquipmentHolder;
+  /** Unit sent to fetch it (phase 'retrieving') or holding it. */
+  assignedTeam?: string | null;
 };
 
 export type Role = {

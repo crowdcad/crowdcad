@@ -27,7 +27,8 @@ export default function EndEventModal({ isOpen, onClose, onConfirm }: Props) {
     if (isOpen) setValue("");
   }, [isOpen]);
 
-  const canSubmit = value.trim() === CONFIRM_PHRASE;
+  // Any capitalization: case is hard to see in the condensed UI's font.
+  const canSubmit = value.trim().toLowerCase() === CONFIRM_PHRASE.toLowerCase();
 
   const inputClassNames = {
     label: "text-surface-light mb-1",

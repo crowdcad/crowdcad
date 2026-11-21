@@ -9,9 +9,9 @@ import {
   ModalBody,
   ModalFooter,
   Button,
-  Checkbox,
   Input,
 } from "@heroui/react";
+import DispatchZoneCheckbox from "@/components/venue-management/DispatchZoneCheckbox";
 import { ZONE_COLOR_PALETTE } from "@/lib/zoneColors";
 
 type Props = {
@@ -113,14 +113,7 @@ export default function ZoneEditModal({
                 </div>
               </div>
 
-              <Checkbox
-                isSelected={isDispatchZone}
-                onValueChange={setIsDispatchZone}
-                size="sm"
-                classNames={{ label: "text-surface-light text-sm" }}
-              >
-                Mark as Dispatch Zone
-              </Checkbox>
+              <DispatchZoneCheckbox isSelected={isDispatchZone} onValueChange={setIsDispatchZone} labelClassName="text-surface-light text-sm" />
             </ModalBody>
 
             <ModalFooter>

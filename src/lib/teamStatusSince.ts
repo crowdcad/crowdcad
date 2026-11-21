@@ -53,7 +53,7 @@ export function deriveStatusSinceFromLogs(unit: Unit, calls: readonly Call[] | u
     }
     // Dispatch to a call logs "responding to call #N" and puts the unit En Route.
     if (status === 'en route' && msg.includes('responding to call')) return timestamp || null;
-    if (msg.includes('post changed to') && location && msg.includes(location)) return timestamp || null;
+    if ((msg.includes('post changed to') || msg.includes('location changed to')) && location && msg.includes(location)) return timestamp || null;
   }
 
   // Call-row status changes (On Scene, Transporting, ...) are only logged on the call.

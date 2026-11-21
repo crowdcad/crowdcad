@@ -18,7 +18,7 @@ import {
 import type { Event, Staff, Supervisor, Call, TeamLogEntry } from "@/app/types";
 import { useDispatchTerms } from "@/lib/dispatchVocabulary/context";
 import { getVenueLocationOptions } from "@/lib/clinics";
-import { STATIC_SELECTOR_BUTTON_CLASS, staticSelectorButtonProps } from "@/lib/autocompleteSelector";
+import { staticSelectorButtonProps } from "@/lib/heroStatic";
 
 type QuickCallState = {
   location: string;
@@ -154,7 +154,7 @@ export default function QuickCallModal({
       };
 
       // Update staff or supervisor if one was assigned — the assignee is
-      // either a staff team or a supervisor callsign (never both), so only
+      // either a staff team or a supervisor call sign (never both), so only
       // one of these actually changes anything.
       let updatedStaff: Staff[] | undefined = event?.staff;
       let updatedSupervisor: Supervisor[] | undefined = event?.supervisor;
@@ -277,7 +277,7 @@ export default function QuickCallModal({
     >
       <ModalContent>
         {(close) => (
-          <form ref={quickCallRef} onSubmit={handleSubmit}>
+          <form ref={quickCallRef} onSubmit={handleSubmit} data-testid="quick-call-modal">
             <ModalHeader className="text-2xl font-bold text-surface">
               {t("Add Call")}
             </ModalHeader>
@@ -291,7 +291,6 @@ export default function QuickCallModal({
                 size="lg"
                 radius="lg"
                 inputProps={{ classNames: inputClassNames }}
-                classNames={{ selectorButton: STATIC_SELECTOR_BUTTON_CLASS }}
                 selectorButtonProps={staticSelectorButtonProps}
                 inputValue={quickCall.location}
                 onInputChange={(v) => setQuickCall((p) => ({ ...p, location: v }))}
@@ -435,6 +434,7 @@ export default function QuickCallModal({
               <Button
                 type="submit"
                 radius="lg"
+                data-testid="quick-call-submit"
                 className="px-4 py-2 bg-accent hover:bg-accent/90 text-surface-light"
                 isDisabled={submitting}
               >

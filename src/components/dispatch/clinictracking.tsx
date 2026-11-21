@@ -13,8 +13,8 @@ import { MoreVertical, RotateCw } from 'lucide-react';
 import type { Event, Call, CallLogEntry, Clinic } from '@/app/types';
 import DispatchMotionCell from './motioncell';
 import StatusLabel, { getMenuLabel } from './statuslabel';
-import TrackingTableBase from './trackingtablebase';
-import { TEAM_CARD_ROW_HOVER_CLASS } from '@/lib/statusColors';
+import TrackingTableBase, { INLINE_CELL_INPUT_CLASS, INLINE_CELL_PLACEHOLDER, InlineCellBox, isRowToggleClick } from './trackingtablebase';
+import { TRACKING_ROW_HOVER_CLASS, TRACKING_ROW_OPEN_CLASS } from '@/lib/statusColors';
 import TrackingTextEntry from '@/components/dispatch/trackingtextentry';
 import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
 import { isClinicCallResolved } from '@/lib/clinics';
@@ -208,11 +208,17 @@ export default function ClinicTrackingTable({
         onClick={() => setShowResolvedClinicCalls(prev => !prev)}
         className="text-surface-faint text-base hover:text-surface-light"
         aria-label="Toggle resolved clinic calls"
+        data-testid="clinic-resolved-toggle"
       >
         {showResolvedClinicCalls ? t('Hide Resolved Clinic Calls') : t('Show Resolved Clinic Calls')}
       </button>
     </div>
   );
+
+  // A status color (getCallRowClass) keeps priority; otherwise the open (or still collapsing) row and its
+  // notes/log row are highlighted at once, with no fade.
+  const isRowOpen = (call: Call) => openClinicCallId === call.id || closingClinicCallId === call.id;
+  const openRowBg = (call: Call) => getCallRowClass(call) || (isRowOpen(call) ? TRACKING_ROW_OPEN_CLASS : 'bg-transparent');
 
   return (
     <div className="col-span-2 text-black w-full h-full min-h-0">
@@ -237,14 +243,15 @@ export default function ClinicTrackingTable({
                   const isActionMenuOpen = openMenuToken === `action:${call.id}` && isClinicCallVisible(call);
                   const isOpen = openClinicCallId === call.id || closingClinicCallId === call.id;
                   const rowRenderKey = `${call.id}:${isResolvedClinicCall ? 'resolved' : 'active'}:${isClinicCallVisible(call) ? 'visible' : 'hidden'}`;
+                  const statusRowClass = getCallRowClass(call);
                   return (
                 <tr
                   key={rowRenderKey}
-                  className={`cursor-pointer min-h-3.25rem bg-transparent rounded-none ${getCallRowClass(call)} ${isOpen || getCallRowClass(call) ? '' : TEAM_CARD_ROW_HOVER_CLASS} transition-colors ${isResolvedClinicCall && !isClinicCallVisible(call) ? '[&>td]:!border-b-0 pointer-events-none' : ''} ${openClinicCallId === call.id ? '[&>td]:!border-b-0' : ''}`}
+                  data-testid={`clinic-row-${callDisplayNumberMap.get(call.id)}`}
+                  className={`cursor-pointer min-h-3.25rem rounded-none ${openRowBg(call)} ${isOpen || statusRowClass ? '' : `${TRACKING_ROW_HOVER_CLASS} transition-colors`} ${isResolvedClinicCall && !isClinicCallVisible(call) ? '[&>td]:!border-b-0 pointer-events-none' : ''} ${openClinicCallId === call.id ? '[&>td]:!border-b-0' : ''}`}
                   aria-hidden={isResolvedClinicCall && !isClinicCallVisible(call)}
                   onClick={(e) => {
-                    const t = e.target as HTMLElement;
-                    if (t.closest('input, textarea, select, button, a, [contenteditable="true"]')) return;
+                    if (!isRowToggleClick(e)) return;
                     setOpenClinicCallId(openClinicCallId === call.id ? null : call.id);
                   }}
                 >
@@ -255,10 +262,7 @@ export default function ClinicTrackingTable({
                   </td>
 
                   {/* Chief Complaint (inline edit) */}
-                  <td
-                    className="p-0"
-                    onClick={() => handleCellClick(call.id, 'chiefComplaint', call.chiefComplaint)}
-                  >
+                  <td className="p-0">
                     <DispatchMotionCell isOpen={isClinicCallVisible(call)} animate={isResolvedClinicCall} delayMs={motionDelayMs} className="px-3 py-2.5 truncate">
                       {editingCell?.callId === call.id && editingCell.field === 'chiefComplaint' ? (
                         <input
@@ -278,23 +282,17 @@ export default function ClinicTrackingTable({
                               });
                             }
                           }}
-                          className="w-full bg-transparent text-surface-light px-0 py-0 border-0 outline-none focus:outline-none focus:ring-0 focus-visible:outline-none"
+                          placeholder={INLINE_CELL_PLACEHOLDER}
+                          className={INLINE_CELL_INPUT_CLASS}
                         />
                       ) : (
-                        call.chiefComplaint || <span className="text-surface-light whitespace-nowrap">[Edit]</span>
+                        <InlineCellBox onEdit={() => handleCellClick(call.id, 'chiefComplaint', call.chiefComplaint)} value={call.chiefComplaint} />
                       )}
                     </DispatchMotionCell>
                   </td>
 
                   {/* A/S (inline edit) */}
-                  <td
-                    className="p-0"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setEditingCell({ callId: call.id, field: 'ageSex' });
-                      setEditValue(formatAgeSex(call.age, call.gender));
-                    }}
-                  >
+                  <td className="p-0">
                     <DispatchMotionCell isOpen={isClinicCallVisible(call)} animate={isResolvedClinicCall} delayMs={motionDelayMs} className="px-3 py-2.5">
                       {editingCell?.callId === call.id && editingCell.field === 'ageSex' ? (
                         <input
@@ -314,10 +312,17 @@ export default function ClinicTrackingTable({
                               });
                             }
                           }}
-                          className="w-full bg-transparent text-surface-light px-0 py-0 border-0 outline-none focus:outline-none focus:ring-0 focus-visible:outline-none"
+                          placeholder={INLINE_CELL_PLACEHOLDER}
+                          className={INLINE_CELL_INPUT_CLASS}
                         />
                       ) : (
-                        formatAgeSex(call.age, call.gender) || <span className="text-surface-light whitespace-nowrap">[Edit]</span>
+                        <InlineCellBox
+                          onEdit={() => {
+                            setEditingCell({ callId: call.id, field: 'ageSex' });
+                            setEditValue(formatAgeSex(call.age, call.gender));
+                          }}
+                          value={formatAgeSex(call.age, call.gender)}
+                        />
                       )}
                     </DispatchMotionCell>
                   </td>
@@ -325,10 +330,7 @@ export default function ClinicTrackingTable({
 
 
                   {/* Location (inline edit) */}
-                  <td
-                    className="p-0"
-                    onClick={() => handleCellClick(call.id, 'location', call.location)}
-                  >
+                  <td className="p-0">
                     <DispatchMotionCell isOpen={isClinicCallVisible(call)} animate={isResolvedClinicCall} delayMs={motionDelayMs} className="px-3 py-2.5 truncate">
                       {editingCell?.callId === call.id && editingCell.field === 'location' ? (
                         <input
@@ -346,10 +348,11 @@ export default function ClinicTrackingTable({
                           onKeyDown={e => {
                             if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
                           }}
-                          className="w-full bg-transparent text-surface-light px-0 py-0 border-0 outline-none focus:outline-none focus:ring-0 focus-visible:outline-none"
+                          placeholder={INLINE_CELL_PLACEHOLDER}
+                          className={INLINE_CELL_INPUT_CLASS}
                         />
                       ) : (
-                        call.location || <span className="text-surface-light whitespace-nowrap">[Edit]</span>
+                        <InlineCellBox onEdit={() => handleCellClick(call.id, 'location', call.location)} value={call.location} />
                       )}
                     </DispatchMotionCell>
                   </td>
@@ -376,6 +379,7 @@ export default function ClinicTrackingTable({
                               radius="full"
                               variant="light"
                               isDisabled={isResolvedClinicCall}
+                              data-testid={`clinic-status-${callDisplayNumberMap.get(call.id)}`}
                               className={`min-w-0 h-8 px-2 text-xs justify-start bg-transparent ${isResolvedClinicCall ? 'opacity-100 cursor-default' : 'hover:bg-surface-muted'}`}
                             >
                               <StatusLabel status={call.outcome || 'In Clinic'} text={t(call.outcome || 'In Clinic')} />
@@ -388,11 +392,11 @@ export default function ClinicTrackingTable({
                               onOutcomeChange(call.id, key as string);
                             }}
                           >
-                            <DropdownItem key="In Clinic">{t('In Clinic')}</DropdownItem>
-                            <DropdownItem key="Pending Transport">{getMenuLabel('Pending Transport', t)}</DropdownItem>
-                            <DropdownItem key="Transported">{getMenuLabel('Transported', t)}</DropdownItem>
-                            <DropdownItem key="AMA">{t('AMA')}</DropdownItem>
-                            <DropdownItem key="Discharged">{t('Discharged')}</DropdownItem>
+                            <DropdownItem key="In Clinic" data-testid="clinic-status-option-In Clinic">{t('In Clinic')}</DropdownItem>
+                            <DropdownItem key="Pending Transport" data-testid="clinic-status-option-Pending Transport">{getMenuLabel('Pending Transport', t)}</DropdownItem>
+                            <DropdownItem key="Transported" data-testid="clinic-status-option-Transported">{getMenuLabel('Transported', t)}</DropdownItem>
+                            <DropdownItem key="AMA" data-testid="clinic-status-option-AMA">{t('AMA')}</DropdownItem>
+                            <DropdownItem key="Discharged" data-testid="clinic-status-option-Discharged">{t('Discharged')}</DropdownItem>
                           </DropdownMenu>
                         </Dropdown>
                         {call.outcome && call.outcome !== 'Pending Transport' && (
@@ -414,7 +418,7 @@ export default function ClinicTrackingTable({
                     <DispatchMotionCell isOpen={isClinicCallVisible(call)} animate={isResolvedClinicCall} delayMs={motionDelayMs} className="px-3 py-2.5">
                       {(call.assignedTeam && call.assignedTeam.length > 0)
                         ? (Array.isArray(call.assignedTeam) ? call.assignedTeam.join(', ') : call.assignedTeam)
-                        : (call.detachedTeams?.map(d => d.team).join(', ') || t('Walkup'))}
+                        : (call.detachedTeams?.map(d => d.team).join(', ') || call.source || t('Walkup'))}
                     </DispatchMotionCell>
                   </td>
                   {/* Options Ellipsis */}
@@ -492,7 +496,7 @@ export default function ClinicTrackingTable({
                   <tr>
                     <td
                       colSpan={7}
-                      className={`p-0 align-top !border-b-0 ${getCallRowClass(call)}`}
+                      className={`p-0 align-top !border-b-0 ${openRowBg(call)}`}
                       onClick={() => setOpenClinicCallId(null)}
                     >
                       <div
@@ -511,6 +515,7 @@ export default function ClinicTrackingTable({
                             <div className="font-semibold mb-1">{t('Notes')}</div>
                             <TrackingTextEntry
                               mode="note"
+                              filled
                               value={notesTexts[call.id] ?? (call.notes || '')}
                               onChange={(e) => {
                                 setNotesTexts(prev => ({ ...prev, [call.id]: e.target.value }));
@@ -546,6 +551,7 @@ export default function ClinicTrackingTable({
                             <strong>{t('Log for Call')} #{callDisplayNumberMap.get(call.id)}:</strong>
                               <TrackingTextEntry
                                 mode="log"
+                                filled
                                 value={logTexts[call.id] ?? (() => {
                                   if (call.log && call.log.length > 0) {
                                     return call.log.map((entry: CallLogEntry) => entry.message).join('\n');

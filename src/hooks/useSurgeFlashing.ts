@@ -51,9 +51,15 @@ export function useSurgeFlashing() {
   return { flashingDisabled, setFlashingDisabled };
 }
 
-/** Classes for a surge indicator in its alarm state — blinking, or a steady orange when flashing is disabled. */
+const STEADY_ALARM = 'border-status-alarm bg-status-alarm/[0.45]';
+
+/**
+ * Classes for a surge indicator in its alarm state — blinking, or a steady orange when flashing is disabled.
+ * Reduce-motion (the OS setting or the app's own `.reduce-motion` class) shrinks every animation to 0.01ms, which
+ * would leave a blinking indicator plain grey, so under it the blinking variant falls back to the steady orange.
+ */
 export function surgeAlarmClass(flashingDisabled: boolean): string {
   return flashingDisabled
-    ? 'border-status-alarm bg-status-alarm/[0.45]'
-    : 'border-surface-liner bg-surface-liner/30 animate-pending-alarm';
+    ? STEADY_ALARM
+    : `border-surface-liner bg-surface-liner/30 animate-pending-alarm motion-reduce:animate-none motion-reduce:border-status-alarm motion-reduce:bg-status-alarm/[0.45] [.reduce-motion_&]:animate-none [.reduce-motion_&]:border-status-alarm [.reduce-motion_&]:bg-status-alarm/[0.45]`;
 }

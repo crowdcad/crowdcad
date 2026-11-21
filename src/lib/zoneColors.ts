@@ -16,3 +16,25 @@ export const ZONE_COLOR_PALETTE: string[] = [
 export function getNextZoneColor(existingZones: Zone[]): string {
   return ZONE_COLOR_PALETTE[existingZones.length % ZONE_COLOR_PALETTE.length];
 }
+
+/**
+ * Dispatch zones are filled with thick 45° stripes alternating between the
+ * zone's usual fill opacity and a little less, so they read apart from
+ * plain areas on every map (canvas on the live map, CSS on image maps).
+ */
+export const ZONE_STRIPE = { widthPx: 6, lightRatio: 0.6 } as const;
+
+function hexRgb(hex: string): [number, number, number] | null {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return null;
+  const n = parseInt(m[1]!, 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+/** The striped dispatch-zone fill as a CSS background, at a given full opacity. */
+export function zoneStripeBackground(color: string, opacity: number): string {
+  const rgb = hexRgb(color);
+  const at = (a: number) => (rgb ? `rgb(${rgb[0]} ${rgb[1]} ${rgb[2]} / ${a})` : color);
+  const w = ZONE_STRIPE.widthPx;
+  return `repeating-linear-gradient(135deg, ${at(opacity)} 0 ${w}px, ${at(opacity * ZONE_STRIPE.lightRatio)} ${w}px ${w * 2}px)`;
+}

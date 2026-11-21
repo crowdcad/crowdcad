@@ -1,6 +1,5 @@
 'use client';
 
-import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
@@ -8,6 +7,7 @@ import { authService } from '@/lib/services';
 import { useAuth } from '@/hooks/useauth';
 import { useDispatchVocabulary } from '@/hooks/useDispatchVocabulary';
 import { getLiteEvent } from '@/lib/liteEventStore';
+import { hasPostingSchedule } from '@/lib/postingTimes';
 import {
   Button,
   Dropdown,
@@ -23,7 +23,8 @@ import {
   NavbarMenuToggle,
 } from '@heroui/react';
 import { LogOut, Menu, Moon, Sun, UserRound } from 'lucide-react';
-import { LiveClock, LoginModalLazy, MobileMenuAccountItems, useThemeToggle } from '@/components/layout/navbarshared';
+import { BrandLogo, LiveClock, LoginModalLazy, MobileMenuAccountItems, NAVBAR_ICON_BUTTON_CLASS, useThemeToggle } from '@/components/layout/navbarshared';
+import HelpButton from '@/components/training/HelpButton';
 
 const liteNavItems = [
   { label: 'Lite Home', href: '/lite' },
@@ -67,9 +68,7 @@ export default function LiteNavbar() {
       const event = await getLiteEvent(decodeURIComponent(liteDispatchEventId));
       if (cancelled) return;
 
-      setPostingScheduleEnabled(
-        event?.postingScheduleEnabled ?? (event?.postingTimes?.length ?? 0) > 0
-      );
+      setPostingScheduleEnabled(hasPostingSchedule(event));
     };
 
     void loadPostingScheduleConfig();
@@ -122,17 +121,7 @@ export default function LiteNavbar() {
         <div className={`flex w-full items-center justify-between ${containerWidthClass} mx-auto`}>
           <div className="relative z-[30] min-w-0 flex items-center gap-2 sm:gap-4 md:gap-6">
             <NavbarBrand>
-              <button onClick={() => router.push("/")} className="flex items-center">
-                <Image
-                  src={isDarkTheme ? '/logo.svg' : '/logo-dark.svg'}
-                  alt="Logo"
-                  width={118}
-                  height={30}
-                  priority
-                  sizes="(max-width: 600px) 7rem, (max-width: 800px) 8rem, 110px"
-                  className={`cursor-pointer h-auto shrink-0 ${logoWidthClass}`}
-                />
-              </button>
+              <BrandLogo isDarkTheme={isDarkTheme} onClick={() => router.push("/")} widthClass={logoWidthClass} />
 
               {isDispatch && (
                 <div className="ml-3 sm:ml-4 md:ml-6">
@@ -213,11 +202,15 @@ export default function LiteNavbar() {
             </div>
 
             <NavbarItem>
+              <HelpButton />
+            </NavbarItem>
+
+            <NavbarItem>
               <Button
                 isIconOnly
                 variant="flat"
                 aria-label={isDarkTheme ? 'Switch to light mode' : 'Switch to dark mode'}
-                className="h-8 w-8 min-w-8 rounded-full bg-surface-deeper/70 text-surface-light hover:bg-surface-deeper"
+                className={NAVBAR_ICON_BUTTON_CLASS}
                 onPress={toggleTheme}
               >
                 {isDarkTheme ? <Sun className="size-4" /> : <Moon className="size-4" />}
@@ -233,7 +226,7 @@ export default function LiteNavbar() {
                 <Button
                   size="sm"
                   variant="bordered"
-                  className="h-8 rounded-full border-surface-liner bg-transparent px-3 text-surface-light font-semibold"
+                  className="h-8 !rounded-circle border-surface-liner bg-transparent px-3 text-surface-light font-semibold"
                   onClick={() => {
                     setIsMenuOpen(false);
                     setLoginOpen(true);
@@ -248,9 +241,9 @@ export default function LiteNavbar() {
                   <DropdownTrigger>
                     <button
                         aria-label="Open profile menu"
-                        className="relative rounded-full p-0.5 bg-gradient-to-br from-accent/70 to-[rgba(240,28,28,0.4)] cursor-pointer"
+                        className="relative rounded-circle cursor-pointer"
                       >
-                        <span className="flex h-7 w-7 items-center justify-center rounded-full border border-surface-liner bg-surface-base">
+                        <span className="flex h-8 w-8 items-center justify-center rounded-circle border border-surface-liner bg-surface-base">
                           <UserRound className="size-4 text-surface-light" />
                         </span>
                       </button>
