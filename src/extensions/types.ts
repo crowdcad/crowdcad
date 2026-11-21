@@ -51,6 +51,8 @@ export interface EventDataStore<S = unknown> {
   planTx(tx: Tx, eventId: string, current: Event, patch: Partial<Event>, state: S): Promise<{ rest: Partial<Event>; write: () => void }>;
   /** One read, outside a transaction (e.g. the summary page). */
   load(eventId: string): Promise<S>;
+  /** Sees each event document exactly as the server sent it, before any merge (e.g. to spot data still kept inline). */
+  onServerEvent?(eventId: string, event: Event): void;
   /** Live updates: calls `onChange` with a function that merges the latest state into an event. */
   subscribe(eventId: string, onChange: (merge: (event: Event) => Event) => void): () => void;
 }

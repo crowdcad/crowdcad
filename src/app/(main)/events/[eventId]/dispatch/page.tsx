@@ -2130,6 +2130,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
             router.push('/?login=true&error=unauthorized');
             return;
           }
+          if (packDocMode) for (const store of eventDataStores()) store.onServerEvent?.(eventId, eventData);
           setEvent(prev => {
             const incoming = freshenSnapshot(prev, packDocMode ? withPackDocs(eventData) : eventData);
             if (!isEqual(prev, incoming)) {
