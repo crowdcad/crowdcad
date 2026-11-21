@@ -1,0 +1,56 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e1]:
+  - generic [ref=e2]:
+    - navigation [ref=e3]:
+      - generic [ref=e5]:
+        - generic [ref=e6]:
+          - button "Logo" [ref=e8] [cursor=pointer]:
+            - img "Logo" [ref=e9]
+          - list [ref=e10]:
+            - listitem [ref=e11]:
+              - link "Home" [ref=e12] [cursor=pointer]:
+                - /url: /
+            - listitem [ref=e13]:
+              - link "Venues" [ref=e14] [cursor=pointer]:
+                - /url: /venues/selection
+        - list [ref=e15]:
+          - listitem [ref=e16]:
+            - button "Switch to light mode" [ref=e17] [cursor=pointer]:
+              - img [ref=e18]
+          - listitem [ref=e24]:
+            - button "Open profile menu" [ref=e25] [cursor=pointer]:
+              - img [ref=e27]
+    - main [ref=e31]:
+      - generic [ref=e33]:
+        - list "Progress" [ref=e34]:
+          - listitem [ref=e35]:
+            - generic [ref=e36]:
+              - 'button "Basics: current step" [ref=e37] [cursor=pointer]'
+              - generic [ref=e38]: Basics
+          - listitem [ref=e40]:
+            - generic [ref=e41]:
+              - 'button "Map & floors: upcoming" [disabled] [ref=e42]'
+              - generic [ref=e43]: Map & floors
+          - listitem [ref=e45]:
+            - generic [ref=e46]:
+              - 'button "Locations: upcoming" [disabled] [ref=e47]'
+              - generic [ref=e48]: Locations
+          - listitem [ref=e50]:
+            - generic [ref=e51]:
+              - 'button "Equipment: upcoming" [disabled] [ref=e52]'
+              - generic [ref=e53]: Equipment
+          - listitem [ref=e55]:
+            - generic [ref=e56]:
+              - 'button "Review & save: upcoming" [disabled] [ref=e57]'
+              - generic [ref=e58]: Review & save
+        - generic [ref=e64]:
+          - generic [ref=e65]: Venue Name*
+          - textbox "Venue Name*" [active] [ref=e67]:
+            - /placeholder: e.g., Convention Center Hall A
+      - generic [ref=e69]:
+        - button "Cancel" [ref=e70] [cursor=pointer]
+        - button "Continue" [disabled]
+  - alert [ref=e71]
+```

@@ -1,0 +1,163 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e1]:
+  - generic [ref=e2]:
+    - log
+    - log
+  - generic [ref=e3]:
+    - navigation [ref=e4]:
+      - generic [ref=e6]:
+        - generic [ref=e7]:
+          - generic [ref=e8]:
+            - button [ref=e9] [cursor=pointer]:
+              - img [ref=e10]
+            - generic [ref=e11]: 01:07:17
+          - list [ref=e12]:
+            - listitem [ref=e13]:
+              - button [ref=e14] [cursor=pointer]: Event Summary
+            - listitem [ref=e15]:
+              - button [ref=e16] [cursor=pointer]: End Event
+            - listitem [ref=e17]:
+              - button [ref=e18] [cursor=pointer]: Venues
+        - list [ref=e19]:
+          - listitem [ref=e20]:
+            - button [ref=e21] [cursor=pointer]:
+              - img [ref=e22]
+          - listitem [ref=e28]:
+            - button [ref=e29] [cursor=pointer]:
+              - img [ref=e31]
+    - generic [ref=e38]:
+      - generic [ref=e40]:
+        - generic [ref=e41]:
+          - generic [ref=e42]:
+            - combobox [ref=e45]
+            - button [ref=e47] [cursor=pointer]:
+              - generic [ref=e49]: Teams
+              - img [ref=e50]
+          - generic [ref=e52]:
+            - button [ref=e54] [cursor=pointer]:
+              - img [ref=e55]
+            - generic [ref=e56]:
+              - button [disabled]:
+                - img
+            - button [ref=e58] [cursor=pointer]:
+              - img [ref=e59]
+        - generic [ref=e62]:
+          - generic [ref=e63]:
+            - generic [ref=e66]: "1"
+            - generic [ref=e69]: "0"
+            - generic [ref=e72]: "0"
+          - generic [ref=e74]: 0%
+        - generic [ref=e93]:
+          - generic [ref=e94] [cursor=pointer]:
+            - generic [ref=e96]: SummaryTeam
+            - generic [ref=e97]:
+              - img [ref=e99]
+              - generic [ref=e101]: 00:24
+              - button [ref=e103]:
+                - img [ref=e104]
+          - generic [ref=e108]:
+            - generic [ref=e109]:
+              - generic [ref=e111]:
+                - combobox [ref=e114]
+                - button [ref=e116] [cursor=pointer]:
+                  - generic [ref=e118]: Available
+                  - img [ref=e119]
+              - generic [ref=e126]:
+                - img [ref=e128]
+                - combobox [ref=e131]
+                - generic [ref=e132]:
+                  - button:
+                    - img
+                  - button [ref=e133] [cursor=pointer]:
+                    - img [ref=e134]
+            - generic [ref=e137]:
+              - generic [ref=e138]: Team
+              - generic [ref=e140]: Test User [CPR]
+              - generic [ref=e141]: Activity Log
+              - textbox [ref=e145]:
+                - /placeholder: No log entries
+                - text: Team created
+      - separator [ref=e146]
+      - generic [ref=e149]:
+        - generic [ref=e150]:
+          - generic [ref=e151]:
+            - button [pressed] [ref=e152] [cursor=pointer]: Calls (0)
+            - button [ref=e153] [cursor=pointer]: Clinic (0)
+          - button [ref=e154] [cursor=pointer]: "Surge: Inactive"
+        - generic [ref=e155]:
+          - generic [ref=e157]:
+            - generic [ref=e158]:
+              - generic [ref=e159]:
+                - generic [ref=e160]: "Total Calls Logged:"
+                - generic [ref=e161]: "0"
+              - generic [ref=e162]:
+                - generic [ref=e163]: "Active:"
+                - generic [ref=e164]: "0"
+              - generic [ref=e165]:
+                - generic [ref=e166]: "Pending:"
+                - generic [ref=e167]: "0"
+              - generic [ref=e168]:
+                - generic [ref=e169]: "On Scene:"
+                - generic [ref=e170]: "0"
+              - generic [ref=e171]:
+                - generic [ref=e172]: "Transporting to:"
+                - generic [ref=e173]: "0"
+            - button [ref=e175] [cursor=pointer]: Add Call
+          - generic [ref=e178]:
+            - table [ref=e180]:
+              - rowgroup [ref=e188]:
+                - row [ref=e189]:
+                  - columnheader [ref=e190]: "Call #"
+                  - columnheader [ref=e191]: Chief Complaint
+                  - columnheader [ref=e192]: A/S
+                  - columnheader [ref=e193]: Location
+                  - columnheader [ref=e194]: Team
+                  - columnheader [ref=e195]
+            - button [ref=e198] [cursor=pointer]: Show Resolved Calls
+  - alert [ref=e199]
+  - dialog "Add Call" [ref=e202]:
+    - button [ref=e204] [cursor=pointer]
+    - generic [ref=e205]:
+      - banner [ref=e206]: Add Call
+      - generic [ref=e207]:
+        - generic [ref=e210]:
+          - generic [ref=e211]: Location
+          - generic [ref=e212]:
+            - combobox "Location" [expanded] [active] [ref=e213]
+            - generic [ref=e214]:
+              - button:
+                - img
+              - button [expanded] [ref=e215] [cursor=pointer]:
+                - img [ref=e216]
+        - generic [ref=e218]:
+          - generic [ref=e220]:
+            - generic: Source
+            - textbox [ref=e222]
+          - generic [ref=e224]:
+            - generic: Age/Sex
+            - textbox [ref=e226]
+        - generic [ref=e228]:
+          - generic: Chief Complaint
+          - textbox [ref=e230]
+        - generic [ref=e231]:
+          - generic [ref=e233]:
+            - text: Assign Team
+            - combobox [ref=e234]
+          - button [ref=e236] [cursor=pointer]:
+            - generic: Assign Team
+            - generic [ref=e238]: Select a team
+            - img [ref=e239]
+      - contentinfo [ref=e241]:
+        - button [ref=e242] [cursor=pointer]: Cancel
+        - button [ref=e243] [cursor=pointer]: Submit
+    - button [ref=e245] [cursor=pointer]
+  - dialog [ref=e247]:
+    - generic "Suggestions" [ref=e250]:
+      - listbox "Suggestions" [ref=e251]:
+        - option "Unknown" [ref=e252] [cursor=pointer]:
+          - generic [ref=e253]: Unknown
+          - img [ref=e255]
+    - button "Dismiss" [ref=e258] [cursor=pointer]
+```

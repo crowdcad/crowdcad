@@ -1,0 +1,153 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e1]:
+  - generic [ref=e2]:
+    - navigation [ref=e3]:
+      - generic [ref=e5]:
+        - generic [ref=e6]:
+          - generic [ref=e7]:
+            - button "Logo" [ref=e8] [cursor=pointer]:
+              - img "Logo" [ref=e9]
+            - generic [ref=e10]: 19:53:09
+          - list [ref=e11]:
+            - listitem [ref=e12]:
+              - button "Venue Map" [ref=e13] [cursor=pointer]
+            - listitem [ref=e14]:
+              - button "Posting Schedule" [ref=e15] [cursor=pointer]
+            - listitem [ref=e16]:
+              - button "Event Summary" [ref=e17] [cursor=pointer]
+            - listitem [ref=e18]:
+              - button "Venues" [ref=e19] [cursor=pointer]
+        - list [ref=e20]:
+          - listitem [ref=e21]:
+            - button "Switch to light mode" [ref=e22] [cursor=pointer]:
+              - img [ref=e23]
+          - listitem [ref=e29]:
+            - button "Open profile menu" [ref=e30] [cursor=pointer]:
+              - img [ref=e32]
+    - generic [ref=e35]:
+      - region "Notifications Alt+T"
+      - generic [ref=e39]:
+        - generic [ref=e41]:
+          - generic [ref=e42]:
+            - generic [ref=e43]:
+              - combobox [ref=e46]
+              - button "Teams Select section" [ref=e48] [cursor=pointer]:
+                - generic [ref=e50]: Teams
+                - img [ref=e51]
+            - generic [ref=e53]:
+              - button "Add Team or Supervisor" [ref=e55] [cursor=pointer]:
+                - img [ref=e56]
+              - button "Update all posts" [ref=e58] [cursor=pointer]:
+                - img [ref=e59]
+              - button "Sort teams" [ref=e63] [cursor=pointer]:
+                - img [ref=e64]
+          - generic [ref=e67]:
+            - generic [ref=e68]:
+              - generic "1 Available" [ref=e69]:
+                - generic [ref=e71]: "1"
+              - generic "0 On Break/Clinic" [ref=e72]:
+                - generic [ref=e74]: "0"
+              - generic "0 On Calls" [ref=e75]:
+                - generic [ref=e77]: "0"
+            - generic [ref=e79]: 0%
+          - generic [ref=e98]:
+            - generic [ref=e99] [cursor=pointer]:
+              - generic [ref=e101]: SummaryTeam
+              - generic [ref=e102]:
+                - img [ref=e104]
+                - generic [ref=e106]: 00:00
+                - button "Team actions" [ref=e108]:
+                  - img [ref=e109]
+            - generic [ref=e113]:
+              - generic [ref=e114]:
+                - generic [ref=e116]:
+                  - combobox [ref=e119]
+                  - button "Available Status" [ref=e121] [cursor=pointer]:
+                    - generic [ref=e123]: Available
+                    - img [ref=e124]
+                - generic [ref=e131]:
+                  - img [ref=e133]
+                  - combobox "Location" [ref=e136]
+                  - generic [ref=e137]:
+                    - button:
+                      - img
+                    - button "Show suggestions" [ref=e138] [cursor=pointer]:
+                      - img [ref=e139]
+              - generic [ref=e142]:
+                - generic [ref=e143]: Team
+                - generic [ref=e145]: Test User [CPR]
+                - generic [ref=e146]: Activity Log
+                - textbox [ref=e150]:
+                  - /placeholder: No log entries
+                  - text: Team created
+        - separator [ref=e151]
+        - generic [ref=e154]:
+          - generic [ref=e155]:
+            - generic [ref=e156]:
+              - button "Calls (0)" [pressed] [ref=e157] [cursor=pointer]
+              - button "Clinic (0)" [ref=e158] [cursor=pointer]
+            - button "Start surge" [ref=e159] [cursor=pointer]: "Surge: Inactive"
+          - generic [ref=e160]:
+            - generic [ref=e162]:
+              - generic [ref=e163]:
+                - generic [ref=e164]:
+                  - generic [ref=e165]: "Total Calls Logged:"
+                  - generic [ref=e166]: "0"
+                - generic [ref=e167]:
+                  - generic [ref=e168]: "Active:"
+                  - generic [ref=e169]: "0"
+                - generic [ref=e170]:
+                  - generic [ref=e171]: "Pending:"
+                  - generic [ref=e172]: "0"
+                - generic [ref=e173]:
+                  - generic [ref=e174]: "On Scene:"
+                  - generic [ref=e175]: "0"
+                - generic [ref=e176]:
+                  - generic [ref=e177]: "Transporting:"
+                  - generic [ref=e178]: "0"
+              - button "Add Call" [ref=e180] [cursor=pointer]
+            - generic [ref=e183]:
+              - table [ref=e185]:
+                - rowgroup [ref=e193]:
+                  - 'row "Call # Chief Complaint A/S Location Team" [ref=e194]':
+                    - 'columnheader "Call #" [ref=e195]'
+                    - columnheader "Chief Complaint" [ref=e196]
+                    - columnheader "A/S" [ref=e197]
+                    - columnheader "Location" [ref=e198]
+                    - columnheader "Team" [ref=e199]
+                    - columnheader [ref=e200]
+                - rowgroup
+              - button "Toggle resolved calls" [ref=e203] [cursor=pointer]: Show Resolved Calls
+  - alert [ref=e204]
+  - dialog "Add New Team" [ref=e207]:
+    - button "Dismiss" [ref=e209] [cursor=pointer]
+    - banner [ref=e210]: Add New Team
+    - generic [ref=e211]:
+      - generic [ref=e213]:
+        - generic [ref=e214]: Team Name
+        - textbox "Team Name" [ref=e216]: SummaryTeam
+      - generic [ref=e217]:
+        - generic [ref=e218]:
+          - generic [ref=e219]: Member name
+          - generic [ref=e220]: Certification
+          - generic [ref=e221]: Lead
+        - generic [ref=e223]:
+          - textbox "Member name" [active] [ref=e228]: Test User
+          - generic [ref=e229]:
+            - combobox [ref=e232]
+            - button "Certification" [ref=e234] [cursor=pointer]:
+              - img [ref=e236]
+          - generic "Lead" [ref=e238] [cursor=pointer]:
+            - checkbox "Lead" [ref=e239]
+            - generic [ref=e240]:
+              - img
+          - button "Remove member" [ref=e241] [cursor=pointer]:
+            - img [ref=e242]
+    - contentinfo [ref=e245]:
+      - button "Cancel" [ref=e246] [cursor=pointer]
+      - button "Save & add another" [disabled]
+      - button "Save & close" [disabled]: Save & close
+    - button "Dismiss" [ref=e248] [cursor=pointer]
+```
