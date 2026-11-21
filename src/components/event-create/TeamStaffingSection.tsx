@@ -2,6 +2,7 @@ import React from 'react';
 import { Button, ButtonGroup, Card, Dropdown, DropdownTrigger, DropdownMenu, DropdownItem, ScrollShadow } from '@heroui/react';
 import { Trash2, ChevronDown, Pencil } from 'lucide-react';
 import type { Staff } from '@/app/types';
+import TutorialTip from '@/components/ui/TutorialTip';
 
 type Props = {
   staff: Staff[];
@@ -11,6 +12,8 @@ type Props = {
   onEditTeam: (idx: number) => void;
   onAddTeam: () => void;
   onUploadCSV: () => void;
+  /** A tutorial callout pointing at Add Team (Lite mode), shown until the first team exists. */
+  addTeamHint?: string;
 };
 
 export default function TeamStaffingSection({
@@ -21,10 +24,11 @@ export default function TeamStaffingSection({
   onEditTeam,
   onAddTeam,
   onUploadCSV,
+  addTeamHint,
 }: Props) {
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <div className="flex-shrink-0 px-4 py-3 flex items-center justify-between">
+      <div className="relative flex-shrink-0 px-4 py-3 flex items-center justify-between">
         <h3 className="text-surface-light font-semibold text-lg">Teams</h3>
         <ButtonGroup radius="full">
           <Button
@@ -56,6 +60,12 @@ export default function TeamStaffingSection({
             </DropdownMenu>
           </Dropdown>
         </ButtonGroup>
+        {addTeamHint && staff.length === 0 && (
+          // The pointer sits under the Add Team half of the button group.
+          <TutorialTip className="top-full mt-2 right-4 w-[240px]" arrowClassName="right-[64px]">
+            {addTeamHint}
+          </TutorialTip>
+        )}
       </div>
 
       <div className="px-4 py-3 flex-1 min-h-0 flex flex-col">

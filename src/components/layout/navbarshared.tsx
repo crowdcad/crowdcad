@@ -4,12 +4,17 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
+import Image from 'next/image';
 import Link from 'next/link';
 import { NavbarMenuItem } from '@heroui/react';
 
 export const LoginModalLazy = dynamic(() => import('@/components/modals/auth/loginmodal'), { ssr: false });
 
 export type LoginMode = 'login' | 'signup';
+
+/** The round icon buttons on the navbar's right (Help, light/dark): the same outline as the profile button. */
+export const NAVBAR_ICON_BUTTON_CLASS =
+  'h-8 w-8 min-w-8 !rounded-circle border border-surface-liner bg-surface-base text-surface-light hover:bg-surface-deeper';
 
 /** HH:mm:ss wall clock shown next to the logo on dispatch pages. */
 export function LiveClock() {
@@ -19,7 +24,7 @@ export function LiveClock() {
     return () => clearInterval(id);
   }, []);
   return (
-    <span suppressHydrationWarning={true} className="tabular-nums text-surface-light text-sm font-semibold font-arial">
+    <span suppressHydrationWarning={true} className="ui-timer text-surface-light text-sm font-semibold">
       {now.toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
     </span>
   );
@@ -116,5 +121,28 @@ export function MobileMenuAccountItems({
         </>
       )}
     </>
+  );
+}
+
+/**
+ * The CrowdCAD wordmark with its ™, as every navbar shows it (a button home). One place, so the mark and its
+ * sizing stay the same on every page.
+ */
+export function BrandLogo({ isDarkTheme, onClick, widthClass = 'w-20' }: { isDarkTheme: boolean; onClick: () => void; widthClass?: string }) {
+  return (
+    <button onClick={onClick} className="flex items-start" aria-label="CrowdCAD home">
+      <Image
+        src={isDarkTheme ? '/logo.svg' : '/logo-dark.svg'}
+        alt="CrowdCAD"
+        width={118}
+        height={30}
+        priority
+        sizes="(max-width: 600px) 7rem, (max-width: 800px) 8rem, 110px"
+        className={`cursor-pointer h-auto shrink-0 ${widthClass}`}
+      />
+      <span aria-hidden className="ml-0.5 -mt-0.5 text-[0.6rem] font-semibold leading-none text-surface-light/80">
+        ™
+      </span>
+    </button>
   );
 }

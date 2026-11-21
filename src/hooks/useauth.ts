@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { authService, dbService, isPocketbaseBackend, type ServiceUser } from '@/lib/services';
+import { firstOf } from '@/extensions';
 
 // Tracks which uids have already had their `users/{uid}` doc synced with
 // email/displayName this session, so the merge write below only fires once
@@ -42,6 +43,13 @@ export function useAuth() {
     const unsub = authService.onAuthStateChanged((u) => {
       setUser(u);
       setReady(true);
+
+      // An account confined to its own pages (an extension's field login) only ever sees them; the rules deny it everything else anyway.
+      const confined = u ? firstOf((x) => x.auth?.confinedTo?.(u.email)) : null;
+      if (confined) {
+        if (typeof window !== 'undefined' && !confined.allows(window.location.pathname)) window.location.replace(confined.home);
+        return;
+      }
 
       // Best-effort sync so the users collection has enough info (email,
       // displayName) for the admin "Manage Admins" lookup — the doc is

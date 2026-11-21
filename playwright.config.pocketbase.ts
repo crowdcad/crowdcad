@@ -54,6 +54,8 @@ export default defineConfig({
       command: 'next build && next start',
       env: {
         NEXT_PUBLIC_BACKEND: 'pocketbase',
+        // Training's preview modules are walked too (tests/e2e/features/training.feature).
+        NEXT_PUBLIC_TRAINING_PREVIEW: 'on',
         NEXT_PUBLIC_POCKETBASE_URL: PB_URL,
         // Firebase env vars must be present (factory.ts checks NEXT_PUBLIC_BACKEND,
         // but Next.js still validates that these are defined strings)
@@ -87,6 +89,8 @@ export default defineConfig({
       },
       dependencies: ['setup'],
       grep: /@authenticated/,
+      // Field logins are Firebase-only for now.
+      grepInvert: /@firebase-only/,
     },
     {
       name: 'chromium-public',

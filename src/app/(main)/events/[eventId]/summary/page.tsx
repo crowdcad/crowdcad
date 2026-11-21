@@ -3,16 +3,19 @@
 import { useEffect, useState, useMemo } from 'react';
 import { formatEventDate } from '@/lib/eventDate';
 import { useParams } from 'next/navigation';
-import { dbService } from '@/lib/services';
+import { dbService, isPocketbaseBackend } from '@/lib/services';
 import { Event, Call, TeamLogEntry, CallLogEntry, InteractionSession } from '@/app/types';
+import { loadExtensionData, useSummaryContributions } from '@/extensions';
 import dynamic from 'next/dynamic';
 import { Button } from '@heroui/react';
 import { getScheduleWindow, teamStatusBreakdown, teamAvailabilitySeries, getSurgeIntervals } from '@/lib/analyticsUtils';
 import { getZoneCallSummaries } from '@/lib/zones';
 import { formatLogTimestampForCsv } from '@/lib/csvFormat';
 import { GRID_WRAPPER, GRID_CELL } from './summaryGrid';
+import EquipmentTimeline from './EquipmentTimeline';
 import LoadingScreen from '@/components/ui/loading-screen';
 import ExportLogModal from '@/components/modals/event/exportlogmodal';
+
 
 const SummaryCharts = dynamic(() => import('./SummaryCharts'), { ssr: false, loading: () => <div className="p-6 bg-surface-deep border border-surface-liner">Loading charts...</div> });
 
@@ -34,7 +37,9 @@ export default function SummaryPage() {
     const fetchData = async () => {
       if (!eventId) return;
       const eventDoc = await dbService.getDocument<Event>('events', eventId);
-      setEvent(eventDoc.exists ? eventDoc.data : null);
+      if (!eventDoc.exists || !eventDoc.data) return setEvent(null);
+      // On Firebase, extension packs keep their state in their own documents; merge it in.
+      setEvent(isPocketbaseBackend ? eventDoc.data : await loadExtensionData(eventId, eventDoc.data));
     };
     fetchData();
   }, [eventId]);
@@ -76,6 +81,8 @@ export default function SummaryPage() {
     clicks: session.mouseClicks.length,
     keystrokes: session.keyStrokes.length,
   })), [interactionSessions]);
+
+  const extensionParts = useSummaryContributions(eventId ?? '', event, { sectionClassName: `${GRID_WRAPPER} ${GRID_CELL}`, formatTimestamp: formatLogTimestampForCsv });
 
   if (!event) {
     return <LoadingScreen label="Loading summary…" />;
@@ -138,6 +145,9 @@ export default function SummaryPage() {
         csvRows.push(`Surge,-,${formatTimestamp(period.endedAt)},"Surge deactivated (active for ${minutes} min)"`);
       }
     });
+
+    // Extension packs' rows (e.g. an MCI log)
+    for (const part of extensionParts) csvRows.push(...(part.csvLines ?? []));
 
     // Zone Summary
     zoneCallSummaries.forEach((zone) => {
@@ -333,14 +343,15 @@ export default function SummaryPage() {
         </div>
 
         {zoneCallSummaries.length > 0 && (
-          <div className={GRID_CELL}>
+          // A standalone box: the wrapper adds the top/left borders a grid cell leaves to its neighbours.
+          <div className={`${GRID_WRAPPER} ${GRID_CELL}`}>
             <div className="px-4 py-3">
               <span className="font-semibold">Zone Breakdown</span>
               <div className="text-sm text-surface-faint">{zoneCallSummaries.length} dispatch zone{zoneCallSummaries.length === 1 ? '' : 's'}</div>
             </div>
             <div className="px-4 pb-4 space-y-2">
               {zoneCallSummaries.map((zone) => (
-                <div key={zone.zoneId} className="bg-surface-deepest p-3 flex items-center justify-between">
+                <div key={zone.zoneId} className="bg-surface-deepest border border-surface-liner/70 p-3 flex items-center justify-between">
                   <span className="font-semibold">{zone.zoneName}</span>
                   <div className="flex gap-6 text-sm">
                     <div>
@@ -362,10 +373,15 @@ export default function SummaryPage() {
           </div>
         )}
 
+        <EquipmentTimeline event={event} />
+
+        {extensionParts.map((part, i) => (part.sections ? <div key={i}>{part.sections}</div> : null))}
+
         <SummaryCharts
           teamStatusBreakdown={teamBreakdown}
           availabilitySeries={availabilitySeries}
           interactionTimeline={interactionTimeline}
+          stepCharts={extensionParts.flatMap((part) => part.charts ?? [])}
         />
 
         {totalSessions > 0 && (

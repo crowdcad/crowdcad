@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { authService, dbService } from "@/lib/services";
@@ -9,6 +8,7 @@ import { useAuth } from "@/hooks/useauth";
 import { useAdmin } from "@/hooks/useAdmin";
 import { useDispatchVocabulary } from "@/hooks/useDispatchVocabulary";
 import { isEventEnded } from "@/lib/eventStatus";
+import { hasPostingSchedule } from "@/lib/postingTimes";
 import type { Event } from "@/app/types";
 
 import {
@@ -27,7 +27,8 @@ import {
 } from "@heroui/react";
 
 import { Menu, Moon, UserRound, LogOut, Sun } from "lucide-react";
-import { LiveClock, LoginModalLazy, MobileMenuAccountItems, useThemeToggle } from '@/components/layout/navbarshared';
+import HelpButton from '@/components/training/HelpButton';
+import { BrandLogo, LiveClock, LoginModalLazy, MobileMenuAccountItems, NAVBAR_ICON_BUTTON_CLASS, useThemeToggle } from '@/components/layout/navbarshared';
 
 export default function AppNavbar() {
   const router = useRouter();
@@ -79,7 +80,7 @@ export default function AppNavbar() {
 
         const data = docSnap.exists ? docSnap.data : null;
 
-        setPostingScheduleEnabled((data?.postingTimes?.length ?? 0) > 0);
+        setPostingScheduleEnabled(hasPostingSchedule(data));
         setEventEnded(data ? isEventEnded(data) : false);
         setEventOwnerId(data?.userId ?? null);
       } catch {
@@ -157,7 +158,7 @@ export default function AppNavbar() {
         onMenuOpenChange={setIsMenuOpen}
         classNames={{
           base:
-            `sticky top-0 z-[300] ${isDispatch ? 'bg-surface-deep' : 'bg-surface-deepest/70'} backdrop-blur-md`,
+            `app-navbar sticky top-0 z-[300] ${isDispatch ? 'bg-surface-deep' : 'bg-surface-deepest/70'} backdrop-blur-md`,
           wrapper:
             `${wrapperHeightClass} px-4 sm:px-6 md:px-6 lg:px-6 xl:px-6 2xl:px-6 flex items-center`,
           item: "text-[16px] leading-6",
@@ -172,17 +173,7 @@ export default function AppNavbar() {
         <div className={`flex w-full items-center justify-between ${containerWidthClass} mx-auto`}>
           <div className="relative z-[30] min-w-0 flex items-center gap-2 sm:gap-4 md:gap-6">
             <NavbarBrand>
-              <button onClick={() => router.push("/")} className="flex items-center">
-                <Image
-                  src={isDarkTheme ? "/logo.svg" : "/logo-dark.svg"}
-                  alt="Logo"
-                  width={118}
-                  height={30}
-                  priority
-                  sizes="(max-width: 600px) 7rem, (max-width: 800px) 8rem, 110px"
-                  className={`cursor-pointer h-auto shrink-0 ${logoWidthClass}`}
-                />
-              </button>
+              <BrandLogo isDarkTheme={isDarkTheme} onClick={() => router.push("/")} widthClass={logoWidthClass} />
               {/* LiveClock next to logo when on dispatch page */}
               {isDispatch && (
                 <div className="ml-3 sm:ml-4 md:ml-6">
@@ -242,11 +233,15 @@ export default function AppNavbar() {
             </div>
 
             <NavbarItem>
+              <HelpButton />
+            </NavbarItem>
+
+            <NavbarItem>
               <Button
                 isIconOnly
                 variant="flat"
                 aria-label={isDarkTheme ? "Switch to light mode" : "Switch to dark mode"}
-                className="h-8 w-8 min-w-8 rounded-full bg-surface-deeper/70 text-surface-light hover:bg-surface-deeper"
+                className={NAVBAR_ICON_BUTTON_CLASS}
                 onPress={toggleTheme}
               >
                 {isDarkTheme ? <Sun className="size-4" /> : <Moon className="size-4" />}
@@ -263,7 +258,7 @@ export default function AppNavbar() {
                 <Button
                   variant="bordered"
                   aria-label="Log in"
-                  className="h-8 min-w-8 rounded-full border-surface-liner px-3 text-surface-light hover:bg-surface-deeper"
+                  className="h-8 min-w-8 !rounded-circle border-surface-liner px-3 text-surface-light hover:bg-surface-deeper"
                   onPress={() => {
                     setIsMenuOpen(false);
                     setLoginMode("login");
@@ -280,9 +275,9 @@ export default function AppNavbar() {
                   <DropdownTrigger>
                     <button
                         aria-label="Open profile menu"
-                        className="relative rounded-full p-0.5 bg-gradient-to-br from-accent/70 to-[rgba(240,28,28,0.4)] cursor-pointer"
+                        className="relative rounded-circle cursor-pointer"
                       >
-                        <span className="flex h-7 w-7 items-center justify-center rounded-full border border-surface-liner bg-surface-base text-surface-light">
+                        <span className="flex h-8 w-8 items-center justify-center rounded-circle border border-surface-liner bg-surface-base text-surface-light">
                           <UserRound className="size-4" />
                         </span>
                       </button>

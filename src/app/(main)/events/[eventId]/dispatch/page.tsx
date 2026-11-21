@@ -1,7 +1,8 @@
 'use client';
-import { useEffect, useMemo, useState, useRef, useCallback, use } from 'react';
+import { useEffect, useMemo, useState, useRef, useCallback, use, lazy, Suspense } from 'react';
 import PostingScheduleModal from '@/components/modals/event/postingschedulemodal';
 import VenueMapTab, { type TeamFocusRequest, type SupervisorFocusRequest, type EquipmentFocusRequest } from '@/components/dispatch/venuemaptab';
+import type { MapOverlay } from '@/components/modals/event/venuemapmodal';
 import EventSummaryModal from '@/components/modals/event/eventsummarymodal';
 import QuickCallModal from "@/components/modals/event/quickcallmodal";
 import ClinicWalkupModal from "@/components/dispatch/clinicwalkupmodal";
@@ -11,7 +12,9 @@ import AddEquipmentModal from "@/components/modals/event/addequipmentmodal";
 import EndEventModal from "@/components/modals/event/endeventmodal";
 import TransportUnitModal from "@/components/modals/event/transportunitmodal";
 import React from 'react';
-import { dbService, ServiceError } from '@/lib/services';
+import { dbService, isPocketbaseBackend, ServiceError } from '@/lib/services';
+import { alertsMuted, emit, eventDataStores, freshenSnapshot, useDispatchContributions, type DispatchHost } from '@/extensions';
+import { DispatchExtrasProvider, mergeDispatch } from '@/extensions/dispatch';
 import { PostAssignment, Event, Staff, Supervisor, Call, EquipmentStatus, CallLogEntry, TeamLogEntry, EquipmentItem, EventEquipment, ClinicOutcome, Clinic, Layer, DispatchZone } from '@/app/types';
 import { toast, Slide, ToastContainer } from 'react-toastify';
 import { useRouter } from 'next/navigation';
@@ -20,9 +23,8 @@ import { useAuth } from '@/hooks/useauth';
 import { useAdmin } from '@/hooks/useAdmin';
 import { useCertifications } from '@/hooks/useCertifications';
 import { useLiteMode } from '@/lib/LiteContext';
-import { deleteLiteEvent, getLiteEvent, saveLiteEvent } from '@/lib/liteEventStore';
 import { Map as MapIcon, Users, BriefcaseMedical, HousePlus } from "lucide-react";
-import { FaWalkieTalkie } from "react-icons/fa6";
+import CrowdcadRadioIcon from "@/components/ui/crowdcad-radio-icon";
 import DispatchMotionCell from '@/components/dispatch/motioncell';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { CallTrackingTable } from '@/components/dispatch/calltracking';
@@ -34,6 +36,9 @@ import DebugModal from '@/components/modals/debugmodal';
 import { ShieldAlert } from 'lucide-react';
 import { Select, SelectItem, Tabs, Tab, Button, Tooltip } from "@heroui/react"
 import AvailabilitySurgeStrip from '@/components/dispatch/availabilitysurgestrip';
+import { isRowToggleClick } from '@/components/dispatch/trackingtablebase';
+import EventLog, { EventLogFilterButton } from '@/components/dispatch/eventlog';
+import { ALL_EVENT_LOG, type EventLogFilter } from '@/lib/eventLog';
 import SurgeToggleButton from '@/components/dispatch/surgetogglebutton';
 import PanelTab from '@/components/dispatch/paneltab';
 import DuplicateCallModal from '@/components/modals/event/duplicatecallmodal';
@@ -54,8 +59,43 @@ import { isEventEnded } from '@/lib/eventStatus';
 import { buildLogSummaryCsv } from '@/lib/csvFormat';
 import { downloadTextFile } from '@/lib/downloadFile';
 import { formatAgeSex, parseAgeSex } from '@/lib/ageSex';
-import { getActivePostingTime } from '@/lib/postingTimes';
+import { getActivePostingTime, hasPostingSchedule } from '@/lib/postingTimes';
+import FillToTabBar from '@/components/dispatch/filltotabbar';
+import { keepTrackedLocations } from '@/lib/teamLocationGuard';
+import { arrivalKey, arrivalQuestion, equipmentArrivals, type EquipmentArrival } from '@/lib/equipmentArrivals';
+import {
+  custodyOf,
+  EQUIPMENT_RUN_STATUSES,
+  fleetOf,
+  handOffEquipment,
+  materializeEventEquipment as materializeEquipment,
+  moveEquipment,
+  pickUpEquipment,
+  releaseEquipment,
+  returnAllFromUnit,
+  returnEquipment,
+  RETRIEVING_EQ,
+  RETURNING_EQ,
+  settleReturningUnits,
+  stagingLocation as stagingLocationOf,
+  unitHolder,
+  unPickUpEquipment,
+  withCustody,
+  type Fleet,
+  type CustodyActor,
+  changedFleet,
+} from '@/lib/equipmentCustody';
+import { trackedUnitNames, type UnitTracking } from '@/lib/unitTracking';
+import { FOCUS_PARAM, focusSearch, parseFocus, type FocusPane } from '@/lib/dispatchFocus';
+import FocusControls from '@/components/dispatch/focuscontrols';
 import { stampStatusSince, deriveStatusSinceFromLogs } from '@/lib/teamStatusSince';
+import { newTeamId } from '@/lib/teamId';
+import { supervisorMemberString } from '@/lib/teamDraft';
+import { isGeoLayer } from '@/lib/geo/layers';
+import { isPlacedPost } from '@/lib/geo/positions';
+
+/** Stands in for the event before it loads, so extension packs' hooks run on every render. */
+const PLACEHOLDER_EVENT = { staff: [], supervisor: [], calls: [] } as unknown as Event;
 
 interface DispatchRoutePageProps {
   params: Promise<{ eventId: string }>;
@@ -81,18 +121,33 @@ interface DispatchRoutePageProps {
 //   );
 // }
 
-const LEFT_PANEL_TABS: LeftPanelTab[] = ['teams', 'supervisors', 'equipment'];
+const LEFT_PANEL_TABS: LeftPanelTab[] = ['teams', 'supervisors', 'equipment', 'log'];
+const LEFT_PANEL_LABELS: Record<LeftPanelTab, string> = { teams: 'Teams', supervisors: 'Supervisors', equipment: 'Equipment', log: 'Log' };
 
 
 export default function DispatchPage({ params }: DispatchRoutePageProps) {
   const [event, setEvent] = useState<Event | undefined>(undefined);
   const [postAssignments, setPostAssignments] = useState<PostAssignment>({});
+  // Live unit positions on a TAK event, reported by the TAK module's agent (D66).
+  const [unitTracking, setUnitTracking] = useState<UnitTracking | null>(null);
+  // Units with live tracking right now (a fresh position on a TAK event). Only their Location is
+  // tracked; every other unit behaves as on a standard event (D66). A ref so writes read the latest.
+  const trackedUnitsRef = useRef<Set<string>>(new Set());
+  trackedUnitsRef.current = trackedUnitNames(event?.mapMode, unitTracking);
   // const handleBulkPostAssignment = (newAssignments: PostAssignment) => {
   //   setPostAssignments(newAssignments);
   // };
   const { eventId } = use(params);
-  const { isLiteMode: layoutLiteMode } = useLiteMode();
+  const { isLiteMode: layoutLiteMode, store: liteStore, writeGate, tracking: liteTracking } = useLiteMode();
   const isLiteMode = layoutLiteMode;
+  // Cloud events on Firebase let extension packs keep state in their own documents (src/extensions/types.ts, EventDataStore);
+  // Lite and PocketBase keep everything on the event.
+  const packDocMode = !isLiteMode && !isPocketbaseBackend;
+  // Each pack's latest merge function from its live documents (undefined until it reports).
+  const packMergesRef = useRef<(((event: Event) => Event) | undefined)[]>([]);
+  const withPackDocs = (base: Event) => packMergesRef.current.reduce((e, merge) => (merge ? merge(e) : e), base);
+  // The merged extension contributions of the last render, for handlers defined above where they are computed.
+  const extrasRef = useRef(mergeDispatch([]));
   const { user: authUser, ready: authReady } = useAuth();
   const user = isLiteMode ? null : authUser;
   const ready = isLiteMode ? true : authReady;
@@ -101,6 +156,12 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
   const vocabularyTerms = dispatchVocabularyPreset.terms;
   const t = useCallback((key: string) => vocabularyTerms[key] ?? key, [vocabularyTerms]);
   const router = useRouter();
+
+  // Training: a scripted position feed stands in for the TAK agent on a Lite event.
+  useEffect(() => {
+    if (!isLiteMode || !liteTracking) return;
+    return liteTracking.subscribe(setUnitTracking);
+  }, [isLiteMode, liteTracking]);
 
   const wasSurgingRef = useRef(false);
   useEffect(() => {
@@ -296,13 +357,17 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
 
   const updateEvent = useCallback(async (
     updateInput: Partial<Event> | ((current: Event) => Partial<Event>),
-    options?: { bypassEndedCheck?: boolean }
+    options?: {
+      bypassEndedCheck?: boolean;
+      /** Tracked units whose Location this write may change (a manual edit); see keepTrackedLocations. */
+      locationEdits?: string[];
+    }
   ) => {
     if (!eventId) return;
 
     if (isLiteMode) {
       try {
-        const currentDraft = await getLiteEvent(eventId);
+        const currentDraft = await liteStore.get(eventId);
         if (!currentDraft) {
           throw new Error('Lite event not found');
         }
@@ -316,7 +381,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
 
         const updates = stampStatusSince(
           currentEvent,
-          typeof updateInput === 'function' ? updateInput(currentEvent) : updateInput
+          keepTrackedLocations(currentEvent, typeof updateInput === 'function' ? updateInput(currentEvent) : updateInput, trackedUnitsRef.current, options?.locationEdits)
         );
 
         const nextEvent = {
@@ -324,8 +389,14 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
           ...removeUndefinedDeep(updates),
         } as Event;
 
+        // Training: a locked step can turn the write away (src/training/gate.ts); the board stays as it was.
+        if (writeGate && !writeGate(currentEvent, nextEvent)) {
+          setEvent((prev) => (prev ? { ...prev } : prev));
+          return;
+        }
+
         const nextDraft = toLiteDraftFromEvent(nextEvent, currentDraft);
-        await saveLiteEvent(nextDraft);
+        await liteStore.save(nextDraft);
 
         setEvent(nextEvent);
         setPostAssignments(nextEvent.postAssignments || {});
@@ -340,8 +411,11 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
       await dbService.runTransaction(async (tx) => {
         const snap = await tx.get<Event>('events', eventId);
         if (!snap.exists || !snap.data) throw new Error("Event does not exist");
-
-        const currentEvent = snap.data;
+        // Extension packs' own documents: read in the same transaction and merged in.
+        const stores = packDocMode ? eventDataStores() : [];
+        const states: unknown[] = [];
+        for (const store of stores) states.push(await store.readTx(tx, eventId));
+        const currentEvent = stores.reduce((e, store, i) => store.merge(e, states[i]), snap.data as Event);
 
         if (!options?.bypassEndedCheck && isEventEnded(currentEvent)) {
           throw new Error('EVENT_ENDED');
@@ -354,7 +428,17 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
           updates = updateInput;
         }
 
-        tx.update('events', eventId, removeUndefinedDeep(stampStatusSince(currentEvent, updates)));
+        const cleaned = removeUndefinedDeep(stampStatusSince(currentEvent, keepTrackedLocations(currentEvent, updates, trackedUnitsRef.current, options?.locationEdits)));
+        // Every pack plans (and reads) before any pack writes; the rest goes to the event document.
+        let rest: Partial<Event> = cleaned;
+        const writes: (() => void)[] = [];
+        for (let i = 0; i < stores.length; i++) {
+          const plan = await stores[i].planTx(tx, eventId, currentEvent, rest, states[i]);
+          rest = plan.rest;
+          writes.push(plan.write);
+        }
+        for (const write of writes) write();
+        if (Object.keys(rest).length) tx.update('events', eventId, rest);
       });
     } catch (error) {
       if (error instanceof Error && error.message === 'EVENT_ENDED') {
@@ -364,7 +448,9 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
       console.error("Update failed:", error);
       toast.error("Failed to save changes. Please try again.");
     }
-  }, [eventId, isLiteMode]);
+  }, [packDocMode, eventId, isLiteMode, liteStore, writeGate]);
+
+  const [logFilter, setLogFilter] = useState<EventLogFilter>(ALL_EVENT_LOG);
 
   const handlePostAssignment = useCallback(async (time: string, post: string, team: string) => {
     await updateEvent((currentEvent) => {
@@ -514,9 +600,9 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     if (!event) return;
     const now = Date.now();
     const testTeams: Staff[] = [
-      { team: 'Alpha', members: ['Test User [EMT]'], status: 'Available', location: 'Roaming', log: [{ timestamp: now, message: 'Test data populated' }], originalPost: 'Roaming' },
-      { team: 'Bravo', members: ['Test User [Paramedic]'], status: 'Available', location: 'Roaming', log: [{ timestamp: now, message: 'Test data populated' }], originalPost: 'Roaming' },
-      { team: 'Charlie', members: ['Test User [RN]'], status: 'Available', location: 'Roaming', log: [{ timestamp: now, message: 'Test data populated' }], originalPost: 'Roaming' }
+      { id: newTeamId(), team: 'Alpha', members: ['Test User [EMT]'], status: 'Available', location: 'Roaming', log: [{ timestamp: now, message: 'Test data populated' }], originalPost: 'Roaming' },
+      { id: newTeamId(), team: 'Bravo', members: ['Test User [Paramedic]'], status: 'Available', location: 'Roaming', log: [{ timestamp: now, message: 'Test data populated' }], originalPost: 'Roaming' },
+      { id: newTeamId(), team: 'Charlie', members: ['Test User [RN]'], status: 'Available', location: 'Roaming', log: [{ timestamp: now, message: 'Test data populated' }], originalPost: 'Roaming' }
     ];
     
     const currentTeamNames = new Set((event.staff || []).map(s => s.team));
@@ -611,31 +697,32 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
 
 
   const handleSaveNewSupervisor = useCallback(async () => {
-    if (!event) return;
+    if (!event) return false;
 
     const callSign = teamName.trim();
     const cert = memberCert.trim();
     // name is optional
     const name = memberName.trim();
 
-    if (!callSign || !cert) {
-      alert('Supervisor Call Sign and Certification are required.');
-      return;
+    if (!callSign) {
+      alert('Supervisor Call Sign is required.');
+      return false;
     }
 
     // Prevent duplicate call signs
     if (event.supervisor?.some(s => s.team.toLowerCase().trim() === callSign.toLowerCase())) {
       alert(`A supervisor with the call sign "${callSign}" already exists.`);
-      return;
+      return false;
     }
 
-    // Build the single-line member string (name may be empty)
-    const memberString = `${name || 'Supervisor'} [${cert}]`;
+    // Build the single-line member string (name and certification may be empty)
+    const memberString = supervisorMemberString(name || 'Supervisor', cert);
 
     const now = new Date();
     const hhmm = now.getHours().toString().padStart(2, '0') + now.getMinutes().toString().padStart(2, '0');
 
     const newSupervisor: Supervisor = {
+      id: newTeamId(),
       team: callSign,
       member: memberString,
       status: 'Available',
@@ -649,14 +736,15 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
         supervisor: [...(event.supervisor || []), newSupervisor],
       });
 
-      // clear fields + close
+      // The dialog closes itself, or stays open for the next supervisor.
       setTeamName('');
       setMemberName('');
       setMemberCert('');
-      setShowAddSupervisorModal(false);
+      return true;
     } catch (error) {
       console.error('Error saving supervisor:', error);
       alert('Error saving supervisor. Please try again.');
+      return false;
     }
   }, [event, teamName, memberName, memberCert, updateEvent]);
 
@@ -669,7 +757,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     const cert = match ? match[2].trim() : '';
 
     setMemberName(name);     // optional
-    setMemberCert(cert);     // required
+    setMemberCert(cert);     // optional
 
     // keep team fields for teams untouched
     setEditSupervisorOriginalName(supervisor.team);
@@ -683,8 +771,8 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     const cert = memberCert.trim();
     const name = memberName.trim(); // optional
 
-    if (!newCallSign || !cert) {
-      alert('Supervisor Call Sign and Certification are required.');
+    if (!newCallSign) {
+      alert('Supervisor Call Sign is required.');
       return;
     }
 
@@ -697,7 +785,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
       return;
     }
 
-    const memberString = `${name || 'Supervisor'} [${cert}]`;
+    const memberString = supervisorMemberString(name || 'Supervisor', cert);
 
     const now = new Date();
     const hhmm = now.getHours().toString().padStart(2, '0') + now.getMinutes().toString().padStart(2, '0');
@@ -759,6 +847,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
       const membersStrings = team.members.map(m => `${m.name} [${m.cert}]${m.lead ? ' (Lead)' : ''}`);
 
       const staffEntry: Staff = {
+        id: newTeamId(),
         team: trimmedName,
         members: membersStrings,
         status: 'Available',
@@ -929,7 +1018,15 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
   }
 
 
-  const handleSupervisorStatusChange = useCallback((supervisor: Staff, newStatus: string) => {
+  const handleSupervisorStatusChange = useCallback((supervisor: Staff, newStatus: string, detail?: string) => {
+    // Same as handleStatusChange: equipment-run statuses go through the call flow.
+    const equipmentCall = EQUIPMENT_RUN_STATUSES.includes(newStatus)
+      ? event?.calls.find(c => c.equipmentTeams?.includes(supervisor.team) && !RESOLVED_CALL_STATUSES.includes(c.status))
+      : undefined;
+    if (equipmentCall) {
+      handleTeamStatusChangeRef.current(equipmentCall.id, supervisor.team, newStatus);
+      return;
+    }
     // "at <location>" gives the log entry real context (which call this
     // status change belongs to) without needing a separate call reference.
     const activeCall = event?.calls?.find(c =>
@@ -939,37 +1036,47 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     const hhmm = now.getHours().toString().padStart(2, '0') + now.getMinutes().toString().padStart(2, '0');
     const logMessage = `${hhmm} - status changed to ${newStatus}${activeCall ? ` at ${activeCall.location}` : ''}`;
 
+    // Extension packs' fields and log lines for this change (e.g. an MCI zone).
+    const extra = event ? extrasRef.current.statusPatch(event, supervisor, newStatus, detail) : null;
     const updatedSupervisors = event?.supervisor.map(s =>
       s.team === supervisor.team
         ? {
             ...s,
+            ...extra?.patch,
             status: newStatus,
             log: [
               ...(s.log || []),
-              { timestamp: now.getTime(), message: logMessage }
+              { timestamp: now.getTime(), message: logMessage },
+              ...(extra?.logMessages ?? []).map((m) => ({ timestamp: now.getTime(), message: `${hhmm} - ${m}` }))
             ]
           }
         : s
     );
-    // updateEvent({ supervisor: updatedSupervisors });
+    // Available after 'Returning Eq': what it was bringing back is at its staging location.
+    const returned = event && supervisor.status === RETURNING_EQ && newStatus === 'Available' && updatedSupervisors
+      ? returnAllFromUnit({ ...fleetOf(event), supervisor: updatedSupervisors }, event, supervisor.team, now.getTime())
+      : null;
     updateEvent({ 
       supervisor: updatedSupervisors,
+      ...(returned && { eventEquipment: returned.eventEquipment }),
       postAssignments
     });
   }, [event, updateEvent, postAssignments]);
 
   const handleSupervisorLocationChange = useCallback(async (supervisor: Staff, newLocation: string) => {
+    // A tracked unit's Location is where it is, never its post, and never sets a status (D66).
+    const tracked = trackedUnitsRef.current.has(supervisor.team);
     const updatedSupervisors = event?.supervisor.map(s =>
       s.team === supervisor.team
         ? {
             ...s,
             location: newLocation,
-            status: newLocation === 'Clinic' && s.status === 'Available' ? 'In Clinic' : s.status, // Changed from 'Available'
+            status: !tracked && newLocation === 'Clinic' && s.status === 'Available' ? 'In Clinic' : s.status, // Changed from 'Available'
             log: [
               ...(s.log || []),
               {
                 timestamp: Date.now(),
-                message: `${new Date().getHours().toString().padStart(2, '0')}${new Date().getMinutes().toString().padStart(2, '0')} - Post changed to ${newLocation}`
+                message: `${new Date().getHours().toString().padStart(2, '0')}${new Date().getMinutes().toString().padStart(2, '0')} - ${tracked ? 'Location' : 'Post'} changed to ${newLocation}`
               }
             ]
           }
@@ -979,7 +1086,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     await updateEvent({ 
       supervisor: updatedSupervisors,
       postAssignments
-    });
+    }, { locationEdits: [supervisor.team] });
   }, [event, updateEvent, postAssignments]);
 
   // Helper to convert equipment data to EquipmentItem format
@@ -998,9 +1105,10 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
       const eventEq = event.eventEquipment?.find(e => e.name === eqName);
       
       // Get staging location - prefer eventEquipment's defaultLocation, fallback to equipment location from venue
-      const stagingLocation = eventEq?.defaultLocation || 
-                             (typeof eq !== 'string' && eq.location) || 
-                             'Staging';
+      // (an event item's own location is where it is now, not where it lives)
+      const stagingLocation = eventEq
+        ? stagingLocationOf(eventEq, event)
+        : (typeof eq !== 'string' && eq.location) || 'Staging';
       
       // Check if equipment is on any active call
       const activeCall = event.calls?.find(c => 
@@ -1011,13 +1119,9 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
       // Determine delivery team
       const deliveryTeam = activeCall?.equipmentTeams?.[0];
       
-      // Determine current location - prefer eventEquipment location if set
-      let currentLocation = eventEq?.location;
-      
-      // If on call and delivered eq, location is the assigned team
-      if (activeCall && activeCall.status === 'Delivered Eq') {
-        currentLocation = activeCall.assignedTeam[0];
-      }
+      // Where it is: its holder (a post, a unit or a clinic), see equipmentCustody.ts
+      const custody = eventEq ? custodyOf(eventEq, event) : undefined;
+      const currentLocation = custody?.holder.name ?? eventEq?.location;
       
       // Check if equipment is in clinic
       const inClinic = currentLocation === 'In Clinic' || eventEq?.status === 'In Clinic';
@@ -1043,73 +1147,52 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
         deliveryTeam: deliveryTeam,
         needsRefresh: inClinic && !activeCall, // Only needs refresh if in clinic but not on active call
         notes: eventEq?.notes,
+        phase: custody?.phase,
+        holder: custody?.holder,
+        assignedTeam: eventEq?.assignedTeam ?? null,
       });
     });
     
     return items;
   };
 
+  // Manual equipment edits on its card (the dispatcher's override): each one
+  // goes through equipmentCustody.ts, so the holder, the custody log and a
+  // unit left in 'Returning Eq' with nothing to return all stay consistent.
+  const saveEquipmentChange = useCallback(async (change: (fleet: Fleet, current: Event, t: number) => Fleet) => {
+    await updateEvent((current) => {
+      const before: Fleet = { ...fleetOf(current), eventEquipment: materializeEquipment(current) };
+      return changedFleet(fleetOf(current), change(before, current, Date.now()));
+    });
+  }, [updateEvent]);
+
   const handleEquipmentStatusChange = useCallback(async (equipmentName: string, newStatus: string) => {
-    if (!event) return;
-    
     try {
-      const existing = (event.eventEquipment || []).find(eq => eq.name === equipmentName);
-
-      let updatedEventEquipment: EventEquipment[] = event.eventEquipment ? [...event.eventEquipment] : [];
-
-      if (existing) {
-        updatedEventEquipment = updatedEventEquipment.map(eq =>
-          eq.name === equipmentName ? { ...eq, status: newStatus as EquipmentStatus } : eq
-        );
-      } else {
-        // Not currently tracked in event.eventEquipment — add it so changes persist
-        // Try to derive a staging/location from venue definition if available
-        const venueEq = (event.venue?.equipment || []).find(v => (typeof v === 'string' ? v : v.name) === equipmentName);
-        const derivedLocation = typeof venueEq === 'string' ? '' : (venueEq && (venueEq as { location?: string }).location) || '';
-        const newItem: EventEquipment = {
-          id: `eq_${Date.now()}_${Math.random().toString(36).slice(2,8)}`,
-          name: equipmentName,
-          status: newStatus as EquipmentStatus,
-          location: derivedLocation,
-          assignedTeam: null,
-        } as EventEquipment;
-        updatedEventEquipment.push(newItem);
-      }
-
-      // Optimistically update local state so the UI reflects the change immediately
-      setEvent(prev => prev ? { ...prev, eventEquipment: updatedEventEquipment } : prev);
-
-      await updateEvent({ eventEquipment: updatedEventEquipment });
+      await saveEquipmentChange((fleet, current, t) => {
+        const eq = fleet.eventEquipment.find(e => e.name === equipmentName);
+        if (!eq) return fleet;
+        const custody = custodyOf(eq, current);
+        if (newStatus === 'Available') {
+          // Back where it is waiting, or to its staging location when a unit or clinic had it.
+          return returnEquipment(fleet, current, equipmentName, t, 'dispatcher', custody.holder.kind === 'post' ? custody.holder.name : undefined);
+        }
+        if (newStatus === 'In Clinic') return moveEquipment(fleet, current, equipmentName, 'Clinic', t);
+        return { ...fleet, eventEquipment: fleet.eventEquipment.map(e => e.name === equipmentName ? { ...e, status: newStatus as EquipmentStatus } : e) };
+      });
     } catch (error) {
       console.error('Error updating equipment status:', error);
       toast.error('Failed to update equipment status');
     }
-  }, [event, updateEvent, setEvent]);
+  }, [saveEquipmentChange]);
 
+  // A post, a unit (it has it now) or a clinic.
   const handleEquipmentLocationChange = (equipmentName: string, newLocation: string) => {
-    if (!event) return;
-    const existing = event.eventEquipment?.find(e => e.name === equipmentName);
-    const updatedEquipment = existing 
-      ? (event.eventEquipment || []).map(e => e.name === equipmentName ? { ...e, location: newLocation } : e)
-      : [...(event.eventEquipment || []), { 
-          id: `eq_${Date.now()}_${Math.random().toString(36).slice(2,8)}`,
-          name: equipmentName,
-          status: 'Available' as EquipmentStatus,
-          location: newLocation,
-          assignedTeam: null,
-        }];
-    updateEvent({ eventEquipment: updatedEquipment });
+    void saveEquipmentChange((fleet, current, t) => moveEquipment(fleet, current, equipmentName, newLocation, t));
   };
 
+  // Back at its staging location (after the clinic, or a return by hand).
   const handleEquipmentMarkReady = (equipmentName: string) => {
-    // Mark equipment as ready: reset to staging location
-    if (!event) return;
-    const eqItem = event.venue?.equipment?.find(e => (typeof e === 'string' ? e : e.name) === equipmentName);
-    const stagingLocation = typeof eqItem === 'string' ? '' : eqItem?.location || 'Not Set';
-    const updatedEquipment = (event.eventEquipment || []).map(e => 
-      e.name === equipmentName ? { ...e, location: stagingLocation } : e
-    );
-    updateEvent({ eventEquipment: updatedEquipment });
+    void saveEquipmentChange((fleet, current, t) => returnEquipment(fleet, current, equipmentName, t));
   };
 
   const handleEquipmentDelete = useCallback(async (equipmentName: string) => {
@@ -1136,25 +1219,16 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
   }, [event, updateEvent]);
 
   const handleResetEquipmentLocations = useCallback(async () => {
-    if (!event) return;
-    
-    const updatedEventEquipment = (event.eventEquipment || []).map(eq => {
-      // Get the default/staging location from venue equipment definition
-      const venueEq = (event.venue?.equipment || []).find(v => 
-        (typeof v === 'string' ? v : v.name) === eq.name
-      );
-      const defaultLocation = typeof venueEq === 'string' ? 'Staging' : (venueEq?.location || 'Staging');
-      
-      return {
-        ...eq,
-        location: eq.defaultLocation || defaultLocation,
-        status: 'Available' as EquipmentStatus
-      };
-    });
-
-    await updateEvent({ eventEquipment: updatedEventEquipment });
+    await saveEquipmentChange((fleet, current, t) =>
+      settleReturningUnits({
+        ...fleet,
+        eventEquipment: fleet.eventEquipment.map(eq =>
+          withCustody(eq, { phase: 'staged', holder: { kind: 'post', name: stagingLocationOf(eq, current) } }, { t, by: 'dispatcher' })
+        ),
+      }, current, t)
+    );
     toast.success('Equipment locations reset to defaults');
-  }, [event, updateEvent]);
+  }, [saveEquipmentChange]);
 
   // getEquipmentItems() (above) only renders event.eventEquipment once it has
   // any items at all — otherwise it falls back to showing the venue's raw
@@ -1162,23 +1236,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
   // that fallback off and make every other venue equipment card vanish, so
   // any add-equipment path materializes the venue catalog into eventEquipment
   // first (a no-op once it's already populated).
-  const materializeEventEquipment = useCallback((currentEvent: Event): EventEquipment[] => {
-    if (currentEvent.eventEquipment && currentEvent.eventEquipment.length > 0) {
-      return currentEvent.eventEquipment;
-    }
-    return (currentEvent.venue?.equipment || []).map(v => {
-      const name = typeof v === 'string' ? v : v.name;
-      const location = typeof v === 'string' ? 'Staging' : (v.location || 'Staging');
-      return {
-        id: `eq_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-        name,
-        status: 'Available' as EquipmentStatus,
-        location,
-        defaultLocation: location,
-        assignedTeam: null,
-      };
-    });
-  }, []);
+  const materializeEventEquipment = useCallback((currentEvent: Event): EventEquipment[] => materializeEquipment(currentEvent), []);
 
   const handleAddVenueEquipment = useCallback(async (equipmentName: string) => {
     if (!event) return;
@@ -1255,7 +1313,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
   // on it releases back to post, not just the team that reported it.
   const RESOLVING_STATUSES = ['Delivered', 'Refusal', 'NMM', 'Treat and Release', 'Unable to Locate', 'Rolled from Scene'];
 
-  const handleTeamStatusChange = (callId: string, team: string, newStatus: string, clinicId?: string, transportUnitValue?: string) => {
+  const handleTeamStatusChange = (callId: string, team: string, newStatus: string, clinicId?: string, transportUnitValue?: string, custodyBy: CustodyActor = 'status') => {
     console.log("FUNCTION CALLED", { callId, team, newStatus });
     setTeamStatusMap(prev => {
       const updatedStatusMap = { ...prev };
@@ -1471,9 +1529,8 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
       };
     });
 
-    // Rest of the function continues as before...
-    const updatedStaff = event?.staff.map(t => {
-      if (t.team === team) {
+    // The acting unit's own status and location (a team, or a supervisor running equipment).
+    const actingUnitUpdate = <U extends Staff | Supervisor>(t: U): U => {
         let updatedLocation = t.location;
         let updatedStatus = newStatus;
 
@@ -1504,7 +1561,10 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
           status: updatedStatus,
           location: updatedLocation,
         };
-      }
+    };
+
+    const updatedStaff = event?.staff.map(t => {
+      if (t.team === team) return actingUnitUpdate(t);
 
       // Auto-return every other team on the call once it resolves via any
       // one team — they weren't the one who reported the resolution, but
@@ -1551,112 +1611,92 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
       }
     }
 
-    // Handle equipment status updates when call / team status changes
+    // A supervisor running equipment changes its own status here too.
+    if (event?.supervisor?.some(s => s.team === team)) {
+      updatedSupervisor = (updatedSupervisor || event.supervisor).map(s => s.team === team ? actingUnitUpdate(s) : s);
+    }
+
+    // Equipment custody (equipmentCustody.ts): what the units on this call
+    // fetch, carry, hand off or bring back follows their statuses.
     let updatedEquipment = event?.eventEquipment;
-
-    // Determine the call after updates and equipment listed on that call
-    const callAfterUpdate = (updatedCalls || event?.calls || []).find(c => c.id === callId);
-    const callEquipmentNames = new Set(
-      (callAfterUpdate?.equipment || []).map((n: unknown) => (typeof n === 'string' ? n : (n as { name?: string }).name || ''))
-    );
-
-    // The acting team plus every other team the resolving cascade above just
-    // released — equipment held by any of them needs to come back too.
-    const resolvingTeams = [team, ...otherAssignedTeams];
-
-    // Equipment currently held by the team(s) that just changed status OR listed on the call
-    const teamEquipment = (event?.eventEquipment || []).filter(eq => resolvingTeams.includes(eq.assignedTeam || '') || callEquipmentNames.has(eq.name));
-
-    if (teamEquipment.length > 0) {
-      const callAfterUpdate = (updatedCalls || event?.calls || []).find(c => c.id === callId);
-      
-      if (isEqDetaching) {
-        // Delivered Eq: transfer to patient care team
-        updatedEquipment = event?.eventEquipment?.map(eq =>
-          eq.assignedTeam === team
-            ? {
-                ...eq,
-                assignedTeam: null,
-                status: 'Available',
-                location: callAfterUpdate?.assignedTeam?.[0] || 'Clinic'
-              }
-            : eq
-        );
-      } else if (newStatus === 'Assisting') {
-        // Assisting: keep with assisting team
-        updatedEquipment = event?.eventEquipment?.map(eq =>
-          eq.assignedTeam === team
-            ? {
-                ...eq,
-                location: team
-              }
-            : eq
-        );
-      } else {
-        // Case A: Call has no remaining assigned teams → resolve equipment to Clinic
-        const noTeamsRemain = !callAfterUpdate?.assignedTeam || callAfterUpdate.assignedTeam.length === 0;
-        const callResolvedLike = ['Resolved', 'Delivered', 'Refusal', 'NMM', 'Treat and Release', 'Unable to Locate', 'Rolled'].includes(
-          callAfterUpdate?.status || newCallStatus
-        );
-
-        if (noTeamsRemain && callResolvedLike) {
-          // If the call was Delivered to clinic, mark equipment as In Clinic
-          // but keep the same team recorded as the assignedTeam (they delivered it).
-          const resolvedStatus = callAfterUpdate?.status || newCallStatus;
-          if (resolvedStatus === 'Delivered') {
-            updatedEquipment = event?.eventEquipment?.map(eq =>
-              resolvingTeams.includes(eq.assignedTeam || '')
-                ? {
-                    ...eq,
-                    // keep assignedTeam so history shows who delivered it
-                    assignedTeam: eq.assignedTeam,
-                    status: 'In Clinic' as EquipmentStatus,
-                    location: 'Clinic'
-                  }
-                : eq
-            );
-          } else {
-            updatedEquipment = event?.eventEquipment?.map(eq =>
-              resolvingTeams.includes(eq.assignedTeam || '')
-                ? {
-                    ...eq,
-                    assignedTeam: null,
-                    status: 'Available' as EquipmentStatus,
-                    location: 'Clinic'
-                  }
-                : eq
-            );
-          }
-        } else {
-          // Other teams remain on the call or the call is still active.
-          // Keep equipment marked as In Use and preserve/transfer assignment appropriately.
-          const newAssigned = (callAfterUpdate?.assignedTeam && callAfterUpdate.assignedTeam.length > 0)
-            ? (callAfterUpdate.assignedTeam.includes(team) ? team : callAfterUpdate.assignedTeam[0])
-            : team;
-
-          updatedEquipment = event?.eventEquipment?.map(eq =>
-            eq.assignedTeam === team
-              ? {
-                  ...eq,
-                  assignedTeam: newAssigned,
-                  status: 'In Use' as EquipmentStatus,
-                  location: callAfterUpdate?.location || eq.location || newAssigned || 'Roaming'
-                }
-              : eq
-          );
-        }
+    let finalStaff = updatedStaff;
+    let finalSupervisor = updatedSupervisor;
+    if (event && (event.eventEquipment || []).length > 0) {
+      const t = now.getTime();
+      const callAfterUpdate = (updatedCalls || event.calls || []).find(c => c.id === callId);
+      let fleet: Fleet = {
+        eventEquipment: event.eventEquipment || [],
+        staff: updatedStaff || event.staff || [],
+        supervisor: updatedSupervisor || event.supervisor || [],
+      };
+      if (newStatus === 'En Route Eq' || newStatus === 'Assisting') {
+        fleet = pickUpEquipment(fleet, event, team, t, custodyBy);
+      } else if (newStatus === RETRIEVING_EQ) {
+        fleet = unPickUpEquipment(fleet, event, team, t);
+      } else if (newStatus === 'Delivered Eq') {
+        // Left with the care team: the first unit on the call that isn't running equipment.
+        const careTeam = (callAfterUpdate?.assignedTeam || []).find(u => !callAfterUpdate?.equipmentTeams?.includes(u)) ?? null;
+        fleet = handOffEquipment(fleet, event, team, careTeam, latestCall.location, t);
+      } else if (RESOLVING_STATUSES.includes(newStatus) || newStatus === 'Detached') {
+        // Delivered to a clinic: it stays there. Otherwise the units holding it bring it back.
+        const clinicName = newStatus === 'Delivered' ? destinationClinicName || 'Clinic' : undefined;
+        fleet = releaseEquipment(fleet, event, [team, ...otherAssignedTeams], t, clinicName);
       }
+      updatedEquipment = fleet.eventEquipment;
+      finalStaff = fleet.staff;
+      finalSupervisor = fleet.supervisor;
     }
 
     // Update the event with all changes
     updateEvent({
       calls: updatedCalls,
-      staff: updatedStaff,
+      staff: finalStaff,
       postAssignments,
-      ...(updatedSupervisor && { supervisor: updatedSupervisor }),
+      ...(finalSupervisor && { supervisor: finalSupervisor }),
       ...(updatedEquipment && { eventEquipment: updatedEquipment })
     });
   };
+
+  // The unit sent to fetch it has it: on a call that is its 'En Route Eq', otherwise just the equipment changes hands.
+  const handleEquipmentPickedUp = (equipmentName: string, by: CustodyActor = 'dispatcher') => {
+    const eq = event?.eventEquipment?.find(e => e.name === equipmentName);
+    const unit = eq?.assignedTeam;
+    if (!event || !eq || !unit) return;
+    const unitStatus = [...(event.staff || []), ...(event.supervisor || [])].find(u => u.team === unit)?.status;
+    const call = event.calls.find(c => c.equipmentTeams?.includes(unit) && !RESOLVED_CALL_STATUSES.includes(c.status));
+    if (call && unitStatus === RETRIEVING_EQ) {
+      handleTeamStatusChange(call.id, unit, 'En Route Eq', undefined, undefined, by);
+      return;
+    }
+    void saveEquipmentChange((fleet, current, t) => pickUpEquipment(fleet, current, unit, t, by, equipmentName));
+  };
+
+  // Pickup and return suggestions from live tracking (equipmentArrivals.ts):
+  // offered on the equipment card and announced once; nothing changes until confirmed.
+  const [dismissedArrivals, setDismissedArrivals] = useState<Set<string>>(() => new Set());
+  const unitsAtPost = unitTracking?.atPost;
+  const arrivals = useMemo(
+    () => (event?.mapMode === 'tak' ? equipmentArrivals(event, unitsAtPost).filter(a => !dismissedArrivals.has(arrivalKey(a))) : []),
+    [event, unitsAtPost, dismissedArrivals]
+  );
+  const announcedArrivals = useRef(new Set<string>());
+  useEffect(() => {
+    for (const a of arrivals) {
+      const key = arrivalKey(a);
+      if (announcedArrivals.current.has(key)) continue;
+      announcedArrivals.current.add(key);
+      toast.info(arrivalQuestion(a));
+    }
+  }, [arrivals]);
+  const confirmArrival = (a: EquipmentArrival) => {
+    if (a.kind === 'picked_up') handleEquipmentPickedUp(a.equipmentName, 'tracking');
+    else void saveEquipmentChange((fleet, current, t) => returnEquipment(fleet, current, a.equipmentName, t, 'tracking', a.post));
+  };
+  const dismissArrival = (a: EquipmentArrival) => setDismissedArrivals(prev => new Set(prev).add(arrivalKey(a)));
+
+  // Lets the team card's status handler (a stable useCallback) hand equipment-run statuses to the call flow above.
+  const handleTeamStatusChangeRef = useRef(handleTeamStatusChange);
+  handleTeamStatusChangeRef.current = handleTeamStatusChange;
 
   // Reverses a single detached-team entry (regular team, equipment run, or auto-detached
   // supervisor): restores its prior status/location, re-attaches it to the call, and — for a
@@ -1771,9 +1811,10 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
 
     let updatedEquipment = event?.eventEquipment;
     if (kind === 'equipment' && detachedEntry.equipmentNames?.length) {
+      // Back in the hands of the unit that delivered it.
       updatedEquipment = event?.eventEquipment?.map(eq =>
         detachedEntry.equipmentNames?.includes(eq.name)
-          ? { ...eq, assignedTeam: team, status: 'In Use' as EquipmentStatus, location: call.location }
+          ? withCustody(eq, { phase: 'carried', holder: unitHolder(team) }, { t: now.getTime(), by: 'dispatcher' })
           : eq
       );
     }
@@ -1885,6 +1926,45 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
 
   const [selectedLeftTab, setSelectedLeftTab] = useState<string>('teams');
   const [selectedRightTab, setSelectedRightTab] = useState<string>('calls');
+  // Extension tabs that open themselves (`autoOpen`) do so once, including for a dispatcher who loads the page mid-way.
+  const autoOpenedTabs = useRef(new Set<string>());
+  const autoOpenSuppressed = useRef(false);
+  // Full-screen (focus) view of one side of the board (#138), kept in the URL as ?focus=<tab>.
+  const [focusedPane, setFocusedPane] = useState<FocusPane | null>(null);
+  const focusUrlReady = useRef(false);
+  useEffect(() => {
+    const focus = parseFocus(new URLSearchParams(window.location.search).get(FOCUS_PARAM));
+    if (focus) {
+      setFocusedPane(focus.pane);
+      if (focus.pane === 'left') setSelectedLeftTab(focus.tab);
+      else setSelectedRightTab(focus.tab);
+      // A URL that opens a tab full screen wins over a tab opening itself.
+      autoOpenSuppressed.current = true;
+    }
+    focusUrlReady.current = true;
+  }, []);
+  useEffect(() => {
+    if (!focusUrlReady.current) return;
+    const tab = focusedPane === 'left' ? selectedLeftTab : focusedPane === 'right' ? selectedRightTab : null;
+    const search = focusSearch(window.location.search, tab);
+    if (search !== window.location.search) window.history.replaceState(window.history.state, '', `${window.location.pathname}${search}${window.location.hash}`);
+  }, [focusedPane, selectedLeftTab, selectedRightTab]);
+  // Full screen hides the navbar (a rule in globals.css), so the tab fills the screen.
+  useEffect(() => {
+    const root = document.documentElement;
+    if (focusedPane) root.setAttribute('data-dispatch-focus', '');
+    else root.removeAttribute('data-dispatch-focus');
+    return () => root.removeAttribute('data-dispatch-focus');
+  }, [focusedPane]);
+  const toggleFocus = (pane: FocusPane) => setFocusedPane((current) => (current === pane ? null : pane));
+  const openFocusWindow = (tab: string) => {
+    window.open(`${window.location.pathname}${focusSearch(window.location.search, tab)}`, '_blank', 'noopener');
+  };
+  // Shows a right-side tab; leaves full-screen Teams/Supervisors/Equipment so it is visible.
+  const showRightTab = (tab: string) => {
+    setSelectedRightTab(tab);
+    setFocusedPane((current) => (current === 'left' ? null : current));
+  };
   // Which dispatch zone(s) the Calls tab is scoped to — the 'all' sentinel
   // means unfiltered ("All Calls"); it's mutually exclusive with any zone
   // id, enforced in the dropdown's onSelectionChange below, never both at
@@ -1892,7 +1972,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
   const [callZoneFilter, setCallZoneFilter] = useState<Set<string>>(new Set(['all']));
   // Controlled so picking "All Calls" can close the dropdown itself while
   // picking a zone leaves it open for further multi-select picks.
-  const [mobileTeamsSubTab, setMobileTeamsSubTab] = useState<'teams' | 'supervisors'>('teams');
+  const [mobileTeamsSubTab, setMobileTeamsSubTab] = useState<'teams' | 'supervisors' | 'log'>('teams');
   const [mobileActiveTab, setMobileActiveTab] = useState<string>('teams');
   const [mobileSelectedClinicId, setMobileSelectedClinicId] = useState<string>('');
   // Set alongside switching to the Map tab from a team card's "view on
@@ -1902,19 +1982,19 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
   const [mapTeamFocusRequest, setMapTeamFocusRequest] = useState<TeamFocusRequest | null>(null);
   const viewTeamOnMap = (teamName: string) => {
     setMapTeamFocusRequest({ teamName, requestId: Date.now() });
-    setSelectedRightTab('map');
+    showRightTab('map');
   };
   // Same as mapTeamFocusRequest/viewTeamOnMap, for a supervisor card's "view on map" button.
   const [mapSupervisorFocusRequest, setMapSupervisorFocusRequest] = useState<SupervisorFocusRequest | null>(null);
   const viewSupervisorOnMap = (supervisorName: string) => {
     setMapSupervisorFocusRequest({ supervisorName, requestId: Date.now() });
-    setSelectedRightTab('map');
+    showRightTab('map');
   };
   // Same as mapTeamFocusRequest/viewTeamOnMap, for an equipment card's "view on map" button.
   const [mapEquipmentFocusRequest, setMapEquipmentFocusRequest] = useState<EquipmentFocusRequest | null>(null);
   const viewEquipmentOnMap = (equipmentName: string) => {
     setMapEquipmentFocusRequest({ equipmentName, requestId: Date.now() });
-    setSelectedRightTab('map');
+    showRightTab('map');
   };
 
   // Matches the lg breakpoint used by the desktop/mobile CSS split below —
@@ -1937,9 +2017,14 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
       if (e.altKey && e.key.toLowerCase() === 'm') {
         e.preventDefault();
         setSelectedRightTab('map');
+        setFocusedPane((current) => (current === 'left' ? null : current));
       }
       if (e.key === 'Escape') {
         setShowQuickCallForm(false);
+        // Leaves full screen, unless Escape is closing a dialog or leaving a field.
+        const active = document.activeElement;
+        const inField = !!active && ['INPUT', 'TEXTAREA', 'SELECT'].includes(active.tagName);
+        if (!inField && !document.querySelector('[role="dialog"]')) setFocusedPane(null);
       }
       // Bare Tab cycles the left sidebar tabs, unless focus is in a control
       // that should get normal tab navigation.
@@ -1966,7 +2051,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
 
       const loadLiteEvent = async () => {
         try {
-          const draft = await getLiteEvent(eventId);
+          const draft = await liteStore.get(eventId);
           if (cancelled) return;
 
           if (!draft) {
@@ -1979,7 +2064,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
             draft.status === 'draft' ? { ...draft, status: 'active' as const } : draft;
 
           if (activeDraft !== draft) {
-            await saveLiteEvent(activeDraft);
+            await liteStore.save(activeDraft);
           }
 
           const normalizedEvent = normalizeLiteDraftToEvent(activeDraft);
@@ -1998,8 +2083,16 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
       };
 
       void loadLiteEvent();
+      // Changes made outside this page (a training step filled in for the trainee) arrive here.
+      const unsubscribe = liteStore.subscribe?.(eventId, (draft) => {
+        if (cancelled || !draft) return;
+        const next = normalizeLiteDraftToEvent(draft);
+        setEvent((prev) => (isEqual(prev, next) ? prev : next));
+        setPostAssignments(next.postAssignments || {});
+      });
       return () => {
         cancelled = true;
+        unsubscribe?.();
       };
     }
 
@@ -2037,10 +2130,12 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
             router.push('/?login=true&error=unauthorized');
             return;
           }
+          if (packDocMode) for (const store of eventDataStores()) store.onServerEvent?.(eventId, eventData);
           setEvent(prev => {
-            if (!isEqual(prev, eventData)) {
-              setPostAssignments(eventData.postAssignments || {});
-              return eventData;
+            const incoming = freshenSnapshot(prev, packDocMode ? withPackDocs(eventData) : eventData);
+            if (!isEqual(prev, incoming)) {
+              setPostAssignments(incoming.postAssignments || {});
+              return incoming;
             }
             return prev;
           });
@@ -2059,7 +2154,25 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
       },
     );
     return () => unsubscribe();
-  }, [eventId, user, router, isAdmin, isLiteMode]);
+  }, [eventId, user, router, isAdmin, isLiteMode, packDocMode, liteStore]);
+
+  // Extension packs' own documents, merged into the event as they change.
+  useEffect(() => {
+    if (!packDocMode || !eventId || !user) return;
+    const stores = eventDataStores();
+    packMergesRef.current = stores.map(() => undefined);
+    const stops = stores.map((store, i) =>
+      store.subscribe(eventId, (merge) => {
+        packMergesRef.current[i] = merge;
+        setEvent((prev) => {
+          if (!prev) return prev;
+          const next = freshenSnapshot(prev, merge(prev));
+          return isEqual(prev, next) ? prev : next;
+        });
+      })
+    );
+    return () => stops.forEach((stop) => stop());
+  }, [packDocMode, eventId, user]);
 
   // Lazily backfill/refresh event.clinics from the venue's clinic-flagged posts
   // (additive — never removes an entry, so existing calls' clinicId never orphans).
@@ -2109,6 +2222,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     const updatedCall: Call = {
       ...call,
       assignedTeam: (call.assignedTeam || []).filter(t => t !== teamToRemove),
+      equipmentTeams: (call.equipmentTeams || []).filter(t => t !== teamToRemove),
       status: (call.assignedTeam || []).length <= 1 ? 'Pending' : call.status,
       log: [...(call.log || []), callLogEntry]
     };
@@ -2128,11 +2242,15 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     const updatedStaff = event.staff.map(t => 
       t.team === teamToRemove ? updatedTeam : t
     );
+
+    // Equipment it hadn't picked up stays put; anything it has, it brings back ('Returning Eq').
+    const fleet = releaseEquipment({ ...fleetOf(event), staff: updatedStaff }, event, [teamToRemove], now.getTime());
   
     // Save to Firestore
     await updateEvent({ 
       calls: updatedCalls, 
-      staff: updatedStaff,
+      staff: fleet.staff,
+      eventEquipment: fleet.eventEquipment,
       postAssignments
     });
   };  
@@ -2350,8 +2468,17 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     };
   }, []);
 
-  const handleStatusChange = useCallback(async (staff: Staff, newStatus: string, clinicId?: string) => {
+  const handleStatusChange = useCallback(async (staff: Staff, newStatus: string, detail?: string) => {
     const team = staff.team;
+
+    // An equipment run's statuses fetch, carry and hand off equipment, which only the call flow does.
+    const equipmentCall = EQUIPMENT_RUN_STATUSES.includes(newStatus)
+      ? event?.calls.find(c => c.equipmentTeams?.includes(team) && !RESOLVED_CALL_STATUSES.includes(c.status))
+      : undefined;
+    if (equipmentCall) {
+      handleTeamStatusChangeRef.current(equipmentCall.id, team, newStatus);
+      return;
+    }
 
     setTeamTimers(prev => ({ ...prev, [team]: Date.now() }));
 
@@ -2366,7 +2493,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
       const now = new Date();
       const hhmm = now.getHours().toString().padStart(2, '0') + now.getMinutes().toString().padStart(2, '0');
       const resolvedClinicId = newStatus === 'Transporting'
-        ? (clinicId ?? activeCall?.clinicId ?? currentEvent.clinics?.[0]?.id ?? 'clinic')
+        ? (detail ?? activeCall?.clinicId ?? currentEvent.clinics?.[0]?.id ?? 'clinic')
         : activeCall?.clinicId;
       const destinationClinicName = newStatus === 'Transporting'
         ? getClinicName(getEventClinics(currentEvent.clinics), resolvedClinicId)
@@ -2382,9 +2509,13 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
         if (s.team !== team) return s;
         
         const teamLogEntry: TeamLogEntry = { timestamp: now.getTime(), message: logMessage };
+        // Extension packs' fields and log lines for this change (e.g. an MCI zone set by Triage, cleared by Available).
+        const extra = extrasRef.current.statusPatch(currentEvent, s, newStatus, newStatus === 'Transporting' ? undefined : detail);
+        const extraLog: TeamLogEntry[] = extra.logMessages.map((m) => ({ timestamp: now.getTime(), message: `${hhmm} - ${m}` }));
 
         return {
             ...s,
+            ...extra.patch,
             status: newStatus,
             // Location is never this handler's call — teamcard.tsx/
             // teamcard-condensed.tsx already compute the right destination
@@ -2392,7 +2523,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
             // location) and apply it via their own onLocationChange before
             // calling this. Overwriting it here with a cruder originalPost-
             // or-'Roaming' fallback used to stomp on that right after.
-            log: [...(s.log || []), teamLogEntry]
+            log: [...(s.log || []), teamLogEntry, ...extraLog]
         };
       });
 
@@ -2425,30 +2556,38 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
          });
       }
 
+      // Available after 'Returning Eq': what it was bringing back is at its staging location.
+      if (staff.status === RETURNING_EQ && newStatus === 'Available') {
+        const fleet = returnAllFromUnit({ ...fleetOf(currentEvent), staff: updatedStaff }, currentEvent, team, now.getTime());
+        return { staff: fleet.staff, calls: updatedCalls, eventEquipment: fleet.eventEquipment };
+      }
+
       return {
         staff: updatedStaff,
         calls: updatedCalls
       };
     });
-  }, [updateEvent]);
+  }, [updateEvent, event?.calls]);
 
   const handleLocationChange = useCallback(async (staff: Staff, newLocation: string) => {
+    // A tracked team's Location is where it is, never its post, and never sets a status (D66).
+    const tracked = trackedUnitsRef.current.has(staff.team);
     const updatedStaff = event?.staff.map(t =>
       t.team === staff.team
         ? addTeamLog(
             {
               ...t,
               location: newLocation,
-              status: newLocation === 'Clinic' && t.status === 'Available' ? 'In Clinic' : t.status,
+              status: !tracked && newLocation === 'Clinic' && t.status === 'Available' ? 'In Clinic' : t.status,
             },
-            `Post changed to ${newLocation}`
+            `${tracked ? 'Location' : 'Post'} changed to ${newLocation}`
           )
         : t
     );
     await updateEvent({ 
       staff: updatedStaff,
       postAssignments // Explicitly preserve postAssignments
-    });
+    }, { locationEdits: [staff.team] });
   }, [event, updateEvent, addTeamLog, postAssignments]); // Add postAssignments dependency
 
   const handleAddTeamToCall = async (callId: string, team: string) => {
@@ -2495,36 +2634,11 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
       c.id === callId ? updatedCall : c
     );
 
-    // Update equipment: mark as In Use any equipment already assigned to this team
-    // or explicitly listed on the call's equipment list.
-    let updatedEquipment = event.eventEquipment || [];
-    try {
-      const callEquipmentNames = new Set(
-        (call.equipment || []).map((n: unknown) => (typeof n === 'string' ? n : (n as { name?: string }).name || ''))
-      );
-      updatedEquipment = (event.eventEquipment || []).map(eq => {
-        const eqName = eq.name;
-        const isListedOnCall = callEquipmentNames.has(eqName);
-        const isCurrentlyAssignedToTeam = eq.assignedTeam === team;
-        if (isListedOnCall || isCurrentlyAssignedToTeam) {
-          return {
-            ...eq,
-            assignedTeam: team,
-            status: 'In Use' as EquipmentStatus,
-            location: call.location || eq.location || team
-          };
-        }
-        return eq;
-      });
-    } catch (e) {
-      console.error('Error updating equipment on team add:', e);
-    }
-
+    // Equipment keeps its holder: adding a care team doesn't take it from the unit running it.
     await updateEvent({ 
       calls: updatedCalls, 
       staff: updatedStaff,
       postAssignments,
-      eventEquipment: updatedEquipment
     });
 
     setTeamToAdd(prev => ({ ...prev, [callId]: '' }));
@@ -2855,14 +2969,14 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     if (!confirmed) return;
 
     try {
-      await deleteLiteEvent(eventId);
+      await liteStore.delete(eventId);
       toast.success('Local event cleared.');
       router.push('/lite');
     } catch (error) {
       console.error('Failed to clear local event:', error);
       toast.error('Failed to clear local event. Please try again.');
     }
-  }, [isLiteMode, eventId, router]);
+  }, [isLiteMode, eventId, router, liteStore]);
 
   // Ticks every 30s so the "ended by the 1-hour-no-activity backup" state
   // (a pure function of wall-clock time against the event's own End Time,
@@ -2891,6 +3005,9 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
 
     await updateEvent(() => ({ ended: true, endedAt: Date.now() }), { bypassEndedCheck: true });
     setShowEndEventModal(false);
+
+    // Extension packs react (e.g. TAK closes the event's live tracking).
+    if (!isLiteMode) emit('event.ended', { eventId, event });
 
     if (!isLiteMode) {
       window.dispatchEvent(new CustomEvent('dispatch-event-ended'));
@@ -2998,8 +3115,9 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
       // closure's possibly-stale `event`, so a surge someone else just started
       // (or that this effect itself already started a moment ago) never gets
       // its start time clobbered by a second, redundant Date.now().
+      // Automatic alerts stay off while an extension pack mutes them (e.g. during an MCI).
       updateEvent((current) =>
-        current.manualSurgeActive ? {} : withSurgeStarted(current, Date.now())
+        current.manualSurgeActive || alertsMuted(current) ? {} : withSurgeStarted(current, Date.now())
       );
     }
     wasAboveSurgeThresholdRef.current = aboveThreshold;
@@ -3014,7 +3132,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
 
     if (aboveThreshold && !wasPendingTransportAboveThresholdRef.current && !event.manualSurgeActive) {
       updateEvent((current) =>
-        current.manualSurgeActive ? {} : withSurgeStarted(current, Date.now())
+        current.manualSurgeActive || alertsMuted(current) ? {} : withSurgeStarted(current, Date.now())
       );
     }
     wasPendingTransportAboveThresholdRef.current = aboveThreshold;
@@ -3040,7 +3158,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
 
       if (aboveThreshold && !wasUnassignedCallAboveThresholdRef.current && !currentEvent.manualSurgeActive) {
         updateEvent((current) =>
-          current.manualSurgeActive ? {} : withSurgeStarted(current, Date.now())
+          current.manualSurgeActive || alertsMuted(current) ? {} : withSurgeStarted(current, Date.now())
         );
       }
       wasUnassignedCallAboveThresholdRef.current = aboveThreshold;
@@ -3058,6 +3176,41 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     }
   }, [event?.clinics, mobileSelectedClinicId]);
 
+  // Extension packs (src/extensions): their contributions to this render, shared with every part of the page.
+  const host: DispatchHost = {
+    eventId,
+    event: event ?? PLACEHOLDER_EVENT,
+    uid: user?.uid,
+    isLite: isLiteMode,
+    isMobile,
+    isOwner: !!user && event?.userId === user.uid,
+    venueLayers: event ? getEventVenueLayers(event) : [],
+    t,
+    updateEvent,
+    setLocalEvent: setEvent,
+    showTab: showRightTab,
+    unitTracking,
+    setUnitTracking,
+    trackedUnits: () => trackedUnitsRef.current,
+    setUnitStatus: async (unitName, status, detail) => {
+      const staff = event?.staff.find((s) => s.team === unitName);
+      if (staff) return handleStatusChange(staff, status, detail);
+      const sup = event?.supervisor?.find((s) => s.team === unitName);
+      if (sup) handleSupervisorStatusChange(sup as unknown as Staff, status, detail);
+    },
+  };
+  const extras = mergeDispatch(useDispatchContributions(host));
+  extrasRef.current = extras;
+  // Tabs that open themselves do so once (a full-screen URL wins).
+  useEffect(() => {
+    if (autoOpenSuppressed.current) return;
+    for (const tab of extras.tabs) {
+      if (!tab.autoOpen || autoOpenedTabs.current.has(tab.id)) continue;
+      autoOpenedTabs.current.add(tab.id);
+      showRightTab(tab.id);
+    }
+  });
+
   // Return early if auth is not ready or user is not authenticated
   if (!isLiteMode && !ready) {
     return <LoadingScreen label="Loading…" />;
@@ -3072,8 +3225,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
   }
 
   const handleRowClick = (e: React.MouseEvent, id: string) => {
-    const target = e.target as HTMLElement;
-    if (target.closest('input, textarea, select, button, a, [contenteditable="true"]')) return;
+    if (!isRowToggleClick(e)) return;
     setOpenCallId(openCallId === id ? null : id);
   };
 
@@ -3171,10 +3323,22 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
   // getEventVenueLayers, so both resolve a call's zone(s) identically.
   const venueLayers: Layer[] = getEventVenueLayers(event);
 
+  // Live tracking on the map: an extension pack's overlay (e.g. TAK), or in training the scripted feed's chrome.
+  const takOverlay: MapOverlay | undefined =
+    extras.mapOverlay ??
+    (event.mapMode === 'tak' && isLiteMode && liteTracking
+      // Training: a scripted feed stands in for live tracking (src/training/trackingFeed.ts); same positions shape, no server.
+      ? {
+          unitTracking: unitTracking ?? { positions: {}, alignments: {} },
+          chrome: typeof liteTracking.chrome === 'function' ? liteTracking.chrome({ event, layers: venueLayers, tracking: unitTracking }) : liteTracking.chrome,
+        }
+      : undefined);
+
+
   // The Map tab only makes sense once an image actually exists to show —
   // a venue with no map uploaded to any layer gets no tab, same rule the
   // navbar used for its old "Venue Map" shortcut.
-  const hasVenueMapImage = venueLayers.some((layer) => !!layer.mapUrl);
+  const hasVenueMapImage = venueLayers.some((layer) => !!layer.mapUrl || isGeoLayer(layer));
 
   // Every post name actually placeable on the map (has x/y coordinates) —
   // plain string posts and free-text locations (Roaming, In Clinic, a typed
@@ -3182,11 +3346,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
   // card's "view on map" button is disabled unless its location is in here.
   const knownMapLocations = new Set(
     venueLayers.flatMap((layer) =>
-      (layer.posts || [])
-        .filter((post): post is { name: string; x: number; y: number } =>
-          typeof post === 'object' && post !== null && typeof post.x === 'number' && typeof post.y === 'number'
-        )
-        .map((post) => post.name)
+      (layer.posts || []).filter((post) => isPlacedPost(post, layer)).map((post) => (typeof post === 'string' ? post : post.name))
     )
   );
 
@@ -3321,6 +3481,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     cardViewMode,
     hasVenueMap: hasVenueMapImage,
     knownMapLocations,
+    unitTracking: event.mapMode === 'tak' ? unitTracking : null,
     onRefreshTeamPost: refreshTeamFromSchedule,
     onNewCall: (teamName: string) => openAddCallModal({ assignedTeam: teamName }),
   };
@@ -3332,6 +3493,8 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     onEditTeam: handleEditTeam,
     onDeleteTeam: handleDeleteTeam,
     onViewOnMap: viewTeamOnMap,
+    // On a TAK event with a posting schedule, each team's posts are listed and edited in its card (D66).
+    onPostAssignment: event.mapMode === 'tak' && (event.postingTimes || []).length > 0 ? handlePostAssignment : undefined,
   };
   const supervisorListProps: SupervisorListProps = {
     ...sharedTeamListProps,
@@ -3350,9 +3513,19 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     onStatusChange: handleEquipmentStatusChange,
     onLocationChange: handleEquipmentLocationChange,
     onMarkReady: handleEquipmentMarkReady,
+    onPickedUp: handleEquipmentPickedUp,
     onDelete: handleEquipmentDelete,
     onViewOnMap: viewEquipmentOnMap,
+    unitTracked: (unitName: string) => event.mapMode === 'tak' && !!unitTracking?.positions[unitName],
+    equipmentTracked: (equipmentName: string) => event.mapMode === 'tak' && !!unitTracking?.equipmentPositions?.[equipmentName],
+    arrivals,
+    onConfirmArrival: confirmArrival,
+    onDismissArrival: dismissArrival,
   };
+
+  // The Log view (left panel on desktop, under Teams on mobile), and its filter in the panel header.
+  const renderEventLog = () => <EventLog event={event} filter={logFilter} />;
+  const renderLogFilter = () => <EventLogFilterButton filter={logFilter} onChange={setLogFilter} />;
 
   // Plain render function (not a component) so the toolbar keeps its
   // identity across renders — see dispatchcontrols.tsx.
@@ -3380,9 +3553,10 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
       return (
         <>
           <Select
+            data-testid="mobile-teams-subtab"
             selectedKeys={[mobileTeamsSubTab]}
             onSelectionChange={(keys) => {
-              const selected = Array.from(keys)[0] as 'teams' | 'supervisors';
+              const selected = Array.from(keys)[0] as 'teams' | 'supervisors' | 'log';
               if (selected) setMobileTeamsSubTab(selected);
             }}
             aria-label="Select teams or supervisors"
@@ -3395,8 +3569,9 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
           >
             <SelectItem key="teams">{t('Teams')}</SelectItem>
             <SelectItem key="supervisors">{t('Supervisors')}</SelectItem>
+            <SelectItem key="log">{t('Log')}</SelectItem>
           </Select>
-          {renderTeamActions(mobileTeamsSubTab)}
+          {mobileTeamsSubTab === 'log' ? renderLogFilter() : renderTeamActions(mobileTeamsSubTab)}
         </>
       );
     }
@@ -3451,6 +3626,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
                   className="rounded-full bg-transparent hover:bg-surface-liner text-base"
                   aria-label={t('Add Call')}
                   onPress={() => openAddCallModal()}
+                  data-testid="mobile-add-call"
                 >
                   {t('Add Call')}
                 </Button>
@@ -3637,8 +3813,316 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     />
   );
 
+
+  // The desktop board's two sides, shared by the split layout and the full-screen (focus) view (#138).
+  const rightTabLabel =
+    selectedRightTab === 'map' ? t('Map')
+    : extras.tabs.find((tab) => tab.id === selectedRightTab)?.label
+      ?? clinics.find((c) => c.id === selectedRightTab)?.name ?? t('Calls');
+  const desktopLeftPane = (
+    <div className="h-full rounded-xl flex flex-col" data-testid="left-panel">
+      {/* Header with Select and Action Buttons */}
+      <div className="flex w-full justify-between items-center pt-2 pb-2 border-b border-surface-liner shrink-0">
+        <Select
+          selectedKeys={[selectedLeftTab]}
+          onSelectionChange={(keys) => {
+            const selected = Array.from(keys)[0] as string;
+            setSelectedLeftTab(selected);
+          }}
+          aria-label="Select section"
+          data-testid="left-panel-select"
+          className="w-auto min-w-[180px]"
+          classNames={{
+            trigger: "bg-surface-deep border border-surface-liner rounded-full hover:bg-surface-liner h-10 min-h-10",
+            value: "text-surface-light",
+            popoverContent: "bg-surface-deep border-surface-liner",
+          }}
+        >
+          <SelectItem key="teams" data-testid="left-panel-option-teams">{t('Teams')}</SelectItem>
+          <SelectItem key="supervisors" data-testid="left-panel-option-supervisors">{t('Supervisors')}</SelectItem>
+          <SelectItem key="equipment" data-testid="left-panel-option-equipment">{t('Equipment')}</SelectItem>
+          <SelectItem key="log" data-testid="left-panel-option-log">{t('Log')}</SelectItem>
+        </Select>
+
+        <div className="flex items-center gap-1.5">
+          {selectedLeftTab === 'log' ? renderLogFilter() : renderTeamActions(selectedLeftTab as LeftPanelTab)}
+          {/* No full-screen button on this side; only a way out if a ?focus= link opened it full screen. */}
+          {focusedPane === 'left' && (
+            <FocusControls
+              focused
+              onToggle={() => toggleFocus('left')}
+              size="md"
+              label={t(LEFT_PANEL_LABELS[selectedLeftTab as LeftPanelTab] ?? 'Teams')}
+            />
+          )}
+        </div>
+      </div>
+
+      {event && <div className="shrink-0">{extras.strip ?? <AvailabilitySurgeStrip event={event} />}</div>}
+
+      {/* Content with ScrollShadow */}
+      <div className="flex-1 min-h-0 overflow-auto scrollbar-hide">
+        <div className="p-0 pb-16">
+
+          {/* TEAMS CONTENT */}
+          {selectedLeftTab === 'teams' && (
+            <TeamList {...teamListProps} emptyText={t('No teams available')} />
+          )}
+
+          {/* SUPERVISORS CONTENT */}
+          {selectedLeftTab === 'supervisors' && (
+            <SupervisorList {...supervisorListProps} emptyText="No supervisors assigned" />
+          )}
+
+          {/* EQUIPMENT CONTENT */}
+          {selectedLeftTab === 'equipment' && (
+            <EquipmentList {...equipmentListProps} emptyText={t('No equipment configured')} />
+          )}
+
+          {/* LOG: every log and note in one timeline */}
+          {selectedLeftTab === 'log' && renderEventLog()}
+
+        </div>
+      </div>
+    </div>
+  );
+
+  const desktopRightPane = (
+    <div className="h-full flex flex-col overflow-hidden pt-2 pb-2" data-testid="right-panel">
+      <div className="w-full flex flex-col flex-1 min-h-0">
+        <div className="relative z-0 mx-1.5 pb-0 flex items-start justify-between gap-1 h-10 shrink-0">
+          <div className="flex items-end gap-1 min-w-0">
+            {extras.tabs.map((tab) => (
+              <PanelTab key={tab.id} active={selectedRightTab === tab.id} onSelect={() => setSelectedRightTab(tab.id)} data-testid={tab.testId}>
+                {tab.label}
+              </PanelTab>
+            ))}
+            <PanelTab active={selectedRightTab === 'calls'} onSelect={() => setSelectedRightTab('calls')} data-testid="calls-tab-button">
+              {dispatchZones.length > 0 ? callZoneFilterLabel : t('Calls')} ({getActiveCallsForZoneSelection(callZoneFilter).length})
+            </PanelTab>
+
+            {clinics.map((clinic) => (
+              <PanelTab
+                key={clinic.id}
+                active={selectedRightTab === clinic.id}
+                onSelect={() => setSelectedRightTab(clinic.id)}
+                data-testid={`clinic-tab-${clinic.id}`}
+              >
+                {clinic.name} ({getClinicCalls(clinic.id).filter(c => !c.outcome).length})
+              </PanelTab>
+            ))}
+
+            {hasVenueMapImage && (
+              <Tooltip content={`${t('Map')} (Alt+M)`} placement="top">
+                <PanelTab
+                  active={selectedRightTab === 'map'}
+                  onSelect={() => setSelectedRightTab('map')}
+                  aria-label={t('Map')}
+                  data-testid="map-tab-button"
+                >
+                  <MapIcon className="h-4 w-4" />
+                </PanelTab>
+              </Tooltip>
+            )}
+          </div>
+
+          <div className="flex items-start gap-1.5 shrink-0">
+            {extras.toolbar}
+            <SurgeToggleButton
+              active={!!event.manualSurgeActive}
+              startedAt={event.manualSurgeStartedAt}
+              onToggle={handleToggleSurge}
+            />
+            <FocusControls
+              focused={focusedPane === 'right'}
+              onToggle={() => toggleFocus('right')}
+              onOpenWindow={() => openFocusWindow(selectedRightTab)}
+              label={rightTabLabel}
+            />
+          </div>
+        </div>
+
+        {extras.tabs.map((tab) =>
+          tab.id === selectedRightTab ? (
+            <div key={tab.id} className="relative z-10 -mt-px mx-1.5 rounded-lg bg-surface-deep px-2.5 py-2 flex flex-col flex-1 min-h-0">
+              {tab.render()}
+            </div>
+          ) : null
+        )}
+
+        {selectedRightTab === 'calls' && !isMobile && (() => {
+          const zoneCounts = getInsightCountsForZoneSelection(callZoneFilter);
+          const isAllCalls = callZoneFilter.has('all');
+          return (
+          <div className="relative z-10 -mt-px mx-1.5 rounded-lg bg-surface-deep px-2.5 py-2 flex flex-col flex-1 min-h-0">
+            <div className="shrink-0 flex flex-col gap-2 pb-1">
+              <div className="flex items-center justify-between py-1">
+                <TrackingInsightsRow
+                  items={[
+                    { key: 'total', label: t('Total Calls Logged'), count: zoneCounts.total },
+                    { key: 'active', label: t('Active'), count: zoneCounts.active },
+                    { key: 'pending', label: t('Pending'), count: zoneCounts.pending, colorClass: 'text-surface-light' },
+                    { key: 'onScene', label: t('On Scene'), count: zoneCounts.onScene, colorClass: 'text-status-red' },
+                    { key: 'transporting', label: t('Transporting'), count: zoneCounts.transporting, colorClass: 'text-status-red' },
+                  ]}
+                />
+                <div className="flex items-center gap-1.5">
+                  {dispatchZones.length > 1 && (
+                    <CallZoneFilterButton
+                      label={callZoneFilterLabel}
+                      zones={dispatchZones}
+                      selection={callZoneFilter}
+                      onSelectionChange={applyCallZoneSelectionChange}
+                    />
+                  )}
+                  <CallSortButton sortMode={callSortMode} onSortModeChange={setCallSortMode} />
+                  <Tooltip content={`${t('Add Call')} (Ctrl+Enter)`} placement="top">
+                    <div>
+                      <Button
+                        size="sm"
+                        variant="flat"
+                        className="rounded-full bg-surface-deep border border-surface-liner hover:bg-surface-liner"
+                        aria-label={t('Add Call')}
+                        data-testid="add-call-button"
+                        onPress={() => openAddCallModal()}
+                      >
+                        {t('Add Call')}
+                      </Button>
+                    </div>
+                  </Tooltip>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex-1 min-h-0">
+              <CallTrackingTable
+                event={event}
+                filterCalls={isAllCalls ? undefined : (call) => getCallZoneIds(call, venueLayers).some(id => callZoneFilter.has(id))}
+                callDisplayNumberMap={callDisplayNumberMap}
+                showResolvedCalls={showResolvedCalls}
+                setShowResolvedCalls={setShowResolvedCalls}
+                openCallId={openCallId}
+                setOpenCallId={setOpenCallId}
+                editingCell={editingCell}
+                setEditingCell={setEditingCell}
+                editValue={editValue}
+                setEditValue={setEditValue}
+                teamStatusMap={teamStatusMap}
+                updateEvent={updateEvent}
+                handleCellClick={handleCellClick}
+                handleCellBlur={handleCellBlur}
+                handleAgeSexBlur={handleAgeSexBlur}
+                handleRowClick={handleRowClick}
+                handleMarkDuplicate={handleMarkDuplicate}
+                handleTogglePriorityFromMenu={handleTogglePriorityFromMenu}
+                handleTogglePin={handleTogglePin}
+                sortMode={callSortMode}
+                handleDeleteCall={handleDeleteCall}
+                handleTeamStatusChange={handleTeamStatusChange}
+                onTransportToAmbulance={openCallTransportUnitModal}
+                handleRemoveTeamFromCall={handleRemoveTeamFromCall}
+                handleAddTeamToCall={handleAddTeamToCall}
+                handleRevertDetachment={handleRevertDetachment}
+                formatAgeSex={formatAgeSex}
+              />
+            </div>
+          </div>
+          );
+        })()}
+
+        {clinics.map((clinic) => selectedRightTab === clinic.id && !isMobile && (
+          <div key={clinic.id} className="relative z-10 -mt-px mx-1.5 rounded-lg bg-surface-deep px-2.5 py-2 flex flex-col flex-1 min-h-0">
+            <div className="shrink-0 flex flex-col gap-2 pb-1">
+              <div className="flex items-center justify-between py-1">
+                {(() => {
+                  const clinicCounts = getClinicInsightCounts(clinic.id);
+                  return (
+                    <TrackingInsightsRow
+                      items={[
+                        { key: 'total', label: t('Total Patients'), count: clinicCounts.totalPatients },
+                        { key: 'inClinic', label: t('In Clinic'), count: clinicCounts.totalInClinic, colorClass: 'text-status-blue' },
+                        { key: 'transported', label: t('Transported'), count: clinicCounts.totalTransported, colorClass: 'text-status-green' },
+                        { key: 'pendingTransport', label: t('Pending Transport'), count: clinicCounts.totalPendingTransport, colorClass: 'text-status-orange' },
+                      ]}
+                    />
+                  );
+                })()}
+                <Tooltip content={t('Add Patient')} placement="top">
+                  <div>
+                    <Button
+                      size="sm"
+                      variant="flat"
+                      className="rounded-full bg-surface-deep border border-surface-liner hover:bg-surface-liner"
+                      aria-label={t('Add Patient')}
+                      data-testid="clinic-add-patient"
+                      onPress={() => setShowQuickClinicCallForm(true)}
+                    >
+                      {t('Add Patient')}
+                    </Button>
+                  </div>
+                </Tooltip>
+              </div>
+            </div>
+
+            <div className="flex-1 min-h-0">
+              <ClinicTrackingTable
+                event={event}
+                clinicId={clinic.id}
+                clinics={clinics}
+                callDisplayNumberMap={callDisplayNumberMap}
+                showResolvedClinicCalls={showResolvedClinicCalls}
+                setShowResolvedClinicCalls={setShowResolvedClinicCalls}
+                openClinicCallId={openClinicCallId}
+                setOpenClinicCallId={setOpenClinicCallId}
+                editingCell={editingCell}
+                setEditingCell={setEditingCell}
+                editValue={editValue}
+                setEditValue={setEditValue}
+                updateEvent={updateEvent}
+                handleCellClick={handleCellClick}
+                handleCellBlur={handleCellBlur}
+                handleAgeSexBlur={handleAgeSexBlur}
+                onOutcomeChange={handleClinicOutcomeChange}
+                onRevertOutcome={handleRevertClinicOutcome}
+                handleTogglePin={handleTogglePin}
+                getCallRowClass={getCallRowClass}
+                formatAgeSex={formatAgeSex}
+              />
+            </div>
+          </div>
+        ))}
+
+        {selectedRightTab === 'map' && !isMobile && hasVenueMapImage && (
+          <div className="relative z-10 -mt-px mx-1.5 rounded-lg bg-surface-deep px-2.5 py-2 flex flex-col flex-1 min-h-0">
+            <VenueMapTab
+              layers={venueLayers}
+              staff={event.staff || []}
+              supervisor={event.supervisor || []}
+              equipment={event.eventEquipment || []}
+              teamTimers={teamTimers}
+              calls={event.calls || []}
+              clinics={clinics}
+              showPosts={hasPostingSchedule(event)}
+              onAddCallAtPost={(location) => openAddCallModal({ location })}
+              onAddCallForTeam={(assignedTeam) => openAddCallModal({ assignedTeam })}
+              focusTeamRequest={mapTeamFocusRequest}
+              focusSupervisorRequest={mapSupervisorFocusRequest}
+              focusEquipmentRequest={mapEquipmentFocusRequest}
+              onTeamFocusHandled={() => setMapTeamFocusRequest(null)}
+              onSupervisorFocusHandled={() => setMapSupervisorFocusRequest(null)}
+              onEquipmentFocusHandled={() => setMapEquipmentFocusRequest(null)}
+              overlay={takOverlay}
+            />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
   return (
     <DispatchVocabularyProvider terms={vocabularyTerms}>
+    <DispatchExtrasProvider value={extras}>
+      {extras.background}
       <ToastContainer
         theme="dark"
         toastClassName="!bg-surface-deep !border !border-surface-liner !rounded-2xl !text-surface-light !shadow-lg"
@@ -3667,6 +4151,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
         parseAgeSex={parseAgeSex}
         clinicId={isMobile ? mobileClinicId : (clinics.find(c => c.id === selectedRightTab)?.id || clinics[0]?.id)}
       />
+      {extras.mounted}
       <TransportUnitModal
         isOpen={showTransportUnitModal}
         onClose={() => {
@@ -3718,6 +4203,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
         onSubmit={handleSaveNewSupervisor}
         teamName={teamName}
         setTeamName={setTeamName}
+        existingNames={(event?.supervisor || []).map((s) => s.team)}
         memberName={memberName}
         setMemberName={setMemberName}
         memberCert={memberCert}
@@ -3752,9 +4238,11 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
         event={event}
       />
       {/* Main Layout */}
-      <div className="relative w-full bg-surface-deepest h-[calc(100vh-72px)]">
+      <div className={`relative w-full bg-surface-deepest ${focusedPane ? 'h-screen' : 'h-[calc(100vh-72px)]'}`}>
         {eventEnded && (
-          <div className="absolute inset-0 z-[100] flex flex-col items-center justify-center gap-3 bg-neutral-700/70 text-center px-6">
+          // Fixed from below the navbar (h-14) to the screen's bottom edge, so it also covers the
+          // mobile tab bar and anything scrolled below; the page container stops short of both.
+          <div className="fixed inset-x-0 top-14 bottom-0 z-[100] flex flex-col items-center justify-center gap-3 bg-neutral-700/70 text-center px-6">
             <p className="text-xl font-semibold text-surface-light">{t('This event has ended')}</p>
             <p className="text-sm text-surface-light/80 max-w-sm">
               {t('Data collection is locked. Go to the Event Summary for a read-only record.')}
@@ -3764,7 +4252,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
             </Button>
           </div>
         )}
-        <div className="max-w-[1750px] mx-auto px-2 sm:px-4 h-full">
+        <div className={`${focusedPane ? 'max-w-none' : 'max-w-[1750px]'} mx-auto px-2 sm:px-4 h-full`}>
 
           {isAdmin && (
             <button 
@@ -3778,275 +4266,33 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
           
           {/* Desktop Layout - Left Sidebar with Select, Right Side with Calls & Clinic */}
           <div className="hidden lg:block h-full">
+            {focusedPane ? (
+              // Full screen (#138): one side fills the board, still with its own tabs.
+              <div className="h-full" data-testid={`dispatch-focus-${focusedPane}`}>
+                {focusedPane === 'left' ? desktopLeftPane : desktopRightPane}
+              </div>
+            ) : (
             <ResizablePanelGroup direction="horizontal" className="gap-2 h-full">
               
               {/* LEFT SIDEBAR - Select for Teams/Supervisors/Equipment */}
               <ResizablePanel defaultSize={25} minSize={20} maxSize={37}>
-                <div className="h-full rounded-xl flex flex-col">
-                  {/* Header with Select and Action Buttons */}
-                  <div className="flex w-full justify-between items-center pt-2 pb-2 border-b border-surface-liner shrink-0">
-                    <Select
-                      selectedKeys={[selectedLeftTab]}
-                      onSelectionChange={(keys) => {
-                        const selected = Array.from(keys)[0] as string;
-                        setSelectedLeftTab(selected);
-                      }}
-                      aria-label="Select section"
-                      className="w-auto min-w-[180px]"
-                      classNames={{
-                        trigger: "bg-surface-deep border border-surface-liner rounded-full hover:bg-surface-liner h-10 min-h-10",
-                        value: "text-surface-light",
-                        popoverContent: "bg-surface-deep border-surface-liner",
-                      }}
-                    >
-                      <SelectItem key="teams">{t('Teams')}</SelectItem>
-                      <SelectItem key="supervisors">{t('Supervisors')}</SelectItem>
-                      <SelectItem key="equipment">{t('Equipment')}</SelectItem>
-                    </Select>
-
-                    {renderTeamActions(selectedLeftTab as LeftPanelTab)}
-                  </div>
-
-                  {event && <div className="shrink-0"><AvailabilitySurgeStrip event={event} /></div>}
-
-                  {/* Content with ScrollShadow */}
-                  <div className="flex-1 min-h-0 overflow-auto scrollbar-hide">
-                    <div className="p-0 pb-16">
-
-                      {/* TEAMS CONTENT */}
-                      {selectedLeftTab === 'teams' && (
-                        <TeamList {...teamListProps} emptyText={t('No teams available')} />
-                      )}
-
-                      {/* SUPERVISORS CONTENT */}
-                      {selectedLeftTab === 'supervisors' && (
-                        <SupervisorList {...supervisorListProps} emptyText="No supervisors assigned" />
-                      )}
-
-                      {/* EQUIPMENT CONTENT */}
-                      {selectedLeftTab === 'equipment' && (
-                        <EquipmentList {...equipmentListProps} emptyText={t('No equipment configured')} />
-                      )}
-
-                    </div>
-                  </div>
-                </div>
+                {desktopLeftPane}
               </ResizablePanel>
 
               <ResizableHandle withHandle />
 
               {/* RIGHT SIDE - Calls and Clinic Tabs */}
               <ResizablePanel defaultSize={75} minSize={50}>
-                <div className="h-full flex flex-col overflow-hidden pt-2 pb-2">
-                  <div className="w-full flex flex-col flex-1 min-h-0">
-                    <div className="relative z-30 mx-1.5 pb-0 flex items-start justify-between gap-1 h-10 shrink-0">
-                      <div className="flex items-end gap-1 min-w-0">
-                        <PanelTab active={selectedRightTab === 'calls'} onSelect={() => setSelectedRightTab('calls')}>
-                          {dispatchZones.length > 0 ? callZoneFilterLabel : t('Calls')} ({getActiveCallsForZoneSelection(callZoneFilter).length})
-                        </PanelTab>
-
-                        {clinics.map((clinic) => (
-                          <PanelTab
-                            key={clinic.id}
-                            active={selectedRightTab === clinic.id}
-                            onSelect={() => setSelectedRightTab(clinic.id)}
-                          >
-                            {clinic.name} ({getClinicCalls(clinic.id).filter(c => !c.outcome).length})
-                          </PanelTab>
-                        ))}
-
-                        {hasVenueMapImage && (
-                          <Tooltip content={`${t('Map')} (Alt+M)`} placement="top">
-                            <PanelTab
-                              active={selectedRightTab === 'map'}
-                              onSelect={() => setSelectedRightTab('map')}
-                              aria-label={t('Map')}
-                            >
-                              <MapIcon className="h-4 w-4" />
-                            </PanelTab>
-                          </Tooltip>
-                        )}
-                      </div>
-
-                      <SurgeToggleButton
-                        active={!!event.manualSurgeActive}
-                        startedAt={event.manualSurgeStartedAt}
-                        onToggle={handleToggleSurge}
-                      />
-                    </div>
-
-                    {selectedRightTab === 'calls' && !isMobile && (() => {
-                      const zoneCounts = getInsightCountsForZoneSelection(callZoneFilter);
-                      const isAllCalls = callZoneFilter.has('all');
-                      return (
-                      <div className="relative z-10 -mt-px mx-1.5 rounded-lg bg-surface-deep px-2.5 py-2 flex flex-col flex-1 min-h-0">
-                        <div className="shrink-0 flex flex-col gap-2 pb-1">
-                          <div className="flex items-center justify-between py-1">
-                            <TrackingInsightsRow
-                              items={[
-                                { key: 'total', label: t('Total Calls Logged'), count: zoneCounts.total },
-                                { key: 'active', label: t('Active'), count: zoneCounts.active },
-                                { key: 'pending', label: t('Pending'), count: zoneCounts.pending, colorClass: 'text-surface-light' },
-                                { key: 'onScene', label: t('On Scene'), count: zoneCounts.onScene, colorClass: 'text-status-red' },
-                                { key: 'transporting', label: t('Transporting'), count: zoneCounts.transporting, colorClass: 'text-status-red' },
-                              ]}
-                            />
-                            <div className="flex items-center gap-1.5">
-                              {dispatchZones.length > 1 && (
-                                <CallZoneFilterButton
-                                  label={callZoneFilterLabel}
-                                  zones={dispatchZones}
-                                  selection={callZoneFilter}
-                                  onSelectionChange={applyCallZoneSelectionChange}
-                                />
-                              )}
-                              <CallSortButton sortMode={callSortMode} onSortModeChange={setCallSortMode} />
-                              <Tooltip content={`${t('Add Call')} (Ctrl+Enter)`} placement="top">
-                                <div>
-                                  <Button
-                                    size="sm"
-                                    variant="flat"
-                                    className="rounded-full bg-surface-deep border border-surface-liner hover:bg-surface-liner"
-                                    aria-label={t('Add Call')}
-                                    data-testid="add-call-button"
-                                    onPress={() => openAddCallModal()}
-                                  >
-                                    {t('Add Call')}
-                                  </Button>
-                                </div>
-                              </Tooltip>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="flex-1 min-h-0">
-                          <CallTrackingTable
-                            event={event}
-                            filterCalls={isAllCalls ? undefined : (call) => getCallZoneIds(call, venueLayers).some(id => callZoneFilter.has(id))}
-                            callDisplayNumberMap={callDisplayNumberMap}
-                            showResolvedCalls={showResolvedCalls}
-                            setShowResolvedCalls={setShowResolvedCalls}
-                            openCallId={openCallId}
-                            setOpenCallId={setOpenCallId}
-                            editingCell={editingCell}
-                            setEditingCell={setEditingCell}
-                            editValue={editValue}
-                            setEditValue={setEditValue}
-                            teamStatusMap={teamStatusMap}
-                            updateEvent={updateEvent}
-                            handleCellClick={handleCellClick}
-                            handleCellBlur={handleCellBlur}
-                            handleAgeSexBlur={handleAgeSexBlur}
-                            handleRowClick={handleRowClick}
-                            handleMarkDuplicate={handleMarkDuplicate}
-                            handleTogglePriorityFromMenu={handleTogglePriorityFromMenu}
-                            handleTogglePin={handleTogglePin}
-                            sortMode={callSortMode}
-                            handleDeleteCall={handleDeleteCall}
-                            handleTeamStatusChange={handleTeamStatusChange}
-                            onTransportToAmbulance={openCallTransportUnitModal}
-                            handleRemoveTeamFromCall={handleRemoveTeamFromCall}
-                            handleAddTeamToCall={handleAddTeamToCall}
-                            handleRevertDetachment={handleRevertDetachment}
-                            formatAgeSex={formatAgeSex}
-                          />
-                        </div>
-                      </div>
-                      );
-                    })()}
-
-                    {clinics.map((clinic) => selectedRightTab === clinic.id && !isMobile && (
-                      <div key={clinic.id} className="relative z-10 -mt-px mx-1.5 rounded-lg bg-surface-deep px-2.5 py-2 flex flex-col flex-1 min-h-0">
-                        <div className="shrink-0 flex flex-col gap-2 pb-1">
-                          <div className="flex items-center justify-between py-1">
-                            {(() => {
-                              const clinicCounts = getClinicInsightCounts(clinic.id);
-                              return (
-                                <TrackingInsightsRow
-                                  items={[
-                                    { key: 'total', label: t('Total Patients'), count: clinicCounts.totalPatients },
-                                    { key: 'inClinic', label: t('In Clinic'), count: clinicCounts.totalInClinic, colorClass: 'text-status-blue' },
-                                    { key: 'transported', label: t('Transported'), count: clinicCounts.totalTransported, colorClass: 'text-status-green' },
-                                    { key: 'pendingTransport', label: t('Pending Transport'), count: clinicCounts.totalPendingTransport, colorClass: 'text-status-orange' },
-                                  ]}
-                                />
-                              );
-                            })()}
-                            <Tooltip content={t('Add Patient')} placement="top">
-                              <div>
-                                <Button
-                                  size="sm"
-                                  variant="flat"
-                                  className="rounded-full bg-surface-deep border border-surface-liner hover:bg-surface-liner"
-                                  aria-label={t('Add Patient')}
-                                  onPress={() => setShowQuickClinicCallForm(true)}
-                                >
-                                  {t('Add Patient')}
-                                </Button>
-                              </div>
-                            </Tooltip>
-                          </div>
-                        </div>
-
-                        <div className="flex-1 min-h-0">
-                          <ClinicTrackingTable
-                            event={event}
-                            clinicId={clinic.id}
-                            clinics={clinics}
-                            callDisplayNumberMap={callDisplayNumberMap}
-                            showResolvedClinicCalls={showResolvedClinicCalls}
-                            setShowResolvedClinicCalls={setShowResolvedClinicCalls}
-                            openClinicCallId={openClinicCallId}
-                            setOpenClinicCallId={setOpenClinicCallId}
-                            editingCell={editingCell}
-                            setEditingCell={setEditingCell}
-                            editValue={editValue}
-                            setEditValue={setEditValue}
-                            updateEvent={updateEvent}
-                            handleCellClick={handleCellClick}
-                            handleCellBlur={handleCellBlur}
-                            handleAgeSexBlur={handleAgeSexBlur}
-                            onOutcomeChange={handleClinicOutcomeChange}
-                            onRevertOutcome={handleRevertClinicOutcome}
-                            handleTogglePin={handleTogglePin}
-                            getCallRowClass={getCallRowClass}
-                            formatAgeSex={formatAgeSex}
-                          />
-                        </div>
-                      </div>
-                    ))}
-
-                    {selectedRightTab === 'map' && !isMobile && hasVenueMapImage && (
-                      <div className="relative z-10 -mt-px mx-1.5 rounded-lg bg-surface-deep px-2.5 py-2 flex flex-col flex-1 min-h-0">
-                        <VenueMapTab
-                          layers={venueLayers}
-                          staff={event.staff || []}
-                          supervisor={event.supervisor || []}
-                          equipment={event.eventEquipment || []}
-                          teamTimers={teamTimers}
-                          calls={event.calls || []}
-                          clinics={clinics}
-                          onAddCallAtPost={(location) => openAddCallModal({ location })}
-                          onAddCallForTeam={(assignedTeam) => openAddCallModal({ assignedTeam })}
-                          focusTeamRequest={mapTeamFocusRequest}
-                          focusSupervisorRequest={mapSupervisorFocusRequest}
-                          focusEquipmentRequest={mapEquipmentFocusRequest}
-                          onTeamFocusHandled={() => setMapTeamFocusRequest(null)}
-                          onSupervisorFocusHandled={() => setMapSupervisorFocusRequest(null)}
-                          onEquipmentFocusHandled={() => setMapEquipmentFocusRequest(null)}
-                        />
-                      </div>
-                    )}
-                  </div>
-                </div>
+                {desktopRightPane}
               </ResizablePanel>
             </ResizablePanelGroup>
+            )}
           </div>
 
           {/* Mobile/Tablet Layout - Bottom Tabs */}
-          <div className="lg:hidden">
+          <div className="lg:hidden" data-testid="mobile-dispatch">
             <div className="sticky top-14 z-40 bg-surface-deepest">
-              {event && <AvailabilitySurgeStrip event={event} />}
+              {event && (extras.strip ?? <AvailabilitySurgeStrip event={event} />)}
               {mobileActiveTab !== 'map' && (
                 <div className="flex justify-between items-center py-2">
                   {renderMobileTabHeader()}
@@ -4082,6 +4328,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
                   {mobileTeamsSubTab === 'supervisors' && (
                     <SupervisorList {...supervisorListProps} emptyText={t('No supervisors added yet')} />
                   )}
+                  {mobileTeamsSubTab === 'log' && renderEventLog()}
                 </div>
               </Tab>
 
@@ -4096,7 +4343,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
                 </div>
               </Tab>
 
-              <Tab key="calls" title={<FaWalkieTalkie className="h-5 w-5" />} aria-label={t('Calls')}>
+              <Tab key="calls" title={<CrowdcadRadioIcon className="h-6 w-6" />} aria-label={t('Calls')}>
                 <div className="space-y-6 pb-20">
                   <div>
                     {(() => {
@@ -4196,7 +4443,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
 
               {hasVenueMapImage && (
                 <Tab key="map" title={<MapIcon className="h-6 w-6" />} aria-label={t('Map')}>
-                  <div className="h-[70vh] pt-3 pb-20">
+                  <FillToTabBar tabBarLabel="Dispatch sections" className="pt-3">
                     <VenueMapTab
                       layers={venueLayers}
                       staff={event.staff || []}
@@ -4205,6 +4452,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
                       teamTimers={teamTimers}
                       calls={event.calls || []}
                       clinics={clinics}
+                      showPosts={hasPostingSchedule(event)}
                       onAddCallAtPost={(location) => openAddCallModal({ location })}
                       onAddCallForTeam={(assignedTeam) => openAddCallModal({ assignedTeam })}
                       focusTeamRequest={mapTeamFocusRequest}
@@ -4213,8 +4461,9 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
                       onTeamFocusHandled={() => setMapTeamFocusRequest(null)}
                       onSupervisorFocusHandled={() => setMapSupervisorFocusRequest(null)}
                       onEquipmentFocusHandled={() => setMapEquipmentFocusRequest(null)}
+                      overlay={takOverlay}
                     />
-                  </div>
+                  </FillToTabBar>
                 </Tab>
               )}
             </Tabs>
@@ -4263,6 +4512,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
           onClose={() => setShowDuplicateModal(false)}
         />
       )}
+    </DispatchExtrasProvider>
     </DispatchVocabularyProvider>
   );
 }

@@ -20,6 +20,7 @@ import {
   type ExportLogOptions,
 } from '@/lib/exportLog';
 import { downloadTextFile } from '@/lib/downloadFile';
+import { STATIC_CLOSE_BUTTON_CLASS } from '@/lib/heroStatic';
 
 export interface ExportLogModalProps {
   isOpen: boolean;
@@ -96,6 +97,7 @@ export default function ExportLogModal({ isOpen, onClose, event }: ExportLogModa
         header: 'pb-0',
         body: 'py-4',
         footer: 'pt-0',
+        closeButton: STATIC_CLOSE_BUTTON_CLASS,
       }}
     >
       <ModalContent>

@@ -28,6 +28,9 @@ ARG FB_APP_ID
 ARG FB_MEASURE_ID
 ARG NEXT_PUBLIC_BACKEND
 ARG NEXT_PUBLIC_POCKETBASE_URL
+# Optional: "on" builds preview training modules in.
+ARG NEXT_PUBLIC_TRAINING_PREVIEW
+ENV NEXT_PUBLIC_TRAINING_PREVIEW=$NEXT_PUBLIC_TRAINING_PREVIEW
 
 # Next.js telemetry is disabled during the build in the standalone mode usually, but just in case
 ENV NEXT_TELEMETRY_DISABLED 1

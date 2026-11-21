@@ -60,7 +60,7 @@ The `upstream` remote lets you pull future releases into your fork.
 **2a. Firebase.** Create a Firebase project with Email/Password auth and a Firestore database, paste its web config into `.env.local`, deploy the rules and start the app:
 
 ```bash
-firebase deploy --only firestore:rules --project YOUR_PROJECT_ID
+firebase deploy --only firestore:rules,firestore:indexes --project YOUR_PROJECT_ID
 npm run dev
 ```
 

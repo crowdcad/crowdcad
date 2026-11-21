@@ -370,7 +370,7 @@ export default function GeoJsonImportModal({ isOpen, onClose, onSubmit }: Props)
                               key={idx}
                               title={post.name}
                               style={{ left: `calc(${post.x}% - 8px)`, top: `calc(${post.y}% - 8px)` }}
-                              className="absolute flex h-4 w-4 items-center justify-center rounded-full border-2 border-accent bg-accent/30"
+                              className="absolute flex h-4 w-4 items-center justify-center rounded-circle border-2 border-accent bg-accent/30"
                             >
                               <MapPin className="h-2.5 w-2.5 text-accent" strokeWidth={3} />
                             </div>

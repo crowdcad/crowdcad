@@ -9,6 +9,7 @@ import {
 import { CircleHelp } from "lucide-react";
 import { Role } from "@/app/types";
 import { useDispatchTerms } from "@/lib/dispatchVocabulary/context";
+import { getNextTeamName } from "./addteammodal";
 
 type Props = {
   isOpen: boolean;
@@ -16,7 +17,8 @@ type Props = {
 
   // unify create/edit just like AddTeamModal
   mode?: "create" | "edit";
-  onSubmit: () => void;
+  /** Saves the form. Returning false (a refused save) leaves the dialog as it is; otherwise it closes, or resets for the next supervisor. */
+  onSubmit: () => boolean | void | Promise<boolean | void>;
   titleOverride?: string;
   submitLabelOverride?: string;
 
@@ -31,6 +33,9 @@ type Props = {
   setMemberCert: (v: string) => void;
 
   roles: Role[];
+
+  /** Create mode: the event's supervisor names, oldest first. An empty call sign starts as the next one ("S1", then "S2"). */
+  existingNames?: string[];
 };
 
 export default function AddSupervisorModal({
@@ -47,9 +52,19 @@ export default function AddSupervisorModal({
   memberCert,
   setMemberCert,
   roles,
+  existingNames,
 }: Props) {
   const { t } = useDispatchTerms();
   const [submitting, setSubmitting] = React.useState(false);
+
+  // Suggest the next call sign each time the dialog opens empty, as Add Team does.
+  const wasOpen = React.useRef(false);
+  React.useEffect(() => {
+    if (isOpen && !wasOpen.current && mode === "create" && existingNames && !teamName.trim()) {
+      setTeamName(getNextTeamName(existingNames, "S1"));
+    }
+    wasOpen.current = isOpen;
+  }, [isOpen, mode, existingNames, teamName, setTeamName]);
 
   const inputClassNames = {
     label: "text-surface-light mb-1",
@@ -68,7 +83,22 @@ export default function AddSupervisorModal({
   const title = titleOverride ?? (mode === "edit" ? t("Edit Supervisor") : t("Add New Supervisor"));
   const submitLabel = submitLabelOverride ?? (mode === "edit" ? t("Save Changes") : t("Create Supervisor"));
 
-  const canSubmit = teamName.trim().length > 0 && (memberCert?.trim().length ?? 0) > 0;
+  const canSubmit = teamName.trim().length > 0;
+
+  const commitSave = async (addAnother: boolean) => {
+    if (submitting || !canSubmit) return;
+    const saved = teamName.trim();
+    let result: boolean | void;
+    try {
+      setSubmitting(true);
+      result = await Promise.resolve(onSubmit());
+    } finally {
+      setSubmitting(false);
+    }
+    if (result === false) return;
+    if (addAnother) setTeamName(getNextTeamName([...(existingNames ?? []), saved], "S1"));
+    else onClose();
+  };
 
   return (
     <Modal
@@ -97,7 +127,7 @@ export default function AddSupervisorModal({
                 label={
                   <span className="inline-flex items-center gap-1">
                     {t("Supervisor Call Sign")}
-                    <Tooltip content="The radio call sign this supervisor unit will be identified by on the dispatch board, not a person's name." placement="top">
+                    <Tooltip content="The radio call sign this supervisor unit will be identified by on the dispatch interface, not a person's name." placement="top">
                       <CircleHelp className="w-3.5 h-3.5 text-surface-faint" />
                     </Tooltip>
                   </span>
@@ -126,7 +156,7 @@ export default function AddSupervisorModal({
               />
 
               <Select
-                label={t("Certification")}
+                label={t("Certification (optional)")}
                 labelPlacement="inside"
                 variant="flat"
                 size="lg"
@@ -138,7 +168,6 @@ export default function AddSupervisorModal({
                   setMemberCert(val ?? "");
                 }}
                 aria-label="Certification"
-                isRequired
               >
                 {roles.map((role) => (
                   <SelectItem key={role.name} aria-label={role.fullName} textValue={role.fullName}>
@@ -157,16 +186,20 @@ export default function AddSupervisorModal({
               >
                 {t("Cancel")}
               </Button>
+              {mode === "create" && (
+                <Button
+                  onPress={() => void commitSave(true)}
+                  isDisabled={submitting || !canSubmit}
+                  variant="flat"
+                  radius="lg"
+                  className="px-4 py-2 text-surface-light bg-default/40 hover:bg-default/60"
+                  data-testid="supervisor-save-add-another"
+                >
+                  {t("Save & add another")}
+                </Button>
+              )}
               <Button
-                onPress={async () => {
-                  if (submitting || !canSubmit) return;
-                  try {
-                    setSubmitting(true);
-                    await Promise.resolve(onSubmit());
-                  } finally {
-                    setSubmitting(false);
-                  }
-                }}
+                onPress={() => void commitSave(false)}
                 radius="lg"
                 className="px-4 py-2 bg-accent hover:bg-accent/90 text-surface-light"
                 isDisabled={submitting || !canSubmit}

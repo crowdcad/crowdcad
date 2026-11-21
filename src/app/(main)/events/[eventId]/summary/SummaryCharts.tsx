@@ -8,6 +8,7 @@ import {
 } from 'recharts';
 import { STATUS_COLORS_HEX } from '@/lib/colorTokens';
 import type { TeamStatusBreakdown, AvailabilityPoint } from '@/lib/analyticsUtils';
+import type { StepChartSpec } from '@/extensions/types';
 import { GRID_WRAPPER, GRID_CELL } from './summaryGrid';
 
 type Interaction = { sessionId: string; startTime: string; duration: number; clicks: number; keystrokes: number };
@@ -27,10 +28,13 @@ export default function SummaryCharts({
   teamStatusBreakdown = [] as TeamStatusBreakdown[],
   availabilitySeries = [] as AvailabilityPoint[],
   interactionTimeline = [] as Interaction[],
+  stepCharts,
 }: {
   teamStatusBreakdown?: TeamStatusBreakdown[];
   availabilitySeries?: AvailabilityPoint[];
   interactionTimeline?: Interaction[];
+  /** Extension packs' step charts (e.g. patients over time). */
+  stepCharts?: StepChartSpec[];
 }) {
   return (
     <>
@@ -115,6 +119,39 @@ export default function SummaryCharts({
           </div>
         </div>
       </div>
+
+      {stepCharts?.map((chart) => (
+        <div key={chart.id} className={GRID_WRAPPER}>
+          <div className={`${GRID_CELL} p-6`} data-testid={`${chart.id}-chart`}>
+            <h2 className="text-xl font-semibold mb-4">{chart.title}</h2>
+            <div className="w-full h-[300px]">
+              <ResponsiveContainer width="100%" height="100%">
+                {/* A step chart: each point changes the values at its own time and holds until the next. */}
+                <LineChart data={chart.data} margin={{ top: 8, right: 16, left: 12, bottom: 12 }}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis
+                    dataKey="t"
+                    type="number"
+                    scale="time"
+                    domain={['dataMin', 'dataMax']}
+                    tickFormatter={(t: number) => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  />
+                  <YAxis allowDecimals={false} />
+                  <Tooltip
+                    contentStyle={TOOLTIP_CONTENT_STYLE}
+                    labelStyle={TOOLTIP_LABEL_STYLE}
+                    labelFormatter={(t) => new Date(Number(t)).toLocaleTimeString()}
+                  />
+                  <Legend />
+                  {chart.lines.map((line) => (
+                    <Line key={line.key} type="stepAfter" dataKey={line.key} name={line.name} stroke={line.color} strokeWidth={2} dot={false} isAnimationActive={false} />
+                  ))}
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </div>
+      ))}
 
       {interactionTimeline && interactionTimeline.length > 0 && (
         <div className={`grid grid-cols-1 lg:grid-cols-2 ${GRID_WRAPPER}`}>

@@ -3,6 +3,9 @@ import { Button, Checkbox, Chip, Input, ScrollShadow, Select, SelectItem, Toolti
 import { CircleHelp, Plus, Trash2 } from 'lucide-react';
 import type { Event, Post, Venue, EventEquipment } from '@/app/types';
 import { randomId } from '@/lib/utils';
+import { equipmentHolderUnit, setupEquipmentHolder } from '@/lib/equipmentCustody';
+import EquipmentTeamSelect from './EquipmentTeamSelect';
+import TutorialTip from '@/components/ui/TutorialTip';
 
 type FlattenedPost = {
   post: Post;
@@ -25,6 +28,8 @@ type Props = {
     input: string;
     inputWrapper: string;
   };
+  /** A tutorial callout under the post picker (Lite mode). */
+  postsHint?: string;
 };
 
 export function PostsSelectionSection({
@@ -39,6 +44,7 @@ export function PostsSelectionSection({
   lastSelectedPostIndex,
   setLastSelectedPostIndex,
   selectClassNames,
+  postsHint,
 }: Props) {
   if (!hasVenue) return null;
 
@@ -63,7 +69,7 @@ export function PostsSelectionSection({
 
       <div className="space-y-3">
         <div className={`space-y-3 ${!postsEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
-          <div className="flex items-end gap-2">
+          <div className="relative flex items-end gap-2">
             <div className="flex-1 min-w-0">
               <Select
                 label="Select Posts"
@@ -139,6 +145,7 @@ export function PostsSelectionSection({
             >
               Enable All
             </Button>
+            {postsHint && postsEnabled && allPosts.length > 0 && <TutorialTip className="top-full mt-2 left-0">{postsHint}</TutorialTip>}
           </div>
 
           {(eventData.eventPosts || []).length > 0 && (
@@ -201,6 +208,17 @@ export function EquipmentSelectionSection({
       eventEquipment: prev.eventEquipment.filter((e) => e.id !== id),
     }));
   };
+
+  const units = [...(eventData.staff || []).map((s) => s.team), ...(eventData.supervisor || []).map((s) => s.team)];
+  // Starts the event with a team holding it (or back at its default location), as on the board.
+  const setHolder = (name: string, unit: string) =>
+    setEventData((prev) => {
+      const next = setupEquipmentHolder({ ...prev, staff: prev.staff || [], supervisor: prev.supervisor || [] }, name, unit, Date.now());
+      return { ...prev, ...next };
+    });
+  const teamSelect = (equip: EventEquipment) => (
+    <EquipmentTeamSelect itemName={equip.name} units={units} value={equipmentHolderUnit(equip)} onChange={(unit) => setHolder(equip.name, unit)} classNames={selectClassNames} />
+  );
 
   const setCustomEquipmentLocation = (id: string, locName: string) => {
     setEventData((prev) => ({
@@ -270,6 +288,7 @@ export function EquipmentSelectionSection({
                       return <SelectItem key={postName}>{postName}</SelectItem>;
                     })}
                   </Select>
+                  {teamSelect(equip)}
                   <button
                     type="button"
                     onClick={() => removeCustomEquipment(equip.id)}
@@ -336,6 +355,7 @@ export function EquipmentSelectionSection({
                         })}
                       </Select>
                     )}
+                    {selectedEquip && teamSelect(selectedEquip)}
                   </div>
                 </div>
               );
