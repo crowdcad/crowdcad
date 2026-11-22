@@ -22,7 +22,7 @@ jobs:
       report-prefix: ${{ steps.set-prefix.outputs.report-prefix }}
     
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
  
       - id: set-env
         uses: ./.github/actions/set-environment
@@ -50,7 +50,7 @@ jobs:
     environment: ${{ needs.set-env.outputs.environment }}
     
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       
       - name: Setup project
         uses: ./.github/actions/setup
@@ -65,7 +65,7 @@ jobs:
           fi;
 
       - name: Cache Playwright browsers
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         id: playwright-cache
         with:
           path: ~/.cache/ms-playwright
@@ -80,7 +80,7 @@ jobs:
         run: npx playwright install-deps
 
       - name: "Firebase Tools: Setup Java 21"
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '21'
@@ -96,7 +96,7 @@ jobs:
           E2E_TEST_PASSWORD: TestPassword123!
 
       - name: Upload Playwright report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: failure()
         with:
           name: playwright-report-${{ github.sha }}
@@ -111,10 +111,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Node.js 22.x
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 22.x
           cache: 'npm'
@@ -142,7 +142,7 @@ jobs:
           E2E_TEST_PASSWORD: TestPassword123!
 
       - name: Upload Playwright report (PocketBase)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: failure()
         with:
           name: playwright-report-pocketbase
@@ -159,14 +159,14 @@ jobs:
       contents: write
 
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
         with:
           name: playwright-report-${{ github.sha }}
           path: playwright-report/
  
       - name: Checkout gh-pages branch
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: gh-pages
           path: gh-pages
