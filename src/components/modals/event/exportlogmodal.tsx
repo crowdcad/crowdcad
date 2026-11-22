@@ -20,6 +20,7 @@ import {
   type ExportLogOptions,
 } from '@/lib/exportLog';
 import { downloadTextFile } from '@/lib/downloadFile';
+import { auditLog } from '@/lib/services';
 import { STATIC_CLOSE_BUTTON_CLASS } from '@/lib/heroStatic';
 
 export interface ExportLogModalProps {
@@ -82,6 +83,7 @@ export default function ExportLogModal({ isOpen, onClose, event }: ExportLogModa
     const rows = isSummary ? buildSummaryRows(event) : buildDetailRows(event, options);
     const csv = toCsv(rows);
     downloadTextFile(buildExportFilename(event.name, options.variant), csv, 'text/csv;charset=utf-8;');
+    void auditLog.record({ action: 'event.export', eventId: event.id, target: event.name, detail: isSummary ? 'summary CSV' : 'detail CSV' });
     onClose();
   }
 

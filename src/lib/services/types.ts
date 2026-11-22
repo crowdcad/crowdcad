@@ -18,7 +18,7 @@ export interface DocSnapshot<T = Record<string, unknown>> {
   data: T | null;
 }
 
-export type WhereOperator = '==' | '!=' | 'array-contains';
+export type WhereOperator = '==' | '!=' | '>=' | 'array-contains';
 
 export interface QueryConstraint {
   field: string;
@@ -81,6 +81,54 @@ export class ServiceError extends Error {
     super(message);
     this.name = 'ServiceError';
   }
+}
+
+// ────────────────────────────────────────────────────────────────
+// Two-step sign-in
+// ────────────────────────────────────────────────────────────────
+
+/**
+ * How an account proves itself a second time: a code from an authenticator
+ * app (Firebase, TOTP) or a code sent by email (PocketBase).
+ */
+export type SecondFactorMethod = 'app' | 'email';
+
+/**
+ * Thrown by signIn and reauthenticate when the account must also enter a
+ * code. Finish with `authService.completeSecondFactor(code)`.
+ */
+export class SecondFactorRequiredError extends ServiceError {
+  constructor(
+    public readonly method: SecondFactorMethod,
+    public readonly sentTo?: string,
+  ) {
+    super(
+      'auth/second-factor-required',
+      method === 'app' ? 'Enter the code from your authenticator app.' : `Enter the code sent to ${sentTo ?? 'your email'}.`,
+    );
+    this.name = 'SecondFactorRequiredError';
+  }
+}
+
+export interface SecondFactorStatus {
+  method: SecondFactorMethod;
+  /** An authenticator app is set up (always true for email codes, which need no setup). */
+  enrolled: boolean;
+  /**
+   * Whether this session signed in with the second step. Null when the
+   * backend can't tell: PocketBase asks for it at sign-in, on its server.
+   */
+  usedThisSession: boolean | null;
+}
+
+export interface SecondFactorSetup {
+  method: SecondFactorMethod;
+  /** otpauth:// link to show as a QR code (app). */
+  uri?: string;
+  /** The same key, to type into the app by hand (app). */
+  secret?: string;
+  /** Where the test code went (email). */
+  sentTo?: string;
 }
 
 // ────────────────────────────────────────────────────────────────

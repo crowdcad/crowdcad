@@ -205,6 +205,8 @@ export interface CrowdcadExtension {
     afterCreate?: (eventId: string, event: Partial<Event>, pending: unknown) => Promise<void>;
   };
   auth?: {
+    /** A hint under the sign-in box's email field (e.g. that another kind of username works too). */
+    signInHint?: string;
     /** The account email for what was typed in the sign-in box (e.g. a field login's username), or null to use it as typed. */
     signInEmail?: (typed: string) => string | null;
     /** For an account confined to its own pages (e.g. a field login): where it lands and which paths it may stay on. */

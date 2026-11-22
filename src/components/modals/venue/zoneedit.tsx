@@ -13,6 +13,7 @@ import {
 } from "@heroui/react";
 import DispatchZoneCheckbox from "@/components/venue-management/DispatchZoneCheckbox";
 import { ZONE_COLOR_PALETTE } from "@/lib/zoneColors";
+import { LABELED_FIELD_CLASSNAMES } from '@/components/ui/fieldClassNames';
 
 type Props = {
   isOpen: boolean;
@@ -41,12 +42,7 @@ export default function ZoneEditModal({
     setIsDispatchZone(initialIsDispatchZone);
   }, [initialName, initialColor, initialIsDispatchZone]);
 
-  const inputClassNames = {
-    label: "text-surface-light mb-1",
-    inputWrapper: "rounded-large px-4 hover:bg-surface-deep",
-    input:
-      "text-surface-light outline-none focus:outline-none data-[focus=true]:outline-none",
-  } as const;
+  const inputClassNames = LABELED_FIELD_CLASSNAMES;
 
   const handleSubmit = () => {
     if (!name.trim()) return;

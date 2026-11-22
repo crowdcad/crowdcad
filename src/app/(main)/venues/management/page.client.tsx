@@ -58,6 +58,7 @@ import {
   CircleHelp,
   HousePlus,
 } from 'lucide-react';
+import { SMALL_FIELD_CLASSNAMES } from '@/components/ui/fieldClassNames';
 
 
 // Real-world maps (P8, D64): the Map alignment step and the drawn-area map
@@ -1588,10 +1589,7 @@ export default function VenueManagementPageClient() {
             }
           }}
           variant="flat"
-          classNames={{
-            input: 'text-surface-light text-sm outline-none focus:outline-none data-[focus=true]:outline-none',
-            inputWrapper: 'rounded-large px-4 hover:bg-surface-deep',
-          }}
+          classNames={SMALL_FIELD_CLASSNAMES}
         />
         <Button
           isIconOnly

@@ -49,7 +49,7 @@ export default function MapAlignmentStep({ uid, layers, onAlignmentChange }: Map
   });
 
   return (
-    <div className="minimal-scrollbar flex h-full flex-col gap-3 overflow-y-auto pb-2 text-surface-light">
+    <div className="flex h-full flex-col gap-3 overflow-y-auto pb-2 text-surface-light">
       <div>
         <h3 className="inline-flex items-center gap-1.5 text-xl font-semibold">
           Map alignment

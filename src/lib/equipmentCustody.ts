@@ -9,6 +9,7 @@ import type {
   Supervisor,
 } from '@/app/types';
 import { getEventClinics } from '@/lib/clinics';
+import { hhmmOf } from '@/lib/clock';
 
 /**
  * Equipment custody: who has each piece of equipment, and where it is in its
@@ -60,11 +61,6 @@ type EventLike = Pick<Event, 'venue' | 'staff' | 'supervisor' | 'clinics'>;
 export const postHolder = (name: string): EquipmentHolder => ({ kind: 'post', name });
 export const unitHolder = (name: string): EquipmentHolder => ({ kind: 'team', name });
 export const clinicHolder = (name: string): EquipmentHolder => ({ kind: 'clinic', name });
-
-const hhmm = (t: number) => {
-  const d = new Date(t);
-  return d.getHours().toString().padStart(2, '0') + d.getMinutes().toString().padStart(2, '0');
-};
 
 export function fleetOf(event: Pick<Event, 'eventEquipment' | 'staff' | 'supervisor'>): Fleet {
   return { eventEquipment: event.eventEquipment || [], staff: event.staff || [], supervisor: event.supervisor || [] };
@@ -165,7 +161,7 @@ function mapUnits(fleet: Fleet, fn: <U extends Staff | Supervisor>(u: U) => U): 
 }
 
 function logUnit<U extends Staff | Supervisor>(u: U, t: number, message: string): U {
-  return { ...u, log: [...(u.log || []), { timestamp: t, message: `${hhmm(t)} - ${message}` }] };
+  return { ...u, log: [...(u.log || []), { timestamp: t, message: `${hhmmOf(t)} - ${message}` }] };
 }
 
 /**
@@ -253,7 +249,7 @@ export function assignEquipment(
     ? `responding to ${callRef} with ${eq.name}`
     : `retrieving ${eq.name} from ${custody.holder.name} for ${callRef}`;
 
-  const callMessage = `${hhmm(t)} - ${eq.name} assigned to ${unit} for this call.`;
+  const callMessage = `${hhmmOf(t)} - ${eq.name} assigned to ${unit} for this call.`;
   const otherUnitsOnCall = (call.assignedTeam || []).length > 0;
   const updatedCall: Call = {
     ...call,

@@ -80,18 +80,21 @@ export default function EventLog({
 
   return (
     <div className="flex flex-col gap-2 px-2 py-2" data-testid="event-log">
-      <Input
-        aria-label="Search the log"
-        placeholder="Search words or a time range (14:00-15:30)"
-        size="sm"
-        radius="lg"
-        isClearable
-        value={query}
-        onValueChange={setQuery}
-        classNames={PANEL_INPUT_CLASSNAMES}
-        startContent={<Search className="h-4 w-4 shrink-0 text-surface-faint" aria-hidden />}
-        data-testid="event-log-search"
-      />
+      {/* Stays at the top while the log scrolls under it. */}
+      <div className="sticky top-0 z-10 -mx-2 -mt-2 bg-surface-deepest px-2 pb-1 pt-2">
+        <Input
+          aria-label="Search the log"
+          placeholder="Search words or a time range (14:00-15:30)"
+          size="sm"
+          radius="lg"
+          isClearable
+          value={query}
+          onValueChange={setQuery}
+          classNames={PANEL_INPUT_CLASSNAMES}
+          startContent={<Search className="h-4 w-4 shrink-0 text-surface-faint" aria-hidden />}
+          data-testid="event-log-search"
+        />
+      </div>
       {shown.length === 0 && <p className="px-1 text-sm italic text-surface-faint">{rows.length ? 'Nothing matches.' : t('No log entries')}</p>}
       <ul className="flex flex-col divide-y divide-surface-liner">
         {shown.map((r) => (

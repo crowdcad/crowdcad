@@ -37,10 +37,13 @@ function testIdsInSource() {
         for (const m of text.matchAll(/data-testid=\{`([^`$]*)(\$\{)?/g)) (m[2] ? prefixes : literal).add(m[1]);
         for (const m of text.matchAll(/data-testid=\{["']([^"']+)["']\}/g)) literal.add(m[1]);
         // Components that forward a `testId` prop to data-testid (modals, Pick, ...).
-        for (const m of text.matchAll(/testId=["']([^"']+)["']/g)) literal.add(m[1]);
+        // Also props that forward to one (formTestId, bodyTestId, ...).
+        for (const m of text.matchAll(/[tT]estId=["']([^"']+)["']/g)) literal.add(m[1]);
         // Objects that carry a test id for something rendered elsewhere (an extension pack's tab).
         for (const m of text.matchAll(/testId:\s*["']([^"']+)["']/g)) literal.add(m[1]);
         for (const m of text.matchAll(/testId=\{`([^`$]*)(\$\{)?/g)) (m[2] ? prefixes : literal).add(m[1]);
+        // Lists that add each item's key to a prefix (UnitPickerItems: `call-add-team-${unit}`).
+        for (const m of text.matchAll(/testIdPrefix=["']([^"']+)["']/g)) prefixes.add(`${m[1]}-`);
       }
     }
   };

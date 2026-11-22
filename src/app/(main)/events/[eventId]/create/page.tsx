@@ -3,7 +3,7 @@
 import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import React, { useEffect, useRef, useState } from 'react';
 import { Event, Venue, Staff, Supervisor, Post, EventEquipment } from '@/app/types';
-import { authService, dbService } from '@/lib/services';
+import { auditLog, authService, dbService } from '@/lib/services';
 import { Button, Card, ScrollShadow } from '@heroui/react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { syncClinicsFromVenue } from '@/lib/clinics';
@@ -344,6 +344,7 @@ export default function EventCreation() {
           createdAt: new Date().toISOString(),
         }));
       }
+      if (!draftExists) void auditLog.record({ action: 'event.create', eventId: eventDocId, target: eventData.name });
       if (!draftExists) {
         for (const x of withMember('eventCreate')) {
           if (!x.eventCreate.afterCreate) continue;
@@ -402,7 +403,7 @@ export default function EventCreation() {
   };
 
   const basicsStep = (
-    <div className="px-6 pt-4 h-full overflow-y-auto minimal-scrollbar">
+    <div className="px-6 pt-4 h-full overflow-y-auto">
       <MetadataSection
         eventData={eventData}
         setEventData={setEventData}

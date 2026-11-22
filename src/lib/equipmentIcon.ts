@@ -1,4 +1,4 @@
-export type EquipmentIconType = 'wheelchair' | 'stretcher' | 'aed' | 'briefcase';
+export type EquipmentIconType = 'wheelchair' | 'stretcher' | 'aed' | 'radio' | 'briefcase';
 
 /**
  * Classifies an equipment item's icon by name — the exact matching rules the
@@ -12,5 +12,6 @@ export function getEquipmentIconType(name: string): EquipmentIconType {
   if (lower.includes('wheelchair')) return 'wheelchair';
   if (lower.includes('gurney') || lower.includes('stretcher')) return 'stretcher';
   if (lower.includes('aed')) return 'aed';
+  if (lower.includes('radio')) return 'radio';
   return 'briefcase';
 }

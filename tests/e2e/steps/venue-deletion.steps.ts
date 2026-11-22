@@ -52,11 +52,12 @@ When('I confirm venue deletion', async ({ page, scenarioState }) => {
   await heading
     .locator('xpath=ancestor::div[.//button[@aria-label="Venue actions"]][1]//button[@aria-label="Venue actions"]')
     .click();
-  // Register a dialog handler to accept the window.confirm before clicking Delete
-  page.once('dialog', dialog => dialog.accept());
   // force:true bypasses Playwright's stability/scroll checks that cause the
   // HeroUI dropdown to re-render and detach the element mid-click
   await page.getByRole('menuitem', { name: 'Delete' }).click({ force: true });
+  // The in-app confirm dialog (src/components/ui/confirmdialog.tsx).
+  await page.getByTestId('confirm-dialog-confirm').click();
+  await expect(page.getByTestId('confirm-dialog')).not.toBeVisible();
 });
 
 When('I cancel venue deletion', async ({ page, scenarioState }) => {
@@ -66,9 +67,9 @@ When('I cancel venue deletion', async ({ page, scenarioState }) => {
   await heading
     .locator('xpath=ancestor::div[.//button[@aria-label="Venue actions"]][1]//button[@aria-label="Venue actions"]')
     .click();
-  // Register a dialog handler to dismiss the window.confirm
-  page.once('dialog', dialog => dialog.dismiss());
   await page.getByRole('menuitem', { name: 'Delete' }).click({ force: true });
+  await page.getByTestId('confirm-dialog-cancel').click();
+  await expect(page.getByTestId('confirm-dialog')).not.toBeVisible();
 });
 
 Then('the venue should no longer be visible', async ({ page, scenarioState }) => {

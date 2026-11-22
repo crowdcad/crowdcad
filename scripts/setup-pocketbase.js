@@ -154,11 +154,12 @@ async function ensureCollection(headers, name, fields, rules, indexes = []) {
       fields,
       // Restrict access to authenticated users by default.
       // Adjust these rules in the PocketBase admin UI to match your security policy.
-      listRule: rules?.listRule ?? authRule,
-      viewRule: rules?.viewRule ?? authRule,
-      createRule: rules?.createRule ?? authRule,
-      updateRule: rules?.updateRule ?? authRule,
-      deleteRule: rules?.deleteRule ?? authRule,
+      // An explicit null (superusers only) is kept; only a missing rule falls back.
+      listRule: rules && 'listRule' in rules ? rules.listRule : authRule,
+      viewRule: rules && 'viewRule' in rules ? rules.viewRule : authRule,
+      createRule: rules && 'createRule' in rules ? rules.createRule : authRule,
+      updateRule: rules && 'updateRule' in rules ? rules.updateRule : authRule,
+      deleteRule: rules && 'deleteRule' in rules ? rules.deleteRule : authRule,
       indexes,
     }),
   });
@@ -260,6 +261,41 @@ async function ensureField(headers, collectionName, field) {
   console.log(`  [add]    ${collectionName}.${field.name}`);
 }
 
+
+// Two-step sign-in (Profile > Admin > Security, src/lib/securitySettings.ts):
+// PocketBase's own MFA, password then a one-time code sent by email. The
+// MFA rule reads the security settings record, so the server refuses a token
+// without the code whenever an admin has asked for it ('admins' or
+// 'everyone'), and changing the setting in the app takes effect at each
+// account's next sign-in with no restart. With the setting off (or no
+// record) nothing changes. Sending codes needs SMTP (Settings > Mail
+// settings); the app makes an admin receive a test code before turning it on.
+//
+// One-time codes also let an account sign in with an emailed code alone
+// through the API, which is no weaker than the password-reset email.
+const MFA_EXEMPT = [
+];
+const MFA_RULE = [
+  "@collection.settings:sec.id ?= 'securitysetting'",
+  "(@collection.settings:sec.value.mfa ?= 'everyone' || (@collection.settings:sec.value.mfa ?= 'admins' && isAdmin = true))",
+  ...MFA_EXEMPT,
+].join(' && ');
+
+async function ensureTwoStepSignIn(headers) {
+  const res = await pbFetch('/api/collections/users', {
+    method: 'PATCH',
+    headers,
+    body: JSON.stringify({
+      mfa: { enabled: true, duration: 1800, rule: MFA_RULE },
+      otp: { enabled: true, duration: 300, length: 6 },
+    }),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Failed to set up two-step sign-in on 'users': ${res.status} — ${body}`);
+  }
+  console.log('  [update] users two-step sign-in (follows the security settings; off until an admin turns it on)');
+}
 
 async function main() {
   console.log(`Connecting to PocketBase at ${PB_URL} ...`);
@@ -403,6 +439,31 @@ async function main() {
   // for a user's dispatch logs (Profile > Security) filters on it.
   await ensureField(headers, 'dispatchLogs', { name: 'userId', type: 'text' });
 
+  // Audit log (src/lib/services/audit.ts): append-only. An account
+  // records rows only as itself; admins read; no one can edit or delete a
+  // row through the API (null = superusers only). Mirrors firestore.rules.
+  await ensureCollection(
+    headers,
+    'audit',
+    [
+      { name: 't', type: 'number', required: true },
+      { name: 'uid', type: 'text', required: true },
+      { name: 'actor', type: 'text' },
+      { name: 'action', type: 'text', required: true, max: 64 },
+      { name: 'target', type: 'text', max: 200 },
+      { name: 'eventId', type: 'text' },
+      { name: 'detail', type: 'text', max: 500 },
+    ],
+    {
+      listRule: `${AUTH_RULE} && @request.auth.isAdmin = true`,
+      viewRule: `${AUTH_RULE} && @request.auth.isAdmin = true`,
+      createRule: `${AUTH_RULE} && @request.body.uid = @request.auth.id`,
+      updateRule: null,
+      deleteRule: null,
+    },
+    ['CREATE INDEX idx_audit_t ON audit (t)'],
+  );
+
   await ensureCollection(headers, '_storage', [
     { name: 'path', type: 'text', required: true },
     { name: 'file', type: 'file', options: { maxSelect: 1, maxSize: 52428800 } },
@@ -414,6 +475,7 @@ async function main() {
     [
       { name: 'key', type: 'text', required: true },
       { name: 'list', type: 'json' },
+      { name: 'value', type: 'json' },
     ],
     {
       // Readable by any authenticated user (needed at event-create time);
@@ -425,6 +487,10 @@ async function main() {
       deleteRule: '@request.auth.isAdmin = true',
     },
   );
+
+  // `value` holds a setting that isn't a list: the security settings record
+  // (id `securitysetting`, src/lib/securitySettings.ts).
+  await ensureField(headers, 'settings', { name: 'value', type: 'json' });
 
   // `isAdmin` on the built-in `users` auth collection — grants access to the
   // Profile > Admin section. Grant it per-user via scripts/setAdminPocketbase.js
@@ -446,6 +512,8 @@ async function main() {
   // allows public sign-up, which this app depends on.
   await ensureRules(headers, 'users', USERS_RULES);
 
+
+  await ensureTwoStepSignIn(headers);
 
   console.log('\nDone. CrowdCAD collections are ready, with owner/admin-scoped access rules applied automatically.');
   console.log(

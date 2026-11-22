@@ -3,6 +3,7 @@
 
 import React from 'react';
 import { Briefcase } from 'lucide-react';
+import CrowdcadRadioIcon from '@/components/ui/crowdcad-radio-icon';
 import type { EquipmentIconType } from '@/lib/equipmentIcon';
 
 type Props = {
@@ -11,8 +12,8 @@ type Props = {
 };
 
 /**
- * An equipment type's icon: a wheelchair, a gurney, or a medical briefcase
- * for 'aed' and anything else. All three are drawn in `currentColor`, so they
+ * An equipment type's icon: a wheelchair, a gurney, a radio, or a medical
+ * briefcase for 'aed' and anything else. All three are drawn in `currentColor`, so they
  * take the color of the text around them (a team card's status color, a
  * pill's text, white on the map's badges).
  */
@@ -34,6 +35,8 @@ export default function EquipmentTypeIcon({ type, className = 'w-4 h-4 shrink-0'
       </svg>
     );
   }
+  // The same radio as the phone's Calls tab.
+  if (type === 'radio') return <CrowdcadRadioIcon className={className} />;
   return <Briefcase className={className} aria-hidden="true" />;
 }
 

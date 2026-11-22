@@ -206,6 +206,8 @@ export interface Call {
   priority?: boolean;
   /** Pins this call to the top of its list (below Priority calls). Never logged, and cleared automatically once the call resolves. */
   pin?: boolean;
+  /** A point dropped on the map for a place that isn't a venue location; `location` still names it in words. */
+  locationPoint?: { lat: number; lng: number };
   duplicate?: boolean;
   duplicateOf?: string;
   log?: CallLogEntry[];

@@ -5,6 +5,8 @@ import { Button, Card, CardBody, Input } from '@heroui/react';
 import { authService, dbService, ServiceError, type ServiceUser } from '@/lib/services';
 import { Eye, EyeOff, LogOut, Trash2, Download } from 'lucide-react';
 import { PROFILE_ACTION_BUTTON } from './buttonStyles';
+import { FIELD_CLASSNAMES } from '@/components/ui/fieldClassNames';
+import TwoStepCard from './two-step-card';
 
 export default function SecuritySection({ user }: { user: ServiceUser }) {
   const [currentPassword, setCurrentPassword] = useState('');
@@ -201,10 +203,7 @@ export default function SecuritySection({ user }: { user: ServiceUser }) {
                     value={currentPassword}
                     onChange={(e) => setCurrentPassword(e.target.value)}
                     placeholder="Enter current password"
-                    classNames={{
-                      inputWrapper: 'rounded-large px-4 hover:bg-surface-deep',
-                      input: 'text-surface-light outline-none focus:outline-none data-[focus=true]:outline-none',
-                    }}
+                    classNames={FIELD_CLASSNAMES}
                     endContent={
                       <button
                         type="button"
@@ -223,10 +222,7 @@ export default function SecuritySection({ user }: { user: ServiceUser }) {
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
                     placeholder="Enter new password"
-                    classNames={{
-                      inputWrapper: 'rounded-large px-4 hover:bg-surface-deep',
-                      input: 'text-surface-light outline-none focus:outline-none data-[focus=true]:outline-none',
-                    }}
+                    classNames={FIELD_CLASSNAMES}
                     endContent={
                       <button
                         type="button"
@@ -245,10 +241,7 @@ export default function SecuritySection({ user }: { user: ServiceUser }) {
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     placeholder="Confirm new password"
-                    classNames={{
-                      inputWrapper: 'rounded-large px-4 hover:bg-surface-deep',
-                      input: 'text-surface-light outline-none focus:outline-none data-[focus=true]:outline-none',
-                    }}
+                    classNames={FIELD_CLASSNAMES}
                     endContent={
                       <button
                         type="button"
@@ -274,6 +267,8 @@ export default function SecuritySection({ user }: { user: ServiceUser }) {
           )}
         </CardBody>
       </Card>
+
+      <TwoStepCard />
 
       <Card isBlurred className="w-full border border-default-200 bg-surface-deep/40">
         <CardBody className="p-6">

@@ -1,0 +1,43 @@
+# Supply-chain checks.
+# - audit: fails on any high or critical advisory in production dependencies
+#   (dev-only tooling is reported by Dependabot instead). Reads the lockfile,
+#   so it needs no install.
+# - codeql: static analysis. Free on public repositories only, so it runs on
+#   crowdcad/crowdcad and is skipped on private forks.
+name: Security checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '17 6 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: npm audit (production, high+)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm audit --omit=dev --audit-level=high --package-lock-only
+
+  codeql:
+    name: CodeQL
+    if: ${{ !github.event.repository.private }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+      - uses: github/codeql-action/analyze@v3

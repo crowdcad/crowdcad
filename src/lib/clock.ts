@@ -8,7 +8,8 @@ export function formatClock(ms: number): string {
   return `${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
 }
 
-/** "1405": the time prefix log entries are written with ("1405 - En Route"). */
-export function hhmm(date: Date = new Date()): string {
+/** "1405": the time prefix log entries are written with ("1405 - En Route"), for a Date or a timestamp. */
+export function hhmmOf(at: Date | number = new Date()): string {
+  const date = typeof at === 'number' ? new Date(at) : at;
   return pad2(date.getHours()) + pad2(date.getMinutes());
 }

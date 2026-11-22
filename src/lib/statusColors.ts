@@ -28,6 +28,11 @@ export const TRACKING_ROW_OPEN_CLASS = 'bg-surface-liner/60';
 /** Hovering a closed call/clinic row shows the open color, so clicking it does not change the color again. */
 export const TRACKING_ROW_HOVER_CLASS = 'hover:bg-surface-liner/60';
 
+/** Resolved call/clinic rows and cards: diagonal stripes in the hover color (globals.css). */
+export const TRACKING_RESOLVED_CLASS = 'tracking-resolved';
+/** The same on the phone's call/clinic cards, in their own hover color. */
+export const TRACKING_RESOLVED_CARD_CLASS = 'tracking-resolved-card';
+
 export const STATUS_COLORS: Record<string, DispatchStatusColor> = {
   Available: {
     borderClass: 'border-status-card-ring-green',

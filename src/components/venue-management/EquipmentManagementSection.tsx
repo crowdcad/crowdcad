@@ -4,6 +4,7 @@ import React from 'react';
 import { Button, Input, ScrollShadow, Select, SelectItem, Tooltip } from '@heroui/react';
 import { CircleHelp, Edit2, Plus, Trash2 } from 'lucide-react';
 import type { Equipment } from '@/app/types';
+import { SMALL_FIELD_CLASSNAMES } from '@/components/ui/fieldClassNames';
 
 interface EquipmentManagementSectionProps {
   equipmentInput: string;
@@ -66,10 +67,7 @@ export default function EquipmentManagementSection({
             }
           }}
           variant="flat"
-          classNames={{
-            input: 'text-surface-light text-sm outline-none focus:outline-none data-[focus=true]:outline-none',
-            inputWrapper: 'rounded-large px-4 hover:bg-surface-deep',
-          }}
+          classNames={SMALL_FIELD_CLASSNAMES}
         />
         <Button
           isIconOnly

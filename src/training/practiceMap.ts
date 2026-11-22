@@ -6,7 +6,7 @@ import raw from './maps/practice-map.json';
  * keeping the .json name). Each feature says what it is with one property:
  *
  * - Point `{"Location": "Sather Gate"}`: a post.
- * - Point `{"Clinic": "Dwinelle Tent"}`: a clinic (a post that is a clinic, with its own tab).
+ * - Point `{"Clinic": "South Clinic"}`: a clinic (a post that is a clinic, with its own tab).
  * - Polygon `{"Zone": "Glade"}`: a zone (MCI zones come from these). Optional `"color"` or `"fill"`.
  * - Polygon `{"Area": "Campus"}` (optional): the event's map area. Without one, the area is
  *   the box around everything, with a margin.

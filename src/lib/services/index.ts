@@ -1,7 +1,8 @@
 // The single import point for all backend service access.
 // Usage: import { authService, dbService, storageService, arrayUnion, arrayRemove } from '@/lib/services';
 
-export { authService, dbService, storageService, isPocketbaseBackend } from './factory';
+export { authService, dbService, storageService, isPocketbaseBackend, auditLog } from './factory';
+export { AUDIT_COLLECTION, type AuditAction, type AuditEntry, type AuditInput, type AuditLog } from './audit';
 
 export {
   arrayUnion,
@@ -9,6 +10,7 @@ export {
   isArrayUnion,
   isArrayRemove,
   ServiceError,
+  SecondFactorRequiredError,
 } from './types';
 
 export type {
@@ -21,6 +23,9 @@ export type {
   ArrayRemoveValue,
   Unsubscribe,
   TransactionContext,
+  SecondFactorMethod,
+  SecondFactorStatus,
+  SecondFactorSetup,
 } from './types';
 
 export type { IAuthService } from './IAuthService';

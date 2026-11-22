@@ -92,7 +92,7 @@ export default function TrainingCatalog() {
         </p>
         <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-sm text-surface-light/75">
           <span className="flex items-center gap-1.5">
-            <Clock className="h-4 w-4" /> {formatDuration(totalSec)} in all
+            <Clock className="h-4 w-4" /> {formatDuration(totalSec)} total
           </span>
           <span className="flex items-center gap-1.5">
             <Check className="h-4 w-4" /> {completed} of {all.length} completed

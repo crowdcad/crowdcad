@@ -9,7 +9,6 @@ import { useDispatchVocabulary } from '@/hooks/useDispatchVocabulary';
 import { getLiteEvent } from '@/lib/liteEventStore';
 import { hasPostingSchedule } from '@/lib/postingTimes';
 import {
-  Button,
   Dropdown,
   DropdownItem,
   DropdownMenu,
@@ -20,10 +19,9 @@ import {
   NavbarItem,
   NavbarMenu,
   NavbarMenuItem,
-  NavbarMenuToggle,
 } from '@heroui/react';
-import { LogOut, Menu, Moon, Sun, UserRound } from 'lucide-react';
-import { BrandLogo, LiveClock, LoginModalLazy, MobileMenuAccountItems, NAVBAR_ICON_BUTTON_CLASS, useThemeToggle } from '@/components/layout/navbarshared';
+
+import { BrandLogo, NavbarEndActions, LiveClock, LoginModalLazy, MobileMenuAccountItems, useThemeToggle } from '@/components/layout/navbarshared';
 import HelpButton from '@/components/training/HelpButton';
 
 const liteNavItems = [
@@ -190,90 +188,21 @@ export default function LiteNavbar() {
           </NavbarContent>
           </div>
 
-          <NavbarContent justify="end" className="gap-2 sm:gap-3 md:gap-4">
-            <div className="lg:hidden">
-              <NavbarMenuToggle
-                aria-label={isMenuOpen ? 'Close menu' : 'Open menu'}
-                className="text-surface-light"
-                icon={(open) => (
-                  <Menu className={`size-6 transition ${open ? 'rotate-90' : ''} text-surface-light`} />
-                )}
-              />
-            </div>
-
-            <NavbarItem>
-              <HelpButton />
-            </NavbarItem>
-
-            <NavbarItem>
-              <Button
-                isIconOnly
-                variant="flat"
-                aria-label={isDarkTheme ? 'Switch to light mode' : 'Switch to dark mode'}
-                className={NAVBAR_ICON_BUTTON_CLASS}
-                onPress={toggleTheme}
-              >
-                {isDarkTheme ? <Sun className="size-4" /> : <Moon className="size-4" />}
-              </Button>
-            </NavbarItem>
-
-            {!ready ? (
-              <NavbarItem>
-                <div className="w-10 h-10" />
-              </NavbarItem>
-            ) : !user ? (
-              <NavbarItem>
-                <Button
-                  size="sm"
-                  variant="bordered"
-                  className="h-8 !rounded-circle border-surface-liner bg-transparent px-3 text-surface-light font-semibold"
-                  onClick={() => {
-                    setIsMenuOpen(false);
-                    setLoginOpen(true);
-                  }}
-                >
-                  Log in
-                </Button>
-              </NavbarItem>
-            ) : (
-              <NavbarItem className="hidden lg:flex">
-                <Dropdown placement="bottom-end">
-                  <DropdownTrigger>
-                    <button
-                        aria-label="Open profile menu"
-                        className="relative rounded-circle cursor-pointer"
-                      >
-                        <span className="flex h-8 w-8 items-center justify-center rounded-circle border border-surface-liner bg-surface-base">
-                          <UserRound className="size-4 text-surface-light" />
-                        </span>
-                      </button>
-                  </DropdownTrigger>
-
-                  <DropdownMenu
-                    aria-label="Profile menu"
-                    className="min-w-40 flex flex-col space-y-1 origin-top-right transform-gpu transition-all duration-150"
-                  >
-                    <DropdownItem
-                      key="profile"
-                      startContent={<UserRound className="size-4" />}
-                      className="transition-colors"
-                      onPress={() => router.push('/profile')}
-                    >
-                      Profile
-                    </DropdownItem>
-                    <DropdownItem
-                      key="logout"
-                      className="text-status-red"
-                      startContent={<LogOut className="size-4" />}
-                      onPress={onLogout}
-                    >
-                      Logout
-                    </DropdownItem>
-                  </DropdownMenu>
-                </Dropdown>
-              </NavbarItem>
-            )}
-          </NavbarContent>
+          <NavbarEndActions
+              isMenuOpen={isMenuOpen}
+              help={isDispatch ? <HelpButton /> : null}
+              isDarkTheme={isDarkTheme}
+              toggleTheme={toggleTheme}
+              ready={ready}
+              signedIn={!!user}
+              onLogin={() => {
+                setIsMenuOpen(false);
+                setLoginMode('login');
+                setLoginOpen(true);
+              }}
+              onProfile={() => router.push('/profile')}
+              onLogout={onLogout}
+            />
         </div>
 
         <NavbarMenu className="bg-surface-deep border-t border-surface-liner pt-6">

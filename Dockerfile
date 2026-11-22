@@ -16,7 +16,7 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY src ./src
 COPY public ./public
-COPY package.json package-lock.json components.json next.config.js tailwind.config.js postcss.config.mjs tsconfig.json eslint.config.mjs ./
+COPY package.json package-lock.json components.json next.config.js security-headers.js tailwind.config.js postcss.config.mjs tsconfig.json eslint.config.mjs ./
 
 # Add build args using safe names to avoid SonarCloud secret warnings
 ARG FB_API
@@ -31,6 +31,9 @@ ARG NEXT_PUBLIC_POCKETBASE_URL
 # Optional: "on" builds preview training modules in.
 ARG NEXT_PUBLIC_TRAINING_PREVIEW
 ENV NEXT_PUBLIC_TRAINING_PREVIEW=$NEXT_PUBLIC_TRAINING_PREVIEW
+# Optional: "on" shows a "made-up data only" strip on every page (test instances).
+ARG NEXT_PUBLIC_TEST_DATA_ONLY
+ENV NEXT_PUBLIC_TEST_DATA_ONLY=$NEXT_PUBLIC_TEST_DATA_ONLY
 
 # Next.js telemetry is disabled during the build in the standalone mode usually, but just in case
 ENV NEXT_TELEMETRY_DISABLED 1

@@ -1,0 +1,27 @@
+# Attaches a CycloneDX software bill of materials (production dependencies) to
+# every published release. Agency IT and security reviews ask for one.
+name: Release SBOM
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  sbom:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Build SBOM from the lockfile
+        run: npx --yes @cyclonedx/cyclonedx-npm@7.0.1 --package-lock-only --omit dev --output-file sbom.cdx.json
+      - name: Upload to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.event.release.tag_name }}" sbom.cdx.json --clobber

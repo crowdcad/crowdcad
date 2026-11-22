@@ -48,7 +48,7 @@ export default function TrackingTextEntry({
       classNames={{
         ...classNames,
         input: cn(
-          'minimal-scrollbar text-surface-light group-data-[has-value=true]:text-surface-light !pr-0',
+          'text-surface-light group-data-[has-value=true]:text-surface-light !pr-0',
           mode === 'log' ? 'text-sm' : undefined,
           classNames?.input
         ),

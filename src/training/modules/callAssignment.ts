@@ -24,7 +24,7 @@ const callAssignment: TrainingModule = {
       id: 'intro',
       section: 'Add a call',
       title: 'Read the scenario',
-      body: "Someone radios in: a man near **Sather Gate** feels dizzy. You will log the {{call}}, send a {{team}} and follow it until the patient reaches the Dwinelle Tent Clinic.",
+      body: "Someone radios in: a man near **Sather Gate** feels dizzy. You will log the {{call}}, send a {{team}} and follow it until the patient reaches South Clinic Clinic.",
       estSec: 20,
     },
     {
@@ -123,7 +123,7 @@ const callAssignment: TrainingModule = {
       id: 'delivered',
       section: 'Update the team status',
       title: 'Set Delivered to Clinic',
-      body: "The patient has arrived at the Dwinelle Tent. Change the status to **Delivered to Clinic**. The call closes and the patient moves to the clinic tab.",
+      body: "The patient has arrived at South Clinic. Change the status to **Delivered to Clinic**. The call closes and the patient moves to the clinic tab.",
       anchors: ['team-status-option-Delivered', `team-status-${TEAM}`],
       placement: 'right',
       estSec: 15,

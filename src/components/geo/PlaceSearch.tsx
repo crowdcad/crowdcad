@@ -90,7 +90,7 @@ export default function PlaceSearch({
       </form>
       {results && results.length > 1 && (
         // A dropdown over what's below, rather than pushing it down.
-        <ul className="minimal-scrollbar absolute left-0 right-0 top-full z-50 mt-1 max-h-56 overflow-y-auto rounded-lg border border-surface-liner bg-surface-deep text-sm shadow-lg">
+        <ul className="absolute left-0 right-0 top-full z-50 mt-1 max-h-56 overflow-y-auto rounded-lg border border-surface-liner bg-surface-deep text-sm shadow-lg">
           {results.map((r, i) => (
             <li key={i}>
               <button type="button" className="w-full px-3 py-1.5 text-left hover:bg-surface-liner/30" onClick={() => pick(r)}>

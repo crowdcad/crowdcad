@@ -1,5 +1,6 @@
 import type { Call, Event, Staff } from '@/app/types';
 import { assignEquipment, fleetOf, handOffEquipment, pickUpEquipment, type Fleet } from '@/lib/equipmentCustody';
+import { hhmmOf } from '@/lib/clock';
 
 /**
  * What a trainee's clicks do to the event, for a step's `apply` ("Do it for
@@ -12,7 +13,7 @@ import { assignEquipment, fleetOf, handOffEquipment, pickUpEquipment, type Fleet
 
 const hhmm = (now: number) => {
   const d = new Date(now);
-  return d.getHours().toString().padStart(2, '0') + d.getMinutes().toString().padStart(2, '0');
+  return hhmmOf(d);
 };
 
 export const RESOLVING = ['Delivered', 'Refusal', 'NMM', 'Treat and Release', 'Unable to Locate', 'Rolled from Scene'];

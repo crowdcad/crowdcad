@@ -39,6 +39,7 @@ import {
 import { newSupervisor, newTeam, teamDraftFromStaff, teamMemberStrings } from '@/lib/teamDraft';
 import { randomId } from '@/lib/utils';
 import { EVENT_INPUT_CLASSNAMES, EVENT_SELECT_CLASSNAMES } from '@/components/event-create/fieldClassNames';
+import { LiteStorageNotice } from '@/components/lite/litestoredevents';
 
 // The live map (Map step and map-based Locations step), loaded on demand like
 // venue setup's: the same AreaEditor and map controls, without image layers or TAK.
@@ -554,7 +555,7 @@ function LiteCreateContent() {
   const hasRequiredBasics = !!eventDraft.name.trim() && !!eventDraft.date;
 
   const basicsStep = (
-    <div className="px-6 pt-4 h-full overflow-y-auto minimal-scrollbar">
+    <div className="px-6 pt-4 h-full overflow-y-auto">
       <MetadataSection
         eventData={sectionData}
         setEventData={
@@ -1031,6 +1032,7 @@ function LiteCreateContent() {
             </div>
             <div className="flex items-center justify-between px-6 pt-4 pb-4 flex-shrink-0">
               <div>{backButton}</div>
+              <LiteStorageNotice className="hidden md:block max-w-lg px-4 text-center leading-snug" />
               <div>{primaryButton}</div>
             </div>
           </div>

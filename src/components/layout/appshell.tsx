@@ -3,6 +3,7 @@
 import { usePathname } from 'next/navigation';
 import AppNavbar from '@/components/layout/appnavbar';
 import { extensions } from '@/extensions';
+import SecondFactorGate from '@/components/auth/secondfactorgate';
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -16,6 +17,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     <>
       {!isLiteRoute && !isPackChrome && !isTrainingPlayer && <AppNavbar />}
       <div>{children}</div>
+      {!isLiteRoute && !isPackChrome && <SecondFactorGate />}
     </>
   );
 }

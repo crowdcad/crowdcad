@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { dbService, arrayUnion, arrayRemove } from '@/lib/services';
+import { auditLog, dbService, arrayUnion, arrayRemove } from '@/lib/services';
 import {
   Modal,
   ModalContent,
@@ -48,6 +48,7 @@ export default function ShareModal({
       await dbService.updateDocument(collectionName, resourceId, {
         sharedWith: arrayUnion(emailInput.trim().toLowerCase()),
       });
+      void auditLog.record({ action: 'access.grant', target: emailInput.trim().toLowerCase(), detail: `${collectionName}/${resourceId}`, ...(collectionName === 'events' ? { eventId: resourceId } : {}) });
       setEmailInput('');
       onUpdate();
     } catch (error) {
@@ -66,6 +67,7 @@ export default function ShareModal({
       await dbService.updateDocument(collectionName, resourceId, {
         sharedWith: arrayRemove(email),
       });
+      void auditLog.record({ action: 'access.revoke', target: email, detail: `${collectionName}/${resourceId}`, ...(collectionName === 'events' ? { eventId: resourceId } : {}) });
       onUpdate();
     } catch (error) {
       console.error('Error removing user:', error);

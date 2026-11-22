@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Button, Input } from '@heroui/react';
 import HomePageStreaks from '@/components/layout/homepagestreaks';
 import { ArrowRight } from 'lucide-react';
+import LiteStoredEvents, { LiteStorageNotice } from '@/components/lite/litestoredevents';
 
 /**
  * Lite Landing Page (/lite)
@@ -58,7 +59,7 @@ export default function LiteLandingPage() {
   };
 
   return (
-    <main className="h-[calc(100dvh-3.5rem)] w-full max-w-full overflow-hidden relative flex flex-col text-surface-light bg-surface-deepest">
+    <main className="h-[calc(100dvh-3.5rem)] w-full max-w-full overflow-x-hidden overflow-y-auto relative flex flex-col text-surface-light bg-surface-deepest">
       <HomePageStreaks />
 
       {/* Main content */}
@@ -80,6 +81,8 @@ export default function LiteLandingPage() {
             </label>
             <Input
               id="event-name"
+              // The label above isn't tied to HeroUI's inner input, so name it here too.
+              aria-label="Event Name"
               placeholder="e.g., Big Game"
               value={eventName}
               onChange={(e) => setEventName(e.target.value)}
@@ -110,6 +113,9 @@ export default function LiteLandingPage() {
             </Link>
             {' '}if you&apos;d like full features
           </p>
+
+          <LiteStorageNotice className="text-center" />
+          <LiteStoredEvents />
         </div>
       </div>
     </main>

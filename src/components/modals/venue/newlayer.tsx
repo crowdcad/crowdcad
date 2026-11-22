@@ -1,6 +1,7 @@
 // components/modals/NewLayerModal.tsx
 "use client";
 
+import { LABELED_FIELD_CLASSNAMES } from '@/components/ui/fieldClassNames';
 import * as React from "react";
 import { Upload, Trash2 } from "lucide-react";
 import {
@@ -24,12 +25,7 @@ export default function NewLayerModal({ isOpen, onClose, onSubmit }: Props) {
   const [file, setFile] = React.useState<File | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
-  const inputClassNames = {
-    label: "text-surface-light mb-1",
-    inputWrapper: "rounded-large px-4 hover:bg-surface-deep",
-    input:
-      "text-surface-light outline-none focus:outline-none data-[focus=true]:outline-none",
-  } as const;
+  const inputClassNames = LABELED_FIELD_CLASSNAMES;
 
   const handleSubmit = () => {
     if (!name.trim() || !file) return;

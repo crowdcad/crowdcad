@@ -5,12 +5,9 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Card, CardBody, Button, Input } from '@heroui/react';
 import { authService, ServiceError } from '@/lib/services';
+import { FORM_FIELD_CLASSNAMES } from '@/components/ui/fieldClassNames';
 
-const inputClassNames = {
-  label: 'text-surface-light font-medium',
-  input: 'text-surface-light outline-none focus:outline-none data-[focus=true]:outline-none focus:ring-0 focus-visible:ring-0',
-  inputWrapper: 'rounded-large px-4 hover:bg-surface-deep',
-} as const;
+const inputClassNames = FORM_FIELD_CLASSNAMES;
 
 const cardProps = {
   isBlurred: true,

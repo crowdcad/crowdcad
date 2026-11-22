@@ -13,6 +13,8 @@ import DispatchMotionCell from '@/components/dispatch/motioncell';
 import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
 import { useMMSS } from '@/hooks/useMMSS';
 import { textToLog } from '@/lib/logText';
+import { hhmmOf } from '@/lib/clock';
+import type { DroppedPin } from '@/components/geo/PinDropModal';
 
 /** Enter/exit animation for the dispatch tables' and cards' HeroUI dropdowns. */
 export const dropdownMotionProps = {
@@ -183,7 +185,7 @@ export function CallNotesAndLog({
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
                 const now = new Date();
-                const hhmm = now.getHours().toString().padStart(2, '0') + now.getMinutes().toString().padStart(2, '0');
+                const hhmm = hhmmOf(now);
                 setLogText(prev => prev + `\n${hhmm} - `);
               }
             }}
@@ -197,4 +199,24 @@ export function CallNotesAndLog({
       </div>
     </DispatchMotionCell>
   );
+}
+
+/**
+ * Pins an existing call to a point dropped on the map: stores the point, names the place in words when the call
+ * had none ("Unknown" or blank), and logs it.
+ */
+export function pinCallPatch(event: Event, callId: string, pin: DroppedPin): Partial<Event> {
+  const now = new Date();
+  return {
+    calls: event.calls.map((c) =>
+      c.id !== callId
+        ? c
+        : {
+            ...c,
+            locationPoint: pin.point,
+            ...(!c.location?.trim() || c.location === 'Unknown' ? { location: pin.label } : {}),
+            log: [...(c.log || []), { timestamp: now.getTime(), message: `${hhmmOf(now)} - Pin dropped: ${pin.label}` }],
+          }
+    ),
+  };
 }

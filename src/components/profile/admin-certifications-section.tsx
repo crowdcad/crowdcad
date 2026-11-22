@@ -5,6 +5,7 @@ import { Button, Card, CardBody, Chip, Input, Spinner } from '@heroui/react';
 import { useCertifications } from '@/hooks/useCertifications';
 import { DEFAULT_CERTIFICATIONS } from '@/lib/certificationsService';
 import { PROFILE_ACTION_BUTTON } from './buttonStyles';
+import { FIELD_CLASSNAMES } from '@/components/ui/fieldClassNames';
 
 export default function AdminCertificationsSection() {
   const { certifications, loading, save } = useCertifications();
@@ -85,10 +86,7 @@ export default function AdminCertificationsSection() {
               }
             }}
             placeholder="Add certification"
-            classNames={{
-              inputWrapper: 'rounded-large px-4 hover:bg-surface-deep',
-              input: 'text-surface-light outline-none focus:outline-none data-[focus=true]:outline-none',
-            }}
+            classNames={FIELD_CLASSNAMES}
           />
           <Button onPress={handleAdd} isDisabled={saving || !newCert.trim()} className="bg-accent">
             Add

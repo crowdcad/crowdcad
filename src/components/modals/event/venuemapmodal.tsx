@@ -213,7 +213,7 @@ function getEquipmentIcon(equipment: Equipment) {
 // White glyphs: the status color and white border live on the circular badge
 // these sit inside of (EquipmentMarker), not on the icon itself.
 function EquipmentIcon({ type }: { type: string }) {
-  if (type === 'wheelchair' || type === 'stretcher') return <EquipmentTypeIcon type={type} className="h-4 w-4 text-white" />;
+  if (type === 'wheelchair' || type === 'stretcher' || type === 'radio') return <EquipmentTypeIcon type={type} className="h-4 w-4 text-white" />;
   // 'aed' and the default case.
   return <Briefcase size={16} strokeWidth={1.75} stroke="white" fill="none" />;
 }

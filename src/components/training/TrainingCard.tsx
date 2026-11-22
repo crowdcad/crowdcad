@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Button } from '@heroui/react';
-import { ChevronDown, ChevronUp, RotateCcw, Undo2 } from 'lucide-react';
+import { ChevronDown, ChevronUp, RotateCcw, Undo2, X } from 'lucide-react';
 import { useDispatchVocabulary } from '@/hooks/useDispatchVocabulary';
 import { visibleModules } from '@/training/registry';
 import { plainStepText } from '@/training/text';
@@ -38,6 +38,7 @@ export default function TrainingCard({
   actions,
   layout,
   note,
+  live,
 }: {
   module: TrainingModule;
   state: TrainingCardState;
@@ -45,6 +46,11 @@ export default function TrainingCard({
   layout: 'floating' | 'top' | 'inline';
   /** A line under the instruction (e.g. that a module is best on a computer). */
   note?: string;
+  /**
+   * Help's "Show me" on a live board: the same card, headed "Help · <module>" with a close button, and the
+   * given actions in place of Restart section / Do it for me (nothing is done for you on a live event).
+   */
+  live?: { onClose: () => void; footer: React.ReactNode };
 }) {
   const { activePreset } = useDispatchVocabulary();
   const t = useCallback((key: string) => activePreset.terms[key] ?? key, [activePreset]);
@@ -69,7 +75,7 @@ export default function TrainingCard({
   return (
     <aside
       aria-live="polite"
-      data-testid="training-card"
+      data-testid={live ? 'help-live-guide' : 'training-card'}
       data-step-id={complete ? 'complete' : step.id}
       data-gate={state.unlocked || complete ? 'free' : 'guided'}
       // Top layer: pressing the card while a board modal is open must not dismiss that modal and swallow the press.
@@ -79,7 +85,7 @@ export default function TrainingCard({
       className={`pointer-events-auto ${position} rounded-xl border border-surface-liner bg-surface-deep p-4 text-sm text-surface-light shadow-2xl`}
     >
       <div className="mb-1 flex items-center justify-between gap-2 text-xs uppercase tracking-wide text-surface-light/60">
-        <span className="truncate">{complete ? 'Complete' : `Step ${index + 1} of ${module.steps.length}`}</span>
+        <span className="truncate">{live ? `Help · ${module.title}` : complete ? 'Complete' : `Step ${index + 1} of ${module.steps.length}`}</span>
         <span className="flex shrink-0 items-center gap-0.5">
           <button
             type="button"
@@ -91,17 +97,23 @@ export default function TrainingCard({
           >
             {minimized ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
           </button>
-          <button
-            type="button"
-            aria-label="Back: undo the last step"
-            title="Back: undo the last step"
-            disabled={!complete && index === 0}
-            className="rounded p-1 hover:bg-surface-liner disabled:pointer-events-none disabled:opacity-30"
-            onClick={actions.back}
-            data-testid="training-back"
-          >
-            <Undo2 className="h-3.5 w-3.5" />
-          </button>
+          {live ? (
+            <button type="button" aria-label="Close help" className="rounded p-1 hover:bg-surface-liner" onClick={live.onClose} data-testid="help-live-close">
+              <X className="h-3.5 w-3.5" />
+            </button>
+          ) : (
+            <button
+              type="button"
+              aria-label="Back: undo the last step"
+              title="Back: undo the last step"
+              disabled={!complete && index === 0}
+              className="rounded p-1 hover:bg-surface-liner disabled:pointer-events-none disabled:opacity-30"
+              onClick={actions.back}
+              data-testid="training-back"
+            >
+              <Undo2 className="h-3.5 w-3.5" />
+            </button>
+          )}
         </span>
       </div>
 
@@ -159,12 +171,18 @@ export default function TrainingCard({
             </div>
           )}
           <div className="mt-3 flex items-center justify-between gap-2">
-            <Button size="sm" variant="light" startContent={<RotateCcw className="h-3.5 w-3.5" />} onPress={actions.restartSection} data-testid="training-restart-section">
-              Restart section
-            </Button>
-            <Button size="sm" color="primary" onPress={kind === 'read' ? actions.next : actions.doIt} data-testid="training-primary">
-              {kind === 'read' ? 'Next' : 'Do it for me'}
-            </Button>
+            {live ? (
+              live.footer
+            ) : (
+              <>
+                <Button size="sm" variant="light" startContent={<RotateCcw className="h-3.5 w-3.5" />} onPress={actions.restartSection} data-testid="training-restart-section">
+                  Restart section
+                </Button>
+                <Button size="sm" color="primary" onPress={kind === 'read' ? actions.next : actions.doIt} data-testid="training-primary">
+                  {kind === 'read' ? 'Next' : 'Do it for me'}
+                </Button>
+              </>
+            )}
           </div>
         </>
       )}

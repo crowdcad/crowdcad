@@ -19,6 +19,12 @@ import type { Event, Staff, Supervisor, Call, TeamLogEntry } from "@/app/types";
 import { useDispatchTerms } from "@/lib/dispatchVocabulary/context";
 import { getVenueLocationOptions } from "@/lib/clinics";
 import { staticSelectorButtonProps } from "@/lib/heroStatic";
+import { hhmmOf } from '@/lib/clock';
+import PinDropModal, { firstGeoLayer } from '@/components/geo/PinDropModal';
+import { callPoint, placePoint } from '@/lib/unitDistance';
+import { distanceM, formatMeters } from '@/lib/geo/distance';
+import { getEventVenueLayers } from '@/lib/zones';
+import { MapPin } from 'lucide-react';
 
 type QuickCallState = {
   location: string;
@@ -27,6 +33,8 @@ type QuickCallState = {
   gender: string;
   chiefComplaint: string;
   assignedTeam: string; // single select
+  /** A point dropped on the map (PinDropModal) for a place that isn't a venue location. */
+  locationPoint?: { lat: number; lng: number };
 };
 
 type Props = {
@@ -59,6 +67,14 @@ export default function QuickCallModal({
   const [submitting, setSubmitting] = React.useState(false);
 
   const locationOptions = React.useMemo(() => getVenueLocationOptions(event?.venue), [event?.venue]);
+  const venueLayers = React.useMemo(() => (event ? getEventVenueLayers(event) : []), [event]);
+  const [pinOpen, setPinOpen] = React.useState(false);
+  // How far each unit is from the call being typed: its pin, else the typed location (when the venue places it).
+  const callAt = callPoint({ location: quickCall.location, locationPoint: quickCall.locationPoint }, venueLayers);
+  const away = (unit: { team: string; location?: string }) => {
+    const at = placePoint(unit.location, venueLayers);
+    return callAt && at ? ` · ${formatMeters(distanceM(callAt, at))}` : '';
+  };
 
   // Replace the postedTeams useMemo
   const { availableTeams, inactiveTeams } = React.useMemo(() => {
@@ -118,8 +134,7 @@ export default function QuickCallModal({
     try {
       const now = new Date();
       const hhmm =
-        now.getHours().toString().padStart(2, "0") +
-        now.getMinutes().toString().padStart(2, "0");
+        hhmmOf(now);
 
       const nextOrder =
         event?.calls?.length
@@ -133,6 +148,7 @@ export default function QuickCallModal({
         order: nextOrder,
         status: quickCall.assignedTeam ? "Assigned" : "Pending",
         location: quickCall.location.trim() || "Unknown",
+        ...(quickCall.locationPoint && { locationPoint: quickCall.locationPoint }),
         assignedTeam: quickCall.assignedTeam ? [quickCall.assignedTeam] : [],
         chiefComplaint: quickCall.chiefComplaint?.trim() || "",
         ...(quickCall.source?.trim() && { source: quickCall.source.trim() }),
@@ -282,7 +298,7 @@ export default function QuickCallModal({
               {t("Add Call")}
             </ModalHeader>
 
-            <ModalBody className="">
+            <ModalBody>
               <Autocomplete
                 autoFocus={firstEmptyField === "location"}
                 label={t("Location")}
@@ -306,6 +322,27 @@ export default function QuickCallModal({
                   <AutocompleteItem key={loc}>{loc}</AutocompleteItem>
                 ))}
               </Autocomplete>
+              {firstGeoLayer(venueLayers) && (
+                <Button
+                  size="sm"
+                  variant="flat"
+                  className="self-start"
+                  startContent={<MapPin className="h-4 w-4" />}
+                  onPress={() => setPinOpen(true)}
+                  data-testid="quick-call-drop-pin"
+                >
+                  {quickCall.locationPoint ? t('Move pin') : t('Drop pin')}
+                </Button>
+              )}
+              <PinDropModal
+                isOpen={pinOpen}
+                onClose={() => setPinOpen(false)}
+                layers={venueLayers}
+                initial={quickCall.locationPoint}
+                onPick={(pin) =>
+                  setQuickCall((p) => ({ ...p, locationPoint: pin.point, location: p.location.trim() && p.location !== 'Unknown' ? p.location : pin.label }))
+                }
+              />
               <div className="flex gap-2">
                 <Input
                   autoFocus={firstEmptyField === "source"}
@@ -372,7 +409,7 @@ export default function QuickCallModal({
                     key={team.team}
                     textValue={`${team.team} - ${t(team.location || 'Unknown')}`}
                   >
-                    {team.team} - {t(team.location || 'Unknown')}
+                    {team.team} - {t(team.location || 'Unknown')}{away(team)}
                   </SelectItem>
                 )),
                 ...availableSupervisors.map((supervisor) => (
@@ -380,7 +417,7 @@ export default function QuickCallModal({
                     key={supervisor.team}
                     textValue={`${supervisor.team} - ${t(supervisor.location || 'Unknown')}`}
                   >
-                    {supervisor.team} - {t(supervisor.location || 'Unknown')}
+                    {supervisor.team} - {t(supervisor.location || 'Unknown')}{away(supervisor)}
                   </SelectItem>
                 )),
                 ...inactiveTeams.map((team) => (
@@ -391,7 +428,7 @@ export default function QuickCallModal({
                       base: "bg-status-blue/20"
                     }}
                   >
-                    {team.team} - {t(team.location || 'Unknown')}
+                    {team.team} - {t(team.location || 'Unknown')}{away(team)}
                   </SelectItem>
                 )),
                 ...inactiveSupervisors.map((supervisor) => (
@@ -402,7 +439,7 @@ export default function QuickCallModal({
                       base: "bg-status-blue/20"
                     }}
                   >
-                    {supervisor.team} - {t(supervisor.location || 'Unknown')}
+                    {supervisor.team} - {t(supervisor.location || 'Unknown')}{away(supervisor)}
                   </SelectItem>
                 ))
               ]}

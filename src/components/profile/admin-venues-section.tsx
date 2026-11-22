@@ -5,6 +5,7 @@ import { Card, CardBody, Input, Spinner, Switch } from '@heroui/react';
 import { dbService } from '@/lib/services';
 import type { Venue } from '@/app/types';
 import type { ServiceUser } from '@/lib/services';
+import { FIELD_CLASSNAMES } from '@/components/ui/fieldClassNames';
 
 export default function AdminVenuesSection({ currentUser }: { currentUser: ServiceUser }) {
   const [venues, setVenues] = useState<Venue[]>([]);
@@ -58,17 +59,14 @@ export default function AdminVenuesSection({ currentUser }: { currentUser: Servi
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search your venues"
-          classNames={{
-            inputWrapper: 'rounded-large px-4 hover:bg-surface-deep',
-            input: 'text-surface-light outline-none focus:outline-none data-[focus=true]:outline-none',
-          }}
+          classNames={FIELD_CLASSNAMES}
           className="mb-4"
         />
 
         {loading ? (
           <Spinner size="sm" classNames={{ circle1: 'border-b-accent', circle2: 'border-b-accent' }} />
         ) : (
-          <div className="minimal-scrollbar space-y-2 max-h-96 overflow-y-auto pr-2">
+          <div className="space-y-2 max-h-96 overflow-y-auto pr-2">
             {filtered.map((venue) => (
               <div
                 key={venue.id}
