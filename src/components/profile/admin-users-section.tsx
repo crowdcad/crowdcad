@@ -3,9 +3,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Button, Card, CardBody, Input, Spinner, Switch } from '@heroui/react';
 import { RefreshCw, Trash2 } from 'lucide-react';
-import { dbService, isPocketbaseBackend } from '@/lib/services';
+import { auditLog, dbService, isPocketbaseBackend } from '@/lib/services';
 import type { UserDoc } from '@/lib/userDoc';
 import type { ServiceUser } from '@/lib/services';
+import { FIELD_CLASSNAMES } from '@/components/ui/fieldClassNames';
 
 interface UserRow {
   id: string;
@@ -42,6 +43,7 @@ async function deleteUserAndData(userId: string): Promise<void> {
   ]);
 
   await dbService.deleteDocument('users', userId);
+  void auditLog.record({ action: 'admin.deleteUser', target: userId, detail: `${venues.length} venues, ${events.length} events` });
 }
 
 export default function AdminUsersSection({ currentUser }: { currentUser: ServiceUser }) {
@@ -82,6 +84,7 @@ export default function AdminUsersSection({ currentUser }: { currentUser: Servic
     try {
       await dbService.setDocument('users', row.id, { isAdmin: !row.isAdmin }, { merge: true });
       setRows((prev) => prev.map((r) => (r.id === row.id ? { ...r, isAdmin: !r.isAdmin } : r)));
+      void auditLog.record({ action: row.isAdmin ? 'admin.revoke' : 'admin.grant', target: row.email ?? row.id });
     } finally {
       setUpdatingId(null);
     }
@@ -124,17 +127,14 @@ export default function AdminUsersSection({ currentUser }: { currentUser: Servic
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search by name or email"
-          classNames={{
-            inputWrapper: 'rounded-large px-4 hover:bg-surface-deep',
-            input: 'text-surface-light outline-none focus:outline-none data-[focus=true]:outline-none',
-          }}
+          classNames={FIELD_CLASSNAMES}
           className="mb-4"
         />
 
         {loading ? (
           <Spinner size="sm" classNames={{ circle1: 'border-b-accent', circle2: 'border-b-accent' }} />
         ) : (
-          <div className="minimal-scrollbar space-y-2 max-h-96 overflow-y-auto pr-2">
+          <div className="space-y-2 max-h-96 overflow-y-auto pr-2">
             {filtered.map((row) => (
               <div
                 key={row.id}

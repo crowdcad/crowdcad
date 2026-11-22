@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import { formatEventDate } from '@/lib/eventDate';
 import { useParams } from 'next/navigation';
-import { dbService, isPocketbaseBackend } from '@/lib/services';
+import { auditLog, dbService, isPocketbaseBackend } from '@/lib/services';
 import { Event, Call, TeamLogEntry, CallLogEntry, InteractionSession } from '@/app/types';
 import { loadExtensionData, useSummaryContributions } from '@/extensions';
 import dynamic from 'next/dynamic';
@@ -165,6 +165,7 @@ export default function SummaryPage() {
     const anchor = document.createElement('a');
     anchor.href = url;
     anchor.setAttribute('download', `${event?.name || eventId}_Summary.csv`);
+    void auditLog.record({ action: 'event.export', eventId, target: event?.name, detail: 'summary CSV' });
     document.body.appendChild(anchor);
     anchor.click();
     document.body.removeChild(anchor);
@@ -178,6 +179,7 @@ export default function SummaryPage() {
     const anchor = document.createElement('a');
     anchor.href = url;
     anchor.setAttribute('download', `${event?.name || eventId}_TestingData.csv`);
+    void auditLog.record({ action: 'event.export', eventId, target: event?.name, detail: 'data collection CSV' });
     document.body.appendChild(anchor);
     anchor.click();
     document.body.removeChild(anchor);

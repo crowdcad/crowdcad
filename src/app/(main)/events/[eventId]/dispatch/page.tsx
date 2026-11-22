@@ -12,7 +12,7 @@ import AddEquipmentModal from "@/components/modals/event/addequipmentmodal";
 import EndEventModal from "@/components/modals/event/endeventmodal";
 import TransportUnitModal from "@/components/modals/event/transportunitmodal";
 import React from 'react';
-import { dbService, isPocketbaseBackend, ServiceError } from '@/lib/services';
+import { auditLog, dbService, isPocketbaseBackend, ServiceError } from '@/lib/services';
 import { alertsMuted, emit, eventDataStores, freshenSnapshot, useDispatchContributions, type DispatchHost } from '@/extensions';
 import { DispatchExtrasProvider, mergeDispatch } from '@/extensions/dispatch';
 import { PostAssignment, Event, Staff, Supervisor, Call, EquipmentStatus, CallLogEntry, TeamLogEntry, EquipmentItem, EventEquipment, ClinicOutcome, Clinic, Layer, DispatchZone } from '@/app/types';
@@ -49,10 +49,10 @@ import { getTeamAvailabilitySummary, getSurgeLimitPercent, isSurging, getPending
 import LoadingScreen from '@/components/ui/loading-screen';
 import { normalizeLiteDraftToEvent, removeUndefinedDeep, toLiteDraftFromEvent } from '@/lib/liteEventAdapters';
 import { getRowStatusClass } from '@/lib/statusColors';
-import { syncClinicsFromVenue, getEventClinics, getClinicName, isClinicCallResolved, RESOLVED_CALL_STATUSES } from '@/lib/clinics';
+import { syncClinicsFromVenue, getEventClinics, getClinicName, isCallResolved, isClinicCallResolved, RESOLVED_CALL_STATUSES } from '@/lib/clinics';
 import { syncDispatchZonesFromVenue, getEventDispatchZones, getCallZoneIds, getEventVenueLayers } from '@/lib/zones';
 import { withPendingSuffix } from '@/lib/callTiming';
-import { sortActiveCalls, type CallSortMode } from '@/lib/callSort';
+import { sortActiveCalls, sortResolvedCalls, type CallSortMode } from '@/lib/callSort';
 import { useDispatchVocabulary } from '@/hooks/useDispatchVocabulary';
 import { DispatchVocabularyProvider } from '@/lib/dispatchVocabulary/context';
 import { isEventEnded } from '@/lib/eventStatus';
@@ -93,6 +93,9 @@ import { newTeamId } from '@/lib/teamId';
 import { supervisorMemberString } from '@/lib/teamDraft';
 import { isGeoLayer } from '@/lib/geo/layers';
 import { isPlacedPost } from '@/lib/geo/positions';
+import { hhmmOf } from '@/lib/clock';
+import { useConfirmDialog } from '@/components/ui/confirmdialog';
+import IdleLock from '@/components/layout/idlelock';
 
 /** Stands in for the event before it loads, so extension packs' hooks run on every render. */
 const PLACEHOLDER_EVENT = { staff: [], supervisor: [], calls: [] } as unknown as Event;
@@ -484,7 +487,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
           }
 
           const now = new Date();
-          const hhmm = now.getHours().toString().padStart(2, '0') + now.getMinutes().toString().padStart(2, '0');
+          const hhmm = hhmmOf(now);
           return {
             ...s,
             originalPost: newHomeBase,
@@ -527,7 +530,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
           }
 
           const now = new Date();
-          const hhmm = now.getHours().toString().padStart(2, '0') + now.getMinutes().toString().padStart(2, '0');
+          const hhmm = hhmmOf(now);
           return {
             ...s,
             originalPost: newHomeBase,
@@ -551,7 +554,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
       const emptyAssignments: PostAssignment = {};
       
       const now = new Date();
-      const hhmm = now.getHours().toString().padStart(2, '0') + now.getMinutes().toString().padStart(2, '0');
+      const hhmm = hhmmOf(now);
       const updatedStaff = (currentEvent.staff || []).map(s => {
         if (s.status !== 'Available' || s.location === 'Roaming') {
           return { ...s, originalPost: 'Roaming' };
@@ -719,7 +722,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     const memberString = supervisorMemberString(name || 'Supervisor', cert);
 
     const now = new Date();
-    const hhmm = now.getHours().toString().padStart(2, '0') + now.getMinutes().toString().padStart(2, '0');
+    const hhmm = hhmmOf(now);
 
     const newSupervisor: Supervisor = {
       id: newTeamId(),
@@ -788,7 +791,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     const memberString = supervisorMemberString(name || 'Supervisor', cert);
 
     const now = new Date();
-    const hhmm = now.getHours().toString().padStart(2, '0') + now.getMinutes().toString().padStart(2, '0');
+    const hhmm = hhmmOf(now);
 
     const updatedSupervisor = (event.supervisor || []).map(s => {
       if (s.team !== editSupervisorOriginalName) return s;
@@ -901,7 +904,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     const membersStrings = team.members.map(m => `${m.name} [${m.cert}]${m.lead ? ' (Lead)' : ''}`);
 
     const now = new Date();
-    const hhmm = now.getHours().toString().padStart(2, '0') + now.getMinutes().toString().padStart(2, '0');
+    const hhmm = hhmmOf(now);
 
     const updatedStaff = (event.staff || []).map(s => {
       if (s.team !== oldName) return s;
@@ -946,7 +949,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     if (!event) return;
 
     const now = new Date();
-    const hhmm = now.getHours().toString().padStart(2, '0') + now.getMinutes().toString().padStart(2, '0');
+    const hhmm = hhmmOf(now);
 
     const remainingStaff = (event.staff || []).filter(s => s.team !== teamNameToDelete);
 
@@ -1004,7 +1007,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     const hasChange = (call.age || '') !== newAge || (call.gender || '') !== newGender;
     if (hasChange) {
       const now = new Date();
-      const hhmm = now.getHours().toString().padStart(2, '0') + now.getMinutes().toString().padStart(2, '0');
+      const hhmm = hhmmOf(now);
       const updatedCall = {
         ...call,
         age: newAge,
@@ -1033,7 +1036,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
       c.assignedTeam?.includes(supervisor.team) && !['Resolved', 'Available'].includes(c.status)
     );
     const now = new Date();
-    const hhmm = now.getHours().toString().padStart(2, '0') + now.getMinutes().toString().padStart(2, '0');
+    const hhmm = hhmmOf(now);
     const logMessage = `${hhmm} - status changed to ${newStatus}${activeCall ? ` at ${activeCall.location}` : ''}`;
 
     // Extension packs' fields and log lines for this change (e.g. an MCI zone).
@@ -1336,7 +1339,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     if (!latestCall) return;
 
     const now = new Date();
-    const hhmm = now.getHours().toString().padStart(2, '0') + now.getMinutes().toString().padStart(2, '0');
+    const hhmm = hhmmOf(now);
     const resolvedClinicId = clinicId ?? latestCall.clinicId ?? (event?.clinics?.[0]?.id || 'clinic');
     const destinationClinicName = ['Transporting', 'Delivered'].includes(newStatus)
       ? getClinicName(clinics, resolvedClinicId)
@@ -1718,7 +1721,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
 
     const restoredStatus = detachedEntry.previousStatus || (kind === 'equipment' ? 'En Route Eq' : 'En Route');
     const now = new Date();
-    const hhmm = now.getHours().toString().padStart(2, '0') + now.getMinutes().toString().padStart(2, '0');
+    const hhmm = hhmmOf(now);
     const logMessage = `${hhmm} - ${team} status reverted, ${kind === 'supervisor' ? 'supervisor reattached' : kind === 'equipment' ? 'equipment run reattached' : 'call reopened'}`;
 
     setTeamStatusMap(prev => ({
@@ -1843,7 +1846,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
       if (!callToUpdate) return {};
 
       const now = new Date();
-      const hhmm = now.getHours().toString().padStart(2, '0') + now.getMinutes().toString().padStart(2, '0');
+      const hhmm = hhmmOf(now);
       const updatedCall = {
         ...callToUpdate,
         outcome: outcome === 'In Clinic' ? undefined : outcome as ClinicOutcome,
@@ -1866,7 +1869,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
       if (!callToUpdate) return {};
 
       const now = new Date();
-      const hhmm = now.getHours().toString().padStart(2, '0') + now.getMinutes().toString().padStart(2, '0');
+      const hhmm = hhmmOf(now);
       const updatedCall = {
         ...callToUpdate,
         outcome: 'Transported' as ClinicOutcome,
@@ -1907,7 +1910,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
       if (!callToUpdate) return {};
 
       const now = new Date();
-      const hhmm = now.getHours().toString().padStart(2, '0') + now.getMinutes().toString().padStart(2, '0');
+      const hhmm = hhmmOf(now);
       const updatedCall = {
         ...callToUpdate,
         outcome: undefined,
@@ -2203,8 +2206,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     if (!call || !team) return;
   
     const now = new Date();
-    const hhmm = now.getHours().toString().padStart(2, '0') + 
-                 now.getMinutes().toString().padStart(2, '0');
+    const hhmm = hhmmOf(now);
   
     // Update call log
     const callLogEntry: CallLogEntry = {
@@ -2327,7 +2329,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     if (!duplicateCall) return;
 
     const now = new Date();
-    const hhmm = now.getHours().toString().padStart(2, '0') + now.getMinutes().toString().padStart(2, '0');
+    const hhmm = hhmmOf(now);
 
     const originalCallNumber = callDisplayNumberMap.get(originalCallId);
 
@@ -2393,8 +2395,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     // Get the current time in HHMM format
     const now = new Date();
     const hhmm =
-      now.getHours().toString().padStart(2, '0') +
-      now.getMinutes().toString().padStart(2, '0');
+      hhmmOf(now);
 
     // Build log message based on checked status
     const logMessage = `${hhmm} - ${
@@ -2459,8 +2460,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
   const addTeamLog = useCallback((staff: Staff, message: string): Staff => {
     const now = new Date();
     const hhmm =
-      now.getHours().toString().padStart(2, '0') +
-      now.getMinutes().toString().padStart(2, '0');
+      hhmmOf(now);
     const newEntry = { timestamp: now.getTime(), message: `${hhmm} - ${message}` };
     return {
       ...staff,
@@ -2491,7 +2491,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
       const callId = activeCall?.id;
 
       const now = new Date();
-      const hhmm = now.getHours().toString().padStart(2, '0') + now.getMinutes().toString().padStart(2, '0');
+      const hhmm = hhmmOf(now);
       const resolvedClinicId = newStatus === 'Transporting'
         ? (detail ?? activeCall?.clinicId ?? currentEvent.clinics?.[0]?.id ?? 'clinic')
         : activeCall?.clinicId;
@@ -2596,8 +2596,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     if (!call) return;
   
     const now = new Date();
-    const hhmm = now.getHours().toString().padStart(2, '0') +
-                 now.getMinutes().toString().padStart(2, '0');
+    const hhmm = hhmmOf(now);
 
     // Update call log
     const callLogEntry: CallLogEntry = {
@@ -2780,7 +2779,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
 
     const busy = new Set(['En Route', 'On Scene', 'Transporting', 'In Clinic']);
     const now = new Date();
-    const hhmm = now.getHours().toString().padStart(2, '0') + now.getMinutes().toString().padStart(2, '0');
+    const hhmm = hhmmOf(now);
 
     let changed = 0;
     const updatedStaff = (event.staff || []).map(t => {
@@ -2846,7 +2845,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     }
 
     const now = new Date();
-    const hhmm = now.getHours().toString().padStart(2, '0') + now.getMinutes().toString().padStart(2, '0');
+    const hhmm = hhmmOf(now);
 
     const updatedStaff = (event.staff || []).map(s =>
       s.team === teamName
@@ -2906,7 +2905,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
 
     if (prevValue !== newValue) {
       const now = new Date();
-      const hhmm = now.getHours().toString().padStart(2, '0') + now.getMinutes().toString().padStart(2, '0');
+      const hhmm = hhmmOf(now);
       const action = (prevValue === undefined || prevValue === "" || prevValue === null)
         ? "set"
         : "changed";
@@ -2951,32 +2950,42 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     });
   }
 
+  // Lite keeps the event only in this browser: clearing it, or offering to after an export, asks first.
+  const { confirm: confirmLite, dialog: liteConfirmDialog } = useConfirmDialog();
+
+  const deleteLiteEventHere = useCallback(async () => {
+    if (!isLiteMode || !eventId) return;
+    await liteStore.delete(eventId);
+    toast.success('Deleted from this browser.');
+    router.push('/lite');
+  }, [isLiteMode, eventId, router, liteStore]);
+
   const handleExportSummaryCsv = useCallback(() => {
     if (!event) {
       toast.info('No summary logs to export yet.');
       return;
     }
     downloadTextFile(`${event.name || eventId || 'LiteEvent'}_Summary.csv`, buildLogSummaryCsv(event), 'text/csv;charset=utf-8;');
-  }, [event, eventId]);
-
-  const handleClearLiteEvent = useCallback(async () => {
-    if (!isLiteMode || !eventId) return;
-
-    const confirmed = window.confirm(
-      'This will permanently clear this local event and all logs. This action is irreversible. Are you sure you want to continue?'
-    );
-
-    if (!confirmed) return;
-
-    try {
-      await liteStore.delete(eventId);
-      toast.success('Local event cleared.');
-      router.push('/lite');
-    } catch (error) {
-      console.error('Failed to clear local event:', error);
-      toast.error('Failed to clear local event. Please try again.');
+    if (isLiteMode) {
+      confirmLite({
+        title: 'Delete this event from this browser?',
+        message:
+          'The summary was downloaded. Lite keeps the event in this browser until you delete it. You can also delete it later from the Lite start page.',
+        confirmLabel: 'Delete from this browser',
+        onConfirm: deleteLiteEventHere,
+      });
     }
-  }, [isLiteMode, eventId, router, liteStore]);
+  }, [event, eventId, isLiteMode, confirmLite, deleteLiteEventHere]);
+
+  const handleClearLiteEvent = useCallback(() => {
+    if (!isLiteMode || !eventId) return;
+    confirmLite({
+      title: 'Clear this event?',
+      message: 'This deletes the event and all its logs from this browser. It can’t be recovered.',
+      confirmLabel: 'Delete',
+      onConfirm: deleteLiteEventHere,
+    });
+  }, [isLiteMode, eventId, confirmLite, deleteLiteEventHere]);
 
   // Ticks every 30s so the "ended by the 1-hour-no-activity backup" state
   // (a pure function of wall-clock time against the event's own End Time,
@@ -3007,7 +3016,10 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     setShowEndEventModal(false);
 
     // Extension packs react (e.g. TAK closes the event's live tracking).
-    if (!isLiteMode) emit('event.ended', { eventId, event });
+    if (!isLiteMode) {
+      emit('event.ended', { eventId, event });
+      void auditLog.record({ action: 'event.end', eventId, target: event.name });
+    }
 
     if (!isLiteMode) {
       window.dispatchEvent(new CustomEvent('dispatch-event-ended'));
@@ -3685,6 +3697,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
 
   const renderMobileCallCard = (call: Call) => (
     <CallTrackingCard
+      unitTracking={unitTracking}
       key={call.id}
       call={call}
       callDisplayNumber={callDisplayNumberMap.get(call.id) || 0}
@@ -3694,7 +3707,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
         if (!callToUpdate) return;
 
         const now = new Date();
-        const hhmm = now.getHours().toString().padStart(2, '0') + now.getMinutes().toString().padStart(2, '0');
+        const hhmm = hhmmOf(now);
         const updatedCall = {
           ...callToUpdate,
           location: newLocation,
@@ -3712,7 +3725,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
         const newGender = gender || '';
 
         const now = new Date();
-        const hhmm = now.getHours().toString().padStart(2, '0') + now.getMinutes().toString().padStart(2, '0');
+        const hhmm = hhmmOf(now);
         const updatedCall = {
           ...callToUpdate,
           age: newAge,
@@ -3727,7 +3740,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
         if (!callToUpdate) return;
 
         const now = new Date();
-        const hhmm = now.getHours().toString().padStart(2, '0') + now.getMinutes().toString().padStart(2, '0');
+        const hhmm = hhmmOf(now);
         const updatedCall = {
           ...callToUpdate,
           chiefComplaint: newChiefComplaint,
@@ -3762,7 +3775,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
         if (!callToUpdate) return;
 
         const now = new Date();
-        const hhmm = now.getHours().toString().padStart(2, '0') + now.getMinutes().toString().padStart(2, '0');
+        const hhmm = hhmmOf(now);
         const updatedCall = {
           ...callToUpdate,
           location: newLocation,
@@ -3780,7 +3793,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
         const newGender = gender || '';
 
         const now = new Date();
-        const hhmm = now.getHours().toString().padStart(2, '0') + now.getMinutes().toString().padStart(2, '0');
+        const hhmm = hhmmOf(now);
         const updatedCall = {
           ...callToUpdate,
           age: newAge,
@@ -3795,7 +3808,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
         if (!callToUpdate) return;
 
         const now = new Date();
-        const hhmm = now.getHours().toString().padStart(2, '0') + now.getMinutes().toString().padStart(2, '0');
+        const hhmm = hhmmOf(now);
         const updatedCall = {
           ...callToUpdate,
           chiefComplaint: newChiefComplaint,
@@ -3996,6 +4009,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
 
             <div className="flex-1 min-h-0">
               <CallTrackingTable
+                unitTracking={unitTracking}
                 event={event}
                 filterCalls={isAllCalls ? undefined : (call) => getCallZoneIds(call, venueLayers).some(id => callZoneFilter.has(id))}
                 callDisplayNumberMap={callDisplayNumberMap}
@@ -4291,7 +4305,8 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
 
           {/* Mobile/Tablet Layout - Bottom Tabs */}
           <div className="lg:hidden" data-testid="mobile-dispatch">
-            <div className="sticky top-14 z-40 bg-surface-deepest">
+            {/* Below the navbar; pages without one (training) set --dispatch-sticky-top. */}
+            <div className="sticky top-[var(--dispatch-sticky-top,3.5rem)] z-40 bg-surface-deepest">
               {event && (extras.strip ?? <AvailabilitySurgeStrip event={event} />)}
               {mobileActiveTab !== 'map' && (
                 <div className="flex justify-between items-center py-2">
@@ -4356,10 +4371,9 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
                           .filter((call: Call) => !mobileZoneFilter || mobileZoneFilter(call)),
                         callSortMode
                       );
-                      const resolvedMobileCalls = event.calls
-                        .filter((c: Call) => ['Delivered', 'Refusal', 'NMM', 'Treat and Release', 'Rolled', 'Resolved', 'Unable to Locate'].includes(c.status))
-                        .filter((call: Call) => !mobileZoneFilter || mobileZoneFilter(call))
-                        .sort((a: Call, b: Call) => parseInt(a.id) - parseInt(b.id));
+                      const resolvedMobileCalls = sortResolvedCalls(
+                        event.calls.filter((c: Call) => isCallResolved(c) && (!mobileZoneFilter || mobileZoneFilter(c)))
+                      );
                       return (
                         <>
                           <div className="dispatch-shell-list">
@@ -4405,9 +4419,9 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
                           .filter(c => c.status === 'Delivered' && !isClinicCallResolved(c) && (clinics.length <= 1 || (c.clinicId ?? clinics[0]?.id) === mobileClinicId)),
                         'oldest'
                       );
-                      const resolvedMobileClinicCalls = (event.calls || [])
-                        .filter(c => isClinicCallResolved(c) && (clinics.length <= 1 || (c.clinicId ?? clinics[0]?.id) === mobileClinicId))
-                        .sort((a, b) => parseInt(a.id) - parseInt(b.id));
+                      const resolvedMobileClinicCalls = sortResolvedCalls(
+                        (event.calls || []).filter(c => isClinicCallResolved(c) && (clinics.length <= 1 || (c.clinicId ?? clinics[0]?.id) === mobileClinicId))
+                      );
                       return (
                         <>
                           <div className="dispatch-shell-list">
@@ -4494,6 +4508,11 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
             onExportCsv={handleExportSummaryCsv}
             eventId={event.id}
           />
+
+          {liteConfirmDialog}
+
+          {/* Idle lock: signed-in dispatch only, never Lite. */}
+          <IdleLock enabled={!isLiteMode && !!user} />
 
           <EndEventModal
             isOpen={showEndEventModal}

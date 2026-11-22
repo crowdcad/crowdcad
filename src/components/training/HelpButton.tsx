@@ -2,16 +2,17 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { createPortal } from 'react-dom';
 import { Button, Input, Popover, PopoverContent, PopoverTrigger } from '@heroui/react';
-import { CircleHelp, GraduationCap, MousePointerClick, Search, X } from 'lucide-react';
+import { CircleHelp, GraduationCap, MousePointerClick, Search } from 'lucide-react';
 import { NAVBAR_ICON_BUTTON_CLASS } from '@/components/layout/navbarshared';
 import { useDispatchVocabulary } from '@/hooks/useDispatchVocabulary';
 import { findAnchor, findStepTarget } from '@/training/anchors';
 import { helpSuggestions, practiceHref, searchHelp, type HelpContext, type HelpEntry } from '@/training/help';
 import { moduleNumber } from '@/training/registry';
 import type { TrackId } from '@/training/types';
-import Coachmark, { TRAINING_CARD_Z } from './Coachmark';
-import StepText from './StepText';
+import Coachmark from './Coachmark';
+import TrainingCard, { type TrainingCardActions } from './TrainingCard';
 
 /**
  * The navbar's Help: a dropdown from the button. Type what you'd like to do,
@@ -33,7 +34,7 @@ function pageContext(): HelpContext {
 const onBoard = () => typeof document !== 'undefined' && !!document.querySelector('[data-testid="right-panel"]');
 
 /** "Show me here": a coachmark for one step, moving on to the module's next pointer step when it is on screen. */
-function LiveGuide({ entry, onClose, t }: { entry: HelpEntry; onClose: () => void; t: (key: string) => string }) {
+function LiveGuide({ entry, onClose }: { entry: HelpEntry; onClose: () => void }) {
   const [index, setIndex] = useState(entry.index);
   const step = entry.module.steps[index];
   const next = entry.module.steps[index + 1];
@@ -62,46 +63,43 @@ function LiveGuide({ entry, onClose, t }: { entry: HelpEntry; onClose: () => voi
 
   if (!step) return null;
   const found = !!findStepTarget(step);
+  // The same card as a training module, in the same corner.
   return (
     <>
       <Coachmark step={step} label={step.title} />
-      <aside
-        role="dialog"
-        aria-label="Help"
-        data-testid="help-live-guide"
-        data-react-aria-top-layer="true"
-        style={{ zIndex: TRAINING_CARD_Z }}
-        className="pointer-events-auto fixed bottom-4 left-4 w-[min(360px,calc(100vw-2rem))] rounded-xl border border-accent/50 bg-surface-deep p-4 text-sm text-surface-light shadow-2xl"
-      >
-        <div className="mb-1 flex items-center justify-between text-xs uppercase tracking-wide text-surface-light/60">
-          <span>Help · {entry.module.title}</span>
-          <button type="button" aria-label="Close help" className="rounded p-1 hover:bg-surface-liner" onClick={onClose}>
-            <X className="h-3.5 w-3.5" />
-          </button>
-        </div>
-        <h2 className="text-base font-semibold text-surface">{step.title}</h2>
-        <p className="mt-1 leading-relaxed text-surface-light/90">
-          <StepText text={step.body} t={t} />
-        </p>
-        {!found && <p className="mt-2 text-xs text-status-yellow">That control isn&apos;t on screen right now. It may be on another tab of the dispatch interface.</p>}
-        <div className="mt-3 flex items-center justify-between gap-2">
-          <Button as={Link} href={practiceHref({ module: entry.module, step })} target="_blank" size="sm" variant="light" startContent={<GraduationCap className="h-3.5 w-3.5" />}>
-            Module {moduleNumber(entry.module)}
-          </Button>
-          {nextUsable ? (
-            <Button size="sm" color="primary" onPress={() => setIndex((i) => i + 1)}>
-              Next tip
-            </Button>
-          ) : (
-            <Button size="sm" color="primary" onPress={onClose}>
-              Done
-            </Button>
-          )}
-        </div>
-      </aside>
+      <TrainingCard
+        module={entry.module}
+        state={{ index, complete: false, unlocked: true, rejected: null }}
+        actions={LIVE_CARD_ACTIONS}
+        layout="floating"
+        note={found ? undefined : "That control isn't on screen right now. It may be on another tab of the dispatch interface."}
+        live={{
+          onClose,
+          footer: (
+            <>
+              <Button as={Link} href={practiceHref({ module: entry.module, step })} target="_blank" size="sm" variant="light" startContent={<GraduationCap className="h-3.5 w-3.5" />}>
+                Module {moduleNumber(entry.module)}
+              </Button>
+              {nextUsable ? (
+                <Button size="sm" color="primary" onPress={() => setIndex((i) => i + 1)}>
+                  Next tip
+                </Button>
+              ) : (
+                <Button size="sm" color="primary" onPress={onClose}>
+                  Done
+                </Button>
+              )}
+            </>
+          ),
+        }}
+      />
     </>
   );
 }
+
+/** Help's card never steps the board itself, so the card's own actions do nothing. */
+const noop = () => {};
+const LIVE_CARD_ACTIONS: TrainingCardActions = { next: noop, doIt: noop, back: noop, restartSection: noop, jumpTo: noop };
 
 export default function HelpButton({ className = '' }: { className?: string }) {
   const { activePreset } = useDispatchVocabulary();
@@ -141,7 +139,7 @@ export default function HelpButton({ className = '' }: { className?: string }) {
             <CircleHelp className="size-4" />
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-[min(380px,calc(100vw-2rem))] items-stretch gap-2 bg-surface-deep p-3 text-surface-light" data-testid="help-panel">
+        <PopoverContent className="w-[min(380px,calc(100vw-2rem))] items-stretch gap-2 bg-surface-deep px-3 pb-3 pt-4 text-surface-light" data-testid="help-panel">
           <div className="text-sm font-semibold text-surface">What would you like to do?</div>
           <Input
             autoFocus
@@ -200,7 +198,9 @@ export default function HelpButton({ className = '' }: { className?: string }) {
         </PopoverContent>
       </Popover>
 
-      {guide && <LiveGuide entry={guide} onClose={closeGuide} t={t} />}
+      {/* On <body>: the navbar's backdrop blur would make it the box `fixed` places against, so the card and
+          coachmark would sit in the navbar's strip at the top instead of the window's corner. */}
+      {guide && createPortal(<LiveGuide entry={guide} onClose={closeGuide} />, document.body)}
     </>
   );
 }

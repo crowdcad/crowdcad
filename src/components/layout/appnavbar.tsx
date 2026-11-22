@@ -18,17 +18,10 @@ import {
   NavbarItem,
   NavbarMenu,
   NavbarMenuItem,
-  NavbarMenuToggle,
-  Button,
-  Dropdown,
-  DropdownTrigger,
-  DropdownMenu,
-  DropdownItem,
 } from "@heroui/react";
 
-import { Menu, Moon, UserRound, LogOut, Sun } from "lucide-react";
 import HelpButton from '@/components/training/HelpButton';
-import { BrandLogo, LiveClock, LoginModalLazy, MobileMenuAccountItems, NAVBAR_ICON_BUTTON_CLASS, useThemeToggle } from '@/components/layout/navbarshared';
+import { BrandLogo, NavbarEndActions, LiveClock, LoginModalLazy, MobileMenuAccountItems, useThemeToggle } from '@/components/layout/navbarshared';
 
 export default function AppNavbar() {
   const router = useRouter();
@@ -219,97 +212,21 @@ export default function AppNavbar() {
           </NavbarContent>
           </div>
 
-          {/* RIGHT: auth + mobile toggle */}
-          <NavbarContent justify="end" className="gap-1 sm:gap-2 md:gap-2">
-            {/* Mobile toggle */}
-            <div className="lg:hidden">
-              <NavbarMenuToggle
-                aria-label={isMenuOpen ? "Close menu" : "Open menu"}
-                className="text-surface-light"
-                icon={(open) => (
-                  <Menu className={`size-6 transition ${open ? "rotate-90" : ""} text-surface-light`} />
-                )}
-              />
-            </div>
-
-            <NavbarItem>
-              <HelpButton />
-            </NavbarItem>
-
-            <NavbarItem>
-              <Button
-                isIconOnly
-                variant="flat"
-                aria-label={isDarkTheme ? "Switch to light mode" : "Switch to dark mode"}
-                className={NAVBAR_ICON_BUTTON_CLASS}
-                onPress={toggleTheme}
-              >
-                {isDarkTheme ? <Sun className="size-4" /> : <Moon className="size-4" />}
-              </Button>
-            </NavbarItem>
-
-            {/* Show nothing while loading */}
-            {!ready ? (
-              <NavbarItem>
-                <div className="w-10 h-10" /> {/* Placeholder to prevent layout shift */}
-              </NavbarItem>
-            ) : !user ? (
-              <NavbarItem>
-                <Button
-                  variant="bordered"
-                  aria-label="Log in"
-                  className="h-8 min-w-8 !rounded-circle border-surface-liner px-3 text-surface-light hover:bg-surface-deeper"
-                  onPress={() => {
-                    setIsMenuOpen(false);
-                    setLoginMode("login");
-                    setLoginOpen(true);
-                  }}
-                >
-                  Log In
-                </Button>
-              </NavbarItem>
-              
-            ) : (
-              <NavbarItem className="hidden lg:flex">
-                <Dropdown placement="bottom-end">
-                  <DropdownTrigger>
-                    <button
-                        aria-label="Open profile menu"
-                        className="relative rounded-circle cursor-pointer"
-                      >
-                        <span className="flex h-8 w-8 items-center justify-center rounded-circle border border-surface-liner bg-surface-base text-surface-light">
-                          <UserRound className="size-4" />
-                        </span>
-                      </button>
-                  </DropdownTrigger>
-
-
-                  {/* ✅ Fixed: solid background + correct hover styles */}
-                  <DropdownMenu
-                    aria-label="Profile menu"
-                    className="min-w-40 flex flex-col space-y-1 origin-top-right transform-gpu transition-all duration-150"
-                  >
-                    <DropdownItem
-                      key="profile"
-                      startContent={<UserRound className="size-4" />}
-                      className="transition-colors"
-                      onPress={() => router.push("/profile")}
-                    >
-                      Profile
-                    </DropdownItem>
-                    <DropdownItem
-                      key="logout"
-                      className="text-status-red"
-                      startContent={<LogOut className="size-4" />}
-                      onPress={onLogout}
-                    >
-                      Logout
-                    </DropdownItem>
-                  </DropdownMenu>
-                </Dropdown>
-              </NavbarItem>
-            )}
-          </NavbarContent>
+          <NavbarEndActions
+              isMenuOpen={isMenuOpen}
+              help={isDispatch ? <HelpButton /> : null}
+              isDarkTheme={isDarkTheme}
+              toggleTheme={toggleTheme}
+              ready={ready}
+              signedIn={!!user}
+              onLogin={() => {
+                setIsMenuOpen(false);
+                setLoginMode("login");
+                setLoginOpen(true);
+              }}
+              onProfile={() => router.push("/profile")}
+              onLogout={onLogout}
+            />
         </div>
 
         {/* MOBILE MENU */}

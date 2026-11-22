@@ -3,16 +3,23 @@
 
 import React, { useState, useMemo } from 'react';
 import {
-  Card, CardHeader, CardBody, Input, Button,
-  Dropdown, DropdownTrigger, DropdownMenu, DropdownItem
+  CardBody,
+  Input,
+  Button,
+  Dropdown,
+  DropdownTrigger,
+  DropdownMenu,
+  DropdownItem,
 } from '@heroui/react';
-import { MoreVertical, RotateCw } from 'lucide-react';
+import { RotateCw } from 'lucide-react';
 import type { Event, Call } from '@/app/types';
 import StatusLabel, { getMenuLabel } from '@/components/dispatch/statuslabel';
 import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
 import { isClinicCallResolved } from '@/lib/clinics';
 import CallIndicatorIcons from './callindicatoricons';
 import { dropdownMotionProps, useCallTimer, useSyncedLocationInput, CallAgeSexComplaintRow, CallNotesAndLog, blurOnEnter } from './trackingcardparts';
+
+import TrackingCardShell, { type TrackingCardAction } from './trackingcardshell';
 
 type ClinicTrackingCardProps = {
   call: Call;
@@ -61,71 +68,27 @@ export default function ClinicTrackingCard({
     return call.source || 'Walkup';
   }, [call.assignedTeam, call.detachedTeams, call.source]);
 
+  const cardActions: TrackingCardAction[] = [
+    { key: 'pin', label: call.pin ? t('Unpin Call') : t('Pin Call'), isDisabled: isResolved, onPress: () => handleTogglePin(call.id) },
+      {
+        key: 'delete',
+        label: t('Delete Call'),
+        danger: true,
+        onPress: () => {
+          if (confirm('Are you sure you want to delete this call? This action cannot be undone.')) handleDeleteCall(call.id);
+        },
+      },
+  ];
   return (
-    <Card
-      className={`dispatch-shell-card ${expanded ? 'dispatch-shell-card--open' : ''} w-full border-0 transition-colors duration-200 ${expanded ? 'rounded-lg bg-surface-deep shadow-sm' : 'rounded-none bg-transparent shadow-none hover:bg-surface-deep'}`}
+    <TrackingCardShell
+      title={`${t('Call')} ${callDisplayNumber}`}
+      timer={timer}
+      indicators={<CallIndicatorIcons call={call} />}
+      actions={cardActions}
+      expanded={expanded}
+      onToggle={() => setExpanded((v) => !v)}
+      resolved={isResolved}
     >
-      {/* HEADER */}
-      <CardHeader 
-        onClick={() => setExpanded(v => !v)}
-        className="relative flex items-center justify-between px-4 py-3 pb-0 cursor-pointer select-none"
-      >
-        <div className="text-[15px] sm:text-base font-semibold text-surface-light">
-          {t('Call')} {callDisplayNumber}
-        </div>
-        
-        {/* Right section: Timer and Menu aligned horizontally */}
-        <div className="absolute top-0 right-0 pt-3 pr-3 flex items-center gap-2 box-content h-6">
-          {/* Timer */}
-          <div className="ui-timer text-sm sm:text-[15px] font-semibold text-surface-light">
-            {timer}
-          </div>
-
-          <CallIndicatorIcons call={call} />
-
-          {/* 3-dot menu */}
-          <div onClick={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()}>
-            <Dropdown motionProps={dropdownMotionProps} placement="bottom-end" offset={6}>
-              <DropdownTrigger>
-                <button
-                  className="p-0 m-0 border-0 bg-transparent text-surface-light hover:text-status-blue transition-colors cursor-pointer flex items-center justify-center"
-                  aria-label="Call actions"
-                  type="button"
-                >
-                  <MoreVertical className="h-4 w-4" />
-                </button>
-              </DropdownTrigger>
-              <DropdownMenu aria-label="Call actions">
-                <DropdownItem
-                  key="showLog"
-                  onPress={() => setExpanded(v => !v)}
-                >
-                  {expanded ? t('Hide Log') : t('Show Log')}
-                </DropdownItem>
-                <DropdownItem
-                  key="pin"
-                  isDisabled={isResolved}
-                  onPress={() => handleTogglePin(call.id)}
-                >
-                  {call.pin ? t('Unpin Call') : t('Pin Call')}
-                </DropdownItem>
-                <DropdownItem
-                  key="delete"
-                  className="text-danger"
-                  color="danger"
-                  onPress={() => {
-                    if (confirm('Are you sure you want to delete this call? This action cannot be undone.')) {
-                      handleDeleteCall(call.id);
-                    }
-                  }}
-                >
-                  {t('Delete Call')}
-                </DropdownItem>
-              </DropdownMenu>
-            </Dropdown>
-          </div>
-        </div>
-      </CardHeader>
 
       {/* BODY */}
       <CardBody className="px-4 pb-3 space-y-3">
@@ -220,6 +183,6 @@ export default function ClinicTrackingCard({
           expanded={expanded}
         />
       </CardBody>
-    </Card>
+    </TrackingCardShell>
   );
 }

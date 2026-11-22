@@ -1,6 +1,6 @@
 # Firebase Setup for CrowdCAD
 
-This guide sets up CrowdCAD with the Firebase backend for local development and production. Firebase is the managed cloud option and the path to use if your organization needs HIPAA-eligible infrastructure through a signed Google BAA. For the self-hosted option see [`SETUP_POCKETBASE.md`](SETUP_POCKETBASE.md), and for a side-by-side comparison see [`DEPLOYMENT.md`](DEPLOYMENT.md).
+This guide sets up CrowdCAD with the Firebase backend for local development and production. Firebase is the managed cloud option. If your organization handles regulated data, Google offers a BAA for some Google Cloud products; check its covered-products list for each one you use. CrowdCAD itself isn't certified, and compliance stays with your organization. For the self-hosted option see [`SETUP_POCKETBASE.md`](SETUP_POCKETBASE.md), and for a side-by-side comparison see [`DEPLOYMENT.md`](DEPLOYMENT.md).
 
 A step-by-step version of this guide for readers with no terminal experience, with separate Mac and Windows instructions, is published at [crowdcad.org/docs/firebase-setup](https://crowdcad.org/docs/firebase-setup).
 
@@ -173,6 +173,7 @@ For CI deploys, store the `NEXT_PUBLIC_FIREBASE_*` values and a deploy credentia
 
 - If Firestore or Storage will hold PHI, sign a Google BAA for the project before any real data enters it, and confirm every third-party integration is also covered.
 - Do not send PHI to analytics, crash reporting or other third-party services without a BAA.
+- Decide on the idle lock, display boards and two-step sign-in (Profile > Admin > Security). Two-step sign-in on Firebase needs the project upgraded to Identity Platform and `scripts/enableTotp.js` run once. See [COMPLIANCE.md](COMPLIANCE.md).
 
 ## Production checklist
 

@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { firstOf } from '@/extensions';
-import { authService } from '@/lib/services';
+import { authService, SecondFactorRequiredError } from '@/lib/services';
+import { authErrorMessage } from '@/lib/authMessages';
 import {
   Modal,
   ModalContent,
@@ -13,6 +14,7 @@ import {
   Button,
   Input,
 } from '@heroui/react';
+import { LABELED_FIELD_CLASSNAMES } from '@/components/ui/fieldClassNames';
 
 interface LoginModalProps {
   open: boolean;
@@ -38,6 +40,9 @@ export default function LoginModal({
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [resetSubmitting, setResetSubmitting] = useState(false);
   const [resetMessage, setResetMessage] = useState<string | null>(null);
+  // Two-step sign-in: the prompt from SecondFactorRequiredError, then the code.
+  const [codePrompt, setCodePrompt] = useState<string | null>(null);
+  const [code, setCode] = useState('');
 
   // Reset state when modal opens/closes
   useEffect(() => {
@@ -50,6 +55,8 @@ export default function LoginModal({
       setConfirmPassword('');
       setShowForgotPassword(false);
       setResetMessage(null);
+      setCodePrompt(null);
+      setCode('');
     }
   }, [open, initialError]);
 
@@ -60,6 +67,8 @@ export default function LoginModal({
     setConfirmPassword('');
     setShowForgotPassword(false);
     setResetMessage(null);
+    setCodePrompt(null);
+    setCode('');
   }, [mode]);
 
   const handleSubmit = async () => {
@@ -74,7 +83,9 @@ export default function LoginModal({
     try {
       setSubmitting(true);
 
-      if (mode === 'login') {
+      if (codePrompt) {
+        await authService.completeSecondFactor(code);
+      } else if (mode === 'login') {
         // An extension may map what was typed to an account (a field login's username).
         await authService.signIn(firstOf((x) => x.auth?.signInEmail?.(email)) ?? email, password);
       } else {
@@ -97,7 +108,9 @@ export default function LoginModal({
         router.push('/venues/selection');
       }
     } catch (err: unknown) {
-      if (err instanceof Error) setError(err.message);
+      if (err instanceof SecondFactorRequiredError) setCodePrompt(err.message);
+      else if (codePrompt) setError(authErrorMessage(err));
+      else if (err instanceof Error) setError(err.message);
       else setError('Authentication failed');
     } finally {
       setSubmitting(false);
@@ -119,18 +132,14 @@ export default function LoginModal({
     }
   };
 
-  const isSubmitDisabled =
-    submitting ||
-    !email ||
-    !password ||
-    (mode === 'signup' && !confirmPassword);
+  const isSubmitDisabled = codePrompt
+    ? submitting || !code.trim()
+    : submitting ||
+      !email ||
+      !password ||
+      (mode === 'signup' && !confirmPassword);
 
-  const inputClassNames = {
-    label: 'text-surface-light mb-1',
-    inputWrapper: 'rounded-large px-4 hover:bg-surface-deep',
-    input:
-      'text-surface-light outline-none focus:outline-none data-[focus=true]:outline-none',
-  } as const;
+  const inputClassNames = LABELED_FIELD_CLASSNAMES;
 
   return (
     <Modal
@@ -153,10 +162,33 @@ export default function LoginModal({
         {(close) => (
           <>
             <ModalHeader className="text-2xl font-bold text-surface">
-              {showForgotPassword ? 'Reset Password' : mode === 'login' ? 'Login' : 'Create an Account'}
+              {showForgotPassword ? 'Reset Password' : codePrompt ? 'Two-step sign-in' : mode === 'login' ? 'Login' : 'Create an Account'}
             </ModalHeader>
 
-            {showForgotPassword ? (
+            {codePrompt ? (
+              <ModalBody>
+                <p className="text-sm text-surface-light/80">{codePrompt}</p>
+                <Input
+                  label="Code"
+                  labelPlacement="inside"
+                  variant="flat"
+                  color="default"
+                  size="lg"
+                  radius="lg"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  autoFocus
+                  classNames={inputClassNames}
+                  value={code}
+                  onValueChange={setCode}
+                  aria-label="Code"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleSubmit();
+                  }}
+                />
+                {error && <p className="text-sm text-status-red">{error}</p>}
+              </ModalBody>
+            ) : showForgotPassword ? (
               <ModalBody>
                 <p className="text-sm text-surface-light/80">
                   Enter your account email and we&apos;ll send you a link to reset your password.
@@ -199,7 +231,7 @@ export default function LoginModal({
               <ModalBody>
                 <Input
                   label="Email Address"
-                  description={mode === 'login' ? 'Or the role username you were given' : undefined}
+                  description={mode === 'login' ? firstOf((x) => x.auth?.signInHint) ?? undefined : undefined}
                   labelPlacement="inside"
                   variant="flat"
                   color="default"
@@ -322,7 +354,7 @@ export default function LoginModal({
                 isDisabled={isSubmitDisabled}
                 isLoading={submitting}
               >
-                {mode === 'login' ? 'Login' : 'Sign Up'}
+                {codePrompt ? 'Verify' : mode === 'login' ? 'Login' : 'Sign Up'}
               </Button>
               )}
             </ModalFooter>

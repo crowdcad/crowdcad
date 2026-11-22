@@ -56,6 +56,18 @@ Out of scope (generally):
 
 Reports that show insecure interactions between third‑party components and CrowdCAD are still welcome.
 
+## No telemetry
+
+CrowdCAD sends nothing to its maintainers. The app has no analytics, error tracking, usage reporting or "phone home" of any kind, and the Docker images build with Next.js telemetry off (`NEXT_TELEMETRY_DISABLED=1`). Your deployment talks only to the backend you configure (Firebase or PocketBase) and, for maps, the map tile and place-search services you choose (both can be set to `off`, see `.env.example`). Lite mode keeps events in the browser and sends them nowhere.
+
+A unit test (`src/lib/noTelemetry.test.ts`) fails if an analytics or error-tracking package is added to `package.json` or imported in `src/`. If your organization adds monitoring to its own deployment, make sure it never captures patient information.
+
+## Security settings
+
+The audit log, idle lock, display boards and two-step sign-in are described in [docs/COMPLIANCE.md](docs/COMPLIANCE.md). The idle lock and two-step sign-in are off until an admin turns them on in Profile > Admin > Security.
+
+CrowdCAD is not certified under HIPAA or any other regulation. Your organization is responsible for its deployment's compliance.
+
 ## Non‑vulnerability issues
 
 Use normal GitHub issues for:

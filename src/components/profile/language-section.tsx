@@ -324,7 +324,7 @@ export default function LanguageSection() {
               </Button>
             </div>
 
-            <div className="minimal-scrollbar space-y-6 max-h-[28rem] overflow-y-auto pr-2">
+            <div className="space-y-6 max-h-[28rem] overflow-y-auto pr-2">
               {CATEGORY_ORDER.map((category) => {
                 const categoryTerms = termsByCategory.get(category);
                 if (!categoryTerms?.length) return null;

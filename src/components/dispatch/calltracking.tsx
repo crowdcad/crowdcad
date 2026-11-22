@@ -19,13 +19,17 @@ import StatusLabel, { getMenuLabel } from './statuslabel';
 import EquipmentTypeIcon, { getEquipmentStatusMenuLabel, getEquipmentStatusWord, isEquipmentIconStatus } from './equipmenttypeicon';
 import TrackingTableBase, { INLINE_CELL_INPUT_CLASS, INLINE_CELL_PLACEHOLDER, InlineCellBox } from './trackingtablebase';
 import PendingCallChip from './pendingcallchip';
-import { getStatusColor, TRACKING_ROW_HOVER_CLASS, TRACKING_ROW_OPEN_CLASS } from '@/lib/statusColors';
+import { TRACKING_RESOLVED_CLASS, getStatusColor, TRACKING_ROW_HOVER_CLASS, TRACKING_ROW_OPEN_CLASS } from '@/lib/statusColors';
 import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
 import { getEventClinics, getTransportClinicId, RESOLVED_CALL_STATUSES, getVenueLocationOptions } from '@/lib/clinics';
 import { getEquipmentIconType } from '@/lib/equipmentIcon';
 import { withPendingSuffix } from '@/lib/callTiming';
-import { sortActiveCalls, type CallSortMode } from '@/lib/callSort';
+import { sortActiveCalls, sortResolvedCalls, type CallSortMode } from '@/lib/callSort';
 import CallIndicatorIcons from './callindicatoricons';
+import { UnitPickerItems, UnitPickerLabel } from './unitpicker';
+import { unitOptions } from '@/lib/unitDistance';
+import { getEventVenueLayers } from '@/lib/zones';
+import type { UnitTracking } from '@/lib/unitTracking';
 import HeldEquipmentIcons from './heldequipmenticons';
 import AddEquipmentSubmenu from './addequipmentmenu';
 
@@ -38,15 +42,19 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { dropdownMotionProps } from './trackingcardparts';
+import { dropdownMotionProps, pinCallPatch } from './trackingcardparts';
 import { textToLog } from '@/lib/logText';
 import { EQUIPMENT_RUN_STATUSES, equipmentOfUnit, fleetOf } from '@/lib/equipmentCustody';
+import { hhmmOf } from '@/lib/clock';
+import PinDropModal, { firstGeoLayer } from '@/components/geo/PinDropModal';
 
 // Define EditableCallField type locally
 type EditableCallField = keyof Call | 'ageSex';
 
 interface CallTrackingTableProps {
   event: Event;
+  /** Live unit positions (an extension pack's), for distances in Add Team / Add Supervisor. */
+  unitTracking?: UnitTracking | null;
   /** Restricts which calls this table displays (e.g. a dispatch zone's tab, scoped to calls whose location falls in that zone) — mutations still always operate on the full `event.calls`, only the resolved/active lists rendered below are filtered. Omit to show every call, as "All Calls"/"Calls" does. */
   filterCalls?: (call: Call) => boolean;
   callDisplayNumberMap: Map<string, number>;
@@ -89,6 +97,7 @@ const DETAILS_CLOSE_ANIMATION_MS = 320;
 
 export const CallTrackingTable: React.FC<CallTrackingTableProps> = ({
   event,
+  unitTracking,
   filterCalls,
   callDisplayNumberMap,
   showResolvedCalls,
@@ -169,11 +178,17 @@ export const CallTrackingTable: React.FC<CallTrackingTableProps> = ({
   } = useCallTrackingState(event, formatAgeSex);
 
   const resolvedCallStatuses = RESOLVED_CALL_STATUSES;
+  const venueLayers = getEventVenueLayers(event);
+  const canDropPin = !!firstGeoLayer(venueLayers);
+  const [pinCallId, setPinCallId] = React.useState<string | null>(null);
+  const pinCall = pinCallId ? event.calls.find((c: Call) => c.id === pinCallId) : undefined;
 
-  const resolvedCalls = event.calls
-    .filter((call: Call) => resolvedCallStatuses.includes(call.status))
-    .filter((call: Call) => !filterCalls || filterCalls(call))
-    .sort((a: Call, b: Call) => parseInt(a.id) - parseInt(b.id));
+  // Most recently resolved first.
+  const resolvedCalls = sortResolvedCalls(
+    event.calls
+      .filter((call: Call) => resolvedCallStatuses.includes(call.status))
+      .filter((call: Call) => !filterCalls || filterCalls(call))
+  );
 
   const activeCalls = sortActiveCalls(
     event.calls
@@ -282,7 +297,7 @@ export const CallTrackingTable: React.FC<CallTrackingTableProps> = ({
                     return (
                   <tr
                       data-testid={`call-row-${callDisplayNumberMap.get(call.id)}`}
-                      className={`cursor-pointer min-h-3.25rem ${rowBg} rounded-none ${isResolvedCall && !isMotionVisible ? '[&>td]:!border-b-0 pointer-events-none' : ''} ${openCallId === call.id ? '[&>td]:!border-b-0' : ''}`}
+                      className={`cursor-pointer min-h-3.25rem ${rowBg} ${isResolvedCall ? TRACKING_RESOLVED_CLASS : ''} rounded-none ${isResolvedCall && !isMotionVisible ? '[&>td]:!border-b-0 pointer-events-none' : ''} ${openCallId === call.id ? '[&>td]:!border-b-0' : ''}`}
                     aria-hidden={isResolvedCall && !isMotionVisible}
                     onClick={(e) => handleRowClick(e, call.id)}
                   >
@@ -615,55 +630,30 @@ export const CallTrackingTable: React.FC<CallTrackingTableProps> = ({
                               </DropdownMenuTrigger>
                               <DropdownMenuContent className="bg-surface-deep border-surface-liner text-surface-light">
                                 
+                                {/* A point on the map for a place that isn't a venue location (venues with a geo map). */}
+                                {canDropPin && (
+                                  <DropdownMenuItem
+                                    data-testid="call-drop-pin"
+                                    className="text-surface-light hover:bg-surface-liner focus:bg-surface-liner cursor-pointer"
+                                    onClick={() => setPinCallId(call.id)}
+                                  >
+                                    {call.locationPoint ? t('Move pin') : t('Drop pin')}
+                                  </DropdownMenuItem>
+                                )}
+
                                 {/* Add Team Submenu */}
                                 <DropdownMenuSub>
                                   <DropdownMenuSubTrigger data-testid="call-add-team" className="hover:bg-surface-liner focus:bg-surface-liner cursor-pointer">
                                     {t('Add Team')}
                                   </DropdownMenuSubTrigger>
                                   <DropdownMenuSubContent className="bg-surface-deep border-surface-liner">
-                                    {(() => {
-                                      const allTeams = event.staff ? event.staff.map(s => s.team) : [];
-                                      
-                                      // Filter teams: must NOT be assigned to active calls, and must be Available/In Clinic/On Break
-                                      const activeTeams = allTeams.filter(teamName => {
-                                        const teamStaff = event.staff?.find(s => s.team === teamName);
-                                        const isAssignedToActiveCall = event.calls?.some((c: Call) => 
-                                          c.assignedTeam?.includes(teamName) && 
-                                          !['Resolved', 'Delivered', 'Refusal', 'NMM', 'Treat and Release', 'Rolled'].includes(c.status)
-                                        );
-                                        return !isAssignedToActiveCall && teamStaff?.status === 'Available';
-                                      });
-                                      
-                                      const inactiveTeams = allTeams.filter(teamName => {
-                                        const teamStaff = event.staff?.find(s => s.team === teamName);
-                                        const isAssignedToActiveCall = event.calls?.some((c: Call) => 
-                                          c.assignedTeam?.includes(teamName) && 
-                                          !['Resolved', 'Delivered', 'Refusal', 'NMM', 'Treat and Release', 'Rolled'].includes(c.status)
-                                        );
-                                        return !isAssignedToActiveCall && ['In Clinic', 'On Break'].includes(teamStaff?.status || '');
-                                      });                                     
-                                      return [
-                                        ...activeTeams.map(team => (
-                                          <DropdownMenuItem
-                                            key={team}
-                                            data-testid={`call-add-team-${team}`}
-                                            className="text-surface-light hover:bg-surface-liner focus:bg-surface-liner cursor-pointer"
-                                            onClick={() => handleAddTeamToCall(call.id, team)}
-                                          >
-                                            {team}
-                                          </DropdownMenuItem>
-                                        )),
-                                        ...inactiveTeams.map(team => (
-                                          <DropdownMenuItem
-                                            key={team}
-                                            className="text-surface-light hover:bg-surface-liner focus:bg-surface-liner cursor-pointer bg-status-card-blue"
-                                            onClick={() => handleAddTeamToCall(call.id, team)}
-                                          >
-                                            {team}
-                                          </DropdownMenuItem>
-                                        ))
-                                      ];
-                                    })()}
+                                    {/* Free teams nearest first, with where each is and how far from this call. */}
+                                    <UnitPickerItems
+                                      options={unitOptions(event, call, 'team', venueLayers, unitTracking)}
+                                      onPick={(team) => handleAddTeamToCall(call.id, team)}
+                                      emptyLabel={t('No available teams')}
+                                      testIdPrefix="call-add-team"
+                                    />
                                   </DropdownMenuSubContent>
                                 </DropdownMenuSub>
 
@@ -673,27 +663,19 @@ export const CallTrackingTable: React.FC<CallTrackingTableProps> = ({
                                     {t('Add Supervisor')}
                                   </DropdownMenuSubTrigger>
                                   <DropdownMenuSubContent className="bg-surface-deep border-surface-liner">
-                                    {event.supervisor
-                                      ?.filter((supervisor: Supervisor) => {
-                                        const notAssignedToThisCall = !call.assignedTeam?.includes(supervisor.team);
-                                        const notAssignedToAnyActiveCall = !event.calls?.some((c: Call) => 
-                                          c.assignedTeam?.includes(supervisor.team) && 
-                                          !['Resolved', 'Delivered', 'Refusal', 'NMM', 'Treat and Release', 'Rolled'].includes(c.status)
-                                        );
-                                        const hasValidStatus = ['Available', 'In Clinic', 'On Break'].includes(supervisor.status);
-                                        return notAssignedToThisCall && notAssignedToAnyActiveCall && hasValidStatus;
-                                      })
-                                      .map((supervisor: Supervisor) => {
+                                    {unitOptions(event, call, 'supervisor', venueLayers, unitTracking)
+                                      .map((option) => ({ option, supervisor: event.supervisor!.find((x: Supervisor) => x.team === option.name)! }))
+                                      .map(({ option, supervisor }) => {
                                         const match = supervisor.member.match(/^(.+?)\s\[(.+?)\]/);
                                         const memberName = match ? match[1] : supervisor.member;
-                                        const isInactive = ['In Clinic', 'On Break'].includes(supervisor.status);
+                                        const isInactive = option.inactive;
                                         return (
                                           <DropdownMenuItem
                                             key={`supervisor-${supervisor.team}`}
                                             className={`text-surface-light hover:bg-surface-liner focus:bg-surface-liner cursor-pointer ${isInactive ? 'bg-status-card-blue' : ''}`}
                                             onClick={async () => {
                                               const now = new Date();
-                                              const hhmm = now.getHours().toString().padStart(2, '0') + now.getMinutes().toString().padStart(2, '0');
+                                              const hhmm = hhmmOf(now);
 
                                               const callLogEntry = {
                                                 timestamp: now.getTime(),
@@ -731,7 +713,7 @@ export const CallTrackingTable: React.FC<CallTrackingTableProps> = ({
                                               });
                                             }}
                                           >
-                                            {memberName} ({supervisor.team})
+                                            <UnitPickerLabel option={option} />
                                           </DropdownMenuItem>
                                         );
                                       })}
@@ -904,7 +886,7 @@ export const CallTrackingTable: React.FC<CallTrackingTableProps> = ({
                       }}
                       onLogInsertTimestamp={() => {
                         const now = new Date();
-                        const hhmm = now.getHours().toString().padStart(2, '0') + now.getMinutes().toString().padStart(2, '0');
+                        const hhmm = hhmmOf(now);
                         setLogTexts((prev) => ({ ...prev, [call.id]: (prev[call.id] || '') + `\n${hhmm} - ` }));
                       }}
                       onClose={() => setOpenCallId(null)}
@@ -914,6 +896,13 @@ export const CallTrackingTable: React.FC<CallTrackingTableProps> = ({
                 );
               })}
       </TrackingTableBase>
+      <PinDropModal
+        isOpen={!!pinCall}
+        onClose={() => setPinCallId(null)}
+        layers={venueLayers}
+        initial={pinCall?.locationPoint}
+        onPick={(pin) => pinCall && void updateEvent(pinCallPatch(event, pinCall.id, pin))}
+      />
     </div>
   );
 };

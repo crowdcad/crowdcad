@@ -178,6 +178,8 @@ const CROWDCAD_FRENCH_TERMS: Record<string, string> = {
   Inactive: 'Inactif',
   'Pin Call': "Épingler l'appel",
   'Unpin Call': "Désépingler l'appel",
+  'Drop pin': 'Placer un repère',
+  'Move pin': 'Déplacer le repère',
   Surge: 'Affluence',
   'Start surge': "Activer l'affluence",
   'Disable surge': "Désactiver l'affluence",

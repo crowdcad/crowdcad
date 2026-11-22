@@ -4,12 +4,9 @@ import React, { useEffect, useState } from 'react';
 import { Button, Input, Modal, ModalBody, ModalContent, ModalFooter, ModalHeader } from '@heroui/react';
 import { authService, dbService, type ServiceUser } from '@/lib/services';
 import HelpTip from '@/components/geo/HelpTip';
+import { FORM_FIELD_CLASSNAMES } from '@/components/ui/fieldClassNames';
 
-const inputClassNames = {
-  label: 'text-surface-light font-medium',
-  input: 'text-surface-light outline-none focus:outline-none data-[focus=true]:outline-none focus:ring-0 focus-visible:ring-0',
-  inputWrapper: 'rounded-large px-4 hover:bg-surface-deep',
-} as const;
+const inputClassNames = FORM_FIELD_CLASSNAMES;
 
 /** Edits the signed-in user's name and phone number (formerly the /profile/edit page). */
 export default function EditProfileModal({

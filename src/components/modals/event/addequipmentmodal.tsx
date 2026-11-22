@@ -9,6 +9,7 @@ import {
 import { CircleHelp } from "lucide-react";
 import { useDispatchTerms } from "@/lib/dispatchVocabulary/context";
 import { staticSelectorButtonProps } from "@/lib/heroStatic";
+import { LABELED_FIELD_CLASSNAMES } from '@/components/ui/fieldClassNames';
 
 type Props = {
   isOpen: boolean;
@@ -41,11 +42,7 @@ export default function AddEquipmentModal({ isOpen, onClose, onSubmit, locations
     [locations]
   );
 
-  const inputClassNames = {
-    label: "text-surface-light mb-1",
-    inputWrapper: "rounded-large px-4 hover:bg-surface-deep",
-    input: "text-surface-light outline-none focus:outline-none data-[focus=true]:outline-none",
-  } as const;
+  const inputClassNames = LABELED_FIELD_CLASSNAMES;
 
   const canSubmit = name.trim().length > 0;
 

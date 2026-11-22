@@ -14,14 +14,15 @@ import type { Event, Call, CallLogEntry, Clinic } from '@/app/types';
 import DispatchMotionCell from './motioncell';
 import StatusLabel, { getMenuLabel } from './statuslabel';
 import TrackingTableBase, { INLINE_CELL_INPUT_CLASS, INLINE_CELL_PLACEHOLDER, InlineCellBox, isRowToggleClick } from './trackingtablebase';
-import { TRACKING_ROW_HOVER_CLASS, TRACKING_ROW_OPEN_CLASS } from '@/lib/statusColors';
+import { TRACKING_RESOLVED_CLASS, TRACKING_ROW_HOVER_CLASS, TRACKING_ROW_OPEN_CLASS } from '@/lib/statusColors';
 import TrackingTextEntry from '@/components/dispatch/trackingtextentry';
 import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
 import { isClinicCallResolved } from '@/lib/clinics';
-import { sortActiveCalls } from '@/lib/callSort';
+import { sortActiveCalls, sortResolvedCalls } from '@/lib/callSort';
 import CallIndicatorIcons from './callindicatoricons';
 import { dropdownMotionProps } from './trackingcardparts';
 import { textToLog } from '@/lib/logText';
+import { hhmmOf } from '@/lib/clock';
 
 type EditableCallField = keyof Call | 'ageSex';
 
@@ -93,9 +94,8 @@ export default function ClinicTrackingTable({
     [clinicId, clinics]
   );
 
-  const resolvedClinicCalls = (event?.calls || [])
-    .filter(c => isClinicCallResolved(c) && belongsToThisClinic(c))
-    .sort((a, b) => parseInt(a.id) - parseInt(b.id));
+  // Most recently resolved first.
+  const resolvedClinicCalls = sortResolvedCalls((event?.calls || []).filter(c => isClinicCallResolved(c) && belongsToThisClinic(c)));
   const unresolvedClinicCalls = sortActiveCalls(
     (event?.calls || [])
       .filter(c => c.status === 'Delivered' && !isClinicCallResolved(c) && belongsToThisClinic(c)),
@@ -248,7 +248,7 @@ export default function ClinicTrackingTable({
                 <tr
                   key={rowRenderKey}
                   data-testid={`clinic-row-${callDisplayNumberMap.get(call.id)}`}
-                  className={`cursor-pointer min-h-3.25rem rounded-none ${openRowBg(call)} ${isOpen || statusRowClass ? '' : `${TRACKING_ROW_HOVER_CLASS} transition-colors`} ${isResolvedClinicCall && !isClinicCallVisible(call) ? '[&>td]:!border-b-0 pointer-events-none' : ''} ${openClinicCallId === call.id ? '[&>td]:!border-b-0' : ''}`}
+                  className={`cursor-pointer min-h-3.25rem rounded-none ${openRowBg(call)} ${isResolvedClinicCall ? TRACKING_RESOLVED_CLASS : ''} ${isOpen || statusRowClass ? '' : `${TRACKING_ROW_HOVER_CLASS} transition-colors`} ${isResolvedClinicCall && !isClinicCallVisible(call) ? '[&>td]:!border-b-0 pointer-events-none' : ''} ${openClinicCallId === call.id ? '[&>td]:!border-b-0' : ''}`}
                   aria-hidden={isResolvedClinicCall && !isClinicCallVisible(call)}
                   onClick={(e) => {
                     if (!isRowToggleClick(e)) return;
@@ -584,7 +584,7 @@ export default function ClinicTrackingTable({
                                   if (e.key === 'Enter' && !e.shiftKey) {
                                     e.preventDefault();
                                     const now = new Date();
-                                    const hhmm = now.getHours().toString().padStart(2, '0') + now.getMinutes().toString().padStart(2, '0');
+                                    const hhmm = hhmmOf(now);
                                     setLogTexts(prev => ({ ...prev, [call.id]: (prev[call.id] || '') + `\n${hhmm} - ` }));
                                   }
                                 }}

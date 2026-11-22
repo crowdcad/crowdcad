@@ -27,7 +27,7 @@ export const POSTS = {
   socialSciences: 'Social Sciences Side Entrance',
   bancroftCross: 'Bancroft Way Cross',
   /** The main clinic: walk-ups, deliveries and MCI treatment go here. */
-  clinic: 'Dwinelle Tent',
+  clinic: 'South Clinic',
 } as const;
 
 /** The main clinic's id (its tab is `clinic-tab-training-clinic`). */

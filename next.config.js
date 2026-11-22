@@ -1,9 +1,14 @@
 /** @type {import('next').NextConfig} */
 const path = require('path');
+const { securityHeaders } = require('./security-headers');
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // CSP, HSTS, frame and referrer policy on every response (security-headers.js).
+  async headers() {
+    return [{ source: '/:path*', headers: securityHeaders() }];
+  },
   output: 'standalone',
   // Ensure Next.js traces output from the project root (Dispatch)
   outputFileTracingRoot: path.resolve(__dirname),

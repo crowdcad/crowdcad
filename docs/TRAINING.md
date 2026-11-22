@@ -122,7 +122,7 @@ Every module runs on one map: `src/training/maps/practice-map.json`, a GeoJSON f
 | Draw | Property | Becomes |
 | --- | --- | --- |
 | Point | `"Location": "Sather Gate"` | a post |
-| Point | `"Clinic": "Dwinelle Tent"` | a clinic: a post with its own clinic tab |
+| Point | `"Clinic": "South Clinic"` | a clinic: a post with its own clinic tab |
 | Polygon | `"Zone": "Glade"` (optional `"color"` or `"fill"`) | a zone; MCI zones come from these |
 | Polygon | `"Area": "Campus"` (optional) | the event's map area; without one, the box around everything plus a margin |
 | Line | `"TAKPath": "MRC2"` | the route that team's marker follows in TAK modules when it travels somewhere within 150 m of the line's end; draw it from the team's post toward the destination |

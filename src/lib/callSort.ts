@@ -36,3 +36,14 @@ export function sortActiveCalls(calls: Call[], mode: CallSortMode = 'newest'): C
     return compareWithinGroup(mode, a, b);
   });
 }
+
+/** When a resolved call was resolved: its last log entry's time (calls are logged on every status change), else its creation. */
+export function resolvedAt(call: Call): number {
+  const last = call.log?.[call.log.length - 1]?.timestamp;
+  return typeof last === 'number' ? last : parseInt(call.id);
+}
+
+/** Resolved calls (or clinic patients), most recently resolved first. */
+export function sortResolvedCalls(calls: Call[]): Call[] {
+  return [...calls].sort((a, b) => resolvedAt(b) - resolvedAt(a));
+}

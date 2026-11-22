@@ -5,6 +5,7 @@ import { Button } from '@heroui/react';
 import type { Event, EquipmentCustodyEntry } from '@/app/types';
 import { custodyRunStats, describeCustody } from '@/lib/equipmentCustody';
 import { GRID_CELL, GRID_WRAPPER } from './summaryGrid';
+import { hhmmOf } from '@/lib/clock';
 
 const BY_LABEL: Record<EquipmentCustodyEntry['by'], string> = {
   status: '',
@@ -14,7 +15,7 @@ const BY_LABEL: Record<EquipmentCustodyEntry['by'], string> = {
 
 const hhmm = (t: number) => {
   const d = new Date(t);
-  return d.getHours().toString().padStart(2, '0') + d.getMinutes().toString().padStart(2, '0');
+  return hhmmOf(d);
 };
 
 /**

@@ -211,6 +211,8 @@ export const DISPATCH_TERMS: DispatchTerm[] = [
     'Inactive',
     'Pin Call',
     'Unpin Call',
+    'Drop pin',
+    'Move pin',
     'Surge',
     'Start surge',
     'Disable surge',

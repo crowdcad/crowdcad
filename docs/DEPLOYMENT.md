@@ -17,7 +17,7 @@ Beginner-friendly versions of both guides, with separate Mac and Windows steps, 
 |---|---|---|
 | Infrastructure | Managed by Google Cloud | Your machine or LAN, run with Docker |
 | Cloud account | Firebase project required | None |
-| HIPAA path | Signed Google BAA covering Firestore, Auth, Storage and Hosting | No managed BAA. Your organization owns compliance for the infrastructure it runs. |
+| Regulated data (HIPAA and similar) | Google offers a BAA for some Google Cloud products. Check Google's HIPAA covered-products list for every product your deployment uses. CrowdCAD isn't certified, and your organization owns compliance. | No managed BAA. If you run it on a cloud server, you need a BAA with that host. CrowdCAD isn't certified, and your organization owns compliance. |
 | Operations | Google handles uptime, scaling and patching | Your organization handles the server, backups and updates |
 | Cost | Usage-based cloud billing. Map image uploads need the Blaze plan. | Your own hardware, which can be $0 |
 | Internet needed during an event | Yes | No, if all devices share the LAN |

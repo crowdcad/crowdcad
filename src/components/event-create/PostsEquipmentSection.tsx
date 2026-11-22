@@ -6,6 +6,7 @@ import { randomId } from '@/lib/utils';
 import { equipmentHolderUnit, setupEquipmentHolder } from '@/lib/equipmentCustody';
 import EquipmentTeamSelect from './EquipmentTeamSelect';
 import TutorialTip from '@/components/ui/TutorialTip';
+import { SMALL_FIELD_CLASSNAMES } from '@/components/ui/fieldClassNames';
 
 type FlattenedPost = {
   post: Post;
@@ -244,10 +245,7 @@ export function EquipmentSelectionSection({
               }}
               variant="flat"
               size="lg"
-              classNames={{
-                input: 'text-surface-light text-sm outline-none focus:outline-none data-[focus=true]:outline-none',
-                inputWrapper: 'rounded-large px-4 hover:bg-surface-deep',
-              }}
+              classNames={SMALL_FIELD_CLASSNAMES}
             />
             <Button
               isIconOnly

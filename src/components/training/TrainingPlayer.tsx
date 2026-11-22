@@ -130,13 +130,21 @@ function LivePlayer({ module, startIndex, embed }: { module: TrainingModule; sta
   const PracticeSurfaceView = practiceSurface();
   const phone = module.device === 'phone';
   const phoneDirect = phone && isMobile;
+  // Inside the phone frame, scrolling shows no scrollbars, as on a phone.
+  useEffect(() => {
+    if (!embed) return;
+    document.documentElement.setAttribute('data-phone-frame', '');
+    return () => document.documentElement.removeAttribute('data-phone-frame');
+  }, [embed]);
   return (
-    <div className="flex h-dvh flex-col bg-surface-deepest">
+    // The board scrolls in its own area below the bar and card, so its sticky header sits at the top of that
+    // area (there is no navbar to clear) and never covers the first card.
+    <div className="flex h-dvh flex-col bg-surface-deepest" style={{ '--dispatch-sticky-top': '0px' } as React.CSSProperties}>
       {!embed && <PlayerHeader module={module} index={index} complete={complete} onJump={session.jumpTo} />}
       {/* On a phone, a phone module's card sits above the screen, in the page, so it never covers a bottom bar. */}
       {!embed && phoneDirect && <TrainingCard module={module} state={cardState(session)} actions={session} layout="top" />}
 
-      <div className={`relative min-h-0 flex-1 ${module.surface ? "overflow-y-auto" : ""}`}>
+      <div className="relative min-h-0 flex-1 overflow-y-auto">
         <ExtensionProviders>
           {module.surface && PracticeSurfaceView ? (
             <PracticeSurfaceView module={module} store={session.store} eventId={session.eventId} />

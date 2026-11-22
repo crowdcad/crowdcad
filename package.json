@@ -9,6 +9,7 @@
     "lint": "next lint",
     "type-check": "tsc --noEmit",
     "test:unit": "vitest run",
+    "test:rules": "firebase emulators:exec --only firestore --project demo-crowdcad \"node tests/rules/two-step.mjs\"",
     "bddgen": "bddgen",
     "test:e2e": "bddgen && playwright test",
     "test:e2e:ui": "bddgen && playwright test --ui",
@@ -20,6 +21,7 @@
     "@heroui/react": "^2.8.5",
     "@radix-ui/react-dropdown-menu": "^2.1.24",
     "@tailwindcss/postcss": "^4.3.3",
+    "barcode-detector": "3.2.3",
     "clsx": "^2.1.1",
     "firebase": "^11.10.0",
     "firebase-admin": "^14.5.0",
@@ -28,9 +30,9 @@
     "lucide-react": "^0.546.0",
     "maplibre-gl": "^6.13.0",
     "motion": "^12.43.0",
-    "next": "^15.5.23",
+    "next": "^15.5.29",
     "next-nprogress-bar": "^2.4.7",
-    "nodemailer": "^7.0.5",
+    "nodemailer": "^10.6.1",
     "papaparse": "^5.6.0",
     "pocketbase": "^0.26.9",
     "react": "^19.2.8",
@@ -41,6 +43,7 @@
     "recharts": "^3.10.1",
     "tailwind-merge": "^3.6.0",
     "tailwindcss-animate": "^1.0.7",
+    "uqr": "0.1.2",
     "uuid": "^11.1.1"
   },
   "devDependencies": {
@@ -63,7 +66,7 @@
     "firebase-tools": "^15.28.1",
     "kill-port": "^2.0.1",
     "playwright-bdd": "^8.5.1",
-    "postcss": "^8.5.6",
+    "postcss": "^8.5.23",
     "tailwindcss": "^3.4.19",
     "typescript": "5.8.3",
     "vite": "^6.4.4",
@@ -72,5 +75,10 @@
   },
   "engines": {
     "node": ">=22"
+  },
+  "overrides": {
+    "@grpc/grpc-js": "^1.13.6",
+    "picomatch@4": "^4.0.4",
+    "postcss": "$postcss"
   }
 }

@@ -1,9 +1,10 @@
 'use client';
+import { LIST_SEARCH_CLASSNAMES } from '@/components/ui/fieldClassNames';
 import { formatEventDate } from '@/lib/eventDate';
 
 import { useRouter } from 'next/navigation';
 import React, { useEffect, useState, useMemo } from 'react';
-import { dbService, type Unsubscribe } from '@/lib/services';
+import { auditLog, dbService, type Unsubscribe } from '@/lib/services';
 import type { Venue, Event } from '@/app/types';
 import { isEventEnded } from '@/lib/eventStatus';
 import { useAuth } from '@/hooks/useauth';
@@ -21,8 +22,10 @@ import {
   DropdownMenu, 
   DropdownItem,
   Input,
-  Chip
+  Chip,
+  Spinner
 } from "@heroui/react";
+import { useConfirmDialog } from '@/components/ui/confirmdialog';
 import { 
   Plus, 
   MapPin, 
@@ -40,7 +43,8 @@ import {
 export default function VenueSelection() {
   const router = useRouter();
   const [venues, setVenues] = useState<Venue[]>([]);
-  const [, setLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const { confirm, dialog: confirmDialog } = useConfirmDialog();
   const [selectedVenueId, setSelectedVenueId] = useState<string | null>(null);
   const [recentEvents, setRecentEvents] = useState<Event[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -90,32 +94,29 @@ export default function VenueSelection() {
   //   return false;
   // };
 
-  const handleDeleteEvent = async (eventId: string) => {
-    const confirm = window.confirm('Are you sure you want to delete this event?');
-    if (!confirm) return;
-    try {
-      await dbService.deleteDocument('events', eventId);
-      setRecentEvents(prev => prev.filter(e => e.id !== eventId));
-    } catch (error) {
-      console.error('Error deleting event:', error);
-      alert('Failed to delete event.');
-    }
-  };
+  const handleDeleteEvent = (eventId: string) =>
+    confirm({
+      title: 'Delete event?',
+      message: "Are you sure you want to delete this event? This can't be undone.",
+      confirmLabel: 'Delete event',
+      onConfirm: async () => {
+        await dbService.deleteDocument('events', eventId);
+        void auditLog.record({ action: 'event.delete', eventId, target: recentEvents.find((e) => e.id === eventId)?.name });
+        setRecentEvents(prev => prev.filter(e => e.id !== eventId));
+      },
+    });
 
-  const handleDeleteVenue = async (venueId: string) => {
-    const confirm = window.confirm('Are you sure you want to delete this venue?');
-    if (!confirm) return;
-    try {
-      await dbService.deleteDocument('venues', venueId);
-      setVenues(prev => prev.filter(v => v.id !== venueId));
-      if (selectedVenueId === venueId) {
-        setSelectedVenueId(null);
-      }
-    } catch (error) {
-      console.error('Error deleting venue:', error);
-      alert('Failed to delete venue.');
-    }
-  };
+  const handleDeleteVenue = (venueId: string) =>
+    confirm({
+      title: 'Delete venue?',
+      message: "Are you sure you want to delete this venue? This can't be undone.",
+      confirmLabel: 'Delete venue',
+      onConfirm: async () => {
+        await dbService.deleteDocument('venues', venueId);
+        setVenues(prev => prev.filter(v => v.id !== venueId));
+        if (selectedVenueId === venueId) setSelectedVenueId(null);
+      },
+    });
 
   // Opens the event builder without writing anything: the event is created
   // only when setup finishes, so backing out leaves no empty event behind.
@@ -385,14 +386,15 @@ export default function VenueSelection() {
                 startContent={<Search className="w-4 h-4 text-surface-light" />}
                 variant="flat"
                 color="default"
-                classNames={{
-                  base: "mb-4",
-                  inputWrapper: "bg-surface-deep",
-                  input: "outline-none focus:outline-none data-[focus=true]:outline-none"
-                }}
+                classNames={LIST_SEARCH_CLASSNAMES}
               />
 
-              <div className="minimal-scrollbar space-y-3 max-h-[32rem] overflow-y-auto pr-2">
+              <div className="space-y-3 max-h-[32rem] overflow-y-auto pr-2">
+                {loading && filteredVenues.length === 0 && (
+                  <div className="flex justify-center py-10" data-testid="venues-loading">
+                    <Spinner size="sm" label="Loading venues…" />
+                  </div>
+                )}
                 {filteredVenues.map((venue) => {
                   const stats = venueStats.byVenue[venue.id] ?? { count: 0, lastUsed: null };
                   return (
@@ -533,7 +535,7 @@ export default function VenueSelection() {
                   </CardBody>
                 </Card>
               ) : (
-                <div className="minimal-scrollbar space-y-3 max-h-[32rem] overflow-y-auto pr-2">
+                <div className="space-y-3 max-h-[32rem] overflow-y-auto pr-2">
                   {selectedVenueEvents.map((event) => {
                     const ended = isEventEnded(event, nowTick);
                     const destination = ended ? `/events/${event.id}/summary` : `/events/${event.id}/dispatch`;
@@ -663,6 +665,7 @@ export default function VenueSelection() {
           }}
         />
       )}
+        {confirmDialog}
       </main>
     );
   }
@@ -701,14 +704,15 @@ export default function VenueSelection() {
                 startContent={<Search className="w-4 h-4 text-surface-light" />}
                 variant="flat"
                 color="default"
-                classNames={{
-                  base: "mb-4",
-                  inputWrapper: "bg-surface-deep",
-                  input: "outline-none focus:outline-none data-[focus=true]:outline-none"
-                }}
+                classNames={LIST_SEARCH_CLASSNAMES}
               />
 
-              <div className="minimal-scrollbar flex-1 space-y-2 overflow-y-auto pr-2">
+              <div className="flex-1 space-y-2 overflow-y-auto pr-2">
+                {loading && filteredVenues.length === 0 && (
+                  <div className="flex justify-center py-10" data-testid="venues-loading">
+                    <Spinner size="sm" label="Loading venues…" />
+                  </div>
+                )}
                 {filteredVenues.map((venue) => {
                   const stats = venueStats.byVenue[venue.id] ?? { count: 0, lastUsed: null };
                   const isSelected = selectedVenueId === venue.id;
@@ -853,7 +857,7 @@ export default function VenueSelection() {
                           </div>
                         </div>
                       ) : (
-                        <div className="minimal-scrollbar overflow-auto h-full min-w-[500px]">
+                        <div className="overflow-auto h-full min-w-[500px]">
                           <table className="w-full table-fixed border-separate border-spacing-0">
                             <colgroup>
                               <col className="w-[30%]" />
@@ -1018,6 +1022,7 @@ export default function VenueSelection() {
           }}
         />
       )}
+      {confirmDialog}
     </main>
   );
 }

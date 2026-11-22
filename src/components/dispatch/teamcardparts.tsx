@@ -25,6 +25,7 @@ import { getEquipmentIconType, type EquipmentIconType } from '@/lib/equipmentIco
 import { textToLog } from '@/lib/logText';
 import { parseTimeToMinutes } from '@/lib/postingTimes';
 import { staticSelectorButtonProps } from '@/lib/heroStatic';
+import { hhmmOf } from '@/lib/clock';
 
 export type TeamCardProps = {
   staff: Staff;
@@ -536,7 +537,7 @@ export function TeamPostSchedule({
             aria-label={`Post from ${slot.time}`}
             selectionMode="single"
             selectedKeys={new Set([slot.post ?? UNASSIGNED_POST])}
-            className="minimal-scrollbar max-h-64 overflow-y-auto"
+            className="max-h-64 overflow-y-auto"
             onAction={(key) => {
               const post = key === UNASSIGNED_POST ? null : (key as string);
               if (post === slot.post) return;
@@ -594,7 +595,7 @@ export function TeamActivityLog({
         if (e.key === 'Enter' && !e.shiftKey) {
           e.preventDefault();
           const now = new Date();
-          const hhmm = now.getHours().toString().padStart(2, '0') + now.getMinutes().toString().padStart(2, '0');
+          const hhmm = hhmmOf(now);
           setLogText(prev => prev + `\n${hhmm} - `);
         }
       }}

@@ -10,6 +10,7 @@ import DevServiceWorkerCleanup from "@/components/devServiceWorkerCleanup";
 import ProgressBarProvider from "@/components/ProgressBarProvider";
 import AppShell from "../components/layout/appshell";
 import ExtensionsBoot from '@/extensions/boot';
+import TestDataBanner from '@/components/layout/testdatabanner';
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -113,6 +114,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <HeroUIProvider disableRipple>
           <AppShell>{children}</AppShell>
         </HeroUIProvider>
+        <TestDataBanner />
       </body>
     </html>
   );

@@ -136,6 +136,10 @@ export default function LandingPage() {
           CrowdCAD Lite
         </Link>
         <span className="hidden sm:inline text-surface-light/20">|</span>
+        <Link href="/training" className="text-surface-light/50 hover:text-accent transition-colors" data-testid="landing-tutorial-link">
+          Tutorial
+        </Link>
+        <span className="hidden sm:inline text-surface-light/20">|</span>
         <span className="text-surface-light/30">
           © {new Date().getFullYear()} CrowdCAD contributors
         </span>

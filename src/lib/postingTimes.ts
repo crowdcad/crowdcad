@@ -1,3 +1,4 @@
+import { hhmmOf } from '@/lib/clock';
 // Posting-schedule time helpers. Posting times are stored as "HHmm" (or
 // occasionally "HH:mm") strings on event.postingTimes.
 
@@ -28,7 +29,7 @@ export function parseTimeToMinutes(timeStr: string): number | null {
 
 /** "HHmm" for the given moment. */
 export function toHHmm(date: Date): string {
-  return date.getHours().toString().padStart(2, '0') + date.getMinutes().toString().padStart(2, '0');
+  return hhmmOf(date);
 }
 
 function sortedValidTimes(times: string[]) {

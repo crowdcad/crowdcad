@@ -10,6 +10,7 @@ import { CircleHelp } from "lucide-react";
 import { Role } from "@/app/types";
 import { useDispatchTerms } from "@/lib/dispatchVocabulary/context";
 import { getNextTeamName } from "./addteammodal";
+import { LABELED_FIELD_CLASSNAMES } from '@/components/ui/fieldClassNames';
 
 type Props = {
   isOpen: boolean;
@@ -66,11 +67,7 @@ export default function AddSupervisorModal({
     wasOpen.current = isOpen;
   }, [isOpen, mode, existingNames, teamName, setTeamName]);
 
-  const inputClassNames = {
-    label: "text-surface-light mb-1",
-    inputWrapper: "rounded-large px-4 hover:bg-surface-deep",
-    input: "text-surface-light outline-none focus:outline-none data-[focus=true]:outline-none",
-  } as const;
+  const inputClassNames = LABELED_FIELD_CLASSNAMES;
 
   const selectClassNames = {
     label: "text-surface-light mb-1",

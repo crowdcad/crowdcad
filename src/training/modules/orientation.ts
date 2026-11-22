@@ -20,7 +20,7 @@ const orientation: TrainingModule = {
       id: 'welcome',
       section: 'Read the board',
       title: 'Start the tour',
-      body: "This is the dispatch interface for a practice event: a campus event with five {{teams}} (MRC1 to MRC5), one {{supervisor}} and three clinics. Click **Next** to go through the tour.",
+      body: "This is the dispatch interface for a practice event: a campus event with five {{teams}} (MRC1 to MRC5), one {{supervisor}} and two clinics. Click **Next** to go through the tour.",
       estSec: 15,
     },
     {

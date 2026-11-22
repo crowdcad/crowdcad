@@ -6,7 +6,8 @@ import React, { useCallback, useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
 import Image from 'next/image';
 import Link from 'next/link';
-import { NavbarMenuItem } from '@heroui/react';
+import { Button, Dropdown, DropdownItem, DropdownMenu, DropdownTrigger, NavbarContent, NavbarItem, NavbarMenuItem, NavbarMenuToggle } from '@heroui/react';
+import { LogOut, Menu, Moon, Sun, UserRound } from 'lucide-react';
 
 export const LoginModalLazy = dynamic(() => import('@/components/modals/auth/loginmodal'), { ssr: false });
 
@@ -144,5 +145,95 @@ export function BrandLogo({ isDarkTheme, onClick, widthClass = 'w-20' }: { isDar
         ™
       </span>
     </button>
+  );
+}
+
+/**
+ * The right end of every navbar: the phone menu toggle, Help (when given), the light/dark switch, and Log In
+ * or the profile menu. Shared so the app's navbars look and behave the same.
+ */
+export function NavbarEndActions({
+  isMenuOpen,
+  help,
+  isDarkTheme,
+  toggleTheme,
+  ready,
+  signedIn,
+  onLogin,
+  onProfile,
+  onLogout,
+}: {
+  isMenuOpen: boolean;
+  help?: React.ReactNode;
+  isDarkTheme: boolean;
+  toggleTheme: () => void;
+  ready: boolean;
+  signedIn: boolean;
+  onLogin: () => void;
+  onProfile: () => void;
+  onLogout: () => void;
+}) {
+  return (
+    <NavbarContent justify="end" className="gap-1 sm:gap-2 md:gap-2">
+      <div className="lg:hidden">
+        <NavbarMenuToggle
+          aria-label={isMenuOpen ? 'Close menu' : 'Open menu'}
+          className="text-surface-light"
+          icon={(open) => <Menu className={`size-6 transition ${open ? 'rotate-90' : ''} text-surface-light`} />}
+        />
+      </div>
+
+      {help && <NavbarItem>{help}</NavbarItem>}
+
+      <NavbarItem>
+        <Button
+          isIconOnly
+          variant="flat"
+          aria-label={isDarkTheme ? 'Switch to light mode' : 'Switch to dark mode'}
+          className={NAVBAR_ICON_BUTTON_CLASS}
+          onPress={toggleTheme}
+        >
+          {isDarkTheme ? <Sun className="size-4" /> : <Moon className="size-4" />}
+        </Button>
+      </NavbarItem>
+
+      {!ready ? (
+        <NavbarItem>
+          {/* Holds the space while auth loads, so nothing shifts. */}
+          <div className="w-10 h-10" />
+        </NavbarItem>
+      ) : !signedIn ? (
+        <NavbarItem>
+          <Button
+            variant="bordered"
+            aria-label="Log in"
+            className="h-8 min-w-8 !rounded-circle border-surface-liner px-3 text-surface-light hover:bg-surface-deeper"
+            onPress={onLogin}
+          >
+            Log In
+          </Button>
+        </NavbarItem>
+      ) : (
+        <NavbarItem className="hidden lg:flex">
+          <Dropdown placement="bottom-end">
+            <DropdownTrigger>
+              <button aria-label="Open profile menu" className="relative rounded-circle cursor-pointer">
+                <span className="flex h-8 w-8 items-center justify-center rounded-circle border border-surface-liner bg-surface-base text-surface-light">
+                  <UserRound className="size-4" />
+                </span>
+              </button>
+            </DropdownTrigger>
+            <DropdownMenu aria-label="Profile menu" className="min-w-40 flex flex-col space-y-1 origin-top-right transform-gpu transition-all duration-150">
+              <DropdownItem key="profile" startContent={<UserRound className="size-4" />} className="transition-colors" onPress={onProfile}>
+                Profile
+              </DropdownItem>
+              <DropdownItem key="logout" className="text-status-red" startContent={<LogOut className="size-4" />} onPress={onLogout}>
+                Logout
+              </DropdownItem>
+            </DropdownMenu>
+          </Dropdown>
+        </NavbarItem>
+      )}
+    </NavbarContent>
   );
 }

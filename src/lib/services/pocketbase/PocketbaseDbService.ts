@@ -15,6 +15,7 @@ function buildFilter(constraints: QueryConstraint[]): string {
     .map((c) => {
       if (c.op === '==') return pb.filter(`${c.field} = {:val}`, { val: c.value });
       if (c.op === '!=') return pb.filter(`${c.field} != {:val}`, { val: c.value });
+      if (c.op === '>=') return pb.filter(`${c.field} >= {:val}`, { val: c.value });
       if (c.op === 'array-contains') return pb.filter(`${c.field} ~ {:val}`, { val: c.value });
       return '';
     })

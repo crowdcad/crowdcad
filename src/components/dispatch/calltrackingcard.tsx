@@ -3,14 +3,20 @@
 
 import React, { useState, useMemo } from 'react';
 import {
-  Card, CardHeader, CardBody, Chip, Button,
-  Dropdown, DropdownTrigger, DropdownMenu, DropdownItem, Autocomplete, AutocompleteItem
+  CardBody,
+  Chip,
+  Button,
+  Dropdown,
+  DropdownTrigger,
+  DropdownMenu,
+  DropdownItem,
+  Autocomplete,
+  AutocompleteItem,
 } from '@heroui/react';
-import { Plus, MoreVertical, RotateCw } from 'lucide-react';
+import { Plus, RotateCw } from 'lucide-react';
 import {
   Dropdownmenu,
   DropdownMenuContent,
-  DropdownMenuItem,
   DropdownMenuSub,
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
@@ -25,9 +31,15 @@ import { getEquipmentIconType } from '@/lib/equipmentIcon';
 import { getStatusColor } from '@/lib/statusColors';
 import { staticSelectorButtonProps } from '@/lib/heroStatic';
 import CallIndicatorIcons from './callindicatoricons';
+import { UnitPickerItems } from './unitpicker';
+import { unitOptions } from '@/lib/unitDistance';
+import { getEventVenueLayers } from '@/lib/zones';
+import type { UnitTracking } from '@/lib/unitTracking';
 import AddEquipmentSubmenu from './addequipmentmenu';
 import { EQUIPMENT_RUN_STATUSES, equipmentOfUnit, fleetOf } from '@/lib/equipmentCustody';
-import { dropdownMotionProps, useCallTimer, useSyncedLocationInput, CallAgeSexComplaintRow, CallNotesAndLog, cardFieldClassNames, blurOnEnter } from './trackingcardparts';
+import { dropdownMotionProps, pinCallPatch, useCallTimer, useSyncedLocationInput, CallAgeSexComplaintRow, CallNotesAndLog, cardFieldClassNames, blurOnEnter } from './trackingcardparts';
+import TrackingCardShell, { type TrackingCardAction } from './trackingcardshell';
+import PinDropModal, { firstGeoLayer } from '@/components/geo/PinDropModal';
 
 type CallTrackingCardProps = {
   call: Call;
@@ -38,6 +50,8 @@ type CallTrackingCardProps = {
   onChiefComplaintChange: (callId: string, chiefComplaint: string) => void;
   onRemoveTeamFromCall: (callId: string, team: string) => Promise<void>;
   onAddTeamToCall: (callId: string, team: string) => Promise<void>;
+  /** Live unit positions (an extension pack's), for distances in Add Team / Add Supervisor. */
+  unitTracking?: UnitTracking | null;
   handleTeamStatusChange: (callId: string, team: string, newStatus: string, clinicId?: string) => void;
   onTransportToAmbulance: (callId: string, team: string) => void;
   handleRevertDetachment: (callId: string, team: string) => void;
@@ -50,7 +64,6 @@ type CallTrackingCardProps = {
   updateEvent: (updates: Partial<Event>) => Promise<void>;
 };
 
-
 export default function CallTrackingCard({
   call,
   callDisplayNumber,
@@ -60,6 +73,7 @@ export default function CallTrackingCard({
   onChiefComplaintChange,
   onRemoveTeamFromCall,
   onAddTeamToCall,
+  unitTracking,
   handleTeamStatusChange,
   onTransportToAmbulance,
   handleRevertDetachment,
@@ -103,98 +117,34 @@ export default function CallTrackingCard({
 
   const locationOptions = useMemo(() => getVenueLocationOptions(event.venue), [event.venue]);
 
-  // Get available teams for dropdown (including On Break and In Clinic)
-  const availableStaff = useMemo(() => {
-    return (event.staff || []).filter(s => 
-      !call.assignedTeam?.includes(s.team)
-    );
-  }, [event.staff, call.assignedTeam]);
+  const venueLayers = getEventVenueLayers(event);
+  const [pinOpen, setPinOpen] = useState(false);
 
-  const availableSupervisors = useMemo(() => {
-    return (event.supervisor || []).filter(s => 
-      !call.assignedTeam?.includes(s.team)
-    );
-  }, [event.supervisor, call.assignedTeam]);
-
+  const cardActions: TrackingCardAction[] = [
+    { key: 'duplicate', label: t('Mark as Duplicate'), onPress: () => handleMarkDuplicate(call.id) },
+    { key: 'priority', label: call.priority ? t('Remove Priority') : t('Mark as Priority'), isDisabled: !!call.clinic, onPress: () => handleTogglePriority(call.id) },
+    { key: 'pin', label: call.pin ? t('Unpin Call') : t('Pin Call'), isDisabled: isResolved, onPress: () => handleTogglePin(call.id) },
+    ...(firstGeoLayer(venueLayers) ? [{ key: 'drop-pin', label: call.locationPoint ? t('Move pin') : t('Drop pin'), onPress: () => setPinOpen(true) }] : []),
+      {
+        key: 'delete',
+        label: t('Delete Call'),
+        danger: true,
+        onPress: () => {
+          if (confirm('Are you sure you want to delete this call? This action cannot be undone.')) handleDeleteCall(call.id);
+        },
+      },
+  ];
   return (
-    <Card
-      data-testid={`call-card-${callDisplayNumber}`}
-      className={`dispatch-shell-card ${expanded ? 'dispatch-shell-card--open' : ''} w-full border-0 transition-colors duration-200 ${expanded ? 'rounded-lg bg-surface-deep shadow-sm' : 'rounded-none bg-transparent shadow-none hover:bg-surface-deep'}`}
+    <TrackingCardShell
+      testId={`call-card-${callDisplayNumber}`}
+      title={`${t('Call')} ${callDisplayNumber}`}
+      timer={timer}
+      indicators={<CallIndicatorIcons call={call} />}
+      actions={cardActions}
+      expanded={expanded}
+      onToggle={() => setExpanded((v) => !v)}
+      resolved={isResolved}
     >
-      {/* HEADER */}
-      <CardHeader 
-        onClick={() => setExpanded(v => !v)}
-        className="relative flex items-center justify-between px-4 py-3 pb-0 cursor-pointer select-none"
-      >
-        <div className="text-[15px] sm:text-base font-semibold text-surface-light">
-          Call {callDisplayNumber}
-        </div>
-        
-        {/* Right section: Timer and Menu aligned horizontally */}
-        <div className="absolute top-0 right-0 pt-3 pr-3 flex items-center gap-2 box-content h-6">
-          {/* Timer */}
-          <div className="ui-timer text-sm sm:text-[15px] font-semibold text-surface-light">
-            {timer}
-          </div>
-
-          <CallIndicatorIcons call={call} />
-
-          {/* 3-dot menu */}
-          <div onClick={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()}>
-            <Dropdown motionProps={dropdownMotionProps} placement="bottom-end" offset={6}>
-              <DropdownTrigger>
-                <button
-                  className="p-0 m-0 border-0 bg-transparent text-surface-light hover:text-status-blue transition-colors cursor-pointer flex items-center justify-center"
-                  aria-label="Call actions"
-                  type="button"
-                >
-                  <MoreVertical className="h-4 w-4" />
-                </button>
-              </DropdownTrigger>
-              <DropdownMenu aria-label="Call actions">
-                <DropdownItem
-                  key="showLog"
-                  onPress={() => setExpanded(v => !v)}
-                >
-                  {expanded ? t('Hide Log') : t('Show Log')}
-                </DropdownItem>
-                <DropdownItem
-                  key="duplicate"
-                  onPress={() => handleMarkDuplicate(call.id)}
-                >
-                  {t('Mark as Duplicate')}
-                </DropdownItem>
-                <DropdownItem
-                  key="priority"
-                  isDisabled={!!call.clinic}
-                  onPress={() => handleTogglePriority(call.id)}
-                >
-                  {call.priority ? t('Remove Priority') : t('Mark as Priority')}
-                </DropdownItem>
-                <DropdownItem
-                  key="pin"
-                  isDisabled={isResolved}
-                  onPress={() => handleTogglePin(call.id)}
-                >
-                  {call.pin ? t('Unpin Call') : t('Pin Call')}
-                </DropdownItem>
-                <DropdownItem
-                  key="delete"
-                  className="text-danger"
-                  color="danger"
-                  onPress={() => {
-                    if (confirm('Are you sure you want to delete this call? This action cannot be undone.')) {
-                      handleDeleteCall(call.id);
-                    }
-                  }}
-                >
-                  {t('Delete Call')}
-                </DropdownItem>
-              </DropdownMenu>
-            </Dropdown>
-          </div>
-        </div>
-      </CardHeader>
 
       {/* BODY */}
       <CardBody className="px-4 pb-3 space-y-3">
@@ -412,26 +362,11 @@ export default function CallTrackingCard({
                   {t('Add Team')}
                 </DropdownMenuSubTrigger>
                 <DropdownMenuSubContent className="bg-surface-deep border-surface-liner">
-                  {availableStaff.length > 0 ? (
-                    availableStaff.map(s => {
-                      const isBreakOrClinic = ['On Break', 'In Clinic'].includes(s.status);
-                      return (
-                        <DropdownMenuItem
-                          key={s.team}
-                          onClick={() => onAddTeamToCall(call.id, s.team)}
-                          className={`hover:bg-surface-liner focus:bg-surface-liner cursor-pointer ${
-                            isBreakOrClinic ? 'bg-status-card-blue text-surface-light' : 'text-surface-light'
-                          }`}
-                        >
-                          {s.team} {isBreakOrClinic && `(${t(s.status)})`}
-                        </DropdownMenuItem>
-                      );
-                    })
-                  ) : (
-                    <DropdownMenuItem disabled className="text-surface-faint">
-                      {t('No available teams')}
-                    </DropdownMenuItem>
-                  )}
+                  <UnitPickerItems
+                    options={unitOptions(event, call, 'team', venueLayers, unitTracking)}
+                    onPick={(team) => onAddTeamToCall(call.id, team)}
+                    emptyLabel={t('No available teams')}
+                  />
                 </DropdownMenuSubContent>
               </DropdownMenuSub>
 
@@ -441,26 +376,11 @@ export default function CallTrackingCard({
                   {t('Add Supervisor')}
                 </DropdownMenuSubTrigger>
                 <DropdownMenuSubContent className="bg-surface-deep border-surface-liner">
-                  {availableSupervisors.length > 0 ? (
-                    availableSupervisors.map(s => {
-                      const isBreakOrClinic = ['On Break', 'In Clinic'].includes(s.status);
-                      return (
-                        <DropdownMenuItem
-                          key={s.team}
-                          onClick={() => onAddTeamToCall(call.id, s.team)}
-                          className={`hover:bg-surface-liner focus:bg-surface-liner cursor-pointer ${
-                            isBreakOrClinic ? 'bg-status-card-blue text-surface-light' : 'text-surface-light'
-                          }`}
-                        >
-                          {s.team} {isBreakOrClinic && `(${t(s.status)})`}
-                        </DropdownMenuItem>
-                      );
-                    })
-                  ) : (
-                    <DropdownMenuItem disabled className="text-surface-faint">
-                      {t('No available supervisors')}
-                    </DropdownMenuItem>
-                  )}
+                  <UnitPickerItems
+                    options={unitOptions(event, call, 'supervisor', venueLayers, unitTracking)}
+                    onPick={(team) => onAddTeamToCall(call.id, team)}
+                    emptyLabel={t('No available supervisors')}
+                  />
                 </DropdownMenuSubContent>
               </DropdownMenuSub>
 
@@ -477,6 +397,13 @@ export default function CallTrackingCard({
           expanded={expanded}
         />
       </CardBody>
-    </Card>
+      <PinDropModal
+        isOpen={pinOpen}
+        onClose={() => setPinOpen(false)}
+        layers={venueLayers}
+        initial={call.locationPoint}
+        onPick={(pin) => void updateEvent(pinCallPatch(event, call.id, pin))}
+      />
+    </TrackingCardShell>
   );
 }

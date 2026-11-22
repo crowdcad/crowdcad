@@ -102,16 +102,16 @@ service cloud.firestore {
     // including editing or deleting any other user's venues/events, which
     // `isRequestingUserAdmin()` unlocks everywhere else in this file. Only an
     // existing admin may set `isAdmin` on anyone (self included).
+    //
+    // An account reaches its own doc before its second step (two-step
+    // sign-in, below): the app reads isAdmin to know whether to ask for it.
     match /users/{userId} {
-      allow read: if signedIn() &&
-        (request.auth.uid == userId || isRequestingUserAdmin());
-      allow create: if signedIn() && request.auth.uid == userId &&
+      allow read: if (signedInFirstStep() && request.auth.uid == userId) || isRequestingUserAdmin();
+      allow create: if signedInFirstStep() && request.auth.uid == userId &&
         request.resource.data.get('isAdmin', false) == false;
-      allow update: if signedIn() &&
-        (
-          isRequestingUserAdmin() ||
-          (request.auth.uid == userId && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['isAdmin']))
-        );
+      allow update: if isRequestingUserAdmin() ||
+        (signedInFirstStep() && request.auth.uid == userId &&
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['isAdmin']));
       allow delete: if signedIn() &&
         (request.auth.uid == userId || isRequestingUserAdmin());
     }
@@ -119,9 +119,32 @@ service cloud.firestore {
     // Settings: app-wide admin-managed config (e.g. the certification list
     // offered when adding team members). Readable by any authenticated user
     // since it's needed during event creation; writable only by admins.
+    //
+    // The security settings (settings/securitysetting, src/lib/securitySettings.ts)
+    // are readable before the second step, so the app knows to ask for it,
+    // and hold only the known fields.
     match /settings/{settingId} {
-      allow read: if signedIn();
-      allow write: if isRequestingUserAdmin();
+      allow read: if signedIn() || (settingId == 'securitysetting' && signedInFirstStep());
+      allow write: if isRequestingUserAdmin() &&
+        (settingId != 'securitysetting' || isValidSecuritySettings(request.resource.data));
+    }
+
+    // Audit log (src/lib/services/audit.ts): append-only. An account
+    // records rows only as itself, stamped within 5 minutes of the server's
+    // clock and with only the known fields; admins read; no one, admins
+    // included, edits or deletes a row. Mirrored in setup-pocketbase.js.
+    match /audit/{entryId} {
+      // Before the second step too, so a sign-in that stops for its code still leaves a row.
+      allow create: if signedInFirstStep()
+        && request.resource.data.keys().hasOnly(['t', 'uid', 'actor', 'action', 'target', 'eventId', 'detail'])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.t is int
+        && request.resource.data.t > request.time.toMillis() - 300000
+        && request.resource.data.t < request.time.toMillis() + 300000
+        && request.resource.data.action is string
+        && request.resource.data.action.size() <= 64;
+      allow read: if isRequestingUserAdmin();
+      allow update, delete: if false;
     }
 
     // Dispatch language presets (Profile > Preferences > Dispatch language):
@@ -150,9 +173,47 @@ service cloud.firestore {
     // `Map.get(key, default)` (safe) or the `in` operator (safe presence
     // check) instead of bare dot access.
     function isRequestingUserAdmin() {
-      return signedIn() &&
+      return signedIn() && adminMfaOk() &&
         exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('isAdmin', false) == true;
+    }
+
+    // Two-step sign-in (Profile > Admin > Security, src/lib/securitySettings.ts).
+    // settings/securitysetting's value.mfa says who needs it: 'off' (or no
+    // record), 'admins' or 'everyone'. A session that signed in with its
+    // second step carries firebase.sign_in_second_factor in its token. With
+    // 'admins', an admin without it keeps dispatcher access but loses admin
+    // powers; with 'everyone', a session without it gets nothing beyond its
+    // own users doc, the security settings and its audit rows (enough for the
+    // app to ask for the code). Integration (bridge) accounts are exempt.
+    function securitySettingsPath() {
+      return /databases/$(database)/documents/settings/securitysetting;
+    }
+
+    function mfaPolicyIs(policy) {
+      return exists(securitySettingsPath()) &&
+        get(securitySettingsPath()).data.get('value', {}).get('mfa', 'off') == policy;
+    }
+
+    function hasSecondFactor() {
+      return request.auth.token.get('firebase', {}).get('sign_in_second_factor', null) != null;
+    }
+
+    function mfaOk() {
+      return !mfaPolicyIs('everyone') || hasSecondFactor() || isBridge();
+    }
+
+    function adminMfaOk() {
+      return (!mfaPolicyIs('admins') && !mfaPolicyIs('everyone')) || hasSecondFactor();
+    }
+
+    function isValidSecuritySettings(d) {
+      return d.keys().hasOnly(['key', 'value']) && d.get('key', '') == 'security' &&
+        d.get('value', null) is map &&
+        d.value.keys().hasOnly(['idleLockMinutes', 'mfa']) &&
+        d.value.get('idleLockMinutes', 0) is int &&
+        d.value.get('idleLockMinutes', 0) >= 0 && d.value.get('idleLockMinutes', 0) <= 720 &&
+        d.value.get('mfa', 'off') in ['off', 'admins', 'everyone'];
     }
 
     // Fallback deny
@@ -265,8 +326,14 @@ service cloud.firestore {
     }
 
 
-    // Signed in. Every rule that lets "anyone signed in" do something uses this.
+    // Signed in, with the second step when the organization requires it.
+    // Every rule that lets "anyone signed in" do something uses this.
     function signedIn() {
+      return signedInFirstStep() && mfaOk();
+    }
+    
+    // Signed in, maybe still missing the second step.
+    function signedInFirstStep() {
       return request.auth != null;
     }
     

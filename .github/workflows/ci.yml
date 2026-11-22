@@ -85,6 +85,9 @@ jobs:
           distribution: temurin
           java-version: '21'
 
+      - name: Firestore rules (two-step sign-in)
+        run: npm run test:rules
+
       - name: Run E2E tests
         run: npm run test:e2e
         env:

@@ -81,6 +81,33 @@
     --streak-opacity-multiplier: 1;
   }
 
+/* One thin, quiet scrollbar everywhere (.scrollbar-hide hides it). */
+@layer base {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(113, 113, 122, 0.5) transparent;
+  }
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track,
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(113, 113, 122, 0.5);
+    border-radius: 9999px;
+  }
+  /* A training module's phone frame scrolls without scrollbars, as a phone does. */
+  html[data-phone-frame] * {
+    scrollbar-width: none;
+  }
+  html[data-phone-frame] ::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 @layer utilities {
   .scrollbar-hide::-webkit-scrollbar {
     display: none;
@@ -91,38 +118,11 @@
     scrollbar-width: none;
   }
 
-  .minimal-scrollbar {
-    scrollbar-width: thin;
-    scrollbar-color: rgba(113, 113, 122, 0.5) transparent;
-  }
-
-  .minimal-scrollbar::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
-  }
-
-  .minimal-scrollbar::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
-  .minimal-scrollbar::-webkit-scrollbar-thumb {
-    background: rgba(113, 113, 122, 0.5);
-    border-radius: 9999px;
-  }
-
-  .minimal-scrollbar::-webkit-scrollbar-thumb:hover {
-    background: rgba(161, 161, 170, 0.7);
-  }
-
-  .minimal-scrollbar::-webkit-scrollbar-corner {
-    background: transparent;
-  }
-
   /*
    * A tab panel's scrolling body (MCI, Logistics, Calls, clinics). The panels pad their sides by px-2.5;
    * this reaches into the right padding and keeps a gutter for the scrollbar there, so the scrollbar sits
    * at the panel's right edge and nothing shifts when the content becomes long enough to scroll.
-   * 6px matches .minimal-scrollbar's width.
+   * 6px matches the scrollbar's width (above).
    */
   .tab-scroll {
     --tab-pad: calc(0.625rem * var(--ui-pad-scale, 1));
@@ -469,4 +469,12 @@ grammarly-card,
   outline-offset: 2px;
   --tw-ring-shadow: 0 0 #0000 !important;
   --tw-ring-offset-shadow: 0 0 #0000 !important;
+}
+
+/* Resolved call and clinic rows and cards: diagonal stripes in the color they take on hover, under the content. */
+.tracking-resolved {
+  background-image: repeating-linear-gradient(135deg, hsl(var(--surface-border) / 0.6) 0 6px, transparent 6px 14px);
+}
+.tracking-resolved-card {
+  background-image: repeating-linear-gradient(135deg, hsl(var(--surface-bg-1)) 0 6px, transparent 6px 14px);
 }

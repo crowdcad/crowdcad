@@ -180,6 +180,8 @@ Two admin UI settings are needed before password reset works. Neither is configu
 
 `setup-pocketbase.js` prints a reminder of both steps when it finishes.
 
+SMTP is also what sends two-step sign-in codes, if an admin turns two-step sign-in on in Profile > Admin > Security. See [COMPLIANCE.md](COMPLIANCE.md#two-step-sign-in).
+
 ## Running without Docker
 
 Download the PocketBase binary for your platform from [pocketbase.io/docs](https://pocketbase.io/docs) and place it in the project root:
