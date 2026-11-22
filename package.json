@@ -18,7 +18,7 @@
     "test:e2e:serve": "concurrently --names \"emulator,nextjs\" --kill-others-on-fail \"npx firebase emulators:start --only auth,firestore --project demo-crowdcad\" \"cross-env NEXT_PUBLIC_USE_FIREBASE_EMULATOR=true NEXT_PUBLIC_USE_FIRESTORE_EMULATOR=true NEXT_PUBLIC_FIREBASE_API_KEY=fake-api-key NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=localhost NEXT_PUBLIC_FIREBASE_PROJECT_ID=demo-crowdcad NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=demo-crowdcad.appspot.com NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=000000000000 NEXT_PUBLIC_FIREBASE_APP_ID=1:000000000000:web:fake next dev\""
   },
   "dependencies": {
-    "@heroui/react": "^2.8.5",
+    "@heroui/react": "^3.2.7",
     "@radix-ui/react-dropdown-menu": "^2.1.24",
     "@tailwindcss/postcss": "^4.3.3",
     "barcode-detector": "3.2.3",
