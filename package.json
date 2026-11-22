@@ -65,7 +65,7 @@
     "eslint-config-next": "^15.5.23",
     "firebase-tools": "^15.28.1",
     "kill-port": "^2.0.1",
-    "playwright-bdd": "^8.5.1",
+    "playwright-bdd": "^9.2.1",
     "postcss": "^8.5.23",
     "tailwindcss": "^3.4.19",
     "typescript": "5.8.3",
