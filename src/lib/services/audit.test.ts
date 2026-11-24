@@ -69,7 +69,7 @@ describe('audit log', () => {
         return user;
       },
     } as unknown as IAuthService;
-    const log = { record: vi.fn(async (i: { action: string }) => void order.push(`audit:${i.action}:${user ? 'in' : 'out'}`)), recent: vi.fn() };
+    const log = { record: vi.fn(async (i: { action: string }) => void order.push(`audit:${i.action}:${user ? 'in' : 'out'}`)), recent: vi.fn(), forEvent: vi.fn() };
     const audited = withAuthAudit(auth, log);
     await audited.signIn('a', 'b');
     await audited.signOut();
@@ -84,7 +84,7 @@ describe('audit log', () => {
       completeSecondFactor: vi.fn(async () => {}),
       currentUser: alice,
     } as unknown as IAuthService;
-    const log = { record: vi.fn(async () => {}), recent: vi.fn() };
+    const log = { record: vi.fn(async () => {}), recent: vi.fn(), forEvent: vi.fn() };
     const audited = withAuthAudit(auth, log);
     await expect(audited.signIn('a', 'b')).rejects.toBeInstanceOf(SecondFactorRequiredError);
     expect(log.record).not.toHaveBeenCalled();

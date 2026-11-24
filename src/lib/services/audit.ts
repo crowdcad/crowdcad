@@ -6,8 +6,8 @@
  * read them, and let no one edit or delete them.
  *
  * What's recorded: sign-in and sign-out, idle-lock unlocks, password
- * changes, two-step sign-in set up or removed, account deletion, event create/end/delete/export, sharing changes, admin grants
- * and settings changes. Never patient details: `target` names the thing
+ * changes, two-step sign-in set up or removed, account deletion, event create/end/delete/export, legal
+ * holds, retention purges, sharing changes, admin grants and settings changes. Never patient details: `target` names the thing
  * acted on (an event name, an email), `detail` is a short note. Reads are
  * left to the backend's own logs (Firebase Cloud Audit Logs data access,
  * PocketBase request logs); see docs/COMPLIANCE.md.
@@ -37,6 +37,9 @@ export type AuditAction =
   | 'event.end'
   | 'event.delete'
   | 'event.export'
+  | 'event.purge'
+  | 'event.hold'
+  | 'event.release'
   | 'access.grant'
   | 'access.revoke'
   | 'admin.grant'
@@ -72,6 +75,8 @@ export interface AuditLog {
   record(input: AuditInput): Promise<void>;
   /** Rows from the last `days` days, newest first (admins only). */
   recent(days?: number): Promise<(AuditEntry & { id: string })[]>;
+  /** Every row about one event, oldest first (admins, and the event's owner). */
+  forEvent(eventId: string): Promise<(AuditEntry & { id: string })[]>;
 }
 
 const clip = (s: string | undefined, max: number) => (s ? s.slice(0, max) : undefined);
@@ -118,6 +123,13 @@ export function createAuditLog(db: IDbService, currentUser: () => ServiceUser | 
         .filter((r) => r.exists && r.data)
         .map((r) => ({ ...(r.data as AuditEntry), id: r.id }))
         .sort((a, b) => b.t - a.t);
+    },
+    async forEvent(eventId) {
+      const rows = await db.queryCollection<AuditEntry>(AUDIT_COLLECTION, [{ field: 'eventId', op: '==', value: eventId }]);
+      return rows
+        .filter((r) => r.exists && r.data)
+        .map((r) => ({ ...(r.data as AuditEntry), id: r.id }))
+        .sort((a, b) => a.t - b.t);
     },
   };
 }

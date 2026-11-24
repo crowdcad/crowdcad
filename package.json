@@ -10,6 +10,8 @@
     "type-check": "tsc --noEmit",
     "test:unit": "vitest run",
     "test:rules": "firebase emulators:exec --only firestore --project demo-crowdcad \"node tests/rules/run.mjs\"",
+    "test:integration": "firebase emulators:exec --only firestore --project demo-crowdcad \"vitest run integration\"",
+    "test:pocketbase": "node scripts/scratch-pocketbase.mjs \"node tests/rules/pocketbase/access.mjs && vitest run integration\"",
     "bddgen": "bddgen",
     "test:e2e": "bddgen && playwright test",
     "test:e2e:ui": "bddgen && playwright test --ui",

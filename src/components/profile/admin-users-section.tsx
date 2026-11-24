@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { Button, Card, CardBody, Input, Spinner, Switch } from '@heroui/react';
 import { RefreshCw, Trash2 } from 'lucide-react';
 import { auditLog, dbService, isPocketbaseBackend } from '@/lib/services';
+import type { Event } from '@/app/types';
+import { deleteEvent } from '@/lib/records/client';
 import type { UserDoc } from '@/lib/userDoc';
 import type { ServiceUser } from '@/lib/services';
 import { FIELD_CLASSNAMES } from '@/components/ui/fieldClassNames';
@@ -25,6 +27,8 @@ function toRow(id: string, data: UserDoc & Record<string, unknown>): UserRow {
 }
 
 /** Deletes everything a user owns (venues, events, dispatch logs) plus their `users/{id}` doc.
+ *  Events go through deleteEvent, so everything kept for them goes too; one on legal hold stops the
+ *  whole deletion before anything is removed, so the account stays for the held record.
  *  On PocketBase, deleting the `users` record also deletes the underlying auth account.
  *  On Firebase, the Auth account itself is untouched — it has no privileged server-side path
  *  here — so it must be removed separately via the Firebase Console if a full account removal
@@ -32,13 +36,17 @@ function toRow(id: string, data: UserDoc & Record<string, unknown>): UserRow {
 async function deleteUserAndData(userId: string): Promise<void> {
   const [venues, events, logs] = await Promise.all([
     dbService.queryCollection('venues', [{ field: 'userId', op: '==', value: userId }]),
-    dbService.queryCollection('events', [{ field: 'userId', op: '==', value: userId }]),
+    dbService.queryCollection<Event>('events', [{ field: 'userId', op: '==', value: userId }]),
     dbService.queryCollection('dispatchLogs', [{ field: 'userId', op: '==', value: userId }]),
   ]);
+  const held = events.filter((e) => e.data?.legalHold === true);
+  if (held.length) {
+    throw new Error(`${held.length} of this user's events ${held.length === 1 ? 'is' : 'are'} on legal hold. Release the hold first.`);
+  }
 
+  for (const e of events) await deleteEvent(e.id, e.data?.name);
   await Promise.all([
     ...venues.map((v) => dbService.deleteDocument('venues', v.id)),
-    ...events.map((e) => dbService.deleteDocument('events', e.id)),
     ...logs.map((l) => dbService.deleteDocument('dispatchLogs', l.id)),
   ]);
 

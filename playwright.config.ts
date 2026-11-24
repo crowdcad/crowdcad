@@ -6,7 +6,9 @@ import dotenv from 'dotenv';
 // Load test environment variables from .env.test.local
 dotenv.config({ path: path.join(__dirname, '.env.test.local') });
 
-const NEXT_DEV_URL = 'http://localhost:3000';
+// E2E_PORT moves the app off 3000 (when something else already serves there locally).
+const PORT = process.env.E2E_PORT || '3000';
+const NEXT_DEV_URL = `http://localhost:${PORT}`;
 
 // Path to the saved auth state — written by auth.setup.ts, read by authenticated projects
 export const STORAGE_STATE = path.join(__dirname, 'tests/e2e/.auth/user.json');
@@ -70,7 +72,7 @@ export default defineConfig({
       stderr: 'pipe',
     },
     {
-      command: 'next build && next start',
+      command: `next build && next start -p ${PORT}`,
       env: {
         NEXT_PUBLIC_BACKEND: 'firebase',
         NEXT_PUBLIC_USE_FIREBASE_EMULATOR: 'true',

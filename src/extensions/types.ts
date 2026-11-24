@@ -182,6 +182,12 @@ export interface CrowdcadExtension {
   on?: AppEventHandlers;
   /** Own documents beside the event (cloud events on Firebase). */
   eventData?: EventDataStore;
+  /**
+   * The pack's part of an event's full record (the owner's JSON export, src/lib/records/eventRecord.ts):
+   * documents it keeps for the event that `eventData` doesn't already merge into it (logs, receipts,
+   * history), as plain data. Null when it has nothing for this event. Never secrets (password or PIN hashes).
+   */
+  eventRecord?: (eventId: string, event: Event) => Promise<Record<string, unknown> | null>;
   /** Lets a pack keep its local copy of an incoming snapshot while its own writes are still saving (stops echoes stepping back). */
   freshen?: (prev: Event | undefined, incoming: Event) => Event;
   /** Automatic alerts (e.g. surge) stay off while this returns true. */

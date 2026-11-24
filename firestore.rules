@@ -79,7 +79,9 @@ service cloud.firestore {
       allow create: if signedIn() && request.resource.data.get('userId', null) == request.auth.uid && !isBridge();
       allow update: if (isEventOwnerOrOrgMember() || isRequestingUserAdmin() ||
         ((isEventSharedWithRequester() || isEventOrgShow()) && isEventProtectedFieldsUnchanged())) && !isBridge();
-      allow delete: if (isEventOwnerOrOrgMember() || isRequestingUserAdmin()) && !isBridge();
+      // An event on legal hold (src/lib/records/client.ts) can't be deleted until the hold is released.
+      allow delete: if (isEventOwnerOrOrgMember() || isRequestingUserAdmin()) && !isBridge() &&
+        resource.data.get('legalHold', false) != true;
     }
 
     // Dispatch logs: owner-scoped, with an admin override for the same
@@ -122,17 +124,22 @@ service cloud.firestore {
     //
     // The security settings (settings/securitysetting, src/lib/securitySettings.ts)
     // are readable before the second step, so the app knows to ask for it,
-    // and hold only the known fields.
+    // and hold only the known fields. So does the retention setting
+    // (settings/recordretention, src/lib/records/retention.ts).
     match /settings/{settingId} {
       allow read: if signedIn() || (settingId == 'securitysetting' && signedInFirstStep());
       allow write: if isRequestingUserAdmin() &&
-        (settingId != 'securitysetting' || isValidSecuritySettings(request.resource.data));
+        (settingId != 'securitysetting' || isValidSecuritySettings(request.resource.data)) &&
+        (settingId != 'recordretention' || isValidRecordSettings(request.resource.data));
     }
 
     // Audit log (src/lib/services/audit.ts): append-only. An account
     // records rows only as itself, stamped within 5 minutes of the server's
-    // clock and with only the known fields; admins read; no one, admins
-    // included, edits or deletes a row. Mirrored in setup-pocketbase.js.
+    // clock and with only the known fields; admins read every row, and an
+    // event's owner the rows about that event (for its full record export);
+    // no one, admins included, edits or deletes a row. The server's retention
+    // purge writes its own rows with the backend's credentials. Mirrored in
+    // setup-pocketbase.js.
     match /audit/{entryId} {
       // Before the second step too, so a sign-in that stops for its code still leaves a row.
       allow create: if signedInFirstStep()
@@ -143,7 +150,7 @@ service cloud.firestore {
         && request.resource.data.t < request.time.toMillis() + 300000
         && request.resource.data.action is string
         && request.resource.data.action.size() <= 64;
-      allow read: if isRequestingUserAdmin();
+      allow read: if isRequestingUserAdmin() || isAuditRowOfOwnEvent();
       allow update, delete: if false;
     }
 
@@ -205,6 +212,23 @@ service cloud.firestore {
 
     function adminMfaOk() {
       return (!mfaPolicyIs('admins') && !mfaPolicyIs('everyone')) || hasSecondFactor();
+    }
+
+    function isValidRecordSettings(d) {
+      return d.keys().hasOnly(['key', 'value']) && d.get('key', '') == 'records' &&
+        d.get('value', null) is map &&
+        d.value.keys().hasOnly(['deleteEndedAfterDays']) &&
+        d.value.get('deleteEndedAfterDays', 0) is int &&
+        d.value.get('deleteEndedAfterDays', 0) >= 0 && d.value.get('deleteEndedAfterDays', 0) <= 3650;
+    }
+
+    // An audit row about an event the requester owns. Written with
+    // resource.data so Firestore can prove the export's
+    // `eventId == X` query against it.
+    function isAuditRowOfOwnEvent() {
+      return signedIn() && resource.data.get('eventId', '') is string && resource.data.get('eventId', '') != '' &&
+        exists(/databases/$(database)/documents/events/$(resource.data.eventId)) &&
+        get(/databases/$(database)/documents/events/$(resource.data.eventId)).data.get('userId', null) == request.auth.uid;
     }
 
     function isValidSecuritySettings(d) {
@@ -318,11 +342,11 @@ service cloud.firestore {
     // The event fields a non-owner, non-admin writer (a shared user, or an
     // org member via isEventOrgShow) must not be able to change: who owns
     // the event, who it's shared with, whether it's an org-wide show,
-    // whether/when it's ended, and its map mode (`mapMode`). See the
-    // events match block above for why.
+    // whether/when it's ended, its map mode (`mapMode`) and its legal hold.
+    // See the events match block above for why.
     function isEventProtectedFieldsUnchanged() {
       return !request.resource.data.diff(resource.data).affectedKeys()
-        .hasAny(['userId', 'sharedWith', 'isOrgEvent', 'ended', 'endedAt', 'mapMode']);
+        .hasAny(['userId', 'sharedWith', 'isOrgEvent', 'ended', 'endedAt', 'mapMode', 'legalHold', 'legalHoldAt', 'legalHoldBy']);
     }
 
 

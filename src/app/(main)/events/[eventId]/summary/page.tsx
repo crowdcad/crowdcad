@@ -15,6 +15,7 @@ import { GRID_WRAPPER, GRID_CELL } from './summaryGrid';
 import EquipmentTimeline from './EquipmentTimeline';
 import LoadingScreen from '@/components/ui/loading-screen';
 import ExportLogModal from '@/components/modals/event/exportlogmodal';
+import EventRecordActions from '@/components/records/eventrecordactions';
 
 
 const SummaryCharts = dynamic(() => import('./SummaryCharts'), { ssr: false, loading: () => <div className="p-6 bg-surface-deep border border-surface-liner">Loading charts...</div> });
@@ -295,7 +296,8 @@ export default function SummaryPage() {
                 ({formatEventDate(event.date)})
               </span>
             </h1>
-            <div className="flex gap-2 shrink-0">
+            <div className="flex flex-wrap justify-end gap-2 shrink-0">
+              <EventRecordActions eventId={eventId ?? ''} event={event} onHoldChange={(legalHold) => setEvent((e) => (e ? { ...e, legalHold } : e))} />
               <Button
                 onPress={handleCSVDownload}
                 variant="flat"

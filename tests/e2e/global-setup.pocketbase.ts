@@ -3,7 +3,7 @@ import dotenv from 'dotenv';
 
 dotenv.config({ path: path.join(__dirname, '../../.env.test.local') });
 
-const PB_URL = 'http://127.0.0.1:8090';
+const PB_URL = `http://127.0.0.1:${process.env.E2E_PB_PORT || '8090'}`;
 const ADMIN_EMAIL = process.env.PB_E2E_ADMIN_EMAIL ?? 'admin@pbtest.local';
 const ADMIN_PASSWORD = process.env.PB_E2E_ADMIN_PASSWORD ?? 'Admin1234567890!';
 
@@ -193,6 +193,10 @@ async function globalSetup(): Promise<void> {
   // ensureBaseCollection only sets fields at creation time, not on existing collections.
   await ensureField(headers, 'venues', { name: 'isOrgVenue', type: 'bool' });
   await ensureField(headers, 'events', { name: 'ended', type: 'bool' });
+  // Legal hold (tests/e2e/features/records.feature).
+  for (const field of [{ name: 'legalHold', type: 'bool' }, { name: 'legalHoldAt', type: 'number' }, { name: 'legalHoldBy', type: 'text' }]) {
+    await ensureField(headers, 'events', field);
+  }
 
   // Wipe all data collections to ensure a clean state for every test run
   await Promise.all([

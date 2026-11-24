@@ -105,8 +105,11 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - name: Firestore rules (two-step sign-in)
+      - name: Firestore rules
         run: npm run test:rules
+
+      - name: Integration tests (Firestore emulator)
+        run: npm run test:integration
 
       - name: Run E2E tests
         run: npm run test:e2e
@@ -152,6 +155,9 @@ jobs:
           unzip pocketbase.zip pocketbase
           chmod +x pocketbase
           rm pocketbase.zip
+
+      - name: PocketBase API rules and integration tests
+        run: npm run test:pocketbase
 
       - name: Install Playwright Chromium browser
         run: npx playwright install chromium --with-deps

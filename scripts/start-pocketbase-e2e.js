@@ -3,7 +3,7 @@
  * Starts PocketBase for E2E testing.
  *
  * 1. Creates/updates a superadmin account (idempotent) using the pocketbase CLI.
- * 2. Starts PocketBase serve on 127.0.0.1:8090.
+ * 2. Starts PocketBase serve on 127.0.0.1:8090 (or E2E_PB_PORT).
  *
  * Data directory: tests/e2e/.pb-data  (gitignored)
  * Playwright's global-setup.pocketbase.ts creates collections and the test
@@ -38,8 +38,11 @@ try {
 }
 
 // Start PocketBase — keep this process alive so Playwright can manage it
-console.log('[pocketbase-e2e] Starting PocketBase serve on 127.0.0.1:8090...');
-const serve = spawn(PB_EXE, ['serve', '--http=127.0.0.1:8090', '--dir', PB_DATA_DIR], {
+const PB_PORT = process.env.E2E_PB_PORT || '8090';
+console.log(`[pocketbase-e2e] Starting PocketBase serve on 127.0.0.1:${PB_PORT}...`);
+// --automigrate=false: the global setup changes collections through the API, which would otherwise write
+// a migration file into tests/e2e/pb_migrations on every schema change.
+const serve = spawn(PB_EXE, ['serve', `--http=127.0.0.1:${PB_PORT}`, '--dir', PB_DATA_DIR, '--automigrate=false'], {
   stdio: 'inherit',
 });
 

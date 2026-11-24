@@ -92,6 +92,11 @@ export interface Event {
   ended?: boolean;
   /** Epoch ms when the event was ended (manually, or by the 1-hour-no-activity backup) — unset while active. */
   endedAt?: number;
+  /** Legal hold (src/lib/records/client.ts): while set, the event can't be deleted or purged by retention. Owner or admin only. */
+  legalHold?: boolean;
+  /** When the hold was placed (epoch ms), and by whom (email). */
+  legalHoldAt?: number;
+  legalHoldBy?: string;
   postAssignments?: PostAssignment;
   clinics?: Clinic[];
   dispatchZones?: DispatchZone[];
