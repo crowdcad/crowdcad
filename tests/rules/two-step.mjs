@@ -1,26 +1,7 @@
 // Firestore rules for two-step sign-in (src/lib/securitySettings.ts), against
 // the emulator REST API with unsigned tokens. Run: npm run test:rules
-const HOST = process.env.FIRESTORE_EMULATOR_HOST || '127.0.0.1:8080';
-const BASE = 'http://' + HOST + '/v1/projects/demo-crowdcad/databases/(default)/documents';
-const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
-const token = (uid, email, mfa) =>
-  `${b64({ alg: 'none', typ: 'JWT' })}.${b64({
-    iss: 'https://securetoken.google.com/demo-crowdcad', aud: 'demo-crowdcad', sub: uid, user_id: uid, email,
-    iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 3600, auth_time: Math.floor(Date.now() / 1000),
-    firebase: { sign_in_provider: 'password', ...(mfa ? { sign_in_second_factor: 'totp' } : {}) },
-  })}.`;
-const enc = (v) => {
-  if (typeof v === 'string') return { stringValue: v };
-  if (typeof v === 'boolean') return { booleanValue: v };
-  if (Number.isInteger(v)) return { integerValue: String(v) };
-  if (Array.isArray(v)) return { arrayValue: { values: v.map(enc) } };
-  return { mapValue: { fields: Object.fromEntries(Object.entries(v).map(([k, x]) => [k, enc(x)])) } };
-};
-const fields = (o) => ({ fields: Object.fromEntries(Object.entries(o).map(([k, v]) => [k, enc(v)])) });
-const call = async (auth, method, path, body) => {
-  const r = await fetch(`${BASE}/${path}`, { method, headers: { Authorization: `Bearer ${auth}`, 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
-  return r.status;
-};
+import { call, done, expect, fields, token } from './lib.mjs';
+
 const asOwner = (method, path, body) => call('owner', method, path, body);
 const setPolicy = (mfa) => asOwner('PATCH', 'settings/securitysetting', fields({ key: 'security', value: { idleLockMinutes: 0, mfa } }));
 
@@ -32,8 +13,6 @@ const adminNo = token('admin1', 'a@x.org', false), adminYes = token('admin1', 'a
 const dispNo = token('disp1', 'd@x.org', false), dispYes = token('disp1', 'd@x.org', true);
 const venue = (uid) => fields({ userId: uid, name: 'v' });
 const auditRow = (uid) => fields({ t: Date.now(), uid, actor: 'x', action: 'auth.signIn' });
-let n = 0, bad = 0;
-const expect = async (label, got, want) => { n++; const ok = (got === 200) === want; if (!ok) bad++; console.log(`${ok ? 'ok  ' : 'FAIL'} ${label}: ${got}`); };
 
 for (const policy of ['none', 'off', 'admins', 'everyone']) {
   if (policy === 'none') await asOwner('DELETE', 'settings/securitysetting'); else await setPolicy(policy);
@@ -60,5 +39,4 @@ await expect('extra field refused', await write(adminYes, { idleLockMinutes: 30,
 await expect('too many minutes refused', await write(adminYes, { idleLockMinutes: 9999, mfa: 'off' }), false);
 await expect('dispatcher refused', await write(dispYes, { idleLockMinutes: 0, mfa: 'off' }), false);
 await setPolicy('off');
-console.log(`${n - bad}/${n} passed`);
-process.exit(bad ? 1 : 0);
+done();

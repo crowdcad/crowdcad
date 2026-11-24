@@ -58,7 +58,9 @@ async function pbFetch(apiPath, options = {}) {
 // the Firebase backend does — this is the only backend config a self-hoster
 // forking this repo actually runs, so it needs to be correct standalone,
 // not just documented as a manual follow-up step.
-const AUTH_RULE = '@request.auth.id != ""';
+// Signed in with a normal account (`users`): a record of any other auth collection would otherwise
+// pass `@request.auth.id != ""` too.
+const AUTH_RULE = '(@request.auth.id != "" && @request.auth.collectionName = "users")';
 
 // A record's own `userId` field must match the requester, or the requester
 // must be an admin. Used for venues (update/delete) and dispatchLogs
@@ -76,11 +78,18 @@ const SELF_OWNED_CREATE_RULE = `${AUTH_RULE} && @request.body.userId = @request.
 // direct write, even though they need broad write access to ordinary
 // dispatch fields (calls, staff/supervisor status, equipment) for
 // dispatching to work at all. Mirrors firestore.rules'
-// isEventProtectedFieldsUnchanged().
-const EVENT_PROTECTED_FIELDS = ['userId', 'sharedWith', 'isOrgEvent', 'ended', 'endedAt', 'mapMode'];
+// isEventProtectedFieldsUnchanged(). The legal hold fields too
+// (src/lib/records/client.ts): only the owner or an admin places or releases one.
+const EVENT_PROTECTED_FIELDS = ['userId', 'sharedWith', 'isOrgEvent', 'ended', 'endedAt', 'mapMode', 'legalHold', 'legalHoldAt', 'legalHoldBy'];
 const EVENT_PROTECTED_FIELDS_UNTOUCHED = EVENT_PROTECTED_FIELDS.map(
   (field) => `@request.body.${field}:isset = false`,
 ).join(' && ');
+
+// Who may see an event or a venue: its owner, someone it's shared with, everyone
+// for an org-wide one, or an admin. Mirrors firestore.rules' isEventVisibleToUser()
+// and isVenueVisibleToUser() (PocketBase installs have no organizations).
+const visibleRule = (orgFlag) =>
+  `${AUTH_RULE} && (userId = @request.auth.id || sharedWith ~ @request.auth.email || ${orgFlag} = true || @request.auth.isAdmin = true)`;
 
 const EVENT_UPDATE_RULE =
   `${AUTH_RULE} && (` +
@@ -118,6 +127,20 @@ const USERS_RULES = {
   deleteRule: `${AUTH_RULE} && (id = @request.auth.id || @request.auth.isAdmin = true)`,
 };
 
+const AUDIT_READ_RULE =
+  `${AUTH_RULE} && (@request.auth.isAdmin = true || ` +
+  `(eventId != "" && @collection.events:own.id ?= eventId && @collection.events:own.userId ?= @request.auth.id))`;
+
+// Settings: read by every signed-in normal account (certifications at event
+// creation, the security and retention settings); written only by admins.
+const SETTINGS_RULES = {
+  listRule: AUTH_RULE,
+  viewRule: AUTH_RULE,
+  createRule: `${AUTH_RULE} && @request.auth.isAdmin = true`,
+  updateRule: `${AUTH_RULE} && @request.auth.isAdmin = true`,
+  deleteRule: `${AUTH_RULE} && @request.auth.isAdmin = true`,
+};
+
 async function getAdminToken() {
   const res = await pbFetch('/api/collections/_superusers/auth-with-password', {
     method: 'POST',
@@ -136,6 +159,12 @@ async function ensureCollection(headers, name, fields, rules, indexes = []) {
   const check = await pbFetch(`/api/collections/${name}`, { headers });
   if (check.ok) {
     console.log(`  [skip]   ${name} — already exists`);
+    // Fields added since it was created come first: its rules may name them,
+    // and PocketBase refuses a rule that names an unknown field.
+    const existing = (await check.json()).fields || [];
+    for (const field of fields) {
+      if (!existing.some((f) => f.name === field.name)) await ensureField(headers, name, field);
+    }
     // The collection already existed (e.g. from an earlier run of this
     // script, before its rules were tightened) — bring its rules up to
     // date too, instead of only ever setting them at creation time.
@@ -334,13 +363,11 @@ async function main() {
       { name: 'isOrgVenue', type: 'bool' },
     ],
     {
-      // Reading a venue stays open to any signed-in user (matches
-      // firestore.rules — org-visibility scoping isn't implemented on
-      // either backend). Only the creator or an admin may create/update/
-      // delete one, so a random org member can't edit or delete someone
-      // else's venue preset.
-      listRule: AUTH_RULE,
-      viewRule: AUTH_RULE,
+      // Reading a venue needs one of the app's access paths (visibleRule
+      // above). Only the creator or an admin may create/update/delete one, so
+      // someone it's shared with can't edit or delete another person's venue.
+      listRule: visibleRule('isOrgVenue'),
+      viewRule: visibleRule('isOrgVenue'),
       createRule: SELF_OWNED_CREATE_RULE,
       updateRule: OWNER_OR_ADMIN_RULE,
       deleteRule: OWNER_OR_ADMIN_RULE,
@@ -377,19 +404,23 @@ async function main() {
       { name: 'ended', type: 'bool' },
       { name: 'endedAt', type: 'number' },
       { name: 'mapMode', type: 'text' },
+      { name: 'legalHold', type: 'bool' },
+      { name: 'legalHoldAt', type: 'number' },
+      { name: 'legalHoldBy', type: 'text' },
     ],
     {
-      // Same reasoning as venues: read stays open, but update is
-      // field-limited for anyone who isn't the owner or an admin — a
-      // shared user or org-event member can dispatch (write ordinary
-      // fields), but can't touch who owns/can see/can end the event. See
-      // EVENT_UPDATE_RULE above (mirrors firestore.rules exactly).
-      // TAK bridge accounts never read or write events (NOT_BRIDGE).
-      listRule: `${AUTH_RULE} && ${NOT_BRIDGE}`,
-      viewRule: `${AUTH_RULE} && ${NOT_BRIDGE}`,
+      // Read needs one of the app's access paths, like venues. Update is
+      // field-limited for anyone who isn't the owner or an admin: a shared
+      // user or org-event member can dispatch (write ordinary fields), but
+      // can't touch who owns/can see/can end the event or its legal hold.
+      // See EVENT_UPDATE_RULE above (mirrors firestore.rules). An event on
+      // legal hold can't be deleted. TAK bridge accounts never read or
+      // write events (NOT_BRIDGE).
+      listRule: `${visibleRule('isOrgEvent')} && ${NOT_BRIDGE}`,
+      viewRule: `${visibleRule('isOrgEvent')} && ${NOT_BRIDGE}`,
       createRule: `${SELF_OWNED_CREATE_RULE} && ${NOT_BRIDGE}`,
       updateRule: `${EVENT_UPDATE_RULE} && ${NOT_BRIDGE}`,
-      deleteRule: `${OWNER_OR_ADMIN_RULE} && ${NOT_BRIDGE}`,
+      deleteRule: `${OWNER_OR_ADMIN_RULE} && ${NOT_BRIDGE} && legalHold != true`,
     },
   );
 
@@ -440,8 +471,10 @@ async function main() {
   await ensureField(headers, 'dispatchLogs', { name: 'userId', type: 'text' });
 
   // Audit log (src/lib/services/audit.ts): append-only. An account
-  // records rows only as itself; admins read; no one can edit or delete a
-  // row through the API (null = superusers only). Mirrors firestore.rules.
+  // records rows only as itself; admins read every row, and an event's owner
+  // the rows about that event (its full record export); no one can edit or
+  // delete a row through the API (null = superusers only, which is how the
+  // server's retention purge writes its rows). Mirrors firestore.rules.
   await ensureCollection(
     headers,
     'audit',
@@ -455,8 +488,8 @@ async function main() {
       { name: 'detail', type: 'text', max: 500 },
     ],
     {
-      listRule: `${AUTH_RULE} && @request.auth.isAdmin = true`,
-      viewRule: `${AUTH_RULE} && @request.auth.isAdmin = true`,
+      listRule: AUDIT_READ_RULE,
+      viewRule: AUDIT_READ_RULE,
       createRule: `${AUTH_RULE} && @request.body.uid = @request.auth.id`,
       updateRule: null,
       deleteRule: null,
@@ -477,15 +510,7 @@ async function main() {
       { name: 'list', type: 'json' },
       { name: 'value', type: 'json' },
     ],
-    {
-      // Readable by any authenticated user (needed at event-create time);
-      // writable only by admins.
-      listRule: '@request.auth.id != ""',
-      viewRule: '@request.auth.id != ""',
-      createRule: '@request.auth.isAdmin = true',
-      updateRule: '@request.auth.isAdmin = true',
-      deleteRule: '@request.auth.isAdmin = true',
-    },
+    SETTINGS_RULES,
   );
 
   // `value` holds a setting that isn't a list: the security settings record

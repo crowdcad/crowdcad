@@ -27,7 +27,7 @@ jobs:
     outputs:
       environment: ${{ steps.set-env.outputs.environment }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
  
       - id: set-env
         uses: ./.github/actions/set-environment
@@ -42,7 +42,7 @@ jobs:
       url: ${{ steps.deploy.outputs.deploy-url || 'no-deploy' }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Setup project
         uses: ./.github/actions/setup
@@ -50,7 +50,7 @@ jobs:
           node-version: ${{ vars.NODE_VERSION }}
 
       - name: Cache Next.js build
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             .next/cache

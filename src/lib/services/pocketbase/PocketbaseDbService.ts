@@ -3,6 +3,8 @@ import type { IDbService } from '../IDbService';
 import type { DocSnapshot, QueryConstraint, TransactionContext, Unsubscribe } from '../types';
 import { isArrayUnion, isArrayRemove } from '../types';
 import { toPbServiceError } from './utils';
+import { isNestedCollection } from './docPaths';
+import * as nested from './nestedDocs';
 
 function toSnapshot<T>(record: Record<string, unknown>): DocSnapshot<T> {
   return { id: record.id as string, exists: true, data: record as T };
@@ -25,6 +27,7 @@ function buildFilter(constraints: QueryConstraint[]): string {
 
 export class PocketbaseDbService implements IDbService {
   async getDocument<T>(col: string, id: string): Promise<DocSnapshot<T>> {
+    if (isNestedCollection(col)) return nested.getNested<T>(col, id);
     try {
       const record = await pb.collection(col).getOne(id);
       return toSnapshot<T>(record as unknown as Record<string, unknown>);
@@ -36,6 +39,7 @@ export class PocketbaseDbService implements IDbService {
   }
 
   async getCollection<T>(col: string): Promise<DocSnapshot<T>[]> {
+    if (isNestedCollection(col)) return nested.queryNested<T>(col, []);
     try {
       const records = await pb.collection(col).getFullList();
       return records.map((r: unknown) => toSnapshot<T>(r as unknown as Record<string, unknown>));
@@ -45,6 +49,7 @@ export class PocketbaseDbService implements IDbService {
   }
 
   async queryCollection<T>(col: string, constraints: QueryConstraint[]): Promise<DocSnapshot<T>[]> {
+    if (isNestedCollection(col)) return nested.queryNested<T>(col, constraints);
     try {
       const filter = buildFilter(constraints);
       const records = await pb.collection(col).getFullList({ filter: filter || undefined });
@@ -55,6 +60,11 @@ export class PocketbaseDbService implements IDbService {
   }
 
   async addDocument<T>(col: string, data: T): Promise<string> {
+    if (isNestedCollection(col)) {
+      const id = crypto.randomUUID().replace(/-/g, '').slice(0, 20);
+      await nested.setNested(col, id, data as Record<string, unknown>, false);
+      return id;
+    }
     try {
       const record = await pb.collection(col).create(data as Record<string, unknown>);
       return (record as unknown as Record<string, unknown>).id as string;
@@ -73,6 +83,7 @@ export class PocketbaseDbService implements IDbService {
     // True overwrite (merge === false) is not natively supported; this adapter
     // always patches. All current call-sites pass { merge: true }, so the
     // behaviour is correct. A full overwrite would require a delete + create.
+    if (isNestedCollection(col)) return nested.setNested(col, id, data as Record<string, unknown>, options?.merge ?? false);
     void options;
     try {
       await pb.collection(col).update(id, data as Record<string, unknown>);
@@ -88,6 +99,7 @@ export class PocketbaseDbService implements IDbService {
   }
 
   async updateDocument(col: string, id: string, data: Record<string, unknown>): Promise<void> {
+    if (isNestedCollection(col)) return nested.updateNested(col, id, data);
     const hasArrayOps = Object.values(data).some(
       (v) => isArrayUnion(v) || isArrayRemove(v),
     );
@@ -124,6 +136,7 @@ export class PocketbaseDbService implements IDbService {
   }
 
   async deleteDocument(col: string, id: string): Promise<void> {
+    if (isNestedCollection(col)) return nested.deleteNested(col, id);
     try {
       await pb.collection(col).delete(id);
     } catch (err) {
@@ -142,10 +155,12 @@ export class PocketbaseDbService implements IDbService {
 
     const ctx: TransactionContext = {
       async get<U>(col: string, id: string): Promise<DocSnapshot<U>> {
+        if (isNestedCollection(col)) return nested.getNested<U>(col, id);
         const record = await pb.collection(col).getOne(id);
         return toSnapshot<U>(record as unknown as Record<string, unknown>);
       },
       set<U>(col: string, id: string, data: Partial<U>) {
+        if (isNestedCollection(col)) return void pendingWrites.push(() => nested.setNested(col, id, data as Record<string, unknown>, false));
         pendingWrites.push(async () => {
           try {
             await pb.collection(col).update(id, data as Record<string, unknown>);
@@ -155,11 +170,13 @@ export class PocketbaseDbService implements IDbService {
         });
       },
       update<U>(col: string, id: string, data: Partial<U>) {
+        if (isNestedCollection(col)) return void pendingWrites.push(() => nested.updateNested(col, id, data as Record<string, unknown>));
         pendingWrites.push(async () => {
           await pb.collection(col).update(id, data as Record<string, unknown>);
         });
       },
       delete(col: string, id: string) {
+        if (isNestedCollection(col)) return void pendingWrites.push(() => nested.deleteNested(col, id));
         pendingWrites.push(async () => {
           await pb.collection(col).delete(id);
         });
@@ -179,6 +196,7 @@ export class PocketbaseDbService implements IDbService {
     callback: (snapshot: DocSnapshot<T>) => void,
     onError?: (error: Error) => void,
   ): Unsubscribe {
+    if (isNestedCollection(col)) return nested.subscribeNested<T>(col, id, callback, onError);
     let cancelled = false;
     // Prevents a double-fire when an SSE event races ahead of the initial poll.
     // Once either the poll or SSE delivers the first snapshot, this is set to
@@ -253,6 +271,7 @@ export class PocketbaseDbService implements IDbService {
     callback: (snapshots: DocSnapshot<T>[]) => void,
     onError?: (error: Error) => void,
   ): Unsubscribe {
+    if (isNestedCollection(col)) return nested.subscribeNestedQuery<T>(col, constraints, callback, onError);
     let cancelled = false;
     const filter = buildFilter(constraints);
 

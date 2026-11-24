@@ -5,8 +5,11 @@ import dotenv from 'dotenv';
 
 dotenv.config({ path: path.join(__dirname, '.env.test.local') });
 
-const NEXT_DEV_URL = 'http://localhost:3000';
-const PB_URL = 'http://127.0.0.1:8090';
+// E2E_PORT and E2E_PB_PORT move the app and PocketBase off 3000 and 8090 (when something else serves there locally).
+const PORT = process.env.E2E_PORT || '3000';
+const PB_PORT = process.env.E2E_PB_PORT || '8090';
+const NEXT_DEV_URL = `http://localhost:${PORT}`;
+const PB_URL = `http://127.0.0.1:${PB_PORT}`;
 
 export const STORAGE_STATE = path.join(__dirname, 'tests/e2e/.auth/user.json');
 
@@ -42,7 +45,7 @@ export default defineConfig({
 
   webServer: [
     {
-      // Upsert superadmin then serve PocketBase on 127.0.0.1:8090
+      // Upsert superadmin then serve PocketBase on 127.0.0.1:<E2E_PB_PORT>
       command: 'node scripts/start-pocketbase-e2e.js',
       url: `${PB_URL}/api/health`,
       reuseExistingServer: !process.env.CI,
@@ -51,12 +54,16 @@ export default defineConfig({
       stderr: 'pipe',
     },
     {
-      command: 'next build && next start',
+      command: `next build && next start -p ${PORT}`,
       env: {
         NEXT_PUBLIC_BACKEND: 'pocketbase',
         // Training's preview modules are walked too (tests/e2e/features/training.feature).
         NEXT_PUBLIC_TRAINING_PREVIEW: 'on',
         NEXT_PUBLIC_POCKETBASE_URL: PB_URL,
+        // The server's own superuser (scripts/start-pocketbase-e2e.js makes it), for routes that need one.
+        PB_URL,
+        PB_ADMIN_EMAIL: process.env.PB_E2E_ADMIN_EMAIL ?? 'admin@pbtest.local',
+        PB_ADMIN_PASSWORD: process.env.PB_E2E_ADMIN_PASSWORD ?? 'Admin1234567890!',
         // Firebase env vars must be present (factory.ts checks NEXT_PUBLIC_BACKEND,
         // but Next.js still validates that these are defined strings)
         NEXT_PUBLIC_FIREBASE_API_KEY: 'unused-in-pocketbase-mode',

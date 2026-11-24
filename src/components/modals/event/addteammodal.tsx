@@ -261,7 +261,7 @@ export default function AddTeamModal({
                     className="grid grid-cols-[1fr_10rem_3.5rem_2rem] gap-2 items-center"
                   >
                     <Input
-                      ref={(el) => {
+                      ref={(el: HTMLInputElement | null) => {
                         nameInputRefs.current[row.id] = el;
                       }}
                       aria-label={t("Member name")}

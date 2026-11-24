@@ -2,7 +2,7 @@
 // Usage: import { authService, dbService, storageService, arrayUnion, arrayRemove } from '@/lib/services';
 
 export { authService, dbService, storageService, isPocketbaseBackend, auditLog } from './factory';
-export { AUDIT_COLLECTION, type AuditAction, type AuditEntry, type AuditInput, type AuditLog } from './audit';
+export { AUDIT_COLLECTION, auditCsv, type AuditAction, type AuditEntry, type AuditInput, type AuditLog } from './audit';
 
 export {
   arrayUnion,

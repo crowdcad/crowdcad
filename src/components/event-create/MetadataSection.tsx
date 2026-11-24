@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from 'react';
-import { getLocalTimeZone, parseDate, Time, today } from '@internationalized/date';
+import { getLocalTimeZone, parseDate, Time, today, type CalendarDate } from '@internationalized/date';
 import { DatePicker, Input, TimeInput, Tooltip } from '@heroui/react';
 import { ChevronDown, CircleHelp } from 'lucide-react';
 import type { Event } from '@/app/types';
@@ -9,7 +9,7 @@ import SurgeCriteriaSection from './SurgeCriteriaSection';
 import { EVENT_INPUT_CLASSNAMES } from './fieldClassNames';
 
 /** The event's date for the date picker; today when unset or unreadable. */
-function calendarDateOf(date: string | undefined) {
+function calendarDateOf(date: string | undefined): CalendarDate {
   try {
     if (date) return parseDate(date);
   } catch {
@@ -64,7 +64,7 @@ export default function MetadataSection({
       </div>
 
       <div className="grid grid-cols-3 gap-3">
-        <DatePicker
+        <DatePicker<CalendarDate>
           label="Event Date"
           labelPlacement="outside"
           variant="flat"

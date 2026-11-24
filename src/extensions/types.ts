@@ -182,6 +182,12 @@ export interface CrowdcadExtension {
   on?: AppEventHandlers;
   /** Own documents beside the event (cloud events on Firebase). */
   eventData?: EventDataStore;
+  /**
+   * The pack's part of an event's full record (the owner's JSON export, src/lib/records/eventRecord.ts):
+   * documents it keeps for the event that `eventData` doesn't already merge into it (logs, receipts,
+   * history), as plain data. Null when it has nothing for this event. Never secrets (password or PIN hashes).
+   */
+  eventRecord?: (eventId: string, event: Event) => Promise<Record<string, unknown> | null>;
   /** Lets a pack keep its local copy of an incoming snapshot while its own writes are still saving (stops echoes stepping back). */
   freshen?: (prev: Event | undefined, incoming: Event) => Event;
   /** Automatic alerts (e.g. surge) stay off while this returns true. */
@@ -209,6 +215,8 @@ export interface CrowdcadExtension {
     signInHint?: string;
     /** The account email for what was typed in the sign-in box (e.g. a field login's username), or null to use it as typed. */
     signInEmail?: (typed: string) => string | null;
+    /** Signs in an account this extension keeps apart from normal ones (e.g. a field login on PocketBase), or null to sign in as usual. */
+    signIn?: (email: string, password: string) => Promise<void> | null;
     /** For an account confined to its own pages (e.g. a field login): where it lands and which paths it may stay on. */
     confinedTo?: (email: string | null | undefined) => { home: string; allows: (pathname: string) => boolean } | null;
   };

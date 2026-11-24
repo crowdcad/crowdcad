@@ -4,7 +4,8 @@ import { formatEventDate } from '@/lib/eventDate';
 
 import { useRouter } from 'next/navigation';
 import React, { useEffect, useState, useMemo } from 'react';
-import { auditLog, dbService, type Unsubscribe } from '@/lib/services';
+import { dbService, type Unsubscribe } from '@/lib/services';
+import { deleteEvent } from '@/lib/records/client';
 import type { Venue, Event } from '@/app/types';
 import { isEventEnded } from '@/lib/eventStatus';
 import { useAuth } from '@/hooks/useauth';
@@ -97,11 +98,11 @@ export default function VenueSelection() {
   const handleDeleteEvent = (eventId: string) =>
     confirm({
       title: 'Delete event?',
-      message: "Are you sure you want to delete this event? This can't be undone.",
+      message: "Are you sure you want to delete this event and everything recorded for it? This can't be undone.",
       confirmLabel: 'Delete event',
       onConfirm: async () => {
-        await dbService.deleteDocument('events', eventId);
-        void auditLog.record({ action: 'event.delete', eventId, target: recentEvents.find((e) => e.id === eventId)?.name });
+        // Everything kept for the event goes with it; an event on legal hold is refused (the dialog shows why).
+        await deleteEvent(eventId, recentEvents.find((e) => e.id === eventId)?.name);
         setRecentEvents(prev => prev.filter(e => e.id !== eventId));
       },
     });
@@ -574,6 +575,9 @@ export default function VenueSelection() {
                             {event.isOrgEvent && (
                               <Chip size="sm" variant="flat" className="mt-2 bg-accent/20 text-accent">Org</Chip>
                             )}
+                            {event.legalHold && (
+                              <Chip size="sm" variant="flat" className="mt-2 bg-status-yellow/20 text-status-yellow">Legal hold</Chip>
+                            )}
                             {ended ? (
                               <Chip size="sm" variant="flat" className="mt-2 bg-status-red/20 text-status-red">Ended</Chip>
                             ) : (
@@ -595,7 +599,7 @@ export default function VenueSelection() {
                                   <MoreVertical className="w-4 h-4" />
                                 </button>
                               </DropdownTrigger>
-                              <DropdownMenu aria-label="Event actions" disabledKeys={canManageEvent(event) ? [] : ['share', 'delete']}>
+                              <DropdownMenu aria-label="Event actions" disabledKeys={canManageEvent(event) ? (event.legalHold ? ['delete'] : []) : ['share', 'delete']}>
                                 <DropdownItem
                                   key="resume"
                                   startContent={<Play className="w-4 h-4" />}
@@ -630,7 +634,7 @@ export default function VenueSelection() {
                                   className="text-danger"
                                   color="danger"
                                   startContent={<Trash2 className="w-4 h-4" />}
-                                  description={canManageEvent(event) ? undefined : 'Only the owner or an admin can delete'}
+                                  description={!canManageEvent(event) ? 'Only the owner or an admin can delete' : event.legalHold ? 'On legal hold' : undefined}
                                   onPress={() => handleDeleteEvent(event.id)}
                                 >
                                   Delete
@@ -946,7 +950,7 @@ export default function VenueSelection() {
                                             <MoreVertical className="w-4 h-4" />
                                           </button>
                                         </DropdownTrigger>
-                                        <DropdownMenu aria-label="Event actions" disabledKeys={canManageEvent(event) ? [] : ['share', 'delete']}>
+                                        <DropdownMenu aria-label="Event actions" disabledKeys={canManageEvent(event) ? (event.legalHold ? ['delete'] : []) : ['share', 'delete']}>
                                           <DropdownItem
                                             key="resume"
                                             startContent={<Play className="w-4 h-4" />}
@@ -981,7 +985,7 @@ export default function VenueSelection() {
                                             className="text-danger"
                                             color="danger"
                                             startContent={<Trash2 className="w-4 h-4" />}
-                                            description={canManageEvent(event) ? undefined : 'Only the owner or an admin can delete'}
+                                            description={!canManageEvent(event) ? 'Only the owner or an admin can delete' : event.legalHold ? 'On legal hold' : undefined}
                                             onPress={() => handleDeleteEvent(event.id)}
                                           >
                                             Delete

@@ -7,6 +7,7 @@ import AdminUsersSection from './admin-users-section';
 import AdminVenuesSection from './admin-venues-section';
 import AdminAuditSection from './admin-audit-section';
 import AdminSecuritySection from './admin-security-section';
+import AdminRecordsSection from './admin-records-section';
 import { extensions } from '@/extensions';
 
 
@@ -22,6 +23,7 @@ export default function AdminSection({ currentUser }: { currentUser: ServiceUser
       <AdminVenuesSection currentUser={currentUser} />
       <AdminUsersSection currentUser={currentUser} />
       <AdminSecuritySection />
+      <AdminRecordsSection />
       <AdminAuditSection />
       {/* Extension packs' own admin sections (e.g. TAK server setup). */}
       {extensions.flatMap((x) => x.adminSections ?? []).map((Section, i) => (

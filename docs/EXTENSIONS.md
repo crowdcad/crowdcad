@@ -11,12 +11,14 @@ CrowdCAD's core never names an optional feature. An optional feature plugs in as
 | `src/extensions/installed.ts` | Installs this build's packs, once at startup. |
 | `src/extensions/boot.tsx` | Runs `installed.ts` in the browser. It sits in the root layout. The unit tests run it through `setupFiles`. |
 | `src/extensions/dispatch.tsx` | Merges packs' dispatch contributions and shares them through context (`useDispatchExtras`). |
+| `src/extensions/server.ts` | The server-side contract (`ServerExtension`) and its registry, kept apart so server routes never load a pack's UI. |
+| `src/extensions/installed.server.ts` | Installs this build's server packs. The routes that ask packs import it. |
 
 Packs install after modules load. **Read the registry inside a function, a hook or a render, never in module-level code.** A module-level read sees no packs. The registry imports no pack, so shared code that imports it never pulls pack code in.
 
 ## Slots
 
-- **Data:** `eventData` keeps state in the pack's own documents beside the event, on cloud events on Firebase. The dispatch page reads it in its write transaction and merges it in. `planTx` reads and splits a write before any pack writes. `subscribe` handles live updates, and `load` does one-off reads. `eventFields` lists fields the pack owns on the event, which Lite drafts copy as they are. `freshen` keeps a local copy while the pack's own writes are still saving.
+- **Data:** `eventData` keeps state in the pack's own documents beside the event, on cloud events on Firebase. The dispatch page reads it in its write transaction and merges it in. `planTx` reads and splits a write before any pack writes. `subscribe` handles live updates, and `load` does one-off reads. `eventFields` lists fields the pack owns on the event, which Lite drafts copy as they are. `freshen` keeps a local copy while the pack's own writes are still saving. `eventRecord` adds the pack's documents to an event's full record (the owner's JSON export), beside what `eventData` already merges in; never secrets.
 - **Dispatch page** (`useDispatch(host)`, called on every render):
   - right-panel `tabs`, the header `strip`, `toolbar` buttons, `mounted` UI (modals);
   - `mapOverlay` and `background` work;
@@ -34,6 +36,7 @@ Packs install after modules load. **Read the registry inside a function, a hook 
   - `logKinds`;
   - `alertsMuted`;
   - `training` (tracks, modules, a `PracticeSurface` for `surface` modules, a `Provider`, a `TrackingPanel` and its `panelSteps`).
+- **Server** (`ServerExtension`): `deleteEventData` removes what the pack keeps for an event outside the event's own documents (login accounts, records in a backend's own collections) when the event is deleted or purged. Everything under `events/{id}` goes with the event anyway.
 - **Events:** shared code calls `emit(name, payload)` (see `AppEvents`). Packs react with `on`. Prefer this over adding a member when a pack only needs to react, for example to send a receipt or push to an integration.
 
 ## Adding a slot

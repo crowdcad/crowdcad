@@ -1,0 +1,48 @@
+name: Checks already passed on the merged pull request
+description: >
+  On a push to a branch, finds the pull request merged as this exact commit and whether this same
+  workflow succeeded on it after the branch last moved (so it tested what was merged). Outputs run=false
+  when it did, so the workflow can skip checks already done; run=true otherwise: any other event, a
+  direct push, checks that failed or never ran, a base that moved, or a lookup that failed.
+  The job using it needs `actions: read`, `contents: read` and `pull-requests: read`.
+outputs:
+  run:
+    description: "'true' to run the workflow's checks, 'false' to skip them."
+    value: ${{ steps.check.outputs.run }}
+runs:
+  using: composite
+  steps:
+    - id: check
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        EVENT: ${{ github.event_name }}
+        WORKFLOW_REF: ${{ github.workflow_ref }}
+      run: |
+        set -uo pipefail
+        decide() { echo "run=$1" >> "$GITHUB_OUTPUT"; echo "$2"; exit 0; }
+        [ "$EVENT" = push ] || decide true "Not a push ($EVENT): running."
+
+        # The pull request this commit is the merge of (not just one it contains).
+        pr=$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/pulls" \
+          --jq '[.[] | select(.merged_at != null and .merge_commit_sha == env.GITHUB_SHA)][0] | if . == null then "" else "\(.number) \(.head.sha)" end') \
+          || decide true "Couldn't look up the pull request: running."
+        [ -n "$pr" ] || decide true "Not the merge of a pull request: running."
+        read -r number head <<<"$pr"
+
+        # The branch just before the merge, and when it got there. A pull request run that started after
+        # that tested exactly what was merged: the branch didn't move in between. (GitHub empties a run's
+        # pull request details once it merges, so the time is what tells.)
+        base=$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA" --jq '.parents[0].sha') \
+          || decide true "Couldn't read the merge commit: running."
+        since=$(gh api "repos/$GITHUB_REPOSITORY/commits/$base" --jq '.commit.committer.date') \
+          || decide true "Couldn't read the base commit: running."
+
+        # This workflow's successful runs on the pull request's last commit, started since then.
+        path=${WORKFLOW_REF#*/*/}
+        path=${path%%@*}
+        passed=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$head&event=pull_request&status=success&per_page=100" \
+          --jq "[.workflow_runs[] | select(.path == \"$path\" and .run_started_at >= \"$since\")] | length") \
+          || decide true "Couldn't list the pull request's runs: running."
+        [ "${passed:-0}" -gt 0 ] && decide false "Passed on #$number ($head) after the branch last moved: skipping the rerun."
+        decide true "No passing run on #$number since the branch last moved (it moved, or the checks failed): running."

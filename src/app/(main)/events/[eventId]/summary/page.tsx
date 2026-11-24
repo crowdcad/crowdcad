@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import { formatEventDate } from '@/lib/eventDate';
 import { useParams } from 'next/navigation';
-import { auditLog, dbService, isPocketbaseBackend } from '@/lib/services';
+import { auditLog, dbService } from '@/lib/services';
 import { Event, Call, TeamLogEntry, CallLogEntry, InteractionSession } from '@/app/types';
 import { loadExtensionData, useSummaryContributions } from '@/extensions';
 import dynamic from 'next/dynamic';
@@ -15,6 +15,7 @@ import { GRID_WRAPPER, GRID_CELL } from './summaryGrid';
 import EquipmentTimeline from './EquipmentTimeline';
 import LoadingScreen from '@/components/ui/loading-screen';
 import ExportLogModal from '@/components/modals/event/exportlogmodal';
+import EventRecordActions from '@/components/records/eventrecordactions';
 
 
 const SummaryCharts = dynamic(() => import('./SummaryCharts'), { ssr: false, loading: () => <div className="p-6 bg-surface-deep border border-surface-liner">Loading charts...</div> });
@@ -39,7 +40,7 @@ export default function SummaryPage() {
       const eventDoc = await dbService.getDocument<Event>('events', eventId);
       if (!eventDoc.exists || !eventDoc.data) return setEvent(null);
       // On Firebase, extension packs keep their state in their own documents; merge it in.
-      setEvent(isPocketbaseBackend ? eventDoc.data : await loadExtensionData(eventId, eventDoc.data));
+      setEvent(await loadExtensionData(eventId, eventDoc.data));
     };
     fetchData();
   }, [eventId]);
@@ -295,7 +296,8 @@ export default function SummaryPage() {
                 ({formatEventDate(event.date)})
               </span>
             </h1>
-            <div className="flex gap-2 shrink-0">
+            <div className="flex flex-wrap justify-end gap-2 shrink-0">
+              <EventRecordActions eventId={eventId ?? ''} event={event} onHoldChange={(legalHold) => setEvent((e) => (e ? { ...e, legalHold } : e))} />
               <Button
                 onPress={handleCSVDownload}
                 variant="flat"

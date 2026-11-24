@@ -54,6 +54,13 @@ html[data-ui] {
   text-transform: var(--ui-label-case);
   letter-spacing: var(--ui-label-tracking);
 }
+/* A radio or checkbox wraps its own text in a label, but that text is a
+   choice, not a field's label: it reads like the rest of the page. */
+:where(label:has(input[type='radio'], input[type='checkbox'])),
+:where(label:has(input[type='radio'], input[type='checkbox'])) :where([data-slot='label']) {
+  text-transform: none;
+  letter-spacing: normal;
+}
 
 /* HeroUI spinners draw their ring with rounded-full; keep them round when
    pills are squared (html raises this above the rounded-full class). */

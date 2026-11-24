@@ -12,7 +12,7 @@ import AddEquipmentModal from "@/components/modals/event/addequipmentmodal";
 import EndEventModal from "@/components/modals/event/endeventmodal";
 import TransportUnitModal from "@/components/modals/event/transportunitmodal";
 import React from 'react';
-import { auditLog, dbService, isPocketbaseBackend, ServiceError } from '@/lib/services';
+import { auditLog, dbService, ServiceError } from '@/lib/services';
 import { alertsMuted, emit, eventDataStores, freshenSnapshot, useDispatchContributions, type DispatchHost } from '@/extensions';
 import { DispatchExtrasProvider, mergeDispatch } from '@/extensions/dispatch';
 import { PostAssignment, Event, Staff, Supervisor, Call, EquipmentStatus, CallLogEntry, TeamLogEntry, EquipmentItem, EventEquipment, ClinicOutcome, Clinic, Layer, DispatchZone } from '@/app/types';
@@ -94,6 +94,7 @@ import { supervisorMemberString } from '@/lib/teamDraft';
 import { isGeoLayer } from '@/lib/geo/layers';
 import { isPlacedPost } from '@/lib/geo/positions';
 import { hhmmOf } from '@/lib/clock';
+import { teamStatusChange } from '@/lib/teamStatusChange';
 import { useConfirmDialog } from '@/components/ui/confirmdialog';
 import IdleLock from '@/components/layout/idlelock';
 
@@ -145,7 +146,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
   const isLiteMode = layoutLiteMode;
   // Cloud events on Firebase let extension packs keep state in their own documents (src/extensions/types.ts, EventDataStore);
   // Lite and PocketBase keep everything on the event.
-  const packDocMode = !isLiteMode && !isPocketbaseBackend;
+  const packDocMode = !isLiteMode;
   // Each pack's latest merge function from its live documents (undefined until it reports).
   const packMergesRef = useRef<(((event: Event) => Event) | undefined)[]>([]);
   const withPackDocs = (base: Event) => packMergesRef.current.reduce((e, merge) => (merge ? merge(e) : e), base);
@@ -2483,78 +2484,13 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     setTeamTimers(prev => ({ ...prev, [team]: Date.now() }));
 
     await updateEvent((currentEvent) => {
-
-      const activeCall = currentEvent.calls.find(c =>
-        c.assignedTeam?.includes(team) &&
-        !['Resolved', 'Available'].includes(c.status)
-      );
-      const callId = activeCall?.id;
-
       const now = new Date();
-      const hhmm = hhmmOf(now);
-      const resolvedClinicId = newStatus === 'Transporting'
-        ? (detail ?? activeCall?.clinicId ?? currentEvent.clinics?.[0]?.id ?? 'clinic')
-        : activeCall?.clinicId;
-      const destinationClinicName = newStatus === 'Transporting'
-        ? getClinicName(getEventClinics(currentEvent.clinics), resolvedClinicId)
-        : undefined;
-      // Matches the calls-tracker's own phrasing for these two cases;
-      // "at <location>" gives every other status real context (which call
-      // it belongs to) without needing a separate call reference.
-      const logMessage = newStatus === 'Transporting'
-        ? `${hhmm} - ${team} transporting to ${destinationClinicName || 'clinic'}`
-        : `${hhmm} - ${team} set to ${newStatus}${activeCall ? ` at ${activeCall.location}` : ''}`;
-
-      const updatedStaff = (currentEvent.staff || []).map(s => {
-        if (s.team !== team) return s;
-        
-        const teamLogEntry: TeamLogEntry = { timestamp: now.getTime(), message: logMessage };
-        // Extension packs' fields and log lines for this change (e.g. an MCI zone set by Triage, cleared by Available).
-        const extra = extrasRef.current.statusPatch(currentEvent, s, newStatus, newStatus === 'Transporting' ? undefined : detail);
-        const extraLog: TeamLogEntry[] = extra.logMessages.map((m) => ({ timestamp: now.getTime(), message: `${hhmm} - ${m}` }));
-
-        return {
-            ...s,
-            ...extra.patch,
-            status: newStatus,
-            // Location is never this handler's call — teamcard.tsx/
-            // teamcard-condensed.tsx already compute the right destination
-            // (originalPost, a pending assignment, or the last valid
-            // location) and apply it via their own onLocationChange before
-            // calling this. Overwriting it here with a cruder originalPost-
-            // or-'Roaming' fallback used to stomp on that right after.
-            log: [...(s.log || []), teamLogEntry, ...extraLog]
-        };
+      // Extension packs' fields and log lines for this change (e.g. an MCI zone set by Triage, cleared by Available).
+      const { staff: updatedStaff = currentEvent.staff || [], calls: updatedCalls = currentEvent.calls || [] } = teamStatusChange(currentEvent, team, newStatus, {
+        now: now.getTime(),
+        detail,
+        extra: (unit) => extrasRef.current.statusPatch(currentEvent, unit as Staff, newStatus, newStatus === 'Transporting' ? undefined : detail),
       });
-
-      // Update Calls Array (if team was on a call)
-      let updatedCalls = currentEvent.calls || [];
-      if (callId) {
-         updatedCalls = updatedCalls.map(c => {
-            if (c.id !== callId) return c;
-            
-            const assignedTeams = c.assignedTeam || [];
-            const teamStatuses = assignedTeams.map(t => {
-                if (t === team) return newStatus; // The new status for current team
-                const s = updatedStaff.find(st => st.team === t);
-                return s ? s.status : 'Available';
-            });
-
-            // Calculate new composite status for the call
-            let newCallStatus = c.status;
-            if (teamStatuses.includes('Transporting')) newCallStatus = 'Transporting';
-            else if (teamStatuses.includes('Pending Transport')) newCallStatus = 'Pending Transport';
-            else if (teamStatuses.includes('On Scene')) newCallStatus = 'On Scene';
-            else if (teamStatuses.includes('En Route')) newCallStatus = 'En Route';
-
-            return {
-                ...c,
-                status: newCallStatus,
-                clinicId: newStatus === 'Transporting' ? resolvedClinicId : c.clinicId,
-                log: [...(c.log || []), { timestamp: now.getTime(), message: logMessage }]
-            };
-         });
-      }
 
       // Available after 'Returning Eq': what it was bringing back is at its staging location.
       if (staff.status === RETURNING_EQ && newStatus === 'Available') {
