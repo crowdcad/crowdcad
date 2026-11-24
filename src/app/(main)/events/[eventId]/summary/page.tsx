@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import { formatEventDate } from '@/lib/eventDate';
 import { useParams } from 'next/navigation';
-import { auditLog, dbService, isPocketbaseBackend } from '@/lib/services';
+import { auditLog, dbService } from '@/lib/services';
 import { Event, Call, TeamLogEntry, CallLogEntry, InteractionSession } from '@/app/types';
 import { loadExtensionData, useSummaryContributions } from '@/extensions';
 import dynamic from 'next/dynamic';
@@ -39,7 +39,7 @@ export default function SummaryPage() {
       const eventDoc = await dbService.getDocument<Event>('events', eventId);
       if (!eventDoc.exists || !eventDoc.data) return setEvent(null);
       // On Firebase, extension packs keep their state in their own documents; merge it in.
-      setEvent(isPocketbaseBackend ? eventDoc.data : await loadExtensionData(eventId, eventDoc.data));
+      setEvent(await loadExtensionData(eventId, eventDoc.data));
     };
     fetchData();
   }, [eventId]);

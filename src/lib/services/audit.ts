@@ -42,7 +42,8 @@ export type AuditAction =
   | 'admin.grant'
   | 'admin.revoke'
   | 'admin.deleteUser'
-  | 'settings.change';
+  | 'settings.change'
+  | 'audit.export';
 
 export interface AuditEntry {
   /** When, in ms (the rules require it within a few minutes of the server's clock). */
@@ -74,6 +75,24 @@ export interface AuditLog {
 }
 
 const clip = (s: string | undefined, max: number) => (s ? s.slice(0, max) : undefined);
+
+/**
+ * A CSV cell. Quoted when it holds a comma, quote or line break; text a spreadsheet would run as a
+ * formula (=, +, -, @, tab, return) gets a leading apostrophe, since names and details come from users.
+ */
+function csvCell(value: string | number | undefined): string {
+  let text = value === undefined ? '' : String(value);
+  if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`;
+  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+/** Audit rows as CSV, one row per entry in the order given, for Profile > Admin > Audit log's export. */
+export function auditCsv(rows: AuditEntry[], timeZone?: string): string {
+  const local = (t: number) => new Date(t).toLocaleString('sv-SE', { timeZone, hour12: false });
+  const header = ['Time (UTC)', 'Local time', 'Who', 'Account ID', 'Action', 'On', 'Event ID', 'Detail'];
+  const lines = rows.map((r) => [new Date(r.t).toISOString(), local(r.t), r.actor, r.uid, r.action, r.target, r.eventId, r.detail]);
+  return [header, ...lines].map((line) => line.map(csvCell).join(',')).join('\r\n') + '\r\n';
+}
 
 export function createAuditLog(db: IDbService, currentUser: () => ServiceUser | null, now: () => number = Date.now): AuditLog {
   return {

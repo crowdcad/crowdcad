@@ -86,8 +86,11 @@ export default function LoginModal({
       if (codePrompt) {
         await authService.completeSecondFactor(code);
       } else if (mode === 'login') {
-        // An extension may map what was typed to an account (a field login's username).
-        await authService.signIn(firstOf((x) => x.auth?.signInEmail?.(email)) ?? email, password);
+        // An extension may map what was typed to an account (a field login's username), and sign it in itself.
+        const account = firstOf((x) => x.auth?.signInEmail?.(email)) ?? email;
+        const ownSignIn = firstOf((x) => x.auth?.signIn?.(account, password) ?? null);
+        if (ownSignIn) await ownSignIn;
+        else await authService.signIn(account, password);
       } else {
         await authService.signUp(email, password);
       }

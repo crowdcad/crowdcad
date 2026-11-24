@@ -58,7 +58,7 @@ When('I advance the training to the {string} step', async ({ page }, step: strin
   await expect(card).toHaveAttribute('data-step-id', step);
 });
 
-When('I complete every step with {string}', async ({ page }) => {
+When('I complete every step with {string}', async ({ page }, _button: string) => {
   for (let i = 0; i < 40; i++) {
     if (await page.getByTestId('training-complete').isVisible()) return;
     const title = (await stepTitle(page).textContent()) ?? '';
@@ -89,7 +89,8 @@ When('I add a call at {string} with complaint {string}', async ({ page }, locati
   }
   await expect(form).toBeVisible();
   await form.getByRole('combobox', { name: 'Location' }).fill(location);
-  await page.keyboard.press('Escape');
+  // Tab, not Escape: with no suggestion list open, Escape closes the whole modal.
+  await page.keyboard.press('Tab');
   await form.getByLabel('Chief Complaint').fill(complaint);
   await form.getByTestId('quick-call-submit').click();
 });
@@ -121,11 +122,11 @@ When('I search Help for {string}', async ({ page }, query: string) => {
   await page.getByTestId('help-search').fill(query);
 });
 
-Then('the first Help result should offer {string}', async ({ page }) => {
+Then('the first Help result should offer {string}', async ({ page }, _action: string) => {
   await expect(page.getByTestId('help-results').locator('li').first().getByTestId('help-show-me')).toBeVisible();
 });
 
-When('I pick {string} on the first Help result', async ({ page }) => {
+When('I pick {string} on the first Help result', async ({ page }, _action: string) => {
   await page.getByTestId('help-results').locator('li').first().getByTestId('help-show-me').click();
 });
 

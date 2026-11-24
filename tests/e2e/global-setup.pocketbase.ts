@@ -7,6 +7,7 @@ const PB_URL = 'http://127.0.0.1:8090';
 const ADMIN_EMAIL = process.env.PB_E2E_ADMIN_EMAIL ?? 'admin@pbtest.local';
 const ADMIN_PASSWORD = process.env.PB_E2E_ADMIN_PASSWORD ?? 'Admin1234567890!';
 
+
 type FieldDef = { name: string; type: string; required?: boolean; options?: Record<string, unknown> };
 type AdminHeaders = { 'Content-Type': string; Authorization: string };
 
@@ -172,6 +173,16 @@ async function globalSetup(): Promise<void> {
       { name: 'path', type: 'text', required: true },
       { name: 'file', type: 'file', options: { maxSelect: 1, maxSize: 52428800 } },
     ]),
+    // The audit log (src/lib/services/audit.ts).
+    ensureBaseCollection(headers, 'audit', [
+      { name: 't', type: 'number', required: true },
+      { name: 'uid', type: 'text', required: true },
+      { name: 'actor', type: 'text' },
+      { name: 'action', type: 'text', required: true },
+      { name: 'target', type: 'text' },
+      { name: 'eventId', type: 'text' },
+      { name: 'detail', type: 'text' },
+    ]),
     ensureBaseCollection(headers, 'dispatchLogs', [
       { name: 'eventId', type: 'text' },
       { name: 'data', type: 'json' },
@@ -181,6 +192,7 @@ async function globalSetup(): Promise<void> {
   // Covers .pb-data directories persisted from before this field existed —
   // ensureBaseCollection only sets fields at creation time, not on existing collections.
   await ensureField(headers, 'venues', { name: 'isOrgVenue', type: 'bool' });
+  await ensureField(headers, 'events', { name: 'ended', type: 'bool' });
 
   // Wipe all data collections to ensure a clean state for every test run
   await Promise.all([

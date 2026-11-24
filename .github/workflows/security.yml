@@ -18,26 +18,47 @@ permissions:
   contents: read
 
 jobs:
+  # A push that merges a pull request whose checks already passed (against the same base) skips them;
+  # see .github/actions/pr-already-passed.
+  gate:
+    name: Skip if the pull request passed
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: read
+    outputs:
+      run: ${{ steps.passed.outputs.run }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/actions
+      - id: passed
+        uses: ./.github/actions/pr-already-passed
+
   audit:
     name: npm audit (production, high+)
     runs-on: ubuntu-24.04
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
       - run: npm audit --omit=dev --audit-level=high --package-lock-only
 
   codeql:
     name: CodeQL
-    if: ${{ !github.event.repository.private }}
+    needs: gate
+    if: ${{ !github.event.repository.private && needs.gate.outputs.run == 'true' }}
     runs-on: ubuntu-24.04
     permissions:
       contents: read
       security-events: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: github/codeql-action/init@v3
+      - uses: actions/checkout@v7
+      - uses: github/codeql-action/init@v4
         with:
           languages: javascript-typescript
-      - uses: github/codeql-action/analyze@v3
+      - uses: github/codeql-action/analyze@v4

@@ -1,3 +1,4 @@
+import PocketBase from 'pocketbase';
 import { pb } from './client';
 import type { IAuthService } from '../IAuthService';
 import type { ServiceUser, Unsubscribe } from '../types';
@@ -19,6 +20,24 @@ function mfaIdOf(err: unknown): string | null {
   return typeof id === 'string' && id ? id : null;
 }
 
+/**
+ * A separate client for re-checking the signed-in account (unlocking, or
+ * confirming before a change). PocketBase answers "now the code" with a 401,
+ * and the SDK clears the session on any 401, which on the shared client would
+ * sign the person out halfway through. The new session is copied over only
+ * once the check succeeds.
+ */
+function sideClient(): PocketBase {
+  const client = new PocketBase(pb.baseURL);
+  client.autoCancellation(false);
+  return client;
+}
+
+/** Takes over a session a side client just signed in. */
+function adopt(client: PocketBase): void {
+  if (client !== pb && client.authStore.token) pb.authStore.save(client.authStore.token, client.authStore.record);
+}
+
 function currentEmail(): string {
   const email = pb.authStore.isValid ? ((pb.authStore.model as Record<string, unknown> | null)?.email as string | undefined) : undefined;
   if (!email) throw new ServiceError('auth/no-current-user', 'No user is signed in.');
@@ -33,17 +52,17 @@ function currentEmail(): string {
  */
 export class PocketbaseAuthService implements IAuthService {
   /** A sign-in or re-authentication waiting for its emailed code. */
-  private pending: { mfaId: string; otpId: string } | null = null;
+  private pending: { mfaId: string; otpId: string; client: PocketBase } | null = null;
   /** A test code sent from the setup screen. */
   private pendingSetupOtp: string | null = null;
 
   /** Sends the code and throws SecondFactorRequiredError when PocketBase wants one; rethrows anything else. */
-  private async secondStepOrThrow(err: unknown, email: string): Promise<never> {
+  private async secondStepOrThrow(err: unknown, email: string, client: PocketBase = pb): Promise<never> {
     const mfaId = mfaIdOf(err);
     if (!mfaId) throw toServiceError(err);
     try {
-      const { otpId } = await pb.collection('users').requestOTP(email);
-      this.pending = { mfaId, otpId };
+      const { otpId } = await client.collection('users').requestOTP(email);
+      this.pending = { mfaId, otpId, client };
     } catch (otpErr) {
       throw toServiceError(otpErr);
     }
@@ -127,10 +146,12 @@ export class PocketbaseAuthService implements IAuthService {
 
   async reauthenticate(password: string): Promise<void> {
     const email = currentEmail();
+    const side = sideClient();
     try {
-      await pb.collection('users').authWithPassword(email, password);
+      await side.collection('users').authWithPassword(email, password);
+      adopt(side);
     } catch (err) {
-      await this.secondStepOrThrow(err, email);
+      await this.secondStepOrThrow(err, email, side);
     }
   }
 
@@ -138,7 +159,8 @@ export class PocketbaseAuthService implements IAuthService {
     const pending = this.pending;
     if (!pending) throw new ServiceError('auth/no-pending-second-factor', 'Start again with your password.');
     try {
-      await pb.collection('users').authWithOTP(pending.otpId, code.trim(), { mfaId: pending.mfaId });
+      await pending.client.collection('users').authWithOTP(pending.otpId, code.trim(), { mfaId: pending.mfaId });
+      adopt(pending.client);
       this.pending = null;
     } catch (err) {
       throw toServiceError(err);
@@ -166,7 +188,9 @@ export class PocketbaseAuthService implements IAuthService {
     if (!otpId) throw new ServiceError('auth/no-pending-second-factor', 'Send a new code.');
     try {
       // Signs in again with the code alone: same account, fresh token.
-      await pb.collection('users').authWithOTP(otpId, code.trim());
+      const side = sideClient();
+      await side.collection('users').authWithOTP(otpId, code.trim());
+      adopt(side);
       this.pendingSetupOtp = null;
     } catch (err) {
       // The code was right but the policy already wants the password too:

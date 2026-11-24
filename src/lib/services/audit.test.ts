@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { AUDIT_FIELDS, createAuditLog, withAuthAudit, type AuditEntry } from './audit';
+import { AUDIT_FIELDS, auditCsv, createAuditLog, withAuthAudit, type AuditEntry } from './audit';
 import type { IAuthService } from './IAuthService';
 import type { IDbService } from './IDbService';
 import { SecondFactorRequiredError, type ServiceUser } from './types';
@@ -95,5 +95,20 @@ describe('audit log', () => {
     await expect(audited.reauthenticate('b')).rejects.toBeInstanceOf(SecondFactorRequiredError);
     await audited.completeSecondFactor('123456');
     expect(log.record).not.toHaveBeenCalled();
+  });
+});
+
+describe('auditCsv', () => {
+  it('writes a header and one row per entry, quoting and defusing what a spreadsheet would misread', () => {
+    const rows: AuditEntry[] = [
+      { t: Date.UTC(2026, 10, 23, 15, 4, 5), uid: 'u1', actor: 'alice@agency.example', action: 'event.export', target: 'Fair, "North" gate', eventId: 'e1', detail: '=HYPERLINK("x")' },
+      { t: Date.UTC(2026, 10, 23, 15, 0, 0), uid: 'u2', actor: 'resp-ab12 (Sam, Medic 1)', action: 'field.status', detail: 'line one\nline two' },
+    ];
+    const lines = auditCsv(rows, 'UTC').split('\r\n');
+    expect(lines[0]).toBe('Time (UTC),Local time,Who,Account ID,Action,On,Event ID,Detail');
+    expect(lines[1]).toBe(`2026-11-23T15:04:05.000Z,2026-11-23 15:04:05,alice@agency.example,u1,event.export,"Fair, ""North"" gate",e1,"'=HYPERLINK(""x"")"`);
+    // A line break inside a cell stays inside its quotes.
+    expect(lines[2]).toBe('2026-11-23T15:00:00.000Z,2026-11-23 15:00:00,"resp-ab12 (Sam, Medic 1)",u2,field.status,,,"line one\nline two"');
+    expect(auditCsv([], 'UTC')).toBe('Time (UTC),Local time,Who,Account ID,Action,On,Event ID,Detail\r\n');
   });
 });

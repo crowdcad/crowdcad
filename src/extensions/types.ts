@@ -209,6 +209,8 @@ export interface CrowdcadExtension {
     signInHint?: string;
     /** The account email for what was typed in the sign-in box (e.g. a field login's username), or null to use it as typed. */
     signInEmail?: (typed: string) => string | null;
+    /** Signs in an account this extension keeps apart from normal ones (e.g. a field login on PocketBase), or null to sign in as usual. */
+    signIn?: (email: string, password: string) => Promise<void> | null;
     /** For an account confined to its own pages (e.g. a field login): where it lands and which paths it may stay on. */
     confinedTo?: (email: string | null | undefined) => { home: string; allows: (pathname: string) => boolean } | null;
   };

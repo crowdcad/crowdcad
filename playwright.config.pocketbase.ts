@@ -57,6 +57,10 @@ export default defineConfig({
         // Training's preview modules are walked too (tests/e2e/features/training.feature).
         NEXT_PUBLIC_TRAINING_PREVIEW: 'on',
         NEXT_PUBLIC_POCKETBASE_URL: PB_URL,
+        // The server's own superuser (scripts/start-pocketbase-e2e.js makes it), for routes that need one.
+        PB_URL,
+        PB_ADMIN_EMAIL: process.env.PB_E2E_ADMIN_EMAIL ?? 'admin@pbtest.local',
+        PB_ADMIN_PASSWORD: process.env.PB_E2E_ADMIN_PASSWORD ?? 'Admin1234567890!',
         // Firebase env vars must be present (factory.ts checks NEXT_PUBLIC_BACKEND,
         // but Next.js still validates that these are defined strings)
         NEXT_PUBLIC_FIREBASE_API_KEY: 'unused-in-pocketbase-mode',

@@ -58,7 +58,9 @@ async function pbFetch(apiPath, options = {}) {
 // the Firebase backend does — this is the only backend config a self-hoster
 // forking this repo actually runs, so it needs to be correct standalone,
 // not just documented as a manual follow-up step.
-const AUTH_RULE = '@request.auth.id != ""';
+// Signed in with a normal account (`users`): a record of any other auth collection would otherwise
+// pass `@request.auth.id != ""` too.
+const AUTH_RULE = '(@request.auth.id != "" && @request.auth.collectionName = "users")';
 
 // A record's own `userId` field must match the requester, or the requester
 // must be an admin. Used for venues (update/delete) and dispatchLogs
