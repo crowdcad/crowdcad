@@ -19,6 +19,7 @@ import {
 import { Role } from "@/app/types";
 import { useDispatchTerms } from "@/lib/dispatchVocabulary/context";
 import { LABELED_FIELD_CLASSNAMES } from '@/components/ui/fieldClassNames';
+import { findRosterPerson, type RosterPerson } from '@/lib/roster';
 
 export type TeamMemberDraft = { name: string; cert: string; lead: boolean };
 export type TeamDraft = { name: string; members: TeamMemberDraft[] };
@@ -44,6 +45,9 @@ type Props = {
 
   // Called on every save (both "Save & add another" and "Save & close"/edit save).
   onSave: (team: TeamDraft, opts: { addAnother: boolean }) => void | Promise<void>;
+
+  // The staff roster (admins): member names are suggested from it, and picking one fills in their certification.
+  roster?: RosterPerson[];
 };
 
 let rowIdCounter = 0;
@@ -81,6 +85,7 @@ export default function AddTeamModal({
   existingTeamNames,
   initialTeam,
   onSave,
+  roster = [],
 }: Props) {
   const { t } = useDispatchTerms();
   const isEdit = mode === "edit";
@@ -270,7 +275,12 @@ export default function AddTeamModal({
                       radius="lg"
                       classNames={inputClassNames}
                       value={row.name}
-                      onValueChange={(v) => updateRow(row.id, { name: v })}
+                      list={roster.length ? "roster-member-names" : undefined}
+                      onValueChange={(v) => {
+                        const person = findRosterPerson(roster, v);
+                        const role = person?.licensure && roles.find((r) => r.name.toLowerCase() === person.licensure!.toLowerCase());
+                        updateRow(row.id, { name: v, ...(role ? { cert: role.name } : {}) });
+                      }}
                       onKeyDown={handleNameKeyDown(row, idx)}
                     />
 
@@ -318,6 +328,16 @@ export default function AddTeamModal({
                     </Button>
                   </div>
                 ))}
+
+                {roster.length > 0 && (
+                  <datalist id="roster-member-names">
+                    {roster.map((p) => (
+                      <option key={p.id} value={p.name}>
+                        {p.licensure}
+                      </option>
+                    ))}
+                  </datalist>
+                )}
 
                 <div className="flex items-center gap-3 pt-1">
                   <div className="flex-1 h-px bg-surface-liner" />

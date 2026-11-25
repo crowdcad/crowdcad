@@ -98,6 +98,9 @@ import { hhmmOf } from '@/lib/clock';
 import { teamStatusChange } from '@/lib/teamStatusChange';
 import { useConfirmDialog } from '@/components/ui/confirmdialog';
 import IdleLock from '@/components/layout/idlelock';
+import { undoFor, undoPatch, type EventUndo } from '@/lib/eventUndo';
+import { useRoster } from '@/hooks/useRoster';
+import { recordStaffed } from '@/lib/roster';
 
 /** Stands in for the event before it loads, so extension packs' hooks run on every render. */
 const PLACEHOLDER_EVENT = { staff: [], supervisor: [], calls: [] } as unknown as Event;
@@ -156,6 +159,8 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
   // The merged extension contributions of the last render, for handlers defined above where they are computed.
   const extrasRef = useRef(mergeDispatch([]));
   const { user: authUser, ready: authReady } = useAuth();
+  // The staff roster (admins): suggests member names when adding a team, and counts the event for them.
+  const { roster, isAdmin: rosterAdmin } = useRoster();
   const user = isLiteMode ? null : authUser;
   const ready = isLiteMode ? true : authReady;
   const { isAdmin: isOrgAdmin } = useAdmin();
@@ -362,15 +367,34 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     return currentHHMM >= timeSlot && (!nextTime || currentHHMM < nextTime);
   };
 
+  // Ctrl+Z (src/lib/eventUndo.ts): the last write the dispatcher made here. Only writes soon after a click or key
+  // press count, so a background write (a migration, a timer) never becomes the thing Ctrl+Z undoes.
+  const lastUndoRef = useRef<EventUndo | null>(null);
+  const lastInputAtRef = useRef(0);
+  useEffect(() => {
+    const mark = () => {
+      lastInputAtRef.current = Date.now();
+    };
+    window.addEventListener('pointerdown', mark, true);
+    window.addEventListener('keydown', mark, true);
+    return () => {
+      window.removeEventListener('pointerdown', mark, true);
+      window.removeEventListener('keydown', mark, true);
+    };
+  }, []);
+
   const updateEvent = useCallback(async (
     updateInput: Partial<Event> | ((current: Event) => Partial<Event>),
     options?: {
       bypassEndedCheck?: boolean;
       /** Tracked units whose Location this write may change (a manual edit); see keepTrackedLocations. */
       locationEdits?: string[];
+      /** False for a write Ctrl+Z must not undo (the undo itself). */
+      undoable?: boolean;
     }
   ) => {
     if (!eventId) return;
+    const recordUndo = options?.undoable !== false && Date.now() - lastInputAtRef.current < 10_000;
 
     if (isLiteMode) {
       try {
@@ -404,6 +428,8 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
 
         const nextDraft = toLiteDraftFromEvent(nextEvent, currentDraft);
         await liteStore.save(nextDraft);
+        if (recordUndo) lastUndoRef.current = undoFor(currentEvent, updates);
+        else if (options?.undoable === false) lastUndoRef.current = null;
 
         setEvent(nextEvent);
         setPostAssignments(nextEvent.postAssignments || {});
@@ -415,6 +441,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     }
 
     try {
+      let undo: EventUndo | null = null;
       await dbService.runTransaction(async (tx) => {
         const snap = await tx.get<Event>('events', eventId);
         if (!snap.exists || !snap.data) throw new Error("Event does not exist");
@@ -446,7 +473,10 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
         }
         for (const write of writes) write();
         if (Object.keys(rest).length) tx.update('events', eventId, rest);
+        undo = recordUndo ? undoFor(currentEvent, cleaned) : null;
       });
+      if (recordUndo) lastUndoRef.current = undo;
+      else if (options?.undoable === false) lastUndoRef.current = null;
     } catch (error) {
       if (error instanceof Error && error.message === 'EVENT_ENDED') {
         console.warn('Blocked update: event has ended.');
@@ -2100,8 +2130,27 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
 
 
   
+  const undoLastRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    undoLastRef.current = () => {
+      const undo = lastUndoRef.current;
+      if (!undo) return;
+      lastUndoRef.current = null;
+      void updateEvent((current) => undoPatch(current, undo), { undoable: false });
+    };
+  }, [updateEvent]);
+
   useEffect(() => {
     const handleHotkey = (e: KeyboardEvent) => {
+      // Ctrl+Z undoes the last board change (one level), except while typing or in a dialog.
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'z') {
+        const active = document.activeElement as HTMLElement | null;
+        const typing = !!active && (['INPUT', 'TEXTAREA', 'SELECT'].includes(active.tagName) || active.isContentEditable);
+        if (typing || document.querySelector('[role="dialog"]')) return;
+        e.preventDefault();
+        undoLastRef.current();
+        return;
+      }
       if (e.ctrlKey && e.key === 'Enter') {
         e.preventDefault();
         setShowQuickCallForm(true);
@@ -3960,16 +4009,18 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     </div>
   );
 
+  const renderExtensionTab = (tab: (typeof extras.tabs)[number]) => (
+    <PanelTab key={tab.id} active={selectedRightTab === tab.id} onSelect={() => setSelectedRightTab(tab.id)} data-testid={tab.testId}>
+      {tab.label}
+      {tab.badge ? <span className="ml-1.5">{tab.badge}</span> : null}
+    </PanelTab>
+  );
   const desktopRightPane = (
     <div className="h-full flex flex-col overflow-hidden pt-2 pb-2" data-testid="right-panel">
       <div className="w-full flex flex-col flex-1 min-h-0">
         <div className="relative z-0 mx-1.5 pb-0 flex items-start justify-between gap-1 h-10 shrink-0">
           <div className="flex items-end gap-1 min-w-0">
-            {extras.tabs.map((tab) => (
-              <PanelTab key={tab.id} active={selectedRightTab === tab.id} onSelect={() => setSelectedRightTab(tab.id)} data-testid={tab.testId}>
-                {tab.label}
-              </PanelTab>
-            ))}
+            {extras.tabs.filter((tab) => tab.placement !== 'end').map(renderExtensionTab)}
             <PanelTab active={selectedRightTab === 'calls'} onSelect={() => setSelectedRightTab('calls')} data-testid="calls-tab-button">
               {dispatchZones.length > 0 ? callZoneFilterLabel : t('Calls')} ({getActiveCallsForZoneSelection(callZoneFilter).length})
             </PanelTab>
@@ -3997,6 +4048,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
                 </PanelTab>
               </Tooltip>
             )}
+            {extras.tabs.filter((tab) => tab.placement === 'end').map(renderExtensionTab)}
           </div>
 
           <div className="flex items-start gap-1.5 shrink-0">
@@ -4257,8 +4309,12 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
         onClose={() => setShowAddTeamModal(false)}
         mode="create"
         existingTeamNames={allTeamNames}
-        onSave={(team) => handleSaveNewTeam(team)}
+        onSave={async (team) => {
+          await handleSaveNewTeam(team);
+          if (rosterAdmin && eventId) void recordStaffed(eventId, team.members.map((m) => m.name));
+        }}
         roles={LICENSES.map(name => ({ name, fullName: name }))}
+        roster={roster}
       />
       <AddTeamModal
         isOpen={showEditTeamModal}
@@ -4270,8 +4326,12 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
         submitLabelOverride="Save Changes"
         existingTeamNames={teamNamesExcludingEdited}
         initialTeam={editingTeam}
-        onSave={(team) => handleSaveEditedTeam(team)}
+        onSave={async (team) => {
+          await handleSaveEditedTeam(team);
+          if (rosterAdmin && eventId) void recordStaffed(eventId, team.members.map((m) => m.name));
+        }}
         roles={LICENSES.map(name => ({ name, fullName: name }))}
+        roster={roster}
       />
       <AddSupervisorModal
         isOpen={showAddSupervisorModal}

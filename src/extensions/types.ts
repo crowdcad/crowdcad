@@ -93,6 +93,8 @@ export interface PanelTab {
   badge?: ReactNode;
   /** Opened once by itself, e.g. when its feature becomes active. */
   autoOpen?: boolean;
+  /** 'end': after the built-in tabs (Calls, clinics, Map) instead of before them. */
+  placement?: 'start' | 'end';
   /** Desktop right panel only (phones use their own layout). */
   render: () => ReactNode;
 }

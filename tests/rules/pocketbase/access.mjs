@@ -107,6 +107,14 @@ try {
   await allowed("can't make itself admin", api(stranger.token, 'PATCH', `/api/collections/users/records/${stranger.id}`, { isAdmin: true }), false);
   await allowed('signing up as admin is refused', api(null, 'POST', '/api/collections/users/records', { email: 'new@x.org', password: PASSWORD, passwordConfirm: PASSWORD, isAdmin: true }), false);
 
+  section('roster');
+  const r1 = await create('roster', { name: 'Jane Doe', licensure: 'EMT' });
+  await sees('admin lists the roster', admin.token, 'roster', r1, true);
+  await allowed('admin adds a person', api(admin.token, 'POST', '/api/collections/roster/records', { name: 'Sam Lee' }), true);
+  await sees("non-admin doesn't list it", owner.token, 'roster', r1, false);
+  await allowed("non-admin can't view", api(owner.token, 'GET', `/api/collections/roster/records/${r1}`), false);
+  await allowed("non-admin can't add", api(owner.token, 'POST', '/api/collections/roster/records', { name: 'X' }), false);
+
   section('settings');
   await sees('signed-in account lists settings', stranger.token, 'settings', (await api(su, 'GET', '/api/collections/settings/records')).json.items[0].id, true);
   await allowed("non-admin can't write", api(owner.token, 'POST', '/api/collections/settings/records', { key: 'records', value: { deleteEndedAfterDays: 1 } }), false);
