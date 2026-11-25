@@ -107,6 +107,8 @@ Fields worth knowing:
 
 - `body`: `{{Term}}` shows the org's word for a dispatch term (`src/lib/dispatchVocabulary`), and `{{term}}` (lowercase first letter) shows it lowercased for the middle of a sentence. `**bold**` is bold and `` `value` `` is a value to type. Write labels in sentence case: "the log", "the calls tab", "a {{team}}". Keep a control's exact label (`**{{Log}}**` as a menu option) only where it names that control.
 - `anchor` / `anchors`: a `data-testid`, or `css:` and any selector. The first one on screen is used, so list the specific one first and a fallback after it (the open form, then the button that opens it).
+- `figure`: a component shown under the instruction, for a screen the sandbox can't open (the event builder, say): usually that screen's own parts, read-only, with the control to use outlined.
+- A control that stays mounted while closed (a collapsible panel marked `inert`) still counts as on screen: anchor its open state, e.g. `css:[data-testid="some-panel"]:not([inert])`.
 - `section`: steps with the same section form one entry in the steps menu. Picking a section rebuilds the board by applying every earlier step's `apply` to the seed, so any section can be started directly.
 - `estSec`: seconds for a first-timer. Module, track and catalog times are sums of these.
 - `intents`: phrases a dispatcher might type into Help.

@@ -17,7 +17,11 @@ export type LoginMode = 'login' | 'signup';
 export const NAVBAR_ICON_BUTTON_CLASS =
   'h-8 w-8 min-w-8 !rounded-circle border border-surface-liner bg-surface-base text-surface-light hover:bg-surface-deeper';
 
-/** HH:mm:ss wall clock shown next to the logo on dispatch pages. */
+/**
+ * HH:mm:ss wall clock shown next to the logo on dispatch pages. A box as tall as the navbar's buttons
+ * (h-8) with its digits centred, so it lines up with them in both looks; the timer font's baseline
+ * nudge (meant for timers sitting in a line of label text) is turned off here.
+ */
 export function LiveClock() {
   const [now, setNow] = useState<Date>(() => new Date());
   useEffect(() => {
@@ -25,7 +29,7 @@ export function LiveClock() {
     return () => clearInterval(id);
   }, []);
   return (
-    <span suppressHydrationWarning={true} className="ui-timer text-surface-light text-sm font-semibold">
+    <span suppressHydrationWarning={true} className="ui-timer !top-0 inline-flex h-8 items-center text-sm font-semibold leading-none text-surface-light" data-testid="navbar-clock">
       {now.toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
     </span>
   );

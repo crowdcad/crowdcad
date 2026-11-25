@@ -122,7 +122,7 @@ export default function LiteNavbar() {
               <BrandLogo isDarkTheme={isDarkTheme} onClick={() => router.push("/")} widthClass={logoWidthClass} />
 
               {isDispatch && (
-                <div className="ml-3 sm:ml-4 md:ml-6">
+                <div className="ml-3 flex items-center sm:ml-4 md:ml-6">
                   <LiveClock />
                 </div>
                 

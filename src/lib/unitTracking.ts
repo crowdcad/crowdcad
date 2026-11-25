@@ -14,6 +14,13 @@ export interface UnitPosition {
   lon: number;
   /** No report for a while: drawn faded, and the unit counts as not connected. */
   stale: boolean;
+  /** Direction of travel while moving, in degrees clockwise from north. */
+  heading?: number;
+  /**
+   * Not a reported position: the unit is on this call, which has a dropped
+   * pin, so the map draws it beside the pin (withCallPins, src/lib/callMap.ts).
+   */
+  atCall?: string;
 }
 
 export interface UnitTracking {

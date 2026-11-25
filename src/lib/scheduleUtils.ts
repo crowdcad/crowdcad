@@ -1,4 +1,5 @@
 import { Time } from '@internationalized/date';
+import { parseEventDate } from '@/lib/eventDate';
 
 export function parseTimeValue(value: string, fallback: Time): Time {
   const [hourRaw, minuteRaw] = value.split(':');
@@ -29,14 +30,16 @@ export function formatTimeValue(value: Time): string {
  * Combines the event's calendar date with the schedule's From/To wall
  * times into real timestamps, wrapping To to the next calendar day when it
  * falls at or before From — the same overnight-event convention
- * buildPostingTimes below already uses for generating posting times.
+ * buildPostingTimes below already uses for generating posting times. The
+ * date is read as a calendar day (parseEventDate): `new Date("2026-11-30")`
+ * is UTC midnight, the day before anywhere west of UTC.
  */
 export function scheduleTimesToWindow(
   dateStr: string,
   from: Time,
   to: Time
 ): { start: number; end: number } {
-  const base = new Date(dateStr);
+  const base = parseEventDate(dateStr) ?? new Date();
   const year = base.getFullYear();
   const month = base.getMonth();
   const day = base.getDate();

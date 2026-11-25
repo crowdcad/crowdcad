@@ -184,8 +184,13 @@ export function EquipmentSelectionSection({
   selectClassNames,
   allPosts,
   getPostName,
-}: Pick<Props, 'hasVenue' | 'eventData' | 'setEventData' | 'selectClassNames' | 'allPosts' | 'getPostName'>) {
+  vehicleNames = [],
+}: Pick<Props, 'hasVenue' | 'eventData' | 'setEventData' | 'selectClassNames' | 'allPosts' | 'getPostName'> & {
+  /** The event's vehicles, while vehicles are on: equipment can live on one. */
+  vehicleNames?: string[];
+}) {
   const [newEquipName, setNewEquipName] = React.useState('');
+  const locationNames = Array.from(new Set([...allPosts.map(getPostName), ...vehicleNames]));
 
   const venueEquipmentIds = new Set((eventData.venue?.equipment || []).map((e) => e.id));
   const customEquipment = eventData.eventEquipment.filter((e) => !venueEquipmentIds.has(e.id));
@@ -281,10 +286,9 @@ export function EquipmentSelectionSection({
                     size="sm"
                     className="ml-auto"
                   >
-                    {allPosts.map((post) => {
-                      const postName = getPostName(post);
-                      return <SelectItem key={postName}>{postName}</SelectItem>;
-                    })}
+                    {locationNames.map((name) => (
+                      <SelectItem key={name}>{name}</SelectItem>
+                    ))}
                   </Select>
                   {teamSelect(equip)}
                   <button
@@ -347,10 +351,9 @@ export function EquipmentSelectionSection({
                         size="sm"
                         className="ml-auto"
                       >
-                        {allPosts.map((post) => {
-                          const postName = getPostName(post);
-                          return <SelectItem key={postName}>{postName}</SelectItem>;
-                        })}
+                        {locationNames.map((name) => (
+                          <SelectItem key={name}>{name}</SelectItem>
+                        ))}
                       </Select>
                     )}
                     {selectedEquip && teamSelect(selectedEquip)}

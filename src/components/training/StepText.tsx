@@ -3,13 +3,17 @@
 import React from 'react';
 import { parseStepText } from '@/training/text';
 
-/** A step's text with bold runs and value chips. */
+/** A step's text with bold runs, value chips and links. */
 export default function StepText({ text, t }: { text: string; t: (key: string) => string }) {
   return (
     <>
       {parseStepText(text, t).map((part, i) =>
         part.kind === 'bold' ? (
           <strong key={i} className="font-semibold text-surface">{part.text}</strong>
+        ) : part.kind === 'link' ? (
+          <a key={i} href={part.href} target="_blank" rel="noopener noreferrer" className="font-semibold text-accent underline underline-offset-2">
+            {part.text}
+          </a>
         ) : part.kind === 'value' ? (
           <code
             key={i}

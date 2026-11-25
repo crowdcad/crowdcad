@@ -60,6 +60,21 @@ const STATUS_CARD_RING_OPACITY = {
   yellow: { light: 0.35, dark: 0.45 }, // used for the orange/amber status-card color
 };
 
+// Map marker fills (src/components/geo/mapSymbol.tsx): saturated versions of
+// the status colors, so a pin reads on light, dark and satellite basemaps.
+// Each holds 3:1 contrast against its glyph (white, or near-black on the
+// light ones).
+const MAP_INK = {
+  available: '#2e9e3e',
+  committed: '#d92b2b',
+  equipment: '#e2c93d',
+  onBreak: '#6b7280',
+  other: '#3b37d0',
+  pending: '#e8823c',
+  place: '#3fb0fc',
+  select: '#f97316',
+};
+
 function hexToRgb(hex) {
   const n = parseInt(hex.replace('#', ''), 16);
   return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
@@ -69,5 +84,6 @@ module.exports = {
   STATUS_COLORS_HEX,
   STATUS_CARD_FILL_OPACITY,
   STATUS_CARD_RING_OPACITY,
+  MAP_INK,
   hexToRgb,
 };

@@ -24,7 +24,8 @@ Packs install after modules load. **Read the registry inside a function, a hook 
   - `mapOverlay` and `background` work;
   - `logRows`, with undo;
   - unit `statusOptions`, `statusDetail` (a detail picked with a status, like the built-in clinic for Transporting) and `statusPatch`;
-  - a `UnitChip` and extra `locations`.
+  - a `UnitChip` (team cards), a `CallChip` (call cards) and extra `locations`;
+  - a `CallRowFooter`: a line under a call's row on the desktop table and inside its mobile card. It must render nothing when it has nothing to show, since the row's footer space is hidden only while it is empty.
 
   `host` gives a pack the event, the write path (`updateEvent`, `setLocalEvent`), `showTab`, `setUnitStatus` and live tracking.
 - **Summary page** (`useSummary`): `sections`, step `charts` and `csvLines`.

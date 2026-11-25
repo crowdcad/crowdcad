@@ -10,6 +10,10 @@ import { isArrayRemove, isArrayUnion } from '../types';
  * - `key`: its document id (`state`);
  * - `event`: the event it belongs to (from the path, or the document's `eventId`), for the rules;
  * - `owner`: the document's `uid`, if any (a receipt's login), for the rules;
+ * - `parent`: for a collection under a nested document (`events/{e}/threads/{t}/messages`), that
+ *   document's id (`t`), so the rules can look at it;
+ * - `access`: the document's `access` list, if any (who may read it), as `<token>` text the rules can
+ *   match exactly with `~`;
  * - `data`: the document itself.
  * The record id is the first 15 hex characters of sha256(`path/key`), so the browser and the server
  * find a document's record without a lookup. Every other collection maps to itself.
@@ -43,7 +47,10 @@ export function pbDocRef(col: string, id: string): PbDocRef {
 export function nestedRecord(ref: PbDocRef, data: Record<string, unknown>): Record<string, unknown> {
   const n = ref.nested!;
   const event = n.event || (typeof data.eventId === 'string' ? data.eventId : '');
-  return { id: ref.id, path: n.path, kind: n.kind, key: n.key, event, owner: typeof data.uid === 'string' ? data.uid : '', data };
+  const segments = n.path.split('/');
+  const parent = segments.length >= 4 ? segments[segments.length - 2] : '';
+  const access = Array.isArray(data.access) ? data.access.filter((t): t is string => typeof t === 'string').map((t) => `<${t}>`).join('') : '';
+  return { id: ref.id, path: n.path, kind: n.kind, key: n.key, event, owner: typeof data.uid === 'string' ? data.uid : '', parent, access, data };
 }
 
 /** The document an EVENT_DOCS record holds, and its id. */

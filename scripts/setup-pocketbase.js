@@ -361,6 +361,8 @@ async function main() {
       { name: 'mapUrl', type: 'text' },
       { name: 'sharedWith', type: 'json' },
       { name: 'isOrgVenue', type: 'bool' },
+      { name: 'vehiclesEnabled', type: 'bool' },
+      { name: 'vehicles', type: 'json' },
     ],
     {
       // Reading a venue needs one of the app's access paths (visibleRule
@@ -377,6 +379,9 @@ async function main() {
   // `isOrgVenue` on `venues` — set for deployments where this collection
   // already existed before the field was added above.
   await ensureField(headers, 'venues', { name: 'isOrgVenue', type: 'bool' });
+  // Same, for vehicles (src/lib/vehicles.ts).
+  await ensureField(headers, 'venues', { name: 'vehiclesEnabled', type: 'bool' });
+  await ensureField(headers, 'venues', { name: 'vehicles', type: 'json' });
 
   await ensureCollection(
     headers,
@@ -394,6 +399,8 @@ async function main() {
       { name: 'status', type: 'text' },
       { name: 'eventPosts', type: 'json' },
       { name: 'eventEquipment', type: 'json' },
+      { name: 'vehiclesEnabled', type: 'bool' },
+      { name: 'eventVehicles', type: 'json' },
       { name: 'pendingAssignments', type: 'json' },
       { name: 'postAssignments', type: 'json' },
       { name: 'interactionSessions', type: 'json' },
@@ -431,6 +438,9 @@ async function main() {
   await ensureField(headers, 'events', { name: 'dispatchZones', type: 'json' });
   // Same, for `eventLog` (notes typed into the dispatch Log view).
   await ensureField(headers, 'events', { name: 'eventLog', type: 'json' });
+  // Same, for vehicles (src/lib/vehicles.ts).
+  await ensureField(headers, 'events', { name: 'vehiclesEnabled', type: 'bool' });
+  await ensureField(headers, 'events', { name: 'eventVehicles', type: 'json' });
 
   // `isOrgEvent`/`ended`/`endedAt` on `events` — set for deployments where
   // this collection already existed before these fields were added above.

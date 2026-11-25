@@ -8,7 +8,7 @@ const teamCard = [`team-card-${TEAM}`, `team-card-condensed-${TEAM}`];
 
 const callAssignment: TrainingModule = {
   id: 'call-assignment',
-  version: 1,
+  version: 2,
   track: 'dispatcher',
   title: 'Add a call and assign a team',
   summary: "Log a call, send a team, follow it to the clinic and put the team back in service.",
@@ -23,7 +23,7 @@ const callAssignment: TrainingModule = {
     {
       id: 'intro',
       section: 'Add a call',
-      title: 'Read the scenario',
+      title: 'Look at the scenario',
       body: "Someone radios in: a man near **Sather Gate** feels dizzy. You will log the {{call}}, send a {{team}} and follow it until the patient reaches South Clinic Clinic.",
       estSec: 20,
     },
@@ -56,7 +56,7 @@ const callAssignment: TrainingModule = {
     {
       id: 'pending',
       section: 'Assign a team',
-      title: 'Read a pending call',
+      title: 'Look at a pending call',
       body: "The call is **{{Pending}}**, which means no {{team}} is on it yet. The timer shows how long it has been waiting.",
       anchor: 'call-row-1',
       placement: 'bottom',
@@ -88,11 +88,21 @@ const callAssignment: TrainingModule = {
     {
       id: 'team-card',
       section: 'Assign a team',
-      title: 'Read the team card',
+      title: 'Look at the team card',
       body: "MRC3's card on the left now says **{{En Route}}**, and its timer started again.",
       anchors: teamCard,
       placement: 'right',
       estSec: 15,
+    },
+    {
+      id: 'call-on-map',
+      section: 'Assign a team',
+      title: 'Find the call on the map',
+      body: "Open the **Map** tab. The call is the diamond beside Sather Gate, with its number: orange while it waits for a {{team}}, red once one has it. Several calls at one place share one marker with a count. Point at it to see the call; click it to open the call. A {{team}} on a call with a dropped pin is drawn at the pin.",
+      anchors: ['css:[data-testid^="call-marker-"]', 'map-tab-button'],
+      placement: 'left',
+      estSec: 20,
+      intents: ['call on the map', 'where is the call', 'call marker', 'calls map'],
     },
     {
       id: 'on-scene',

@@ -60,6 +60,7 @@ export default function TrainingCard({
   // A new step (or the end) always shows its instruction, even if the card was hidden.
   useEffect(() => setMinimized(false), [index, complete]);
   const kind = stepKind(step);
+  const Figure = step.figure;
   const nextModule = useMemo(() => {
     const list = visibleModules();
     return list[list.findIndex((m) => m.id === module.id) + 1];
@@ -151,6 +152,11 @@ export default function TrainingCard({
           <p className="mt-1 leading-relaxed text-surface-light/90" aria-label={plainStepText(step.body, t)}>
             <StepText text={step.body} t={t} />
           </p>
+          {Figure && (
+            <div className="mt-2" data-testid="training-step-figure">
+              <Figure />
+            </div>
+          )}
           {note && <p className="mt-2 text-xs text-surface-light/60">{note}</p>}
           {state.rejected && (
             <div role="alert" className="mt-3 rounded-lg border border-status-yellow/50 bg-status-yellow/10 px-3 py-2 text-xs" data-testid="training-gate-nudge">

@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Autocomplete, AutocompleteItem, Button } from '@heroui/react';
 import { ChevronLeft, ChevronRight, Search } from 'lucide-react';
-import type { Layer, Staff, Supervisor, Equipment, Call, Clinic } from '@/app/types';
+import type { Layer, Staff, Supervisor, Equipment, Call, Clinic, Vehicle } from '@/app/types';
 import { useZoomPan } from '@/hooks/useZoomPan';
 import { MAP_CHECKER_BG } from '@/lib/mapStyles';
 import { staticSelectorButtonProps } from '@/lib/heroStatic';
@@ -19,6 +19,10 @@ import { equipmentHolderUnit } from '@/lib/equipmentPlacement';
 import { PREF, usePref } from '@/lib/geo/prefs';
 import { cleanHidden, setLayerShown, type MapLayerKind } from '@/lib/mapLayers';
 import MapLayersMenu from './maplayersmenu';
+import { withCallPins } from '@/lib/callMap';
+import { throughVehicle } from '@/lib/vehicles';
+
+const NO_VEHICLES: Vehicle[] = [];
 
 // The live map for geo layers (P8, D64), loaded only when a venue has one.
 const GeoVenueMap = dynamic(() => import('./GeoVenueMap'), { ssr: false });
@@ -73,6 +77,12 @@ interface VenueMapTabProps {
   onEquipmentFocusHandled?: () => void;
   /** Optional add-on layer passed through to the map (see MapOverlay). */
   overlay?: MapOverlay;
+  /** Clicking a call in a call marker's list (#94) opens it on the Calls tab. */
+  onOpenCall?: (callId: string) => void;
+  /** Clicking a piece of equipment shows it in the Equipment list. */
+  onOpenEquipment?: (equipmentName: string) => void;
+  /** The event's vehicles, while vehicles are on (src/lib/vehicles.ts). */
+  vehicles?: Vehicle[];
 }
 
 
@@ -104,8 +114,17 @@ export default function VenueMapTab({
   onTeamFocusHandled,
   onSupervisorFocusHandled,
   onEquipmentFocusHandled,
-  overlay,
+  overlay: baseOverlay,
+  onOpenCall,
+  onOpenEquipment,
+  vehicles = NO_VEHICLES,
 }: VenueMapTabProps) {
+  // Units on a call with a dropped pin are drawn at the pin (#94): the map's own copy of the unit positions,
+  // never the tracking the rest of the board reads (a pin doesn't make a unit "connected").
+  const overlay = useMemo<MapOverlay | undefined>(() => {
+    const unitTracking = withCallPins(baseOverlay?.unitTracking, calls);
+    return unitTracking === baseOverlay?.unitTracking ? baseOverlay : { ...baseOverlay, unitTracking };
+  }, [baseOverlay, calls]);
   const [currentLayer, setCurrentLayer] = useState(0);
   const [searchInput, setSearchInput] = useState('');
   const [selectedPostName, setSelectedPostName] = useState<string | null>(null);
@@ -205,7 +224,9 @@ export default function VenueMapTab({
   // Same as the team focus effect above, for an equipment card's "view on map" button.
   useEffect(() => {
     if (!focusEquipmentRequest) return;
-    const equip = equipment.find((e) => e.name === focusEquipmentRequest.equipmentName);
+    const found = equipment.find((e) => e.name === focusEquipmentRequest.equipmentName);
+    // On a vehicle, it is wherever the vehicle is.
+    const equip = found && throughVehicle(found, vehicles);
     reveal('equipment');
     // Its own tracker, else wherever the unit holding it is, else the post it is at.
     const tag = equip && overlay?.unitTracking?.equipmentPositions?.[equip.name];
@@ -396,6 +417,10 @@ export default function VenueMapTab({
             onAddCallForTeam={onAddCallForTeam}
             showPosts={showPosts}
             showPostPins={!isHidden('posts')}
+            showCalls={isHidden('calls') ? false : 'open'}
+            onOpenCall={onOpenCall}
+            onOpenEquipment={onOpenEquipment}
+            vehicles={vehicles}
             focus={geoFocus}
             overlay={overlay}
           />
@@ -438,6 +463,10 @@ export default function VenueMapTab({
           onAddCallForTeam={onAddCallForTeam}
           showPosts={showPosts}
           showPostPins={!isHidden('posts')}
+          showCalls={isHidden('calls') ? false : 'open'}
+          onOpenCall={onOpenCall}
+          onOpenEquipment={onOpenEquipment}
+          vehicles={vehicles}
           overlay={overlay}
         />
         <MapZoomControls onZoomIn={() => zoomIn(0.25)} onZoomOut={() => zoomOut(0.25)} onReset={resetZoom}>

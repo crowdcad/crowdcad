@@ -1,18 +1,19 @@
 'use client';
 
 import React from 'react';
-import type { Call, Clinic, Equipment, Layer, Staff, Supervisor } from '@/app/types';
+import type { Call, Clinic, Equipment, Layer, Staff, Supervisor, Vehicle } from '@/app/types';
 import GeoLayerMap from '@/components/geo/GeoLayerMap';
-import type { GeoPin } from '@/components/geo/BasemapView';
-import { PostMarker, SupervisorMarker, TeamMarker, type MapOverlay } from '@/components/modals/event/venuemapmodal';
-import { AT_PIN, atPin, geoEquipmentPins, placedPosts } from './geoPins';
+import type { GeoPin, HeatPoint } from '@/components/geo/BasemapView';
+import { AT_ANCHOR, CallMarker, PostMarker, SLOTS, layoutMarkers, type MapOverlay } from '@/components/modals/event/venuemapmodal';
+import { callDisplayNumbers, callSpots, isOpenCall } from '@/lib/callMap';
+import { AT_PIN, asGeoPins, geoPlacement, placedPosts } from './geoPins';
 
 /**
  * The dispatch Map tab on a geo layer (P8, D64): the live map with the venue
  * image on top, and the same post, team, supervisor and equipment markers as
  * the image map, each at its post's coordinates. The markers are the image
- * map's own components, drawn at a single point (an empty rect at the pin),
- * so they look and behave the same.
+ * map's own components, laid out the same way (layoutMarkers) and drawn at a
+ * single point, so they look and behave the same.
  */
 export interface GeoVenueMapProps {
   layer: Layer;
@@ -20,6 +21,7 @@ export interface GeoVenueMapProps {
   staff: Staff[];
   supervisor: Supervisor[];
   equipment: Equipment[];
+  vehicles?: Vehicle[];
   teamTimers: { [team: string]: number };
   calls: Call[];
   clinics: Clinic[];
@@ -29,6 +31,7 @@ export interface GeoVenueMapProps {
   selectedEquipmentName?: string | null;
   onAddCallAtPost?: (postName: string) => void;
   onAddCallForTeam?: (teamName: string) => void;
+  onOpenEquipment?: (equipmentName: string) => void;
   /** Show posts in team and supervisor cards. Off when the event has no posting schedule. */
   showPosts?: boolean;
   /** Draw the posts' own pins (the Map tab's Layers menu can hide them; units at posts are still placed). */
@@ -36,6 +39,12 @@ export interface GeoVenueMapProps {
   focus?: { key: number; lat: number; lng: number } | null;
   overlay?: MapOverlay;
   className?: string;
+  /** Draw call markers (#94): open calls, or every call (the event summary's map). Off by default. */
+  showCalls?: 'open' | 'all' | false;
+  /** Clicking a call in a call marker's list opens it. */
+  onOpenCall?: (callId: string) => void;
+  /** Heat cells drawn over the map (the event summary's map). */
+  heat?: HeatPoint[] | null;
 }
 
 export default function GeoVenueMap({
@@ -44,20 +53,24 @@ export default function GeoVenueMap({
   staff,
   supervisor,
   equipment,
+  vehicles,
   teamTimers,
   calls,
-  clinics,
   selectedPostName,
   selectedTeamName,
   selectedSupervisorName,
   selectedEquipmentName,
   onAddCallAtPost,
   onAddCallForTeam,
+  onOpenEquipment,
   showPosts = true,
   showPostPins = true,
   focus,
   overlay,
   className,
+  showCalls = false,
+  onOpenCall,
+  heat,
 }: GeoVenueMapProps) {
   const placed = placedPosts(layer);
 
@@ -67,105 +80,43 @@ export default function GeoVenueMap({
       key: `post:${name}`,
       lat: at.lat,
       lng: at.lng,
-      node: (
-        <PostMarker post={atPin(post)} rect={AT_PIN} staff={staff} scale={1} isSelected={selectedPostName === name} onAddCall={onAddCallAtPost} />
-      ),
+      node: <PostMarker post={post} at={AT_PIN} scale={1} isSelected={selectedPostName === name} onAddCall={onAddCallAtPost} />,
     });
   }
-  const tracking = overlay?.unitTracking;
-  pins.push(...geoEquipmentPins(layer, equipment, selectedEquipmentName, placed, [...staff, ...supervisor], tracking));
-  // Live tracking: a unit with a position is drawn there (D66); every other unit at its post, below.
-  if (tracking) {
-    for (const team of staff) {
-      const p = tracking.positions[team.team];
-      if (!p) continue;
-      pins.push({
-        key: `team:${team.team}`,
-        lat: p.lat,
-        lng: p.lon,
-        node: (
-          <TeamMarker
-            showPosts={showPosts}
-            team={team}
-            post={{ name: team.team, x: 0, y: 0 }}
-            rect={AT_PIN}
-            teamTimers={teamTimers}
-            calls={calls}
-            clinics={clinics}
-            scale={1}
-            isSelected={selectedTeamName === team.team}
-            onAddCall={onAddCallForTeam}
-            exact
-            faded={p.stale}
-          />
-        ),
-      });
-    }
-    for (const sup of supervisor) {
-      const p = tracking.positions[sup.team];
-      if (!p) continue;
-      pins.push({
-        key: `supervisor:${sup.team}`,
-        lat: p.lat,
-        lng: p.lon,
-        node: (
-          <SupervisorMarker
-            showPosts={showPosts}
-            supervisor={sup}
-            post={{ name: sup.team, x: 0, y: 0 }}
-            rect={AT_PIN}
-            scale={1}
-            isSelected={selectedSupervisorName === sup.team}
-            exact
-            faded={p.stale}
-          />
-        ),
-      });
-    }
-  }
-  // Teams sharing a post are staggered, as on the image map. On a tracking event,
-  // units with no device are drawn at their post as on a standard event (D66).
-  const occupancy: Record<string, number> = {};
-  for (const team of staff.filter((t) => !tracking?.positions[t.team])) {
-    const p = team.location ? placed.get(team.location) : undefined;
-    if (!p) continue;
-    const staggerIndex = occupancy[team.location] ?? 0;
-    occupancy[team.location] = staggerIndex + 1;
+  const numbers = callDisplayNumbers(calls);
+  for (const spot of showCalls ? callSpots(showCalls === 'all' ? calls : calls.filter(isOpenCall), layer, true) : []) {
     pins.push({
-      key: `team:${team.team}`,
-      lat: p.at.lat,
-      lng: p.at.lng,
-      node: (
-        <TeamMarker
-          showPosts={showPosts}
-          team={team}
-          post={atPin(p.post)}
-          rect={AT_PIN}
-          teamTimers={teamTimers}
-          calls={calls}
-          clinics={clinics}
-          scale={1}
-          isSelected={selectedTeamName === team.team}
-          onAddCall={onAddCallForTeam}
-          staggerIndex={staggerIndex}
-        />
-      ),
+      key: spot.key,
+      lat: spot.lat!,
+      lng: spot.lng!,
+      node: <CallMarker calls={spot.calls} at={AT_PIN} offset={spot.atPost ? SLOTS.call : AT_ANCHOR} scale={1} numbers={numbers} onOpenCall={onOpenCall} />,
     });
   }
-  for (const sup of supervisor.filter((s) => !tracking?.positions[s.team])) {
-    const p = sup.location ? placed.get(sup.location) : undefined;
-    if (!p) continue;
-    pins.push({
-      key: `supervisor:${sup.team}`,
-      lat: p.at.lat,
-      lng: p.at.lng,
-      node: <SupervisorMarker showPosts={showPosts} supervisor={sup} post={atPin(p.post)} rect={AT_PIN} scale={1} isSelected={selectedSupervisorName === sup.team} />,
-    });
-  }
+  pins.push(
+    ...asGeoPins(
+      layoutMarkers({
+        scale: 1,
+        staff,
+        supervisor,
+        equipment,
+        calls,
+        teamTimers,
+        tracking: overlay?.unitTracking,
+        vehicles,
+        showPosts,
+        selectedTeamName,
+        selectedSupervisorName,
+        selectedEquipmentName,
+        onAddCallForTeam,
+        onOpenEquipment,
+        ...geoPlacement(placed),
+      })
+    )
+  );
 
   return (
     // The basemap controls live in the Map tab's top bar (venuemaptab.tsx).
-    <GeoLayerMap className={className} layer={layer} showPosts={false} showControls={false} extraPins={pins} focus={focus}>
+    <GeoLayerMap className={className} layer={layer} showPosts={false} showControls={false} extraPins={pins} focus={focus} heat={heat}>
       {overlay?.geoMarkers?.({ layer, layerIndex })}
       {overlay?.chrome}
     </GeoLayerMap>

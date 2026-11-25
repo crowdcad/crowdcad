@@ -97,6 +97,8 @@ Reusable venue templates: layout, posts and equipment, independent of any specif
 | `mapUrl` | text | URL/path to the venue's base map image. | Yes | `"/files/maps/stadium.png"` |
 | `sharedWith` | json (`string[]`) | Email addresses of other users granted access to this venue. | Yes | `["helper@example.org"]` |
 | `isOrgVenue` | bool | If true, visible to every user on this instance (set by an admin) in addition to the owner and sharedWith list. | Yes (defaults false) | `false` |
+| `vehiclesEnabled` | bool | Vehicles are set up for this venue (events at it can turn on a Vehicles tab). | Yes (defaults false) | `true` |
+| `vehicles` | json (`Vehicle[]`) | The venue's vehicles. See §3.7. | Yes | `[{"id":"v1","name":"Cart 1","location":"Gate A"}]` |
 
 ### 3.3 `events`
 
@@ -119,6 +121,8 @@ The central planning/dispatch record for a single event: a snapshot of the venue
 | `status` | text | Event lifecycle state. Observed values: `"draft"`, `"active"`. | Yes | `"active"` |
 | `eventPosts` | json (`Post[]`) | Posts as configured for this specific event (may diverge from the venue template). See §3.7. | Yes | `[{"name":"Gate A","x":12.5,"y":40.0}]` |
 | `eventEquipment` | json (`EventEquipment[]`) | Equipment inventory for this event. See §3.7. | Yes | `[{"id":"eq1","name":"AED #1","status":"Available","locationId":"Gate A"}]` |
+| `vehiclesEnabled` | bool | Vehicles are on for this event: the dispatch board shows a Vehicles tab. | Yes (defaults false) | `true` |
+| `eventVehicles` | json (`Vehicle[]`) | This event's vehicles (copied from the venue's at event setup, then edited independently). See §3.7. | Yes | `[{"id":"v1","name":"Cart 1","location":"Team 2"}]` |
 | `pendingAssignments` | json (`{ [team]: { post, time } }`) | Assignments queued but not yet committed to `postAssignments`, keyed by team name. | Yes | `{"Team 1":{"post":"Gate A","time":"08:00"}}` |
 | `postAssignments` | json (`{ [time]: { [post]: team } }`) | Committed post assignment grid: for each posting time, which team covers which post. See §3.7. | Yes | `{"08:00":{"Gate A":"Team 1"}}` |
 | `interactionSessions` | json (`InteractionSession[]`) | Client-side usage-tracking sessions (mouse/keystroke activity timestamps) for the dispatch UI. See §3.7. | Yes | `[{"sessionId":"s1","eventId":"e1f2...","startTime":1755000000000,"mouseClicks":[],"keyStrokes":[]}]` |
@@ -194,6 +198,8 @@ PocketBase stores these as opaque `json` fields with no server-side schema; the 
 **`Equipment`** (venue-level): `id`, `name`, `status` (free-text status string), `assignedTeam?`, `location?`.
 
 **`EventEquipment`** = `Equipment` + `locationId?`, `defaultLocation?`, `notes?`.
+
+**`Vehicle`**: `id`, `name`, `location?` (a post name, or the name of the unit crewing it). Equipment on a vehicle has the vehicle's `name` as its `location` (and, on an event, its `defaultLocation`), so it is shown wherever the vehicle is (`src/lib/vehicles.ts`).
 
 Equipment custody (optional, on event equipment; written by `src/lib/equipmentCustody.ts`, absent on older data and derived from `status`/`assignedTeam`/`location` when missing):
 - `phase?`: `'staged' | 'retrieving' | 'carried' | 'with_care_team' | 'returning' | 'in_clinic'`.

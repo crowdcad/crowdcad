@@ -9,8 +9,10 @@ import { boundsOf, postLatLng, zoneLatLngs, type LatLng } from '@/lib/geo/positi
 import { PREF, usePref } from '@/lib/geo/prefs';
 import BasemapToolbar from './BasemapToolbar';
 import { areaDraftShapes, areaVertexPins } from './AreaVertex';
-import BasemapView, { type BasemapViewRequest, type GeoPin, type GeoShape } from './BasemapView';
-import { postIcon } from './postIcon';
+import BasemapView, { type BasemapViewRequest, type GeoPin, type GeoShape, type HeatPoint } from './BasemapView';
+import { postSymbol } from './postIcon';
+import { MapSymbol, SYMBOL_BOX } from './mapSymbol';
+import { MAP_INK } from '@/lib/colorTokens';
 
 const DEFAULT_GEO_IMAGE_OPACITY = 0.7;
 
@@ -61,6 +63,8 @@ export interface GeoLayerMapProps {
   showPosts?: boolean;
   /** Fly to a position; change `key` to fly again. */
   focus?: { key: number; lat: number; lng: number } | null;
+  /** Heat cells drawn over the map (a TAK event's location history on the summary). */
+  heat?: HeatPoint[] | null;
 }
 
 export default function GeoLayerMap({
@@ -76,6 +80,7 @@ export default function GeoLayerMap({
   children,
   showControls = true,
   showPosts = true,
+  heat,
   focus,
 }: GeoLayerMapProps) {
   const [basemapId] = usePref<string>(PREF.alignBasemap, DEFAULT_BASEMAP_ID);
@@ -113,7 +118,7 @@ export default function GeoLayerMap({
     const at = postLatLng(post, layer);
     if (!at) return [];
     const selected = selectedPostName === post.name;
-    const Icon = postIcon(post);
+    const symbol = postSymbol(post);
     return [
       {
         key: `post:${idx}:${post.name}`,
@@ -138,7 +143,12 @@ export default function GeoLayerMap({
             >
               {post.name}
             </span>
-            <Icon className={`h-6 w-6 drop-shadow ${post.isClinic ? 'text-status-red' : 'text-status-blue'} ${selected ? 'animate-bounce' : ''}`} />
+            {/* Half a symbol box tall: the symbol's tip (its center) is the bottom edge, which is the pin's anchor. */}
+            <span className="relative block" style={{ width: SYMBOL_BOX, height: SYMBOL_BOX / 2 }}>
+              <span className="absolute left-0 top-0">
+                <MapSymbol kind={symbol.kind} fill={MAP_INK.place} glyph={symbol.glyph} />
+              </span>
+            </span>
           </button>
         ),
       },
@@ -153,6 +163,7 @@ export default function GeoLayerMap({
       cursor={cursor}
       image={alignment && layer.mapUrl ? { url: layer.mapUrl, corners: imageCorners(alignment), opacity } : null}
       shapes={shapes}
+      heat={heat}
       pins={[
         ...postPins,
         ...(extraPins ?? []),

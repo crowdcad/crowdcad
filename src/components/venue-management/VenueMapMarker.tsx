@@ -1,7 +1,8 @@
 'use client';
 
 import React from 'react';
-import { MapPin, HousePlus } from 'lucide-react';
+import { MapSymbol } from '@/components/geo/mapSymbol';
+import { MAP_INK } from '@/lib/colorTokens';
 
 // The single post/incident marker pin rendered on a venue map — extracted
 // from VenueManagementPageClient's inline renderMarkers() so it's one
@@ -18,8 +19,6 @@ export interface VenueMapMarkerProps {
   isHover?: boolean;
   isPending?: boolean;
   isDragging?: boolean;
-  /** Pin size in px at scale 1. Defaults to 24, matching the original inline h-6 w-6 marker. */
-  size?: number;
   /** Ambient zoom level of the map this marker sits on. The pin counter-scales against it so it stays a constant on-screen size instead of growing/shrinking as the map zooms. Defaults to 1 (no ambient zoom). */
   scale?: number;
   showTooltip?: boolean;
@@ -37,7 +36,6 @@ export default function VenueMapMarker({
   isHover,
   isPending,
   isDragging,
-  size = 24,
   scale = 1,
   showTooltip = true,
   onMouseEnter,
@@ -45,14 +43,14 @@ export default function VenueMapMarker({
   onMouseDown,
   onClick,
 }: VenueMapMarkerProps) {
-  const Icon = isClinic ? HousePlus : MapPin;
   const emphasis = isPending ? 1.3 : isHover || isDragging ? 1.15 : 1;
 
   return (
     <>
       <div style={{ left: `${x}%`, top: `${y}%` }} className="absolute z-10">
         <div
-          style={{ transform: `translate(-50%, -50%) scale(${emphasis / scale})` }}
+          // The symbol's box is centered on its tip, so the pin grows upward from the spot it marks.
+          style={{ transform: `translate(-50%, -50%) scale(${emphasis / scale})`, pointerEvents: 'none' }}
           className={`relative transition-transform ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
           onMouseEnter={onMouseEnter}
           onMouseLeave={onMouseLeave}
@@ -65,13 +63,7 @@ export default function VenueMapMarker({
               style={{ backgroundColor: 'hsl(var(--map-marker) / 0.6)' }}
             />
           )}
-          <Icon
-            size={size}
-            strokeWidth={1.5}
-            stroke="white"
-            fill="hsl(var(--map-marker))"
-            style={{ filter: 'drop-shadow(0 1px 3px rgb(0 0 0 / 0.6))' }}
-          />
+          <MapSymbol kind={isClinic ? 'clinic' : 'post'} fill={MAP_INK.place} />
         </div>
       </div>
       {showTooltip && isHover && !isPending && name && (

@@ -8,6 +8,7 @@
 import type { Call, Event, Staff, Supervisor, TeamLogEntry } from '@/app/types';
 import { getClinicName, getEventClinics } from '@/lib/clinics';
 import { hhmmOf } from '@/lib/clock';
+import { EQUIPMENT_RUN_STATUSES, RETURNING_EQ } from '@/lib/equipmentCustody';
 
 /** Extension packs' fields and log lines for a status change (e.g. an MCI zone set by Triage). */
 export interface StatusChangeExtra {
@@ -22,6 +23,45 @@ export interface StatusChangeOptions {
   extra?: (unit: Staff | Supervisor) => StatusChangeExtra;
   /** Appended to the log lines, e.g. " (from the unit's phone)". */
   logSuffix?: string;
+}
+
+/** A free unit's statuses, unless an extension pack replaces them (e.g. MCI's). */
+export const FREE_UNIT_STATUSES = ['Available', 'On Break', 'In Clinic'];
+/** A unit's statuses while it is on a call. */
+export const ON_CALL_STATUSES = ['En Route', 'On Scene', 'Transporting', 'Pending Transport'];
+const CALL_DONE = ['Resolved', 'Delivered', 'Refusal', 'NMM', 'Treat and Release'];
+const EQUIPMENT_RUN_DONE = ['Resolved', 'Delivered Eq', 'Refusal', 'NMM', 'Treat and Release'];
+
+/** What a unit is doing, for its status menu: an equipment run, a call, bringing equipment back, or nothing. */
+export function teamStatusMode(unit: Pick<Staff, 'team' | 'status'>, event: Pick<Event, 'calls'>): 'equipment' | 'call' | 'returning' | 'free' {
+  const calls = event.calls || [];
+  if (
+    calls.some((c) => c.equipmentTeams?.includes(unit.team) && !EQUIPMENT_RUN_DONE.includes(c.status)) ||
+    ['Retrieving Eq', 'En Route Eq', 'Assisting'].includes(unit.status)
+  )
+    return 'equipment';
+  if (calls.some((c) => c.assignedTeam?.includes(unit.team) && !CALL_DONE.includes(c.status))) return 'call';
+  // Bringing equipment back after a call: Available marks it returned.
+  return unit.status === RETURNING_EQ ? 'returning' : 'free';
+}
+
+/**
+ * The statuses a unit can move to right now, as its team card offers them: an equipment run's, a call's, or a
+ * free unit's (`freeOptions` when an extension pack replaces them), with Returning Eq first while it brings
+ * equipment back. Pure, so the card, a field login's phone and its server route offer the same list.
+ */
+export function teamStatusOptions(unit: Pick<Staff, 'team' | 'status'>, event: Pick<Event, 'calls'>, freeOptions?: string[] | null): string[] {
+  const free = freeOptions ?? FREE_UNIT_STATUSES;
+  switch (teamStatusMode(unit, event)) {
+    case 'equipment':
+      return EQUIPMENT_RUN_STATUSES;
+    case 'call':
+      return ON_CALL_STATUSES;
+    case 'returning':
+      return [RETURNING_EQ, ...free];
+    default:
+      return free;
+  }
 }
 
 /** The call a unit is working, if any. */

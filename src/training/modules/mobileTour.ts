@@ -27,7 +27,7 @@ const mobileTour: TrainingModule = {
     {
       id: 'intro',
       section: 'Find your way around',
-      title: 'Read the layout',
+      title: 'Look at the layout',
       body: 'This is the dispatch interface on a phone. It has everything the computer layout has, one section at a time: the icons along the bottom switch between teams, equipment, calls, clinics and the map.',
       estSec: 20,
       intents: ['phone layout', 'mobile dispatch', 'dispatch on a phone'],
@@ -35,7 +35,7 @@ const mobileTour: TrainingModule = {
     {
       id: 'availability',
       section: 'Find your way around',
-      title: 'Read the availability bar',
+      title: 'Look at the availability bar',
       body: 'The bar at the top shows how many {{teams}} are free. It turns red when a pre-designated percentage of teams are on calls.',
       anchor: 'availability-surge-strip',
       placement: 'bottom',
@@ -44,7 +44,7 @@ const mobileTour: TrainingModule = {
     {
       id: 'teams',
       section: 'Find your way around',
-      title: 'Read the teams list',
+      title: 'Look at the teams list',
       body: 'Each {{team}} card shows its status, {{location}} and how long it has been in that status. MRC1 is on scene at Lower Sproul.',
       anchors: ['team-card-condensed-MRC1', 'team-card-MRC1'],
       placement: 'bottom',
@@ -83,7 +83,7 @@ const mobileTour: TrainingModule = {
     {
       id: 'call-card',
       section: 'Calls',
-      title: 'Read a call card',
+      title: 'Look at a call card',
       body: 'Each open {{call}} is a card with its {{location}}, {{teams}} and status. Tap a card to open its details.',
       anchor: 'call-card-1',
       placement: 'bottom',
@@ -136,6 +136,9 @@ const mobileTour: TrainingModule = {
       section: 'Clinics and map',
       title: 'Get help on a phone',
       body: 'During a live event, the **?** button in the top bar opens Help, with links to these tutorials. That is the phone layout.',
+      // The player's own ? is the same button; inside the computer's phone frame there is none, and the card stands alone.
+      anchor: 'help-button',
+      placement: 'bottom',
       estSec: 10,
     },
   ],

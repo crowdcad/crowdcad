@@ -1,5 +1,5 @@
 import { Event, Staff } from '@/app/types';
-import { getLastActivityTimestamp } from './eventStatus';
+import { getLastActivityTimestamp, getScheduleBounds } from './eventStatus';
 
 const TWO_HOURS = 2 * 60 * 60 * 1000;
 const HOUR = 60 * 60 * 1000;
@@ -44,8 +44,10 @@ export function getScheduleWindow(event: Event): { start: number; end: number } 
 
   const startFields = ['postingStart', 'scheduleStart', 'startTime', 'start'];
 
+  // scheduleStart as corrected for events saved a day off (getScheduleBounds).
+  const scheduleStart = getScheduleBounds(event).start ?? undefined;
   const starts = startFields
-    .map((k) => getNum(event[k as keyof Event]))
+    .map((k) => (k === 'scheduleStart' ? scheduleStart : getNum(event[k as keyof Event])))
     .filter((v): v is number => v !== undefined);
 
   const designatedStart = starts.length ? Math.min(...starts) : undefined;

@@ -2,6 +2,7 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
+import CallRowFooters from './callrowfooter';
 import {
   CardBody,
   Chip,
@@ -28,7 +29,7 @@ import EquipmentTypeIcon, { getEquipmentStatusMenuLabel, getEquipmentStatusWord,
 import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
 import { getEventClinics, getTransportClinicId, isCallResolved, getVenueLocationOptions } from '@/lib/clinics';
 import { getEquipmentIconType } from '@/lib/equipmentIcon';
-import { getStatusColor } from '@/lib/statusColors';
+import { TRACKING_RESOLVED_CHIP_CLASS, getStatusColor } from '@/lib/statusColors';
 import { staticSelectorButtonProps } from '@/lib/heroStatic';
 import CallIndicatorIcons from './callindicatoricons';
 import { UnitPickerItems } from './unitpicker';
@@ -40,6 +41,8 @@ import { EQUIPMENT_RUN_STATUSES, equipmentOfUnit, fleetOf } from '@/lib/equipmen
 import { dropdownMotionProps, pinCallPatch, useCallTimer, useSyncedLocationInput, CallAgeSexComplaintRow, CallNotesAndLog, cardFieldClassNames, blurOnEnter } from './trackingcardparts';
 import TrackingCardShell, { type TrackingCardAction } from './trackingcardshell';
 import PinDropModal, { firstGeoLayer } from '@/components/geo/PinDropModal';
+import StatusCodeKeys from './statuscodekeys';
+import { codeForStatus } from '@/lib/statusCodes';
 
 type CallTrackingCardProps = {
   call: Call;
@@ -89,6 +92,7 @@ export default function CallTrackingCard({
   const clinics = getEventClinics(event.clinics);
   const isResolved = isCallResolved(call);
   const [clinicPickTeam, setClinicPickTeam] = useState<string | null>(null);
+  const [statusMenuTeam, setStatusMenuTeam] = useState<string | null>(null);
   // Which status opened the clinic picker — 'Transporting' or 'Delivered',
   // both of which need a destination clinic recorded when more than one exists.
   const [clinicPickStatus, setClinicPickStatus] = useState<string>('Transporting');
@@ -215,6 +219,25 @@ export default function CallTrackingCard({
             // darker/more saturated, marking this piece out as a button
             // without introducing a whole new color.
             const statusButtonClass = `inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-surface-light ${teamStatusColor.fillClass} hover:brightness-110 transition-all`;
+            const pickTeamStatus = (key: string) => {
+              // A destination picked when the team went Transporting carries over —
+              // Delivered only asks again if no clinic was chosen yet.
+              const transportClinicId = key === 'Delivered' ? getTransportClinicId(call, currentStatus, clinics) : undefined;
+              if (transportClinicId) {
+                handleTeamStatusChange(call.id, team, 'Delivered', transportClinicId);
+                return;
+              }
+              if ((key === 'Transporting' || key === 'Delivered') && clinics.length > 1) {
+                setClinicPickTeam(team);
+                setClinicPickStatus(key);
+                return;
+              }
+              if (key === 'Rolled from Scene') {
+                onTransportToAmbulance(call.id, team);
+                return;
+              }
+              handleTeamStatusChange(call.id, team, key, (key === 'Transporting' || key === 'Delivered') ? clinics[0]?.id : undefined);
+            };
 
             return (
               <Chip
@@ -222,7 +245,7 @@ export default function CallTrackingCard({
                 size="lg"
                 variant="flat"
                 color="default"
-                className={`text-surface-light h-9 ${teamStatusColor.chipClass}`}
+                className={`text-surface-light h-9 ${teamStatusColor.chipClass} ${isResolved ? TRACKING_RESOLVED_CHIP_CLASS : ''}`}
                 onClose={() => onRemoveTeamFromCall(call.id, team)}
               >
                 <div className="flex items-center gap-2" data-testid={`team-chip-${team}`}>
@@ -258,7 +281,13 @@ export default function CallTrackingCard({
                       </DropdownMenu>
                     </Dropdown>
                   ) : (
-                    <Dropdown motionProps={dropdownMotionProps} placement="bottom-end" offset={2}>
+                    <Dropdown
+                      motionProps={dropdownMotionProps}
+                      placement="bottom-end"
+                      offset={2}
+                      isOpen={statusMenuTeam === team}
+                      onOpenChange={(isOpen) => setStatusMenuTeam(isOpen ? team : null)}
+                    >
                       <DropdownTrigger>
                         <button
                           onClick={(e) => {
@@ -278,28 +307,20 @@ export default function CallTrackingCard({
                       </DropdownTrigger>
                       <DropdownMenu
                         aria-label="Team Status"
-                        onAction={(key) => {
-                          // A destination picked when the team went Transporting carries over —
-                          // Delivered only asks again if no clinic was chosen yet.
-                          const transportClinicId = key === 'Delivered' ? getTransportClinicId(call, currentStatus, clinics) : undefined;
-                          if (transportClinicId) {
-                            handleTeamStatusChange(call.id, team, 'Delivered', transportClinicId);
-                            return;
-                          }
-                          if ((key === 'Transporting' || key === 'Delivered') && clinics.length > 1) {
-                            setClinicPickTeam(team);
-                            setClinicPickStatus(key as string);
-                            return;
-                          }
-                          if (key === 'Rolled from Scene') {
-                            onTransportToAmbulance(call.id, team);
-                            return;
-                          }
-                          handleTeamStatusChange(call.id, team, key as string, (key === 'Transporting' || key === 'Delivered') ? clinics[0]?.id : undefined);
-                        }}
+                        // Typing a status code (UTL, NMM, AMA) picks it too.
+                        topContent={
+                          <StatusCodeKeys
+                            options={statusOptions}
+                            onPick={(status) => {
+                              setStatusMenuTeam(null);
+                              pickTeamStatus(status);
+                            }}
+                          />
+                        }
+                        onAction={(key) => pickTeamStatus(key as string)}
                       >
                         {statusOptions.map(status => (
-                          <DropdownItem key={status}>
+                          <DropdownItem key={status} shortcut={codeForStatus(status)}>
                             {isEquipmentIconStatus(status) && teamEquipmentNames
                               ? getEquipmentStatusMenuLabel(status, teamEquipmentNames)
                               : getMenuLabel(status, t)}
@@ -320,7 +341,7 @@ export default function CallTrackingCard({
               size="lg"
               variant="flat"
               color="default"
-              className={`h-9 ${getStatusColor(detachedTeam.reason).chipClass}`}
+              className={`h-9 ${getStatusColor(detachedTeam.reason).chipClass} ${isResolved ? TRACKING_RESOLVED_CHIP_CLASS : ''}`}
               onClose={() => handleRevertDetachment(call.id, detachedTeam.team)}
               endContent={<RotateCw className="w-3.5 h-3.5" aria-label={t('Reopen Call')} />}
             >
@@ -350,7 +371,7 @@ export default function CallTrackingCard({
                 variant="flat"
                 aria-label="Add"
                 isDisabled={isResolved}
-                className="w-8 h-8 rounded-full hover:bg-surface-liner"
+                className={`w-8 h-8 rounded-full hover:bg-surface-liner ${isResolved ? TRACKING_RESOLVED_CHIP_CLASS : ''}`}
               >
                 <Plus className="h-4 w-4" />
               </Button>
@@ -396,6 +417,8 @@ export default function CallTrackingCard({
           updateEvent={updateEvent}
           expanded={expanded}
         />
+        {/* Last, so it leaves no gap while empty. */}
+        <CallRowFooters call={call} />
       </CardBody>
       <PinDropModal
         isOpen={pinOpen}

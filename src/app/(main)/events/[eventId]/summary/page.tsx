@@ -19,6 +19,8 @@ import EventRecordActions from '@/components/records/eventrecordactions';
 
 
 const SummaryCharts = dynamic(() => import('./SummaryCharts'), { ssr: false, loading: () => <div className="p-6 bg-surface-deep border border-surface-liner">Loading charts...</div> });
+// The venue map (and its live map) loads only in the browser.
+const EventMap = dynamic(() => import('./EventMap'), { ssr: false });
 
 const TWO_HOURS = 2 * 60 * 60 * 1000;
 
@@ -376,6 +378,8 @@ export default function SummaryPage() {
             </div>
           </div>
         )}
+
+        <EventMap event={event} extraLayers={extensionParts.flatMap((part) => part.mapLayers ?? [])} className={`${GRID_WRAPPER} ${GRID_CELL}`} />
 
         <EquipmentTimeline event={event} />
 
