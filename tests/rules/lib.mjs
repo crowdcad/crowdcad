@@ -39,11 +39,11 @@ export const call = async (auth, method, path, body) => {
 export const seed = (path, data) => call('owner', 'PATCH', path, fields(data));
 export const wipe = (path) => call('owner', 'DELETE', path);
 
-/** A structured query (a list) under `parent` ('' for the root), filtered on `field == value`. */
-export const query = async (auth, collection, field, value, parent = '') => {
+/** A structured query (a list) under `parent` ('' for the root), filtered on `field <op> value` (EQUAL, ARRAY_CONTAINS). */
+export const query = async (auth, collection, field, value, parent = '', op = 'EQUAL') => {
   const headers = { 'Content-Type': 'application/json' };
   if (auth) headers.Authorization = `Bearer ${auth}`;
-  const where = { fieldFilter: { field: { fieldPath: field }, op: 'EQUAL', value: enc(value) } };
+  const where = { fieldFilter: { field: { fieldPath: field }, op, value: enc(value) } };
   const r = await fetch(`${BASE}${parent ? `/${parent}` : ''}:runQuery`, {
     method: 'POST', headers, body: JSON.stringify({ structuredQuery: { from: [{ collectionId: collection }], where } }),
   });

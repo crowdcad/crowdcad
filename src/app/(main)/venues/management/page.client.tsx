@@ -8,7 +8,7 @@ import Image from 'next/image';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/hooks/useauth';
 import { dbService, storageService } from '@/lib/services';
-import type { Post, Venue, Equipment, EquipmentStatus, Layer, GeoBounds, Zone } from '@/app/types';
+import type { Post, Venue, Equipment, EquipmentStatus, Layer, GeoBounds, Zone, Vehicle } from '@/app/types';
 import { isPointWithinRect, pixelToPercent } from '@/lib/markerUtils';
 import { hasDuplicateClinicName, isClinicPost } from '@/lib/clinics';
 import { hasDuplicateZoneName } from '@/lib/zones';
@@ -24,6 +24,8 @@ import GeoJsonImportModal from '@/components/modals/venue/geojsonimport';
 import LocationEditModal from '@/components/modals/venue/locationedit';
 import ZoneEditModal from '@/components/modals/venue/zoneedit';
 import EquipmentManagementSection from '@/components/venue-management/EquipmentManagementSection';
+import VehicleManagementSection from '@/components/venue-management/VehicleManagementSection';
+import { renameVehicleIn, venueVehicles } from '@/lib/vehicles';
 import LayerControlBar from '@/components/venue-management/LayerControlBar';
 import MarkerModeToggleButton from '@/components/venue-management/MarkerModeToggleButton';
 import AreaModeToggleButton from '@/components/venue-management/AreaModeToggleButton';
@@ -91,10 +93,14 @@ export default function VenueManagementPageClient() {
     name: string;
     equipment: EquipmentWithLocation[];
     layers: Layer[];
+    vehiclesEnabled: boolean;
+    vehicles: Vehicle[];
   }>({
     name: '',
     equipment: [],
     layers: [{ id: randomId(), name: 'Floor 1', posts: [], mapUrl: undefined }],
+    vehiclesEnabled: false,
+    vehicles: [],
   });
 
   const [currentLayer, setCurrentLayer] = useState(0);
@@ -227,7 +233,7 @@ export default function VenueManagementPageClient() {
 
   // Map alignment only applies to map images; a venue with none (no map, or only drawn areas) skips it.
   const hasMapImage = venueData.layers.some((l) => !!l.mapUrl) || !!mapFile;
-  const STEP_ORDER: string[] = ['basics', 'map', ...(hasMapImage ? ['align'] : []), 'locations', 'equipment', 'review'];
+  const STEP_ORDER: string[] = ['basics', 'map', ...(hasMapImage ? ['align'] : []), 'locations', 'equipment', 'vehicles', 'review'];
   const [currentStepId, setCurrentStepId] = useState<string>('basics');
 
 
@@ -307,6 +313,8 @@ export default function VenueManagementPageClient() {
               name: venue.name,
               equipment: venue.equipment || [],
               layers,
+              vehiclesEnabled: !!venue.vehiclesEnabled,
+              vehicles: venue.vehicles || [],
             });
             setCurrentLayer(0);
           }
@@ -368,6 +376,54 @@ export default function VenueManagementPageClient() {
   const locationOptions = Array.from(
     new Set(allPosts.map((item) => (typeof item.post === 'string' ? item.post : item.post.name)).filter(Boolean))
   );
+  // Equipment can also live on a vehicle, while vehicles are on (src/lib/vehicles.ts).
+  const shownVehicles = venueVehicles(venueData);
+  const equipmentLocationOptions = [...locationOptions, ...shownVehicles.map((v) => v.name)];
+
+  // Vehicles
+  const addVehicle = (name: string) => {
+    if (venueData.vehicles.some((v) => v.name.toLowerCase() === name.toLowerCase())) return;
+    setVenueData((prev) => ({ ...prev, vehicles: [...prev.vehicles, { id: randomId(), name }] }));
+  };
+  const renameVehicle = (index: number, name: string) => {
+    setVenueData((prev) => {
+      const from = prev.vehicles[index]?.name;
+      if (!from || prev.vehicles.some((v, i) => i !== index && v.name.toLowerCase() === name.toLowerCase())) return prev;
+      return {
+        ...prev,
+        vehicles: prev.vehicles.map((v, i) => (i === index ? { ...v, name } : v)),
+        equipment: renameVehicleIn(prev.equipment, from, name),
+      };
+    });
+  };
+  const removeVehicle = (index: number) => {
+    setVenueData((prev) => {
+      const vehicle = prev.vehicles[index];
+      if (!vehicle) return prev;
+      // Its equipment stays where the vehicle was kept.
+      return {
+        ...prev,
+        vehicles: prev.vehicles.filter((_, i) => i !== index),
+        equipment: prev.equipment.map((e) => (e.location === vehicle.name ? { ...e, location: vehicle.location } : e)),
+      };
+    });
+  };
+  const setVehicleLocation = (index: number, location: string | undefined) => {
+    setVenueData((prev) => ({ ...prev, vehicles: prev.vehicles.map((v, i) => (i === index ? { ...v, location } : v)) }));
+  };
+  const setVehicleEquipment = (index: number, equipmentIds: string[]) => {
+    setVenueData((prev) => {
+      const vehicle = prev.vehicles[index];
+      if (!vehicle) return prev;
+      return {
+        ...prev,
+        equipment: prev.equipment.map((e) => {
+          if (equipmentIds.includes(e.id)) return { ...e, location: vehicle.name };
+          return e.location === vehicle.name ? { ...e, location: vehicle.location } : e;
+        }),
+      };
+    });
+  };
 
   // Equipment
   const addEquipment = () => {
@@ -832,6 +888,8 @@ export default function VenueManagementPageClient() {
       const dataToSave: Record<string, unknown> = {
         name: venueData.name.trim(),
         equipment: equipmentToSave,
+        vehiclesEnabled: venueData.vehiclesEnabled,
+        vehicles: venueData.vehicles.map((v) => stripUndefined(v)),
         layers: updatedLayers,
         posts: allPosts.map(item => item.post),
         userId,
@@ -1075,7 +1133,7 @@ export default function VenueManagementPageClient() {
             <div className="text-center">
               <p className="text-sm font-medium">Upload Venue Map</p>
               <p className="mt-1 text-xs text-surface-light/50">
-                Optional - Click to select an image
+                Optional - Upload a map here, and overlay it over a street map on the next screen
               </p>
             </div>
           </button>
@@ -1348,6 +1406,7 @@ export default function VenueManagementPageClient() {
           currentLayer={currentLayer}
           staff={[]}
           equipment={venueData.equipment}
+          vehicles={shownVehicles}
           teamTimers={{}}
           scale={readOnlyView.scale}
           position={readOnlyView.position}
@@ -1495,7 +1554,7 @@ export default function VenueManagementPageClient() {
   const geoReadOnlyPanel = currentDisplayLayer ? (
     <div className="flex flex-col h-full">
       <div className="relative min-h-0 flex-1 overflow-hidden rounded-t-sm">
-        <GeoLayerMap className="absolute inset-0" layer={currentDisplayLayer} extraPins={geoEquipmentPins(currentDisplayLayer, venueData.equipment)} />
+        <GeoLayerMap className="absolute inset-0" layer={currentDisplayLayer} extraPins={geoEquipmentPins(currentDisplayLayer, venueData.equipment, shownVehicles)} />
       </div>
       {simpleLayerBar}
     </div>
@@ -1731,8 +1790,25 @@ export default function VenueManagementPageClient() {
         cancelEquipmentEdit={cancelEquipmentEdit}
         startEditEquipment={startEditEquipment}
         removeEquipment={removeEquipment}
-        locationOptions={locationOptions}
+        locationOptions={equipmentLocationOptions}
         onSetLocation={setEquipmentLocation}
+      />
+    </div>
+  );
+
+  const vehiclesStep = (
+    <div className="h-full flex flex-col">
+      <VehicleManagementSection
+        enabled={venueData.vehiclesEnabled}
+        setEnabled={(vehiclesEnabled) => setVenueData((prev) => ({ ...prev, vehiclesEnabled }))}
+        vehicles={venueData.vehicles}
+        equipment={venueData.equipment}
+        locationOptions={locationOptions}
+        onAdd={addVehicle}
+        onRename={renameVehicle}
+        onRemove={removeVehicle}
+        onSetLocation={setVehicleLocation}
+        onSetEquipment={setVehicleEquipment}
       />
     </div>
   );
@@ -1763,6 +1839,11 @@ export default function VenueManagementPageClient() {
       id: 'equipment',
       label: 'Equipment',
       fields: [{ label: 'Equipment', value: `${venueData.equipment.length} item${venueData.equipment.length === 1 ? '' : 's'}` }],
+    },
+    {
+      id: 'vehicles',
+      label: 'Vehicles',
+      fields: [{ label: 'Vehicles', value: venueData.vehiclesEnabled ? `${venueData.vehicles.length} vehicle${venueData.vehicles.length === 1 ? '' : 's'}` : 'Off' }],
     },
   ];
   const reviewStep = (
@@ -1802,6 +1883,7 @@ export default function VenueManagementPageClient() {
     }] : []),
     { id: 'locations', label: 'Locations', component: locationsStep, isComplete: hasName },
     { id: 'equipment', label: 'Equipment', component: equipmentStep, isComplete: hasName },
+    { id: 'vehicles', label: 'Vehicles', component: vehiclesStep, isComplete: hasName },
     { id: 'review', label: 'Review', component: reviewStep, isComplete: hasName },
   ];
 

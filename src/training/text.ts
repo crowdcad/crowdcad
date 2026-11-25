@@ -1,16 +1,18 @@
 /**
  * Step text: `{{Term}}` becomes the org's word for that dispatch term
- * (src/lib/dispatchVocabulary), `**bold**` is bold and `` `value` `` is a
- * value to type. Parsed into parts so the player can render chips without
- * any HTML in module files.
+ * (src/lib/dispatchVocabulary), `**bold**` is bold, `` `value` `` is a
+ * value to type and `[label](https://...)` links out (a new tab). Parsed into
+ * parts so the player can render chips without any HTML in module files.
  */
 
 export type TextPart =
   | { kind: 'text'; text: string }
   | { kind: 'bold'; text: string }
-  | { kind: 'value'; text: string };
+  | { kind: 'value'; text: string }
+  | { kind: 'link'; text: string; href: string };
 
-const TOKEN = /(\*\*[^*]+\*\*|`[^`]+`)/g;
+const TOKEN = /(\*\*[^*]+\*\*|`[^`]+`|\[[^\]]+\]\(https:\/\/[^)\s]+\))/g;
+const LINK = /^\[([^\]]+)\]\((https:\/\/[^)\s]+)\)$/;
 
 /**
  * `{{Team}}` is the org's label as written ("Team"). `{{team}}`, starting
@@ -32,7 +34,10 @@ export function parseStepText(text: string, t: (key: string) => string): TextPar
     if (!piece) continue;
     if (piece.startsWith('**') && piece.endsWith('**')) parts.push({ kind: 'bold', text: piece.slice(2, -2) });
     else if (piece.startsWith('`') && piece.endsWith('`')) parts.push({ kind: 'value', text: piece.slice(1, -1) });
-    else parts.push({ kind: 'text', text: piece });
+    else if (LINK.test(piece)) {
+      const [, label, href] = piece.match(LINK)!;
+      parts.push({ kind: 'link', text: label!, href: href! });
+    } else parts.push({ kind: 'text', text: piece });
   }
   return parts;
 }

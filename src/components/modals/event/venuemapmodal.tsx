@@ -1,20 +1,32 @@
 'use client';
 import React, { useState, useRef, useEffect } from 'react';
 import Image from 'next/image';
-import { ShieldPlus, ShieldUser, Briefcase, ArrowBigDown } from 'lucide-react';
-import { Post, Staff, Supervisor, Equipment, Layer, Call, Clinic } from '@/app/types';
+import { Post, Staff, Supervisor, Equipment, Layer, Call, Clinic, Vehicle } from '@/app/types';
 import { isClinicPost } from '@/lib/clinics';
 import { getEquipmentIconType } from '@/lib/equipmentIcon';
-import EquipmentTypeIcon from '@/components/dispatch/equipmenttypeicon';
-import { getStatusColor } from '@/lib/statusColors';
-import { STATUS_COLORS_HEX } from '@/lib/colorTokens';
 import VenueMapZones from '@/components/venue-management/VenueMapZones';
 import type { UnitTracking } from '@/lib/unitTracking';
-import { latLonToPercent } from '@/lib/geo/affine';
+import { fromLocalMeters, latLonToPercent } from '@/lib/geo/affine';
 import { layerAlignment } from '@/lib/geo/layers';
-import { equipmentAnchor } from '@/lib/equipmentPlacement';
 import { describeCustody } from '@/lib/equipmentCustody';
-import { postIcon } from '@/components/geo/postIcon';
+import { postSymbol } from '@/components/geo/postIcon';
+import { callDisplayNumbers, callSpots, isOpenCall } from '@/lib/callMap';
+import { MAP_INK } from '@/lib/colorTokens';
+import {
+  AnchorDot,
+  LeaderLines,
+  MapSymbol,
+  SYMBOL_BOX,
+  equipmentInk,
+  fanPoints,
+  ringPoints,
+  symbolTop,
+  unitInk,
+  type MapSymbolKind,
+  type MapSymbolProps,
+} from '@/components/geo/mapSymbol';
+import { equipmentLayout, unitGroups, type MapAnchor } from '@/lib/mapLayout';
+import { vehicleOfUnit } from '@/lib/vehicles';
 
 function StatusTimer({ since }: { since: number }) {
   const [elapsed, setElapsed] = React.useState(0);
@@ -53,19 +65,43 @@ export interface ImageRect {
   height: number;
 }
 
-interface PostMarkerProps {
-  post: Post;
-  rect: ImageRect;
-  staff: Staff[];
-  scale: number;
-  /** True when this post was just navigated to (e.g. via the Map tab's location search) — draws a brief attention ring around it. */
-  isSelected?: boolean;
-  /** Clicking the pin toggles a small "Add Call" button beneath it; provided only where a Call actually makes sense (the dispatch board). */
-  onAddCall?: (postName: string) => void;
+/** Where a marker's anchor is, in the map's own (unscaled) pixels. On a live-map pin it is 0,0. */
+export interface MarkerAt {
+  left: number;
+  top: number;
 }
 
-/** How much a marker grows on hover or selection. */
-const MARKER_ENLARGE = 1.15;
+/** A shift from the anchor in screen pixels, the same at every zoom. */
+export interface Offset {
+  dx: number;
+  dy: number;
+}
+
+export const AT_ANCHOR: Offset = { dx: 0, dy: 0 };
+export const AT_PIN: MarkerAt = { left: 0, top: 0 };
+
+/** A point on an image given in percent of `rect`. */
+export const atPercent = (rect: ImageRect, x: number, y: number): MarkerAt => ({ left: rect.x + (x / 100) * rect.width, top: rect.y + (y / 100) * rect.height });
+
+/**
+ * Each kind's corner beside a post or a call's dropped pin, so the post's own
+ * pin (drawn above its spot), its units, its equipment and its calls never
+ * cover each other.
+ */
+export const SLOTS = {
+  team: { dx: 20, dy: -14 },
+  supervisor: { dx: 20, dy: 14 },
+  equipment: { dx: -18, dy: 12 },
+  call: { dx: -24, dy: -14 },
+} satisfies Record<string, Offset>;
+
+const plus = (a: Offset, b: Offset): Offset => ({ dx: a.dx + b.dx, dy: a.dy + b.dy });
+
+/** How much a marker grows on hover, about the spot it marks (a post's tip, anything else's center). */
+const MARKER_ENLARGE = 1.3;
+
+const MARKER_BUTTON =
+  'rounded-full bg-surface-deepest/95 px-3 py-1 text-xs font-semibold text-surface-light shadow-lg hover:bg-surface-deep disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-surface-deepest/95';
 
 /**
  * Closes something a marker has open (its info card or Add Call popup) on any
@@ -83,17 +119,85 @@ function useCloseOnOutsidePointer(ref: React.RefObject<HTMLElement | null>, open
   }, [ref, open, setOpen]);
 }
 
+function useMarkerState() {
+  const [hovered, setHovered] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useCloseOnOutsidePointer(ref, expanded, setExpanded);
+  useCloseOnOutsidePointer(ref, hovered, setHovered);
+  return { hovered, setHovered, expanded, setExpanded, ref };
+}
+
+interface MarkerBoxProps {
+  at: MarkerAt;
+  scale: number;
+  offset?: Offset;
+  grow?: boolean;
+  z: number;
+  boxRef?: React.Ref<HTMLDivElement>;
+  onHover?: (hovered: boolean) => void;
+  onClick?: () => void;
+  testId?: string;
+  attrs?: Record<string, string | number | boolean | undefined>;
+  children: React.ReactNode;
+}
+
+/**
+ * A marker's box: a SYMBOL_BOX square centered on its anchor (plus `offset`),
+ * counter-scaled against the map's zoom so it stays one size on screen. It
+ * grows about its center, the spot it marks. Only the symbol's painted shapes
+ * take the pointer, not the empty box around them.
+ */
+function MarkerBox({ at, scale, offset = AT_ANCHOR, grow, z, boxRef, onHover, onClick, testId, attrs, children }: MarkerBoxProps) {
+  return (
+    <div
+      ref={boxRef}
+      data-testid={testId}
+      {...attrs}
+      style={{
+        position: 'absolute',
+        left: at.left + offset.dx / scale,
+        top: at.top + offset.dy / scale,
+        width: SYMBOL_BOX,
+        height: SYMBOL_BOX,
+        marginLeft: -SYMBOL_BOX / 2,
+        marginTop: -SYMBOL_BOX / 2,
+        transform: `scale(${(grow ? MARKER_ENLARGE : 1) / scale})`,
+        transformOrigin: 'center center',
+        transition: 'transform 0.15s ease-out',
+        zIndex: z,
+        pointerEvents: 'none',
+        cursor: onClick ? 'pointer' : 'default',
+      }}
+      onPointerEnter={onHover ? () => onHover(true) : undefined}
+      // A press on a marker can start a map pan, which takes the pointer away mid-click: keep the hover through it,
+      // so clicking doesn't shrink and regrow the marker.
+      onPointerLeave={onHover ? (e) => e.buttons === 0 && onHover(false) : undefined}
+      onClick={
+        onClick
+          ? (e) => {
+              e.stopPropagation();
+              onClick();
+            }
+          : undefined
+      }
+    >
+      {children}
+    </div>
+  );
+}
+
 /**
  * A marker's info card, shown while it's hovered (or tapped, on touch). It
  * renders inside the marker, so it moves with the point as the map pans and
- * zooms, and closes like the Add Call popup (useCloseOnOutsidePointer).
+ * zooms. `grown` undoes the marker's hover enlarge so the card stays its
+ * normal size.
  */
-function MarkerCard({ children }: { children: React.ReactNode }) {
+function MarkerCard({ children, grown = true }: { children: React.ReactNode; grown?: boolean }) {
   return (
     <div
       className="pointer-events-none absolute whitespace-nowrap rounded-md bg-surface-deepest/95 px-2 py-1 text-xs text-surface-light shadow-lg"
-      // Beside the marker; undoes the marker's hover enlarge so the card stays its normal size.
-      style={{ left: '100%', top: 0, marginLeft: 10, transform: `scale(${1 / MARKER_ENLARGE})`, transformOrigin: 'left top' }}
+      style={{ left: '50%', top: '50%', marginLeft: 20, marginTop: -12, transform: `scale(${grown ? 1 / MARKER_ENLARGE : 1})`, transformOrigin: 'left top', zIndex: 2 }}
     >
       {children}
     </div>
@@ -104,118 +208,685 @@ function MarkerCardTitle({ children }: { children: React.ReactNode }) {
   return <div style={{ fontWeight: 'bold', fontSize: '15px', marginBottom: 4 }}>{children}</div>;
 }
 
-export function PostMarker({ post, rect, scale, isSelected, onAddCall }: PostMarkerProps) {
-  const [hovered, setHovered] = useState(false);
-  const [expanded, setExpanded] = useState(false);
-  const markerRef = useRef<HTMLDivElement>(null);
-  useCloseOnOutsidePointer(markerRef, expanded, setExpanded);
-  useCloseOnOutsidePointer(markerRef, hovered, setHovered);
-
-  if (!isPostObject(post)) return null;
-
-  const { x, y, width, height } = rect;
-  const left = x + (post.x / 100) * width;
-  const top = y + (post.y / 100) * height;
-
-  // Check if this is a clinic location
-  const isClinic = isClinicPost(post);
-  const Icon = postIcon(post, isClinic);
-  const iconSize = isClinic ? 26 : 22;
-  const emphasis = (hovered ? MARKER_ENLARGE : 1) / scale;
-
+/** Buttons above a marker (Add Call, a call list), clear of the symbol and of the search arrow when it shows. */
+function AboveSymbol({ kind, searched, grown, children }: { kind: MapSymbolKind; searched?: boolean; grown?: boolean; children: React.ReactNode }) {
   return (
     <div
-      ref={markerRef}
+      className="pointer-events-auto absolute whitespace-nowrap"
       style={{
-        position: "absolute",
-        left: `${left}px`,
-        top: `${top}px`,
-        // Counter-scale against the map's ambient zoom so the pin stays a
-        // constant on-screen size instead of growing/shrinking with it —
-        // the position offset above still tracks the zoomed map correctly
-        // since it's computed pre-scale, same as every other marker here.
-        transform: `translate(-50%, -50%) scale(${emphasis})`,
-        transformOrigin: 'center center',
-        // A selected/expanded post needs to clear every other marker on the
-        // map regardless of DOM order, not just sit above its own
-        // immediate neighbors.
-        zIndex: isSelected || expanded || hovered ? 999 : 12,
-        cursor: "pointer",
-        transition: 'transform 0.15s ease-out',
-      }}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      onClick={(e) => {
-        e.stopPropagation();
-        if (onAddCall) setExpanded((v) => !v);
+        left: '50%',
+        bottom: '50%',
+        marginBottom: symbolTop(kind) + (searched ? 34 : 8),
+        transform: `translateX(-50%) scale(${grown ? 1 / MARKER_ENLARGE : 1})`,
+        transformOrigin: 'bottom center',
+        zIndex: 2,
       }}
     >
-      {isSelected && (
-        // Centering (-translate-x-1/2) and the bounce both animate `transform`,
-        // so they can't share one element — Tailwind's animate-bounce keyframes
-        // only set translateY and would silently replace the centering
-        // translateX for the whole time it runs. The wrapper centers; only the
-        // icon inside it bounces.
-        <div className="absolute left-1/2 -translate-x-1/2" style={{ bottom: '100%', marginBottom: 2 }}>
-          <ArrowBigDown
-            className="animate-bounce"
-            size={40}
-            strokeWidth={1.5}
-            fill="#f97316"
-            stroke="white"
-            style={{ filter: 'drop-shadow(0 1px 3px rgb(0 0 0 / 0.6))' }}
-          />
-        </div>
-      )}
-      <Icon
-        size={iconSize}
-        strokeWidth={1.5}
-        stroke="white"
-        fill="hsl(var(--map-marker))"
-        style={{ filter: 'drop-shadow(0 1px 3px rgb(0 0 0 / 0.6))' }}
-      />
+      {children}
+    </div>
+  );
+}
 
-      {expanded && onAddCall && (
-        // marginBottom clears the bouncing attention arrow above (see
-        // isSelected below) when both happen to be showing at once — it sits
-        // in this same bottom:100% spot, just further out.
-        <div
-          className="absolute left-1/2 -translate-x-1/2 whitespace-nowrap"
-          style={{ bottom: '100%', marginBottom: isSelected ? 48 : 6 }}
-        >
+interface PostMarkerProps {
+  post: Post;
+  at: MarkerAt;
+  scale: number;
+  /** True when this post was just navigated to (e.g. via the Map tab's location search): brackets and a bouncing arrow. */
+  isSelected?: boolean;
+  /** Clicking the pin toggles a small "Add Call" button above it; provided only where a Call actually makes sense (the dispatch board). */
+  onAddCall?: (postName: string) => void;
+}
+
+/** A venue location: a flag whose tip is the spot, so it grows upward on hover and the spot never moves. */
+export function PostMarker({ post, at, scale, isSelected, onAddCall }: PostMarkerProps) {
+  const m = useMarkerState();
+  if (!isPostObject(post)) return null;
+  const { kind, glyph } = postSymbol(post, isClinicPost(post));
+
+  return (
+    <MarkerBox
+      boxRef={m.ref}
+      at={at}
+      scale={scale}
+      grow={m.hovered || m.expanded}
+      z={isSelected || m.expanded || m.hovered ? 999 : 12}
+      onHover={m.setHovered}
+      onClick={onAddCall ? () => m.setExpanded((v) => !v) : undefined}
+      testId={`post-marker-${post.name}`}
+    >
+      <MapSymbol kind={kind} fill={MAP_INK.place} glyph={glyph} searched={isSelected} title={post.name} />
+      {m.expanded && onAddCall && (
+        <AboveSymbol kind={kind} searched={isSelected} grown>
           <button
             type="button"
             onClick={(e) => {
               e.stopPropagation();
               onAddCall(post.name);
-              setExpanded(false);
+              m.setExpanded(false);
             }}
-            className="rounded-full bg-surface-deepest/95 px-3 py-1 text-xs font-semibold text-surface-light shadow-lg hover:bg-surface-deep"
+            className={MARKER_BUTTON}
           >
             Add Call
           </button>
-        </div>
+        </AboveSymbol>
       )}
+      {m.hovered && <MarkerCard>{post.name}</MarkerCard>}
+    </MarkerBox>
+  );
+}
 
-            {hovered && (
+interface CallMarkerProps {
+  /** The calls at this place: one, or several stacked into one marker. */
+  calls: Call[];
+  at: MarkerAt;
+  scale: number;
+  /** In the calls' corner beside a post (SLOTS.call); a call at its own dropped pin sits on it. */
+  offset?: Offset;
+  /** "Call #N" numbers, by call id (callDisplayNumbers). */
+  numbers: Map<string, number>;
+  /** Clicking a call in the marker's list opens it (the dispatch board's Calls tab). */
+  onOpenCall?: (callId: string) => void;
+}
+
+const RESOLVED_FILL = 'rgba(11,14,19,0.62)';
+const callRank = (c: Call) => (!isOpenCall(c) ? 2 : c.assignedTeam?.length ? 1 : 0);
+const callFill = (c: Call) => (!isOpenCall(c) ? RESOLVED_FILL : c.assignedTeam?.length ? MAP_INK.committed : MAP_INK.pending);
+
+/**
+ * A call on the map (#94): a diamond with the call's number. Waiting for a
+ * unit it is orange and pulses; with a unit, red; closed, dark with a check.
+ * A priority call gets a second frame. Several calls at one place stack, the
+ * most urgent on top.
+ */
+export function CallMarker({ calls, at, scale, offset, numbers, onOpenCall }: CallMarkerProps) {
+  const m = useMarkerState();
+  if (!calls.length) return null;
+
+  const ordered = [...calls].sort((a, b) => callRank(a) - callRank(b));
+  const top = ordered[0]!;
+  const open = calls.some(isOpenCall);
+  const first = numbers.get(calls[0]!.id);
+  const stacked = calls.length > 1;
+  const label = (c: Call) => `Call #${numbers.get(c.id) ?? '?'}`;
+
+  return (
+    <MarkerBox
+      boxRef={m.ref}
+      at={at}
+      scale={scale}
+      offset={offset}
+      grow={m.hovered || m.expanded}
+      z={m.expanded || m.hovered ? 999 : 20}
+      onHover={m.setHovered}
+      onClick={() => m.setExpanded((v) => !v)}
+      testId={`call-marker-${first ?? calls[0]!.id}`}
+      attrs={{
+        'data-count': calls.length,
+        'data-open': open,
+        role: 'button',
+        'aria-label': stacked ? `${calls.length} calls: ${calls.map(label).join(', ')}` : `${label(calls[0]!)}, ${calls[0]!.location}`,
+      }}
+    >
+      <MapSymbol
+        kind="call"
+        fill={callFill(top)}
+        resolved={!isOpenCall(top)}
+        number={numbers.get(top.id)}
+        pending={calls.some((c) => isOpenCall(c) && !c.assignedTeam?.length)}
+        priority={calls.some((c) => isOpenCall(c) && c.priority)}
+        stack={stacked ? { count: calls.length, fills: ordered.slice(1).map(callFill) } : undefined}
+      />
+      {m.expanded && onOpenCall ? (
+        <AboveSymbol kind="call" grown>
+          <div className="flex flex-col items-center gap-1">
+            {calls.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenCall(c.id);
+                  m.setExpanded(false);
+                }}
+                className={`${MARKER_BUTTON} text-left`}
+                data-testid={`call-marker-open-${numbers.get(c.id) ?? c.id}`}
+              >
+                Open {label(c)} · {c.location || 'No location'}
+              </button>
+            ))}
+          </div>
+        </AboveSymbol>
+      ) : (
+        (m.hovered || m.expanded) && (
+          <MarkerCard>
+            <MarkerCardTitle>{stacked ? `${calls.length} calls here` : label(calls[0]!)}</MarkerCardTitle>
+            {calls.map((c) => (
+              <div key={c.id}>
+                {stacked && <strong>#{numbers.get(c.id)} </strong>}
+                {c.location || 'No location'} · {c.status}
+                {c.assignedTeam?.length ? ` · ${c.assignedTeam.join(', ')}` : ''}
+                {c.chiefComplaint ? ` · ${c.chiefComplaint}` : ''}
+              </div>
+            ))}
+          </MarkerCard>
+        )
+      )}
+    </MarkerBox>
+  );
+}
+
+function EquipmentCardBody({ equipment }: { equipment: Equipment }) {
+  return (
+    <>
+      <MarkerCardTitle>{equipment.name}</MarkerCardTitle>
+      <div><strong>Status:</strong> {equipment.status}</div>
+      {equipment.phase && equipment.holder ? (
+        <div>{describeCustody({ phase: equipment.phase, holder: equipment.holder }, equipment.assignedTeam)}</div>
+      ) : (
+        <>
+          <div><strong>Assigned Team:</strong> {equipment.assignedTeam || 'None'}</div>
+          <div><strong>Location:</strong> {equipment.location || 'Unknown'}</div>
+        </>
+      )}
+    </>
+  );
+}
+
+interface EquipmentMarkerProps {
+  equipment: Equipment;
+  at: MarkerAt;
+  scale: number;
+  offset?: Offset;
+  /** True when this equipment item was just navigated to (e.g. via its card's "view on map" button). */
+  isSelected?: boolean;
+  /** At its own tracker's position, which hasn't been updated for a while. */
+  stale?: boolean;
+  /** Clicking it shows the item in the board's Equipment list. */
+  onOpen?: (equipmentName: string) => void;
+}
+
+export function EquipmentMarker({ equipment, at, scale, offset, isSelected, stale, onOpen }: EquipmentMarkerProps) {
+  const m = useMarkerState();
+  return (
+    <MarkerBox
+      boxRef={m.ref}
+      at={at}
+      scale={scale}
+      offset={offset}
+      grow={m.hovered}
+      z={isSelected || m.hovered ? 999 : 15}
+      onHover={m.setHovered}
+      onClick={onOpen ? () => onOpen(equipment.name) : undefined}
+      testId={`equipment-marker-${equipment.name}`}
+    >
+      <MapSymbol kind="equipment" fill={equipmentInk(equipment.status)} glyph={getEquipmentIconType(equipment.name)} stale={stale} searched={isSelected} title={equipment.name} />
+      {m.hovered && (
         <MarkerCard>
-          {post.name}
+          <EquipmentCardBody equipment={equipment} />
+        </MarkerCard>
+      )}
+    </MarkerBox>
+  );
+}
+
+/** A unit's equipment, fanned out below it on leader lines while the unit is open. */
+function CarriedFan({ items, selectedName, onOpen }: { items: Equipment[]; selectedName?: string | null; onOpen?: (equipmentName: string) => void }) {
+  const points = fanPoints(items.length);
+  return (
+    <>
+      <LeaderLines points={points} from={15} />
+      {items.map((item, i) => (
+        <CarriedItem key={item.id} item={item} offset={points[i]!} searched={item.name === selectedName} onOpen={onOpen} />
+      ))}
+    </>
+  );
+}
+
+function CarriedItem({ item, offset, searched, onOpen }: { item: Equipment; offset: Offset; searched: boolean; onOpen?: (equipmentName: string) => void }) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <div
+      data-testid={`carried-equipment-${item.name}`}
+      style={{ position: 'absolute', left: offset.dx, top: offset.dy, width: SYMBOL_BOX, height: SYMBOL_BOX, pointerEvents: 'none', cursor: onOpen ? 'pointer' : 'default', zIndex: hovered ? 3 : 1 }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      onClick={(e) => {
+        e.stopPropagation();
+        onOpen?.(item.name);
+      }}
+    >
+      <MapSymbol kind="equipment" fill={equipmentInk(item.status)} glyph={getEquipmentIconType(item.name)} searched={searched} title={item.name} />
+      {hovered && (
+        <MarkerCard>
+          <EquipmentCardBody equipment={item} />
         </MarkerCard>
       )}
     </div>
   );
 }
 
-function getEquipmentIcon(equipment: Equipment) {
-  return getEquipmentIconType(equipment.name);
+interface UnitMarkerProps {
+  at: MarkerAt;
+  scale: number;
+  offset?: Offset;
+  /** True when this unit was just navigated to (e.g. via its card's "view on map" button). */
+  isSelected?: boolean;
+  /** A live position that hasn't been updated for a while. */
+  stale?: boolean;
+  /** Direction of travel on screen (degrees clockwise from up), while moving. */
+  heading?: number;
+  /** The vehicle this unit crews. */
+  vehicle?: Vehicle;
+  /** Equipment the unit has: a count on its corner, fanned out below it when it's opened. */
+  carrying?: Equipment[];
+  /** The board's "view on map" target; one the unit has opens its fan. */
+  selectedEquipmentName?: string | null;
+  /** Clicking a piece of its equipment shows it in the board's Equipment list. */
+  onOpenEquipment?: (equipmentName: string) => void;
+  /** Show the unit's post in its card. Off when the event has no posting schedule. */
+  showPosts?: boolean;
 }
 
-// White glyphs: the status color and white border live on the circular badge
-// these sit inside of (EquipmentMarker), not on the icon itself.
-function EquipmentIcon({ type }: { type: string }) {
-  if (type === 'wheelchair' || type === 'stretcher' || type === 'radio') return <EquipmentTypeIcon type={type} className="h-4 w-4 text-white" />;
-  // 'aed' and the default case.
-  return <Briefcase size={16} strokeWidth={1.75} stroke="white" fill="none" />;
+interface TeamMarkerProps extends UnitMarkerProps {
+  team: Staff;
+  teamTimers: { [team: string]: number };
+  calls: Call[];
+  /** Clicking the unit toggles a small "Add Call" button above it, prefilled with this team already assigned. */
+  onAddCall?: (teamName: string) => void;
+}
+
+const CLOSED_CALL_STATUSES = ['Resolved', 'Delivered', 'Refusal', 'NMM', 'Treat and Release'];
+
+export function TeamMarker({
+  team,
+  at,
+  scale,
+  offset,
+  teamTimers,
+  calls,
+  isSelected,
+  onAddCall,
+  stale,
+  heading,
+  vehicle,
+  carrying = [],
+  selectedEquipmentName,
+  onOpenEquipment,
+  showPosts = true,
+}: TeamMarkerProps) {
+  const m = useMarkerState();
+  const activeCall = calls.find((c) => c.assignedTeam?.includes(team.team) && !CLOSED_CALL_STATUSES.includes(c.status));
+  const hasSearchedItem = carrying.some((e) => e.name === selectedEquipmentName);
+  const showFan = carrying.length > 0 && (m.expanded || hasSearchedItem);
+
+  return (
+    <MarkerBox
+      boxRef={m.ref}
+      at={at}
+      scale={scale}
+      offset={offset}
+      grow={m.hovered || m.expanded}
+      z={isSelected || m.expanded || m.hovered || hasSearchedItem ? 999 : 25}
+      onHover={m.setHovered}
+      onClick={onAddCall || carrying.length ? () => m.setExpanded((v) => !v) : undefined}
+      testId={`team-marker-${team.team}`}
+    >
+      <MapSymbol
+        kind="unit"
+        fill={unitInk(team.status)}
+        carrying={carrying.length}
+        vehicle={!!vehicle}
+        heading={heading}
+        stale={stale}
+        searched={isSelected}
+        title={team.team}
+      />
+      {showFan && <CarriedFan items={carrying} selectedName={selectedEquipmentName} onOpen={onOpenEquipment} />}
+      {m.expanded && onAddCall && (
+        <AboveSymbol kind="unit" searched={isSelected} grown>
+          <button
+            type="button"
+            disabled={!!activeCall}
+            title={activeCall ? `${team.team} is already on a call` : undefined}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (activeCall) return;
+              onAddCall(team.team);
+              m.setExpanded(false);
+            }}
+            className={MARKER_BUTTON}
+          >
+            Add Call
+          </button>
+        </AboveSymbol>
+      )}
+      {m.hovered && (
+        <MarkerCard>
+          <MarkerCardTitle>{team.team}</MarkerCardTitle>
+          <div><strong>Status:</strong> {team.status || 'Unknown'}</div>
+          {showPosts && <div><strong>Post:</strong> {team.location || 'Unassigned'}</div>}
+          {vehicle && <div><strong>Vehicle:</strong> {vehicle.name}</div>}
+          {carrying.length > 0 && <div><strong>Equipment:</strong> {carrying.map((e) => e.name).join(', ')}</div>}
+          <div>
+            <strong>Status Timer:</strong>{' '}
+            {typeof teamTimers[team.team] === 'number' ? <StatusTimer since={teamTimers[team.team]} /> : <span className="ui-timer">00:00</span>}
+          </div>
+        </MarkerCard>
+      )}
+    </MarkerBox>
+  );
+}
+
+interface SupervisorMarkerProps extends UnitMarkerProps {
+  supervisor: Supervisor;
+}
+
+export function SupervisorMarker({
+  supervisor,
+  at,
+  scale,
+  offset,
+  isSelected,
+  stale,
+  heading,
+  vehicle,
+  carrying = [],
+  selectedEquipmentName,
+  onOpenEquipment,
+  showPosts = true,
+}: SupervisorMarkerProps) {
+  const m = useMarkerState();
+  const hasSearchedItem = carrying.some((e) => e.name === selectedEquipmentName);
+  const showFan = carrying.length > 0 && (m.expanded || hasSearchedItem);
+
+  return (
+    <MarkerBox
+      boxRef={m.ref}
+      at={at}
+      scale={scale}
+      offset={offset}
+      grow={m.hovered || m.expanded}
+      z={isSelected || m.expanded || m.hovered || hasSearchedItem ? 999 : 25}
+      onHover={m.setHovered}
+      onClick={carrying.length ? () => m.setExpanded((v) => !v) : undefined}
+      testId={`supervisor-marker-${supervisor.team}`}
+    >
+      <MapSymbol
+        kind="supervisor"
+        fill={unitInk(supervisor.status)}
+        carrying={carrying.length}
+        vehicle={!!vehicle}
+        heading={heading}
+        stale={stale}
+        searched={isSelected}
+        title={supervisor.team}
+      />
+      {showFan && <CarriedFan items={carrying} selectedName={selectedEquipmentName} onOpen={onOpenEquipment} />}
+      {m.hovered && (
+        <MarkerCard>
+          <MarkerCardTitle>{supervisor.team}</MarkerCardTitle>
+          <div><strong>Status:</strong> {supervisor.status || 'Unknown'}</div>
+          {showPosts && <div><strong>Post:</strong> {supervisor.location || 'Unassigned'}</div>}
+          {vehicle && <div><strong>Vehicle:</strong> {vehicle.name}</div>}
+          {carrying.length > 0 && <div><strong>Equipment:</strong> {carrying.map((e) => e.name).join(', ')}</div>}
+        </MarkerCard>
+      )}
+    </MarkerBox>
+  );
+}
+
+interface StackMember {
+  key: string;
+  name: string;
+  status: string;
+  fill: string;
+  /** The board's "view on map" target: opens the stack. */
+  searched?: boolean;
+  /** The member's own marker, at `offset` from the stack's anchor. */
+  render: (offset: Offset) => React.ReactNode;
+}
+
+/**
+ * Several units (or pieces of equipment) of one kind in the same spot: the
+ * most urgent on top, the next two as frames behind it, and a count. Clicking
+ * it spreads them on a ring around the spot, each its own marker again;
+ * clicking the spot or anywhere else closes it.
+ */
+function StackMarker({ at, scale, offset = AT_ANCHOR, symbol, members, z }: { at: MarkerAt; scale: number; offset?: Offset; symbol: MapSymbolProps; members: StackMember[]; z: number }) {
+  const [hovered, setHovered] = useState(false);
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  useCloseOnOutsidePointer(wrapRef, open, setOpen);
+  useCloseOnOutsidePointer(wrapRef, hovered, setHovered);
+  const spread = open || members.some((mb) => mb.searched);
+  const ring = ringPoints(members.length, symbol.kind === 'equipment' ? 30 : 38);
+  const testKind = symbol.kind === 'equipment' ? 'equipment' : 'unit';
+
+  return (
+    <div ref={wrapRef} className="pointer-events-none absolute inset-0" style={{ zIndex: spread || hovered ? 999 : z }}>
+      {spread ? (
+        <>
+          <MarkerBox at={at} scale={scale} offset={offset} z={0} onClick={() => setOpen(false)} testId={`${testKind}-stack-open`}>
+            <LeaderLines points={ring} />
+            <AnchorDot />
+          </MarkerBox>
+          {members.map((mb, i) => (
+            <React.Fragment key={mb.key}>{mb.render(plus(offset, ring[i]!))}</React.Fragment>
+          ))}
+        </>
+      ) : (
+        <MarkerBox
+          at={at}
+          scale={scale}
+          offset={offset}
+          grow={hovered}
+          z={0}
+          onHover={setHovered}
+          onClick={() => setOpen(true)}
+          testId={`${testKind}-stack`}
+          attrs={{ 'data-count': members.length }}
+        >
+          <MapSymbol {...symbol} stack={{ count: members.length, fills: members.slice(1).map((mb) => mb.fill) }} />
+          {hovered && (
+            <MarkerCard>
+              <MarkerCardTitle>{members.length} here</MarkerCardTitle>
+              {members.map((mb) => (
+                <div key={mb.key}>
+                  {mb.name} · {mb.status}
+                </div>
+              ))}
+            </MarkerCard>
+          )}
+        </MarkerBox>
+      )}
+    </div>
+  );
+}
+
+/** Everything a map needs to lay out its unit and equipment markers (layoutMarkers). */
+export interface MarkerContext {
+  scale: number;
+  staff: Staff[];
+  supervisor: Supervisor[];
+  equipment: Equipment[];
+  calls: Call[];
+  teamTimers: { [team: string]: number };
+  tracking?: UnitTracking | null;
+  vehicles?: Vehicle[];
+  showPosts?: boolean;
+  selectedTeamName?: string | null;
+  selectedSupervisorName?: string | null;
+  selectedEquipmentName?: string | null;
+  onAddCallForTeam?: (teamName: string) => void;
+  onOpenEquipment?: (equipmentName: string) => void;
+  /** Whether this map can show a point. */
+  canShow: (lat: number, lon: number) => boolean;
+  /** Where an anchor is on this map (null when it can't show it); `lat`/`lng` for a live map's pin. */
+  place: (anchor: MapAnchor) => { at: MarkerAt; lat?: number; lng?: number } | null;
+  /** A live position's heading (degrees from north) turned into a screen direction. */
+  headingOnScreen: (lat: number, lon: number, heading: number) => number;
+}
+
+export interface PlacedMarker {
+  key: string;
+  /** Set on a live map: the marker's pin. */
+  lat?: number;
+  lng?: number;
+  node: React.ReactNode;
+}
+
+/**
+ * The unit and equipment markers for one map (src/lib/mapLayout.ts): each
+ * kind in its corner beside a post or a call's pin, stacked when several
+ * share it; units at their live positions; equipment with the unit that has
+ * it. Used by the image map and the live map alike.
+ */
+export function layoutMarkers(ctx: MarkerContext): PlacedMarker[] {
+  const { scale } = ctx;
+  const vehicles = ctx.vehicles ?? [];
+  const units = [...ctx.staff, ...ctx.supervisor];
+  const equipment = equipmentLayout(ctx.equipment, units, ctx.tracking, vehicles);
+  const out: PlacedMarker[] = [];
+
+  for (const g of equipment.groups) {
+    const p = ctx.place(g.anchor);
+    if (!p) continue;
+    const offset = g.beside ? SLOTS.equipment : AT_ANCHOR;
+    const one = (item: Equipment, o: Offset) => (
+      <EquipmentMarker
+        key={item.id}
+        equipment={item}
+        at={p.at}
+        scale={scale}
+        offset={o}
+        isSelected={item.name === ctx.selectedEquipmentName}
+        stale={g.stale}
+        onOpen={ctx.onOpenEquipment}
+      />
+    );
+    const top = g.items[0]!;
+    out.push({
+      key: `${g.key}:equipment`,
+      lat: p.lat,
+      lng: p.lng,
+      node:
+        g.items.length === 1 ? (
+          one(top, offset)
+        ) : (
+          <StackMarker
+            at={p.at}
+            scale={scale}
+            offset={offset}
+            z={15}
+            symbol={{ kind: 'equipment', fill: equipmentInk(top.status), glyph: getEquipmentIconType(top.name) }}
+            members={g.items.map((item) => ({
+              key: item.id,
+              name: item.name,
+              status: item.status,
+              fill: equipmentInk(item.status),
+              searched: item.name === ctx.selectedEquipmentName,
+              render: (o) => one(item, o),
+            }))}
+          />
+        ),
+    });
+  }
+
+  const unitProps = (name: string, g: { stale?: boolean; heading?: number; anchor: MapAnchor }) => ({
+    scale,
+    stale: g.stale,
+    heading: g.heading != null && g.anchor.kind === 'point' ? ctx.headingOnScreen(g.anchor.lat, g.anchor.lon, g.heading) : undefined,
+    vehicle: vehicleOfUnit(name, vehicles),
+    carrying: equipment.carried.get(name),
+    selectedEquipmentName: ctx.selectedEquipmentName,
+    onOpenEquipment: ctx.onOpenEquipment,
+    showPosts: ctx.showPosts,
+  });
+  const unitSymbol = (kind: 'unit' | 'supervisor', u: { team: string; status: string }): MapSymbolProps => ({
+    kind,
+    fill: unitInk(u.status),
+    carrying: equipment.carried.get(u.team)?.length,
+    vehicle: !!vehicleOfUnit(u.team, vehicles),
+  });
+
+  for (const g of unitGroups(ctx.staff, ctx.tracking, ctx.canShow)) {
+    const p = ctx.place(g.anchor);
+    if (!p) continue;
+    const offset = g.beside ? SLOTS.team : AT_ANCHOR;
+    const one = (team: Staff, o: Offset) => (
+      <TeamMarker
+        key={team.team}
+        team={team}
+        at={p.at}
+        offset={o}
+        teamTimers={ctx.teamTimers}
+        calls={ctx.calls}
+        isSelected={team.team === ctx.selectedTeamName}
+        onAddCall={ctx.onAddCallForTeam}
+        {...unitProps(team.team, g)}
+      />
+    );
+    out.push({
+      key: `${g.key}:team`,
+      lat: p.lat,
+      lng: p.lng,
+      node:
+        g.units.length === 1 ? (
+          one(g.units[0]!, offset)
+        ) : (
+          <StackMarker
+            at={p.at}
+            scale={scale}
+            offset={offset}
+            z={25}
+            symbol={unitSymbol('unit', g.units[0]!)}
+            members={g.units.map((team) => ({
+              key: team.team,
+              name: team.team,
+              status: team.status,
+              fill: unitInk(team.status),
+              searched: team.team === ctx.selectedTeamName || !!equipment.carried.get(team.team)?.some((e) => e.name === ctx.selectedEquipmentName),
+              render: (o) => one(team, o),
+            }))}
+          />
+        ),
+    });
+  }
+
+  for (const g of unitGroups(ctx.supervisor, ctx.tracking, ctx.canShow)) {
+    const p = ctx.place(g.anchor);
+    if (!p) continue;
+    const offset = g.beside ? SLOTS.supervisor : AT_ANCHOR;
+    const one = (sup: Supervisor, o: Offset) => (
+      <SupervisorMarker key={sup.team} supervisor={sup} at={p.at} offset={o} isSelected={sup.team === ctx.selectedSupervisorName} {...unitProps(sup.team, g)} />
+    );
+    out.push({
+      key: `${g.key}:supervisor`,
+      lat: p.lat,
+      lng: p.lng,
+      node:
+        g.units.length === 1 ? (
+          one(g.units[0]!, offset)
+        ) : (
+          <StackMarker
+            at={p.at}
+            scale={scale}
+            offset={offset}
+            z={25}
+            symbol={unitSymbol('supervisor', g.units[0]!)}
+            members={g.units.map((sup) => ({
+              key: sup.team,
+              name: sup.team,
+              status: sup.status,
+              fill: unitInk(sup.status),
+              searched: sup.team === ctx.selectedSupervisorName || !!equipment.carried.get(sup.team)?.some((e) => e.name === ctx.selectedEquipmentName),
+              render: (o) => one(sup, o),
+            }))}
+          />
+        ),
+    });
+  }
+  return out;
 }
 
 function getContainedImageRect(containerW: number, containerH: number, naturalW: number, naturalH: number) {
@@ -238,414 +909,6 @@ function getContainedImageRect(containerW: number, containerH: number, naturalW:
     const y = 0;
     return { x, y, width, height };
   }
-}
-
-// Equipment marker - static display only
-interface EquipmentMarkerProps {
-  equipment: Equipment;
-  post: Post;
-  rect: ImageRect;
-  scale: number;
-  /** True when this equipment item was just navigated to (e.g. via its card's "view on map" button) — draws the same attention arrow/enlarge a selected post gets. */
-  isSelected?: boolean;
-  /** Position among the equipment at this post (equipmentStaggerIndices); each one after the first steps a little to the right. */
-  staggerIndex?: number;
-  /** Drawn faded: the unit carrying it has a stale live position. */
-  faded?: boolean;
-}
-
-/** Each equipment item's place among the items at the same location, so markers sharing a post can be staggered. */
-export function equipmentStaggerIndices(equipment: Equipment[]): Map<string, number> {
-  const seen: Record<string, number> = {};
-  const out = new Map<string, number>();
-  for (const equip of equipment) {
-    if (!equip.location) continue;
-    const i = seen[equip.location] ?? 0;
-    seen[equip.location] = i + 1;
-    out.set(equip.id, i);
-  }
-  return out;
-}
-
-export function EquipmentMarker({
-  equipment,
-  post,
-  rect,
-  scale,
-  isSelected,
-  staggerIndex = 0,
-  faded = false,
-}: EquipmentMarkerProps) {
-  const [hovered, setHovered] = useState(false);
-  const markerRef = useRef<HTMLDivElement>(null);
-  useCloseOnOutsidePointer(markerRef, hovered, setHovered);
-
-  const postIsValid = isPostObject(post);
-  if (!postIsValid) return null;
-
-  // Position equipment marker. Like TeamMarker's own offset, this is in the
-  // map's pre-zoom coordinate space, which the ambient container transform
-  // (scale(scale), see VenueMapWithPosts) then multiplies by `scale` again —
-  // dividing by `scale` here cancels that out, so the on-screen distance
-  // from the post stays constant across zoom levels instead of growing the
-  // more you zoom in (a flat pixel offset would, since it wasn't
-  // compensating for the ambient scale at all).
-  const equipmentOffset = 12 / scale;
-  // More equipment at the same post steps right one at a time, counter-scaled like TeamMarker's stagger.
-  const staggerStep = (14 * staggerIndex) / scale;
-  const left = rect.x + (post.x / 100) * rect.width - equipmentOffset + staggerStep;
-  const top = rect.y + (post.y / 100) * rect.height + equipmentOffset;
-
-  const iconType = getEquipmentIcon(equipment);
-  const badgeColor = getEquipmentMarkerColor(equipment);
-  // Same hover/selected enlarge as every other marker (see PostMarker).
-  const emphasis = (hovered || isSelected ? MARKER_ENLARGE : 1) / scale;
-
-
-  return (
-    <div
-      ref={markerRef}
-      style={{
-        position: 'absolute',
-        left: `${left}px`,
-        top: `${top}px`,
-        // Counter-scale against ambient map zoom so the icon stays a
-        // constant on-screen size, same treatment as PostMarker/TeamMarker.
-        transform: `translate(-50%, -50%) scale(${emphasis})`,
-        transformOrigin: 'center center',
-        zIndex: isSelected || hovered ? 999 : 15,
-        cursor: 'pointer',
-        transition: 'transform 0.15s ease-out',
-        opacity: faded ? 0.45 : 1,
-      }}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-    >
-      {isSelected && (
-        <div className="absolute left-1/2 -translate-x-1/2" style={{ bottom: '100%', marginBottom: 2 }}>
-          <ArrowBigDown
-            className="animate-bounce"
-            size={40}
-            strokeWidth={1.5}
-            fill="#f97316"
-            stroke="white"
-            style={{ filter: 'drop-shadow(0 1px 3px rgb(0 0 0 / 0.6))' }}
-          />
-        </div>
-      )}
-      <div
-        style={{
-          width: 26,
-          height: 26,
-          borderRadius: '50%',
-          background: badgeColor,
-          border: '2px solid white',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          filter: 'drop-shadow(0 1px 3px rgb(0 0 0 / 0.6))',
-        }}
-      >
-        <EquipmentIcon type={iconType} />
-      </div>
-            {hovered && (
-        <MarkerCard>
-          <MarkerCardTitle>{equipment.name}</MarkerCardTitle>
-          <div><strong>Status:</strong> {equipment.status}</div>
-          {equipment.phase && equipment.holder ? (
-            <div>{describeCustody({ phase: equipment.phase, holder: equipment.holder }, equipment.assignedTeam)}</div>
-          ) : (
-            <>
-              <div><strong>Assigned Team:</strong> {equipment.assignedTeam || 'None'}</div>
-              <div><strong>Location:</strong> {equipment.location || 'Unknown'}</div>
-            </>
-          )}
-        </MarkerCard>
-      )}
-    </div>
-  );
-}
-
-// Shared by TeamMarker and SupervisorMarker — Staff and Supervisor both
-// carry a plain `status` string, so one status→color mapping covers both.
-function getTeamMarkerColors(team: { status: string }) {
-  let color = '#2300a1ff';
-  const outline = '2px solid white';
-
-  // Same "carrying/delivering equipment" convention calltracking.tsx's
-  // status chips use (getStatusColor's 'text-status-orange' group: En Route
-  // Eq, Assisting, Delivered Eq) — checked first since e.g. 'Assisting'
-  // isn't in any of the other buckets below and would otherwise fall
-  // through to the default color.
-  if (getStatusColor(team.status).textClass === 'text-status-orange') {
-    color = STATUS_COLORS_HEX.orange;
-  } else if (team.status === 'Available') {
-    color = '#4cb600ff';
-  } else if (team.status === 'On Break') {
-    color = 'grey';
-  } else if (
-    team.status === 'En Route' ||
-    team.status === 'On Scene' ||
-    team.status === 'Transporting'
-  ) {
-    color = 'red';
-  }
-
-  return { color, outline };
-}
-
-/** Same green/grey/orange/red/default convention as team markers, applied to an equipment item's own status. */
-function getEquipmentMarkerColor(equipment: Equipment): string {
-  const status = equipment.status || '';
-  if (status.startsWith('Call ') || status === 'In Use') return 'red';
-  if (status === 'In Clinic') return 'grey';
-  if (status === 'Available') return '#4cb600ff';
-  return '#2300a1ff';
-}
-
-// function getTeamMarkerText(team: Staff) {
-//   if (team.sam && /^SAM\d+$/.test(team.team)) {
-//     const number = team.team.replace('SAM', '');
-//     return `S${number}`;
-//   }
-//   return team.team.slice(-1);
-// }
-
-interface TeamMarkerProps {
-  team: Staff;
-  post: Post;
-  rect: ImageRect;
-  teamTimers: { [team: string]: number };
-  calls: Call[];
-  clinics: Clinic[];
-  scale: number;
-  /** True when this team was just navigated to (e.g. via a team card's "view on map" button) — draws the same attention arrow a selected post gets. */
-  isSelected?: boolean;
-  /** Clicking the icon toggles a small "Add Call" button beneath it, prefilled with this team already assigned. */
-  onAddCall?: (teamName: string) => void;
-  /** How many other teams at this same post were already placed before this one (0 for the first) — staggers each additional team a bit further right so a shared post/call doesn't stack their pins on top of each other. */
-  staggerIndex?: number;
-  /** Drawn exactly at `post`'s position (a live position, D66) rather than offset beside a post pin. */
-  exact?: boolean;
-  /** Drawn faded (a live position that hasn't been updated for a while). */
-  faded?: boolean;
-  /** Show the team's post in its card. Off when the event has no posting schedule. */
-  showPosts?: boolean;
-}
-
-export function TeamMarker({
-  team,
-  post,
-  rect,
-  teamTimers,
-  calls,
-  scale,
-  isSelected,
-  onAddCall,
-  staggerIndex = 0,
-  exact = false,
-  faded = false,
-  showPosts = true,
-}: TeamMarkerProps) {
-  const [hovered, setHovered] = useState(false);
-  const [expanded, setExpanded] = useState(false);
-  const markerRef = useRef<HTMLDivElement>(null);
-  useCloseOnOutsidePointer(markerRef, expanded, setExpanded);
-  useCloseOnOutsidePointer(markerRef, hovered, setHovered);
-
-  const postIsValid = isPostObject(post);
-  if (!postIsValid) return null;
-
-  // Stagger the team marker from its post's center. This offset is in the
-  // map's pre-zoom coordinate space, which the ambient container transform
-  // (scale(scale), see VenueMapWithPosts) then multiplies by `scale` again —
-  // dividing by `scale` here cancels that back out, so the on-screen gap
-  // between a team and its post stays a constant size across zoom levels
-  // (same treatment as the icon's own counter-scale below), instead of
-  // growing when zoomed out and shrinking when zoomed in.
-  const teamOffset = exact ? 0 : 10 / scale;
-  // Extra teams sharing this exact post (e.g. several teams attached to the
-  // same call) step further right one at a time, also counter-scaled so the
-  // on-screen spacing between them stays constant too.
-  const staggerStep = (20 * staggerIndex) / scale;
-  const left = rect.x + (post.x / 100) * rect.width + teamOffset + staggerStep;
-  const top = rect.y + (post.y / 100) * rect.height - teamOffset;
-
-  const { color } = getTeamMarkerColors(team);
-
-  const activeCall = calls.find(c =>
-    c.assignedTeam?.includes(team.team) && !['Resolved', 'Delivered', 'Refusal', 'NMM', 'Treat and Release'].includes(c.status)
-  );
-  const statusLabel = team.status || 'Unknown';
-
-  // Same hover/selected enlarge as every other marker (see PostMarker).
-  const emphasis = (hovered || isSelected ? MARKER_ENLARGE : 1) / scale;
-
-
-  return (
-    <div
-      ref={markerRef}
-      style={{
-        position: 'absolute',
-        left: `${left}px`,
-        top: `${top}px`,
-        // Counter-scale against ambient map zoom so the icon stays a
-        // constant on-screen size, same treatment as PostMarker/EquipmentMarker.
-        transform: `translate(-50%, -50%) scale(${emphasis})`,
-        transformOrigin: 'center center',
-        zIndex: isSelected || expanded || hovered ? 999 : 25,
-        opacity: faded ? 0.45 : 1,
-        cursor: 'pointer',
-        transition: 'transform 0.15s ease-out',
-      }}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      onClick={(e) => {
-        e.stopPropagation();
-        if (onAddCall) setExpanded((v) => !v);
-      }}
-    >
-      {isSelected && (
-        <div className="absolute left-1/2 -translate-x-1/2" style={{ bottom: '100%', marginBottom: 2 }}>
-          <ArrowBigDown
-            className="animate-bounce"
-            size={40}
-            strokeWidth={1.5}
-            fill="#f97316"
-            stroke="white"
-            style={{ filter: 'drop-shadow(0 1px 3px rgb(0 0 0 / 0.6))' }}
-          />
-        </div>
-      )}
-      <ShieldPlus
-        size={26}
-        strokeWidth={1.5}
-        stroke="white"
-        fill={color}
-        style={{ filter: 'drop-shadow(0 1px 3px rgb(0 0 0 / 0.6))' }}
-      />
-      {expanded && onAddCall && (
-        // marginBottom clears the bouncing attention arrow above (see
-        // isSelected below) when both happen to be showing at once — it sits
-        // in this same bottom:100% spot, just further out.
-        <div
-          className="absolute left-1/2 -translate-x-1/2 whitespace-nowrap"
-          style={{ bottom: '100%', marginBottom: isSelected ? 48 : 6 }}
-        >
-          <button
-            type="button"
-            disabled={!!activeCall}
-            title={activeCall ? `${team.team} is already on a call` : undefined}
-            onClick={(e) => {
-              e.stopPropagation();
-              if (activeCall) return;
-              onAddCall(team.team);
-              setExpanded(false);
-            }}
-            className="rounded-full bg-surface-deepest/95 px-3 py-1 text-xs font-semibold text-surface-light shadow-lg hover:bg-surface-deep disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-surface-deepest/95"
-          >
-            Add Call
-          </button>
-        </div>
-      )}
-            {hovered && (
-        <MarkerCard>
-          <MarkerCardTitle>{team.team}</MarkerCardTitle>
-          <div><strong>Status:</strong> {statusLabel}</div>
-          {showPosts && <div><strong>Post:</strong> {team.location || 'Unassigned'}</div>}
-          <div>
-            <strong>Status Timer:</strong>{' '}
-            {typeof teamTimers[team.team] === 'number' ? <StatusTimer since={teamTimers[team.team]} /> : <span className="ui-timer">00:00</span>}
-          </div>
-        </MarkerCard>
-      )}
-    </div>
-  );
-}
-
-interface SupervisorMarkerProps {
-  supervisor: Supervisor;
-  post: Post;
-  rect: ImageRect;
-  scale: number;
-  /** True when this supervisor was just navigated to (e.g. via their card's "view on map" button) — draws the same attention arrow/enlarge a selected post gets. */
-  isSelected?: boolean;
-  /** Drawn exactly at `post`'s position (a live position, D66) rather than offset beside a post pin. */
-  exact?: boolean;
-  faded?: boolean;
-  /** Show the supervisor's post in their card. Off when the event has no posting schedule. */
-  showPosts?: boolean;
-}
-
-export function SupervisorMarker({ supervisor, post, rect, scale, isSelected, exact = false, faded = false, showPosts = true }: SupervisorMarkerProps) {
-  const [hovered, setHovered] = useState(false);
-  const markerRef = useRef<HTMLDivElement>(null);
-  useCloseOnOutsidePointer(markerRef, hovered, setHovered);
-
-  const postIsValid = isPostObject(post);
-  if (!postIsValid) return null;
-
-  // Offset down-right from the post — the opposite corner from TeamMarker's
-  // up-right and EquipmentMarker's down-left — so a team, supervisor, and
-  // equipment item sharing the exact same post don't stack on top of each
-  // other. Counter-scaled the same way as the other markers' offsets so the
-  // on-screen gap stays constant across zoom levels.
-  const supervisorOffset = exact ? 0 : 10 / scale;
-  const left = rect.x + (post.x / 100) * rect.width + supervisorOffset;
-  const top = rect.y + (post.y / 100) * rect.height + supervisorOffset;
-
-  const { color } = getTeamMarkerColors(supervisor);
-  // Same hover/selected enlarge as every other marker (see PostMarker).
-  const emphasis = (hovered || isSelected ? MARKER_ENLARGE : 1) / scale;
-
-
-  return (
-    <div
-      ref={markerRef}
-      style={{
-        position: 'absolute',
-        left: `${left}px`,
-        top: `${top}px`,
-        // Counter-scale against ambient map zoom so the icon stays a
-        // constant on-screen size, same treatment as every other marker.
-        transform: `translate(-50%, -50%) scale(${emphasis})`,
-        transformOrigin: 'center center',
-        zIndex: isSelected || hovered ? 999 : 25,
-        opacity: faded ? 0.45 : 1,
-        cursor: 'default',
-        transition: 'transform 0.15s ease-out',
-      }}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-    >
-      {isSelected && (
-        <div className="absolute left-1/2 -translate-x-1/2" style={{ bottom: '100%', marginBottom: 2 }}>
-          <ArrowBigDown
-            className="animate-bounce"
-            size={40}
-            strokeWidth={1.5}
-            fill="#f97316"
-            stroke="white"
-            style={{ filter: 'drop-shadow(0 1px 3px rgb(0 0 0 / 0.6))' }}
-          />
-        </div>
-      )}
-      <ShieldUser
-        size={26}
-        strokeWidth={1.5}
-        stroke="white"
-        fill={color}
-        style={{ filter: 'drop-shadow(0 1px 3px rgb(0 0 0 / 0.6))' }}
-      />
-            {hovered && (
-        <MarkerCard>
-          <MarkerCardTitle>{supervisor.team}</MarkerCardTitle>
-          <div><strong>Status:</strong> {supervisor.status || 'Unknown'}</div>
-          {showPosts && <div><strong>Post:</strong> {supervisor.location || 'Unassigned'}</div>}
-        </MarkerCard>
-      )}
-    </div>
-  );
 }
 
 /** Optional add-on layer for the map, e.g. TAK live tracking. Omitted, the map renders exactly as before. */
@@ -687,6 +950,8 @@ export interface VenueMapWithPostsProps {
   staff: Staff[];
   supervisor?: Supervisor[];
   equipment?: Equipment[];
+  /** The event's (or venue's) vehicles: equipment on one is drawn where the vehicle is, and a unit crewing one shows it. */
+  vehicles?: Vehicle[];
   teamTimers: { [team: string]: number };
   calls?: Call[];
   clinics?: Clinic[];
@@ -709,24 +974,30 @@ export interface VenueMapWithPostsProps {
   /** Overrides the image container's default rounded-2xl corners — for a
    *  caller (e.g. event creation) whose map merges flush with UI beneath it. */
   imageRadiusClassName?: string;
-  /** Name of a post on the current layer to draw a brief attention ring around — e.g. the dispatch Map tab's location search jumping to a result. */
+  /** Name of a post on the current layer to point out — e.g. the dispatch Map tab's location search jumping to a result. */
   selectedPostName?: string | null;
-  /** Name of a team on the current layer to draw the same attention arrow around — e.g. a team card's "view on map" button. */
+  /** Name of a team on the current layer to point out — e.g. a team card's "view on map" button. */
   selectedTeamName?: string | null;
   /** Same, for a supervisor's "view on map" button. */
   selectedSupervisorName?: string | null;
   /** Same, for an equipment item's "view on map" button (matched by name, same identity equipment cards use elsewhere). */
   selectedEquipmentName?: string | null;
-  /** Clicking a post pin shows a small "Add Call" button under it prefilled with that location; omit to disable (event creation/venue management have no Calls). */
+  /** Clicking a post pin shows a small "Add Call" button above it prefilled with that location; omit to disable (event creation/venue management have no Calls). */
   onAddCallAtPost?: (postName: string) => void;
   /** Same, but from clicking a team marker — prefills the assigned team instead of the location. */
   onAddCallForTeam?: (teamName: string) => void;
+  /** Clicking a piece of equipment shows it in the board's Equipment list. */
+  onOpenEquipment?: (equipmentName: string) => void;
   /** Show posts in team and supervisor cards. Off when the event has no posting schedule. */
   showPosts?: boolean;
   /** Draw the posts' own pins (the Map tab's Layers menu can hide them; units at posts are still placed). */
   showPostPins?: boolean;
   /** Optional add-on layer (see MapOverlay). */
   overlay?: MapOverlay;
+  /** Draw call markers (#94): open calls, or every call (the event summary's map). Off by default. */
+  showCalls?: 'open' | 'all' | false;
+  /** Clicking a call in a call marker's list opens it. */
+  onOpenCall?: (callId: string) => void;
 }
 
 export function VenueMapWithPosts({
@@ -735,9 +1006,9 @@ export function VenueMapWithPosts({
   staff,
   supervisor = [],
   equipment = [],
+  vehicles,
   teamTimers,
   calls = [],
-  clinics = [],
   onNaturalSize,
   isOpen,
   imageRadiusClassName = 'rounded-2xl',
@@ -758,9 +1029,12 @@ export function VenueMapWithPosts({
   selectedEquipmentName,
   onAddCallAtPost,
   onAddCallForTeam,
+  onOpenEquipment,
   showPosts = true,
   showPostPins = true,
   overlay,
+  showCalls = false,
+  onOpenCall,
 }: VenueMapWithPostsProps) {
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   const [naturalSize, setNaturalSize] = useState({ width: 0, height: 0 });
@@ -772,7 +1046,19 @@ export function VenueMapWithPosts({
 
   const mapUrl = layers[currentLayer]?.mapUrl || '';
   const posts = layers[currentLayer]?.posts || [];
-  const equipmentStagger = equipmentStaggerIndices(equipment);
+  const callNumbers = callDisplayNumbers(calls);
+  const shownLayer = layers[currentLayer];
+  const callMarkers = showCalls && shownLayer ? callSpots(showCalls === 'all' ? calls : calls.filter(isOpenCall), shownLayer, false) : [];
+
+  // Units with a position (a live one, D66, or a call's dropped pin) are drawn there; positions this layer can't
+  // show are left off, and a unit at a call's pin it can't show falls back to its post (mapLayout.ts).
+  const tracking = overlay?.unitTracking;
+  const alignment = shownLayer ? tracking?.alignments[shownLayer.id] ?? layerAlignment(shownLayer) : undefined;
+  const percentOf = (lat: number, lon: number) => {
+    if (!alignment) return null;
+    const p = latLonToPercent(alignment, { lat, lon });
+    return p.x < 0 || p.x > 100 || p.y < 0 || p.y > 100 ? null : p;
+  };
 
   // Update container size when component mounts and on resize
   useEffect(() => {
@@ -785,7 +1071,7 @@ export function VenueMapWithPosts({
         setContainerSize(newSize);
       }
     }
-    
+
     const updateWithDelay = () => {
       updateContainerSize();
       requestAnimationFrame(() => {
@@ -794,9 +1080,9 @@ export function VenueMapWithPosts({
         setTimeout(updateContainerSize, 50);
       });
     };
-    
+
     updateWithDelay();
-    
+
     window.addEventListener("resize", updateContainerSize);
     return () => window.removeEventListener("resize", updateContainerSize);
   }, []);
@@ -804,7 +1090,7 @@ export function VenueMapWithPosts({
   // Re-measure container when modal opens (for initial render)
   useEffect(() => {
     if (!isOpen) return;
-    
+
     const measureContainer = () => {
       if (containerRef.current) {
         setContainerSize({
@@ -813,14 +1099,14 @@ export function VenueMapWithPosts({
         });
       }
     };
-    
+
     const timers = [
       setTimeout(measureContainer, 0),
       setTimeout(measureContainer, 10),
       setTimeout(measureContainer, 50),
       setTimeout(measureContainer, 100),
     ];
-    
+
     return () => timers.forEach(clearTimeout);
   }, [isOpen, mapUrl]);
 
@@ -829,7 +1115,7 @@ export function VenueMapWithPosts({
     setNaturalSize({ width: img.naturalWidth, height: img.naturalHeight });
     setImageLoaded(true);
     onNaturalSize?.(img.naturalWidth, img.naturalHeight);
-    
+
     const measureAfterImageLoad = () => {
       if (containerRef.current) {
         const newSize = {
@@ -839,9 +1125,9 @@ export function VenueMapWithPosts({
         setContainerSize(newSize);
       }
     };
-    
+
     measureAfterImageLoad();
-    
+
     requestAnimationFrame(() => {
       measureAfterImageLoad();
       setTimeout(measureAfterImageLoad, 10);
@@ -856,12 +1142,12 @@ export function VenueMapWithPosts({
     naturalSize.height
   );
 
-  const shouldRenderMarkers = imageLoaded && 
-    rect.width > 0 && 
-    rect.height > 0 && 
-    containerSize.width > 0 && 
+  const shouldRenderMarkers = imageLoaded &&
+    rect.width > 0 &&
+    rect.height > 0 &&
+    containerSize.width > 0 &&
     containerSize.height > 0 &&
-    naturalSize.width > 0 && 
+    naturalSize.width > 0 &&
     naturalSize.height > 0;
 
   useEffect(() => {
@@ -874,13 +1160,56 @@ export function VenueMapWithPosts({
           });
         }
       };
-      
+
       setTimeout(measureOnce, 5);
     }
   }, [shouldRenderMarkers]);
 
+  const postByName = (name: string) => {
+    const post = posts.find((p) => typeof p !== 'string' && p.name === name);
+    return post && isPostObject(post) ? post : undefined;
+  };
+  const markers = shouldRenderMarkers
+    ? layoutMarkers({
+        scale,
+        staff,
+        supervisor,
+        equipment,
+        calls,
+        teamTimers,
+        tracking,
+        vehicles,
+        showPosts,
+        selectedTeamName,
+        selectedSupervisorName,
+        selectedEquipmentName,
+        onAddCallForTeam,
+        onOpenEquipment,
+        canShow: (lat, lon) => !!percentOf(lat, lon),
+        place: (anchor) => {
+          if (anchor.kind === 'post') {
+            const post = postByName(anchor.post);
+            return post ? { at: atPercent(rect, post.x, post.y) } : null;
+          }
+          const p = percentOf(anchor.lat, anchor.lon);
+          return p ? { at: atPercent(rect, p.x, p.y) } : null;
+        },
+        headingOnScreen: (lat, lon, heading) => {
+          // A short step along the heading, through the image's alignment: the image may be turned or skewed.
+          const rad = (heading * Math.PI) / 180;
+          const ahead = fromLocalMeters({ lat, lon }, 20 * Math.sin(rad), 20 * Math.cos(rad));
+          if (!alignment) return heading;
+          const a = latLonToPercent(alignment, { lat, lon });
+          const b = latLonToPercent(alignment, ahead);
+          const dx = ((b.x - a.x) / 100) * rect.width;
+          const dy = ((b.y - a.y) / 100) * rect.height;
+          return (Math.atan2(dx, -dy) * 180) / Math.PI;
+        },
+      })
+    : [];
+
   return (
-    <div 
+    <div
       className="relative h-full w-full"
       style={{
         height: '100%',
@@ -964,148 +1293,31 @@ export function VenueMapWithPosts({
         {shouldRenderMarkers && (
           <>
             {showPostPins && posts.map((post, i) => (
-              <PostMarker
-                key={i}
-                post={post}
-                rect={rect}
-                staff={staff}
+              isPostObject(post) && (
+                <PostMarker
+                  key={i}
+                  post={post}
+                  at={atPercent(rect, post.x, post.y)}
+                  scale={scale}
+                  isSelected={!!selectedPostName && post.name === selectedPostName}
+                  onAddCall={onAddCallAtPost}
+                />
+              )
+            ))}
+            {callMarkers.map((spot) => (
+              <CallMarker
+                key={spot.key}
+                calls={spot.calls}
+                at={atPercent(rect, spot.x!, spot.y!)}
+                offset={spot.atPost ? SLOTS.call : AT_ANCHOR}
                 scale={scale}
-                isSelected={!!selectedPostName && typeof post === 'object' && post !== null && post.name === selectedPostName}
-                onAddCall={onAddCallAtPost}
+                numbers={callNumbers}
+                onOpenCall={onOpenCall}
               />
             ))}
-            {equipment.map((equip) => {
-              // Drawn with its holder: a post, or beside the unit carrying it.
-              const anchor = equipmentAnchor(equip, [...staff, ...supervisor], overlay?.unitTracking);
-              let post: Post | undefined;
-              let faded = false;
-              if (anchor?.kind === 'post') {
-                post = posts.find(p => (typeof p === "string" ? p : p.name) === anchor.post);
-              } else if (anchor?.kind === 'point') {
-                const layer = layers[currentLayer];
-                const alignment = layer ? overlay?.unitTracking?.alignments[layer.id] ?? layerAlignment(layer) : undefined;
-                const at = alignment && latLonToPercent(alignment, { lat: anchor.lat, lon: anchor.lon });
-                if (at && at.x >= 0 && at.x <= 100 && at.y >= 0 && at.y <= 100) post = { name: equip.name, x: at.x, y: at.y };
-                faded = anchor.faded;
-              }
-              if (!post || typeof post === "string") {
-                return null;
-              }
-
-              return (
-                <EquipmentMarker
-                  key={equip.id}
-                  equipment={equip}
-                  post={post}
-                  rect={rect}
-                  scale={scale}
-                  isSelected={!!selectedEquipmentName && equip.name === selectedEquipmentName}
-                  staggerIndex={equipmentStagger.get(equip.id)}
-                  faded={faded}
-                />
-              );
-            })}
-            {overlay?.unitTracking && (() => {
-              // Live tracking: a unit with a position is drawn there (D66); every other unit at its post, below.
-              const tracking = overlay.unitTracking;
-              const layer = layers[currentLayer];
-              const alignment = layer ? tracking.alignments[layer.id] ?? layerAlignment(layer) : undefined;
-              if (!alignment) return null;
-              const at = (name: string) => {
-                const p = tracking.positions[name];
-                if (!p) return null;
-                const { x, y } = latLonToPercent(alignment, { lat: p.lat, lon: p.lon });
-                return x < 0 || x > 100 || y < 0 || y > 100 ? null : { post: { name, x, y }, faded: p.stale };
-              };
-              return (
-                <>
-                  {staff.map((team) => {
-                    const pos = at(team.team);
-                    return pos && (
-                      <TeamMarker
-                        showPosts={showPosts}
-                        key={team.team}
-                        team={team}
-                        post={pos.post}
-                        rect={rect}
-                        teamTimers={teamTimers}
-                        calls={calls}
-                        clinics={clinics}
-                        scale={scale}
-                        isSelected={!!selectedTeamName && team.team === selectedTeamName}
-                        onAddCall={onAddCallForTeam}
-                        exact
-                        faded={pos.faded}
-                      />
-                    );
-                  })}
-                  {supervisor.map((sup) => {
-                    const pos = at(sup.team);
-                    return pos && (
-                      <SupervisorMarker
-                        showPosts={showPosts}
-                        key={sup.team}
-                        supervisor={sup}
-                        post={pos.post}
-                        rect={rect}
-                        scale={scale}
-                        isSelected={!!selectedSupervisorName && sup.team === selectedSupervisorName}
-                        exact
-                        faded={pos.faded}
-                      />
-                    );
-                  })}
-                </>
-              );
-            })()}
-            {(() => {
-              // Teams sharing the exact same post (e.g. several teams
-              // attached to the same call, all still logged at that post)
-              // get staggered further right one at a time instead of
-              // stacking on top of each other — see TeamMarker's staggerStep.
-              const postOccupancy: { [postName: string]: number } = {};
-              // On a tracking event, units with no device are drawn at their post as on a standard event (D66).
-              return staff.filter((team) => !overlay?.unitTracking?.positions[team.team]).map((team) => {
-                const postObj = posts.find(p => (typeof p === "string" ? p : p.name) === team.location);
-                if (!postObj || typeof postObj === "string") return null;
-
-                const staggerIndex = postOccupancy[team.location] ?? 0;
-                postOccupancy[team.location] = staggerIndex + 1;
-
-                return (
-                  <TeamMarker
-                    showPosts={showPosts}
-                    key={team.team}
-                    team={team}
-                    post={postObj}
-                    rect={rect}
-                    teamTimers={teamTimers}
-                    calls={calls}
-                    clinics={clinics}
-                    scale={scale}
-                    isSelected={!!selectedTeamName && team.team === selectedTeamName}
-                    onAddCall={onAddCallForTeam}
-                    staggerIndex={staggerIndex}
-                  />
-                );
-              });
-            })()}
-            {supervisor.filter((sup) => !overlay?.unitTracking?.positions[sup.team]).map((sup) => {
-              const postObj = posts.find(p => (typeof p === "string" ? p : p.name) === sup.location);
-              if (!postObj || typeof postObj === "string") return null;
-
-              return (
-                <SupervisorMarker
-                  showPosts={showPosts}
-                  key={sup.team}
-                  supervisor={sup}
-                  post={postObj}
-                  rect={rect}
-                  scale={scale}
-                  isSelected={!!selectedSupervisorName && sup.team === selectedSupervisorName}
-                />
-              );
-            })}
+            {markers.map((marker) => (
+              <React.Fragment key={marker.key}>{marker.node}</React.Fragment>
+            ))}
           </>
         )}
         {overlay?.markers && shouldRenderMarkers &&

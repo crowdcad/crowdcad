@@ -4,12 +4,13 @@
  * this browser (src/lib/geo/prefs.ts).
  */
 
-export const MAP_LAYER_KINDS = ['zones', 'posts', 'teams', 'supervisors', 'equipment'] as const;
+export const MAP_LAYER_KINDS = ['zones', 'posts', 'calls', 'teams', 'supervisors', 'equipment'] as const;
 export type MapLayerKind = (typeof MAP_LAYER_KINDS)[number];
 
 export const MAP_LAYER_LABELS: Record<MapLayerKind, string> = {
   zones: 'Zones',
   posts: 'Locations',
+  calls: 'Calls',
   teams: 'Teams',
   supervisors: 'Supervisors',
   equipment: 'Equipment',

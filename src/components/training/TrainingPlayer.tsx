@@ -41,14 +41,19 @@ function PlayerHeader({ module, index, complete, onJump }: { module: TrainingMod
   const pct = Math.round(((complete ? module.steps.length : index) / module.steps.length) * 100);
   return (
     <header className="z-[300] flex h-14 shrink-0 items-center gap-3 border-b border-surface-liner bg-surface-deep px-4">
-      <Link href="/training" className="flex items-center gap-2 text-sm text-surface-light/80 hover:text-surface" data-testid="training-exit">
+      <Link href="/training" aria-label="Training" className="text-surface-light/80 hover:text-surface" data-testid="training-exit">
         <X className="h-4 w-4" />
-        <span className="hidden sm:inline">Training</span>
       </Link>
       <div className="min-w-0 flex-1">
-        <div className="truncate text-sm font-semibold text-surface">{module.title}</div>
-        <div className="mt-1 h-1 w-full max-w-[320px] overflow-hidden rounded-full bg-surface-liner">
-          <div className="h-full bg-accent transition-all" style={{ width: `${pct}%` }} />
+        <div className="w-fit max-w-full">
+          <div className="truncate text-sm font-semibold text-surface">
+            <Link href="/training" className="hidden hover:underline sm:inline">Training</Link>
+            <span className="hidden sm:inline">; </span>
+            {module.title}
+          </div>
+          <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-surface-liner">
+            <div className="h-full bg-accent transition-all" style={{ width: `${pct}%` }} />
+          </div>
         </div>
       </div>
       <StepsMenu module={module} index={index} complete={complete} onJump={onJump} />
@@ -130,6 +135,7 @@ function LivePlayer({ module, startIndex, embed }: { module: TrainingModule; sta
   const PracticeSurfaceView = practiceSurface();
   const phone = module.device === 'phone';
   const phoneDirect = phone && isMobile;
+  const cardTop = useCardBottom(!embed && phoneDirect);
   // Inside the phone frame, scrolling shows no scrollbars, as on a phone.
   useEffect(() => {
     if (!embed) return;
@@ -142,7 +148,13 @@ function LivePlayer({ module, startIndex, embed }: { module: TrainingModule; sta
     <div className="flex h-dvh flex-col bg-surface-deepest" style={{ '--dispatch-sticky-top': '0px' } as React.CSSProperties}>
       {!embed && <PlayerHeader module={module} index={index} complete={complete} onJump={session.jumpTo} />}
       {/* On a phone, a phone module's card sits above the screen, in the page, so it never covers a bottom bar. */}
-      {!embed && phoneDirect && <TrainingCard module={module} state={cardState(session)} actions={session} layout="top" />}
+      {!embed && phoneDirect && (
+        <div ref={cardTop.ref} className="shrink-0">
+          <TrainingCard module={module} state={cardState(session)} actions={session} layout="top" />
+          {/* The board's forms (HeroUI modals) cover the whole window: keep them below the card, so it never hides their top. */}
+          <style>{`[data-slot="wrapper"]:has([role="dialog"]), [data-slot="backdrop"] { top: ${cardTop.bottom}px !important; height: calc(100dvh - ${cardTop.bottom}px) !important; }`}</style>
+        </div>
+      )}
 
       <div className="relative min-h-0 flex-1 overflow-y-auto">
         <ExtensionProviders>
@@ -156,7 +168,7 @@ function LivePlayer({ module, startIndex, embed }: { module: TrainingModule; sta
         </ExtensionProviders>
       </div>
 
-      {!complete && <Coachmark step={session.step} label={session.step.title} />}
+      {!complete && <Coachmark step={session.step} label={session.step.title} topInset={cardTop.bottom} />}
 
       {!embed && !phoneDirect && (
         <TrainingCard
@@ -169,6 +181,28 @@ function LivePlayer({ module, startIndex, embed }: { module: TrainingModule; sta
       )}
     </div>
   );
+}
+
+/** Where the top of the window stops being covered by the step card (a phone module on a phone), kept current as it resizes. */
+function useCardBottom(active: boolean) {
+  const [el, setEl] = useState<HTMLDivElement | null>(null);
+  const [bottom, setBottom] = useState(0);
+  useEffect(() => {
+    if (!active || !el) {
+      setBottom(0);
+      return;
+    }
+    const measure = () => setBottom(Math.round(el.getBoundingClientRect().bottom));
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    window.addEventListener('resize', measure);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', measure);
+    };
+  }, [active, el]);
+  return { ref: setEl, bottom };
 }
 
 /** A phone module on a computer: the module in a phone-sized frame, the step card beside it. */

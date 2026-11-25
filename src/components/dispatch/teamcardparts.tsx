@@ -16,7 +16,8 @@ import TrackingTextEntry from '@/components/dispatch/trackingtextentry';
 import { deriveTeamVisualStatus, getStatusColor } from '@/lib/statusColors';
 import StatusLabel from './statuslabel';
 import EquipmentTypeIcon, { getEquipmentStatusMenuLabel, getEquipmentStatusWord, isEquipmentIconStatus } from './equipmenttypeicon';
-import { EQUIPMENT_RUN_STATUSES, RETURNING_EQ, equipmentOfUnit, fleetOf, heldBy } from '@/lib/equipmentCustody';
+import { equipmentOfUnit, fleetOf, heldBy } from '@/lib/equipmentCustody';
+import { teamStatusMode, teamStatusOptions } from '@/lib/teamStatusChange';
 import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
 import { getEventClinics } from '@/lib/clinics';
 import { useDispatchExtras } from '@/extensions/dispatch';
@@ -63,27 +64,13 @@ export type TeamStatusModel = {
 
 /** Which statuses a team can move to right now, plus the display bits derived alongside. */
 export function useTeamStatusModel(staff: Staff, event: Event): TeamStatusModel {
-  const isOnAnyActiveCall = !!event.calls?.some(c =>
-    c.assignedTeam?.includes(staff.team) && !['Resolved', 'Delivered', 'Refusal', 'NMM', 'Treat and Release'].includes(c.status)
-  );
-
-  const isOnEq = !!event.calls?.some(c =>
-    c.equipmentTeams?.includes(staff.team) && !['Resolved', 'Delivered Eq', 'Refusal', 'NMM', 'Treat and Release'].includes(c.status)
-  ) || ['Retrieving Eq', 'En Route Eq', 'Assisting'].includes(staff.status);
-  // Bringing equipment back after a call: Available marks it returned.
-  const isReturning = !isOnAnyActiveCall && staff.status === RETURNING_EQ;
-
   // An extension can replace a free unit's menu (e.g. MCI statuses); a unit on a call or an equipment run keeps its own options.
   const extras = useDispatchExtras();
-  const freeOptions = extras.statusOptions(staff) ?? ['Available', 'On Break', 'In Clinic'];
-
-  const statusOptions = isOnEq
-    ? EQUIPMENT_RUN_STATUSES
-    : isOnAnyActiveCall
-      ? ['En Route', 'On Scene', 'Transporting', 'Pending Transport']
-      : isReturning
-        ? [RETURNING_EQ, ...freeOptions]
-        : freeOptions;
+  // The same list a field login's phone offers (teamStatusOptions).
+  const statusOptions = teamStatusOptions(staff, event, extras.statusOptions(staff));
+  const mode = teamStatusMode(staff, event);
+  const isOnEq = mode === 'equipment';
+  const isReturning = mode === 'returning';
 
   // Equipment this team/supervisor is actually running — same icon
   // convention as the call tracker's team chip (see equipmenttypeicon.tsx).
@@ -349,8 +336,10 @@ function EditableTeamLocation({
         // before the text reached the dropdown chevron. Taking it out of flow
         // and overlaying it instead frees that space for text, which can now
         // run underneath it exactly like the "clear" button does everywhere
-        // else in this app.
-        clearButton: 'absolute end-6 top-1/2 -translate-y-1/2',
+        // else in this app. Below `sm` HeroUI shows the x whenever there is a value
+        // (no hover on a phone), where it would sit on the text: there it shows only
+        // while the field is being edited, in flow, so the text stops before it.
+        clearButton: 'max-sm:hidden max-sm:group-data-[focus-within=true]:inline-flex sm:absolute sm:end-6 sm:top-1/2 sm:-translate-y-1/2',
       }}
       selectorButtonProps={staticSelectorButtonProps}
       inputProps={{

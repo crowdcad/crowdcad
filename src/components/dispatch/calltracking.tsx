@@ -2,6 +2,7 @@
 'use client';
 
 import React, {} from 'react';
+import CallRowFooters from './callrowfooter';
 import { 
   Button, 
   Chip, 
@@ -19,7 +20,9 @@ import StatusLabel, { getMenuLabel } from './statuslabel';
 import EquipmentTypeIcon, { getEquipmentStatusMenuLabel, getEquipmentStatusWord, isEquipmentIconStatus } from './equipmenttypeicon';
 import TrackingTableBase, { INLINE_CELL_INPUT_CLASS, INLINE_CELL_PLACEHOLDER, InlineCellBox } from './trackingtablebase';
 import PendingCallChip from './pendingcallchip';
-import { TRACKING_RESOLVED_CLASS, getStatusColor, TRACKING_ROW_HOVER_CLASS, TRACKING_ROW_OPEN_CLASS } from '@/lib/statusColors';
+import StatusCodeKeys from './statuscodekeys';
+import { codeForStatus } from '@/lib/statusCodes';
+import { TRACKING_RESOLVED_CLASS, TRACKING_RESOLVED_CHIP_CLASS, getStatusColor, TRACKING_ROW_HOVER_CLASS, TRACKING_ROW_OPEN_CLASS } from '@/lib/statusColors';
 import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
 import { getEventClinics, getTransportClinicId, RESOLVED_CALL_STATUSES, getVenueLocationOptions } from '@/lib/clinics';
 import { getEquipmentIconType } from '@/lib/equipmentIcon';
@@ -462,6 +465,26 @@ export const CallTrackingTable: React.FC<CallTrackingTableProps> = ({
                               // darker/more saturated, marking this piece out as a button
                               // without introducing a whole new color.
                               const statusButtonClass = `min-w-0 h-7 px-2 shrink-0 text-surface-light ${teamStatusColor.fillClass} hover:brightness-110`;
+                              const pickTeamStatus = (key: string) => {
+                                teamStatusMenuSelectedRef.current = true;
+                                // A destination picked when the team went Transporting carries over —
+                                // Delivered only asks again if no clinic was chosen yet.
+                                const transportClinicId = key === 'Delivered' ? getTransportClinicId(call, currentTeamStatus, clinics) : undefined;
+                                if (transportClinicId) {
+                                  handleTeamStatusChange(call.id, team, 'Delivered', transportClinicId);
+                                  return;
+                                }
+                                if ((key === 'Transporting' || key === 'Delivered') && clinics.length > 1) {
+                                  setOpenMenuToken(`team-clinic-pick:${call.id}:${team}`);
+                                  setClinicPickStatus(key);
+                                  return;
+                                }
+                                if (key === 'Rolled from Scene') {
+                                  onTransportToAmbulance(call.id, team);
+                                  return;
+                                }
+                                handleTeamStatusChange(call.id, team, key, (key === 'Transporting' || key === 'Delivered') ? clinics[0]?.id : undefined);
+                              };
 
                               return (
                                 <Chip
@@ -469,7 +492,7 @@ export const CallTrackingTable: React.FC<CallTrackingTableProps> = ({
                                   size="lg"
                                   variant="flat"
                                   color="default"
-                                  className={`text-surface-light h-8 shrink-0 ${teamStatusColor.chipClass}`}
+                                  className={`text-surface-light h-8 shrink-0 ${teamStatusColor.chipClass} ${isResolvedCall ? TRACKING_RESOLVED_CHIP_CLASS : ''}`}
                                   onClose={() => handleRemoveTeamFromCall(call.id, team)}
                                 >
                                   <div className="flex items-center gap-2" data-testid={`team-chip-${team}`}>
@@ -549,29 +572,20 @@ export const CallTrackingTable: React.FC<CallTrackingTableProps> = ({
                                         </DropdownTrigger>
                                         <DropdownMenu
                                           aria-label="Team status"
-                                          onAction={(key) => {
-                                            teamStatusMenuSelectedRef.current = true;
-                                            // A destination picked when the team went Transporting carries over —
-                                            // Delivered only asks again if no clinic was chosen yet.
-                                            const transportClinicId = key === 'Delivered' ? getTransportClinicId(call, currentTeamStatus, clinics) : undefined;
-                                            if (transportClinicId) {
-                                              handleTeamStatusChange(call.id, team, 'Delivered', transportClinicId);
-                                              return;
-                                            }
-                                            if ((key === 'Transporting' || key === 'Delivered') && clinics.length > 1) {
-                                              setOpenMenuToken(`team-clinic-pick:${call.id}:${team}`);
-                                              setClinicPickStatus(key as string);
-                                              return;
-                                            }
-                                            if (key === 'Rolled from Scene') {
-                                              onTransportToAmbulance(call.id, team);
-                                              return;
-                                            }
-                                            handleTeamStatusChange(call.id, team, key as string, (key === 'Transporting' || key === 'Delivered') ? clinics[0]?.id : undefined);
-                                          }}
+                                          // Typing a status code (UTL, NMM, AMA) picks it too.
+                                          topContent={
+                                            <StatusCodeKeys
+                                              options={statusOptions}
+                                              onPick={(status) => {
+                                                pickTeamStatus(status);
+                                                setOpenMenuToken((current) => (current === `team-status:${call.id}:${team}` ? null : current));
+                                              }}
+                                            />
+                                          }
+                                          onAction={(key) => pickTeamStatus(key as string)}
                                         >
                                           {statusOptions.map((status: string) => (
-                                            <DropdownItem key={status} data-testid={`team-status-option-${status}`}>
+                                            <DropdownItem key={status} data-testid={`team-status-option-${status}`} shortcut={codeForStatus(status)}>
                                               {isEquipmentIconStatus(status) && teamEquipmentNames
                                                 ? getEquipmentStatusMenuLabel(status, teamEquipmentNames)
                                                 : getMenuLabel(status, t)}
@@ -592,7 +606,7 @@ export const CallTrackingTable: React.FC<CallTrackingTableProps> = ({
                                 size="lg"
                                 variant="flat"
                                 color="default"
-                                className={`h-8 ${getStatusColor(detachedTeam.reason).chipClass}`}
+                                className={`h-8 ${getStatusColor(detachedTeam.reason).chipClass} ${isResolvedCall ? TRACKING_RESOLVED_CHIP_CLASS : ''}`}
                                 onClose={() => handleRevertDetachment(call.id, detachedTeam.team)}
                                 endContent={<RotateCw className="w-3.5 h-3.5" aria-label={t('Reopen Call')} />}
                               >
@@ -623,7 +637,7 @@ export const CallTrackingTable: React.FC<CallTrackingTableProps> = ({
                                   aria-label="Add"
                                   data-testid="call-add-menu"
                                   isDisabled={isResolvedCall}
-                                  className="w-8 h-8 rounded-full hover:bg-surface-liner shrink-0"
+                                  className={`w-8 h-8 rounded-full hover:bg-surface-liner shrink-0 ${isResolvedCall ? TRACKING_RESOLVED_CHIP_CLASS : ''}`}
                                 >
                                   <Plus className="h-4 w-4" />
                                 </Button>
@@ -828,6 +842,8 @@ export const CallTrackingTable: React.FC<CallTrackingTableProps> = ({
                         );
                       })()}
                   
+                  {isMotionVisible && <CallRowFooters call={call} colSpan={6} />}
+
                   {/* Expanded row for notes and log - NO ANIMATION */}
                   {isMotionVisible && (openCallId === call.id || closingCallId === call.id) && (
                     <CallTrackingDetails

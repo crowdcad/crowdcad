@@ -20,10 +20,9 @@ const sameRect = (a: Rect | null, b: Rect | null) =>
 export function useStepTargetRect(step: TrainingStep | null): Rect | null {
   const [rect, setRect] = useState<Rect | null>(null);
   useEffect(() => {
-    if (!step) {
-      setRect(null);
-      return;
-    }
+    // A new step starts with nothing: a step with no target must not keep the last one's ring.
+    setRect(null);
+    if (!step) return;
     let frame = 0;
     let last: Rect | null = null;
     const loop = () => {
@@ -52,7 +51,11 @@ const PAD = 6;
 /** The callout fits its text, up to this width. */
 const TIP_MAX_W = 320;
 
-export default function Coachmark({ step, label }: { step: TrainingStep | null; label: string }) {
+/**
+ * `topInset`: how much of the window's top something above the coachmark covers (a phone module's step card on a
+ * phone), so the callout is placed and kept below it, never behind it or on the bar above it.
+ */
+export default function Coachmark({ step, label, topInset = 0 }: { step: TrainingStep | null; label: string; topInset?: number }) {
   const rect = useStepTargetRect(step);
   // The callout's rendered width, for placing it: it grows with the label.
   const tipRef = useRef<HTMLDivElement>(null);
@@ -68,15 +71,18 @@ export default function Coachmark({ step, label }: { step: TrainingStep | null; 
   const ring = { top: rect.top - PAD, left: rect.left - PAD, width: rect.width + PAD * 2, height: rect.height + PAD * 2 };
 
   // Prefer the step's side; fall back to whichever side has room.
-  const room = { bottom: vh - (ring.top + ring.height), top: ring.top, right: vw - (ring.left + ring.width), left: ring.left };
+  const room = { bottom: vh - (ring.top + ring.height), top: ring.top - topInset, right: vw - (ring.left + ring.width), left: ring.left };
   let side = step.placement ?? 'bottom';
   if ((side === 'bottom' || side === 'top') && room[side] < 70) side = side === 'bottom' ? 'top' : 'bottom';
   if ((side === 'left' || side === 'right') && room[side] < tipW + 24) side = room.bottom > 70 ? 'bottom' : 'top';
+  // No room on either side (a target filling the screen, e.g. a form): the callout sits inside its top edge.
+  const inside = (side === 'top' && room.top < 70) || (side === 'bottom' && room.bottom < 70);
 
   const clampX = (x: number) => Math.max(8, Math.min(vw - tipW - 8, x));
-  const clampY = (y: number) => Math.max(8, Math.min(vh - 60, y));
-  const tipStyle: React.CSSProperties =
-    side === 'bottom'
+  const clampY = (y: number) => Math.max(topInset + 8, Math.min(vh - 60, y));
+  const tipStyle: React.CSSProperties = inside
+    ? { top: clampY(ring.top + 8), left: clampX(ring.left + ring.width / 2 - tipW / 2) }
+    : side === 'bottom'
       ? { top: ring.top + ring.height + 10, left: clampX(ring.left + ring.width / 2 - tipW / 2) }
       : side === 'top'
         ? { top: ring.top - 10, left: clampX(ring.left + ring.width / 2 - tipW / 2), transform: 'translateY(-100%)' }
@@ -84,8 +90,9 @@ export default function Coachmark({ step, label }: { step: TrainingStep | null; 
           ? { top: clampY(ring.top + ring.height / 2 - 20), left: ring.left + ring.width + 12 }
           : { top: clampY(ring.top + ring.height / 2 - 20), left: ring.left - tipW - 12 };
 
-  const arrow: React.CSSProperties =
-    side === 'bottom'
+  const arrow: React.CSSProperties = inside
+    ? { display: 'none' }
+    : side === 'bottom'
       ? { top: -6, left: Math.max(10, Math.min(tipW - 22, ring.left + ring.width / 2 - (tipStyle.left as number) - 6)) }
       : side === 'top'
         ? { bottom: -6, left: Math.max(10, Math.min(tipW - 22, ring.left + ring.width / 2 - (tipStyle.left as number) - 6)) }

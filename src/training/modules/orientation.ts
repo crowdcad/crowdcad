@@ -26,7 +26,7 @@ const orientation: TrainingModule = {
     {
       id: 'left-panel',
       section: 'Read the board',
-      title: 'Read the team list',
+      title: 'Look at the team list',
       body: "The left side lists your {{teams}}. Each card shows the team's status, {{location}} and how long it has had that status.",
       anchor: 'left-panel',
       placement: 'right',
@@ -37,7 +37,7 @@ const orientation: TrainingModule = {
     {
       id: 'availability',
       section: 'Read the board',
-      title: 'Read the availability bar',
+      title: 'Look at the availability bar',
       body: "This bar counts teams that are **Available**, **On Break or in the Clinic**, and **On Calls**. It turns red when a pre-designated percentage of teams are on calls.",
       anchor: 'availability-surge-strip',
       placement: 'right',
@@ -48,7 +48,7 @@ const orientation: TrainingModule = {
     {
       id: 'right-panel',
       section: 'Read the board',
-      title: 'Read the right panel',
+      title: 'Look at the right panel',
       body: "The right side has a tab for calls, a tab for each clinic and a map.",
       anchor: 'right-panel',
       placement: 'left',
@@ -70,7 +70,7 @@ const orientation: TrainingModule = {
     {
       id: 'equipment',
       section: 'Switch the left panel',
-      title: 'Read the equipment list',
+      title: 'Look at the equipment list',
       body: "This list shows where each piece of equipment is and who has it. It updates when teams pick it up or drop it off.",
       anchor: 'css:[data-testid^="equipment-card-"]',
       placement: 'right',
@@ -103,7 +103,7 @@ const orientation: TrainingModule = {
     {
       id: 'calls-tab',
       section: 'Use the right panel',
-      title: 'Read the calls tab',
+      title: 'Look at the calls tab',
       body: "Each open {{call}} is a row here, with its {{teams}} and how long it has been open. The number on the tab counts open calls.",
       anchor: 'calls-tab-button',
       placement: 'bottom',
@@ -114,7 +114,7 @@ const orientation: TrainingModule = {
     {
       id: 'clinic-tab',
       section: 'Use the right panel',
-      title: 'Read a clinic tab',
+      title: 'Look at a clinic tab',
       body: "Each clinic has its own tab with the patients it is treating.",
       anchor: 'clinic-tab-training-clinic',
       placement: 'bottom',

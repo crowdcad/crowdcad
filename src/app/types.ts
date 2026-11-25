@@ -68,6 +68,19 @@ export interface Venue {
   userId: string;
   sharedWith?: string[]; // Array of emails
   isOrgVenue?: boolean; // Visible to all users on this instance, set by an admin
+  /** Vehicles are set up for this venue (src/lib/vehicles.ts). */
+  vehiclesEnabled?: boolean;
+  vehicles?: Vehicle[];
+}
+
+/**
+ * A cart or other vehicle. Equipment on it has the vehicle's name as its
+ * location; the vehicle's own location is a post, or the unit crewing it.
+ */
+export interface Vehicle {
+  id: string;
+  name: string;
+  location?: string;
 }
 
 export interface Event {
@@ -89,6 +102,9 @@ export interface Event {
   };
   eventPosts: Post[];
   eventEquipment: EventEquipment[];
+  /** Vehicles are on for this event: the dispatch board shows a Vehicles tab. */
+  vehiclesEnabled?: boolean;
+  eventVehicles?: Vehicle[];
   ended?: boolean;
   /** Epoch ms when the event was ended (manually, or by the 1-hour-no-activity backup) — unset while active. */
   endedAt?: number;

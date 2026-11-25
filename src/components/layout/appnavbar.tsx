@@ -169,7 +169,7 @@ export default function AppNavbar() {
               <BrandLogo isDarkTheme={isDarkTheme} onClick={() => router.push("/")} widthClass={logoWidthClass} />
               {/* LiveClock next to logo when on dispatch page */}
               {isDispatch && (
-                <div className="ml-3 sm:ml-4 md:ml-6">
+                <div className="ml-3 flex items-center sm:ml-4 md:ml-6">
                   <LiveClock />
                 </div>
               )}

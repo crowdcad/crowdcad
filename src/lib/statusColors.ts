@@ -32,6 +32,8 @@ export const TRACKING_ROW_HOVER_CLASS = 'hover:bg-surface-liner/60';
 export const TRACKING_RESOLVED_CLASS = 'tracking-resolved';
 /** The same on the phone's call/clinic cards, in their own hover color. */
 export const TRACKING_RESOLVED_CARD_CLASS = 'tracking-resolved-card';
+/** A resolved call's team chips and add button drop their fill so the stripes show beneath them. */
+export const TRACKING_RESOLVED_CHIP_CLASS = '!bg-transparent';
 
 export const STATUS_COLORS: Record<string, DispatchStatusColor> = {
   Available: {

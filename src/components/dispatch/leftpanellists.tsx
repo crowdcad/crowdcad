@@ -1,6 +1,6 @@
 'use client';
 
-// Team / supervisor / equipment lists for the dispatch page's left panel.
+// Team / supervisor / equipment / vehicle lists for the dispatch page's left panel.
 // Rendered by both the desktop sidebar and the mobile bottom-tab layout, which
 // previously each carried their own copy of the sort + map + empty-state code.
 
@@ -9,6 +9,9 @@ import type { EquipmentArrival } from '@/lib/equipmentArrivals';
 import type { Event, Staff, Supervisor, EquipmentItem } from '@/app/types';
 import TeamWidget from '@/components/dispatch/teamwidget';
 import EquipmentCard from '@/components/dispatch/equipmentcard';
+import VehicleCard from '@/components/dispatch/vehiclecard';
+import { eventVehicles, throughVehicle } from '@/lib/vehicles';
+import { materializeEventEquipment } from '@/lib/equipmentCustody';
 import { sortTeams, type TeamSortMode } from '@/lib/teamSort';
 import type { UnitTracking } from '@/lib/unitTracking';
 
@@ -136,6 +139,7 @@ export function EquipmentList({
   event, items, knownMapLocations, unitTracked, equipmentTracked, arrivals, emptyText, ...cardProps
 }: EquipmentListProps & { emptyText: React.ReactNode }) {
   const hasEquipment = !!(event.venue?.equipment?.length || event.eventEquipment?.length);
+  const vehicles = eventVehicles(event);
   // Available first, anything out on a call at the bottom (stable otherwise).
   const sorted = useMemo(
     () => [...items].sort((a, b) => Number(a.status !== 'Available') - Number(b.status !== 'Available')),
@@ -145,8 +149,8 @@ export function EquipmentList({
   return (
     <div className="dispatch-shell-list">
       {sorted.map(item => {
-        const location = item.currentLocation || item.stagingLocation;
-        // With a unit, it is on the map wherever that unit is.
+        // On a vehicle, it is wherever the vehicle is; with a unit, wherever that unit is.
+        const location = throughVehicle({ location: item.currentLocation || item.stagingLocation }, vehicles).location;
         const unit = [...(event.staff || []), ...(event.supervisor || [])].find(u => u.team === location);
         const mapLocation = unit ? unit.location : location;
         return (
@@ -160,6 +164,33 @@ export function EquipmentList({
           />
         );
       })}
+    </div>
+  );
+}
+
+export type VehicleListProps = {
+  event: Event;
+  onLocationChange: (vehicleId: string, location: string) => void;
+  onEquipmentChange: (vehicleId: string, equipmentNames: string[]) => void;
+  onDelete: (vehicleId: string) => void;
+};
+
+export function VehicleList({ event, emptyText, ...cardProps }: VehicleListProps & { emptyText: React.ReactNode }) {
+  const vehicles = eventVehicles(event);
+  const equipment = materializeEventEquipment(event);
+  if (!vehicles.length) return <EmptyListText>{emptyText}</EmptyListText>;
+  return (
+    <div className="dispatch-shell-list">
+      {vehicles.map((vehicle) => (
+        <VehicleCard
+          key={vehicle.id}
+          vehicle={vehicle}
+          event={event}
+          equipmentOn={equipment.filter((e) => e.defaultLocation === vehicle.name || e.location === vehicle.name).map((e) => e.name)}
+          equipmentNames={equipment.map((e) => e.name)}
+          {...cardProps}
+        />
+      ))}
     </div>
   );
 }

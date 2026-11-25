@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Call, Event, Staff, Supervisor } from '@/app/types';
-import { combinedCallStatus, teamStatusChange } from './teamStatusChange';
+import { combinedCallStatus, teamStatusChange, teamStatusOptions } from './teamStatusChange';
 
 const team = (name: string, status = 'Available'): Staff => ({ team: name, status, location: 'Gate A', members: [] });
 const sup = (name: string, status = 'Available'): Supervisor => ({ team: name, status, location: 'Gate A', member: 'Sam' });
@@ -40,5 +40,18 @@ describe('teamStatusChange', () => {
   it('combines statuses', () => {
     expect(combinedCallStatus('En Route', ['En Route', 'Transporting'])).toBe('Transporting');
     expect(combinedCallStatus('Dispatched', ['Available'])).toBe('Dispatched');
+  });
+});
+
+describe('teamStatusOptions', () => {
+  it("offers what the team card offers: a call's, an equipment run's, a free unit's (or a pack's), Returning Eq first", () => {
+    const e = event({ calls: [call({ assignedTeam: ['Medic 1'] }), call({ id: 'c2', assignedTeam: [], equipmentTeams: ['Medic 3'] })] });
+    expect(teamStatusOptions(team('Medic 1', 'En Route'), e)).toEqual(['En Route', 'On Scene', 'Transporting', 'Pending Transport']);
+    expect(teamStatusOptions(team('Medic 3', 'Retrieving Eq'), e)).toContain('Retrieving Eq');
+    expect(teamStatusOptions(team('Medic 2'), e)).toEqual(['Available', 'On Break', 'In Clinic']);
+    expect(teamStatusOptions(team('Medic 2'), e, ['Available', 'Unavailable'])).toEqual(['Available', 'Unavailable']);
+    expect(teamStatusOptions(team('Medic 2', 'Returning Eq'), e)).toEqual(['Returning Eq', 'Available', 'On Break', 'In Clinic']);
+    // A resolved call no longer counts.
+    expect(teamStatusOptions(team('Medic 1'), event({ calls: [call({ status: 'Resolved' })] }))).toEqual(['Available', 'On Break', 'In Clinic']);
   });
 });

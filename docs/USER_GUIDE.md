@@ -73,13 +73,14 @@ From a venue, start a new event. The event wizard has five steps:
 - Calls inside a dispatch zone also appear on that zone's tab.
 - Record transports with "Transporting to" and capture the transport unit when prompted.
 - Use the Clinic tab to track walk-ups and patients delivered from calls.
-- The Map tab shows posts, teams, supervisors and equipment on the venue map.
+- The Map tab shows posts, teams, supervisors, equipment and open calls on the venue map. A call is a diamond with its number; units are octagons and equipment squares, filled with their status. Several at one place share a marker with a count: click it to spread them out. A unit's equipment shows as a count on its corner: click the unit to see it, and click a piece to find it in the Equipment list. Click a call marker to open the call. A call's place is its dropped pin, else the location it names. Teams on a call with a dropped pin are drawn at the pin. The Layers menu can hide calls.
+- A dropped pin is named by the nearest location ("Near Sather Gate", or "80 m from Sather Gate"); type over it to name it yourself.
 - **Posting Schedule** opens the rotation, and **Update all posts** moves every team to its next scheduled post.
 
 ### End an event and review it
 
 - **End Event** (available to the event's creator or a site admin) stops data collection after confirmation.
-- The Summary page shows charts, per-team activity and a zone breakdown. **Export Summary** and the log export produce CSV files with a full date and time per entry.
+- The Summary page shows charts, per-team activity, a zone breakdown and a map of every call. Calls with no venue location and no pin are counted under the map. **Export Summary** and the log export produce CSV files with a full date and time per entry.
 
 ### Import a GIS venue map
 

@@ -15,11 +15,11 @@ import {
   Select,
   SelectItem,
 } from "@heroui/react";
-import type { Event, Staff, Supervisor, Call, TeamLogEntry } from "@/app/types";
+import type { Event, Staff, Supervisor, Call } from "@/app/types";
 import { useDispatchTerms } from "@/lib/dispatchVocabulary/context";
 import { getVenueLocationOptions } from "@/lib/clinics";
 import { staticSelectorButtonProps } from "@/lib/heroStatic";
-import { hhmmOf } from '@/lib/clock';
+import { newCall } from '@/lib/newCall';
 import PinDropModal, { firstGeoLayer } from '@/components/geo/PinDropModal';
 import { callPoint, placePoint } from '@/lib/unitDistance';
 import { distanceM, formatMeters } from '@/lib/geo/distance';
@@ -132,90 +132,21 @@ export default function QuickCallModal({
     setSubmitting(true);
 
     try {
-      const now = new Date();
-      const hhmm =
-        hhmmOf(now);
-
-      const nextOrder =
-        event?.calls?.length
-          ? Math.max(
-              ...event.calls.map((c) => (typeof c.order === "number" ? c.order : 0))
-            ) + 1
-          : 1;
-
-      const cleanCall: Call = {
-        id: Date.now().toString(),
-        order: nextOrder,
-        status: quickCall.assignedTeam ? "Assigned" : "Pending",
-        location: quickCall.location.trim() || "Unknown",
-        ...(quickCall.locationPoint && { locationPoint: quickCall.locationPoint }),
-        assignedTeam: quickCall.assignedTeam ? [quickCall.assignedTeam] : [],
-        chiefComplaint: quickCall.chiefComplaint?.trim() || "",
-        ...(quickCall.source?.trim() && { source: quickCall.source.trim() }),
-        ...(quickCall.age?.trim() && { age: quickCall.age.trim() }),
-        ...(quickCall.gender?.trim() && { gender: quickCall.gender.trim() }),
-        priority: false,
-        log: [
-          {
-            timestamp: now.getTime(),
-            message: `${hhmm} - Call created${
-              quickCall.source ? ` from ${quickCall.source}` : ""
-            }${quickCall.chiefComplaint ? `, complaint: ${quickCall.chiefComplaint}` : ""}, location: ${
-              quickCall.location.trim() || "Unknown"
-            }${
-              quickCall.assignedTeam ? `, assigned to ${quickCall.assignedTeam}` : ""
-            }`,
-          },
-        ],
-      };
-
-      // Update staff or supervisor if one was assigned — the assignee is
-      // either a staff team or a supervisor call sign (never both), so only
-      // one of these actually changes anything.
-      let updatedStaff: Staff[] | undefined = event?.staff;
-      let updatedSupervisor: Supervisor[] | undefined = event?.supervisor;
-
-      if (quickCall.assignedTeam) {
-        const teamLogEntry: TeamLogEntry = {
-          timestamp: now.getTime(),
-          message: `${hhmm} - responding to call #${nextOrder}`,
-        };
-
-        const assignedIsSupervisor = event?.supervisor?.some((s) => s.team === quickCall.assignedTeam);
-
-        if (assignedIsSupervisor && event?.supervisor) {
-          updatedSupervisor = event.supervisor.map((supervisor: Supervisor) =>
-            supervisor.team === quickCall.assignedTeam
-              ? {
-                  ...supervisor,
-                  status: "En Route",
-                  location: quickCall.location,
-                  originalPost: supervisor.location || "Unknown",
-                  log: [...(supervisor.log || []), teamLogEntry],
-                }
-              : supervisor
-          );
-        } else if (event?.staff) {
-          updatedStaff = event.staff.map((staff: Staff) =>
-            staff.team === quickCall.assignedTeam
-              ? {
-                  ...staff,
-                  status: "En Route",
-                  location: quickCall.location,
-                  originalPost: staff.location || "Unknown",
-                  // Now teamLogEntry matches the type expected inside the log array
-                  log: [...(staff.log || []), teamLogEntry],
-                }
-              : staff
-          );
-        }
-      }
-
-      await updateEvent({
-        calls: [...(event?.calls || []), cleanCall],
-        ...(updatedStaff && { staff: updatedStaff }),
-        ...(updatedSupervisor && { supervisor: updatedSupervisor }),
-      });
+      // The same call wherever it's made (src/lib/newCall.ts): order, starting status and log lines.
+      const { patch } = newCall(
+        event ?? { calls: [], staff: [], supervisor: [] },
+        {
+          location: quickCall.location,
+          ...(quickCall.locationPoint && { locationPoint: quickCall.locationPoint }),
+          source: quickCall.source,
+          age: quickCall.age,
+          gender: quickCall.gender,
+          chiefComplaint: quickCall.chiefComplaint,
+          assignedTeam: quickCall.assignedTeam,
+        },
+        Date.now(),
+      );
+      await updateEvent(patch);
 
       // Reset & close
       setQuickCall({

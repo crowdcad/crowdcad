@@ -3,7 +3,7 @@ import { cleanHidden, setLayerShown } from './mapLayers';
 
 describe('map layers', () => {
   it('keeps only known kinds from a stored value', () => {
-    expect(cleanHidden(['teams', 'nope', 'zones', 'teams'])).toEqual(['zones', 'teams']);
+    expect(cleanHidden(['teams', 'nope', 'calls', 'zones', 'teams'])).toEqual(['zones', 'calls', 'teams']);
     expect(cleanHidden('teams')).toEqual([]);
     expect(cleanHidden(null)).toEqual([]);
   });

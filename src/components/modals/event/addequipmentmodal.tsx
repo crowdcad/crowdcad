@@ -18,13 +18,15 @@ type Props = {
   onSubmit: (name: string, location: string) => void | Promise<void>;
   /** The venue's named posts/locations, offered as autocomplete suggestions for the starting location. */
   locations?: string[];
+  /** What is being added: a piece of equipment, or a vehicle (whose location may be the unit crewing it). */
+  noun?: 'Equipment' | 'Vehicle';
 };
 
 /**
- * Adds a piece of equipment that exists only for this event — not part of
- * the venue's predefined catalog (e.g. gear borrowed just for today).
+ * Adds a piece of equipment (or a vehicle) that exists only for this event —
+ * not part of the venue's predefined catalog (e.g. gear borrowed just for today).
  */
-export default function AddEquipmentModal({ isOpen, onClose, onSubmit, locations = [] }: Props) {
+export default function AddEquipmentModal({ isOpen, onClose, onSubmit, locations = [], noun = 'Equipment' }: Props) {
   const { t } = useDispatchTerms();
   const [name, setName] = React.useState("");
   const [location, setLocation] = React.useState("");
@@ -38,8 +40,8 @@ export default function AddEquipmentModal({ isOpen, onClose, onSubmit, locations
   }, [isOpen]);
 
   const locationOptions = React.useMemo(
-    () => Array.from(new Set(['Staging', 'Clinic', ...locations].filter(Boolean))),
-    [locations]
+    () => Array.from(new Set([...(noun === 'Equipment' ? ['Staging', 'Clinic'] : []), ...locations].filter(Boolean))),
+    [locations, noun]
   );
 
   const inputClassNames = LABELED_FIELD_CLASSNAMES;
@@ -76,15 +78,15 @@ export default function AddEquipmentModal({ isOpen, onClose, onSubmit, locations
         {(close) => (
           <>
             <ModalHeader className="text-2xl font-bold text-surface">
-              {t("Add Equipment")}
+              {t(`Add ${noun}`)}
             </ModalHeader>
 
             <ModalBody className="space-y-3">
               <Input
                 label={
                   <span className="inline-flex items-center gap-1">
-                    {t("Equipment Name")}
-                    <Tooltip content="Added for this event only, not the venue's saved equipment catalog." placement="top">
+                    {t(`${noun} Name`)}
+                    <Tooltip content={`Added for this event only, not the venue's saved ${noun === 'Vehicle' ? 'vehicles' : 'equipment catalog'}.`} placement="top">
                       <CircleHelp className="w-3.5 h-3.5 text-surface-faint" />
                     </Tooltip>
                   </span>
@@ -97,13 +99,13 @@ export default function AddEquipmentModal({ isOpen, onClose, onSubmit, locations
                 value={name}
                 onValueChange={setName}
                 onKeyDown={(e) => { if (e.key === "Enter") handleSubmit(); }}
-                aria-label="Equipment Name"
+                aria-label={`${noun} Name`}
                 isRequired
                 autoFocus
               />
 
               <Autocomplete
-                label={t("Starting Location (optional)")}
+                label={t(noun === 'Vehicle' ? 'Location or crew (optional)' : 'Starting Location (optional)')}
                 labelPlacement="inside"
                 variant="flat"
                 size="lg"
@@ -115,7 +117,7 @@ export default function AddEquipmentModal({ isOpen, onClose, onSubmit, locations
                 onSelectionChange={(key) => { if (key) setLocation(key as string); }}
                 onKeyDown={(e) => { if (e.key === "Enter") handleSubmit(); }}
                 allowsCustomValue
-                placeholder="Staging"
+                placeholder={noun === 'Vehicle' ? undefined : 'Staging'}
                 aria-label="Starting Location"
               >
                 {locationOptions.map((loc) => (
@@ -139,7 +141,7 @@ export default function AddEquipmentModal({ isOpen, onClose, onSubmit, locations
                 className="px-4 py-2 bg-accent hover:bg-accent/90 text-surface-light"
                 isDisabled={submitting || !canSubmit}
               >
-                {t("Add Equipment")}
+                {t(`Add ${noun}`)}
               </Button>
             </ModalFooter>
           </>

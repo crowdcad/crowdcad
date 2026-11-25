@@ -5,7 +5,7 @@
  * team card (or any other part) can ask for them without prop drilling.
  */
 import { createContext, useContext, type ComponentType, type ReactNode } from 'react';
-import type { Event, Staff } from '@/app/types';
+import type { Call, Event, Staff } from '@/app/types';
 import type { MapOverlay } from '@/components/modals/event/venuemapmodal';
 import type { DispatchContribution, LogRow, PanelTab, StatusDetail } from './types';
 
@@ -22,6 +22,8 @@ export interface DispatchExtras {
   /** Every pack's fields and log lines for a status change, combined. */
   statusPatch: (event: Event, unit: Staff, status: string, detail?: string) => { patch: Partial<Staff>; logMessages: string[] };
   UnitChips: ComponentType<{ unit: Staff; event: Event; compact?: boolean }>[];
+  CallChips: ComponentType<{ call: Call }>[];
+  CallRowFooters: ComponentType<{ call: Call }>[];
   locations: string[];
 }
 
@@ -49,6 +51,8 @@ export function mergeDispatch(parts: DispatchContribution[]): DispatchExtras {
       };
     },
     UnitChips: parts.flatMap((p) => (p.UnitChip ? [p.UnitChip] : [])),
+    CallChips: parts.flatMap((p) => (p.CallChip ? [p.CallChip] : [])),
+    CallRowFooters: parts.flatMap((p) => (p.CallRowFooter ? [p.CallRowFooter] : [])),
     locations: parts.flatMap((p) => p.locations ?? []),
   };
 }

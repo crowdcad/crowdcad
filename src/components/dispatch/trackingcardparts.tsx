@@ -81,8 +81,9 @@ export function CallAgeSexComplaintRow({
         }}
         onKeyDown={blurOnEnter}
         variant="flat"
-        classNames={cardFieldClassNames}
-        className="w-1/4"
+        classNames={{ ...cardFieldClassNames, label: 'whitespace-nowrap' }}
+        // Wide enough for its label on a small phone, where a quarter of the row wraps it ("AGE/SE X").
+        className="w-1/4 min-w-[6.5rem] shrink-0"
       />
       <Input
         label={t('Chief Complaint')}

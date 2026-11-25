@@ -13,6 +13,7 @@ import LoadingScreen from '@/components/ui/loading-screen';
 import TutorialTip from '@/components/ui/TutorialTip';
 import { useScheduleGeneration } from '@/hooks/useScheduleGeneration';
 import { scheduleTimesToWindow, formatTimeValue, parseTimeValue } from '@/lib/scheduleUtils';
+import { todayCalendarDay } from '@/lib/eventDate';
 import { syncClinicsFromVenue } from '@/lib/clinics';
 import { hasDuplicateZoneName, syncDispatchZonesFromVenue } from '@/lib/zones';
 import { liteVenueLayers } from '@/lib/liteEventAdapters';
@@ -222,7 +223,7 @@ function LiteCreateContent() {
   // creation.
   useEffect(() => {
     if (!eventDraft) return;
-    const { start, end } = scheduleTimesToWindow(eventDraft.date || new Date().toISOString(), scheduleFrom, scheduleTo);
+    const { start, end } = scheduleTimesToWindow(eventDraft.date || todayCalendarDay(), scheduleFrom, scheduleTo);
     updateDraft((current) => ({ ...current, scheduleStart: start, scheduleEnd: end }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scheduleFrom, scheduleTo, eventDraft?.date]);

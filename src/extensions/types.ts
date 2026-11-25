@@ -14,9 +14,10 @@
  * AppEvents instead of adding a member.
  */
 import type { ComponentType, ReactNode } from 'react';
-import type { Event, Layer, PostPoint, Staff } from '@/app/types';
+import type { Call, Event, Layer, PostPoint, Staff } from '@/app/types';
 import type { TransactionContext as Tx } from '@/lib/services/types';
 import type { MapOverlay } from '@/components/modals/event/venuemapmodal';
+import type { HeatPoint } from '@/components/geo/BasemapView';
 import type { TrainingModule, TrainingStep, TrainingTrack } from '@/training/types';
 import type { UnitTracking } from '@/lib/unitTracking';
 
@@ -144,6 +145,10 @@ export interface DispatchContribution {
   statusPatch?: (event: Event, unit: Staff, status: string, detail?: string) => { patch: Partial<Staff>; logMessage?: string } | null;
   /** A chip on a unit's card. */
   UnitChip?: ComponentType<{ unit: Staff; event: Event; compact?: boolean }>;
+  /** A chip on a call's card, beside its indicators. */
+  CallChip?: ComponentType<{ call: Call }>;
+  /** A line under a call's row (desktop) and in its card (mobile), e.g. a change waiting for dispatch. Renders nothing when there is none. */
+  CallRowFooter?: ComponentType<{ call: Call }>;
   /** Extra location names to suggest. */
   locations?: string[];
 }
@@ -165,6 +170,20 @@ export interface SummaryContribution {
   charts?: StepChartSpec[];
   /** Extra CSV export lines, already formatted (see the summary page's export). */
   csvLines?: string[];
+  /** Layers for the summary's event map, each with a checkbox. */
+  mapLayers?: SummaryMapLayer[];
+}
+
+/** A layer a pack adds to the summary's event map (e.g. TAK's heat map). */
+export interface SummaryMapLayer {
+  id: string;
+  label: string;
+  /** Drawn on a geo layer's map. */
+  heat?: HeatPoint[];
+  /** Drawn on an image layer's map (its `markers`). */
+  overlay?: MapOverlay;
+  /** Shown under the map while the layer is (e.g. a color scale). */
+  legend?: ReactNode;
 }
 
 /* ---------------------------------------------------------------- pack */
@@ -209,6 +228,8 @@ export interface CrowdcadExtension {
       onPendingChange: (pending: unknown) => void;
     }>;
     afterCreate?: (eventId: string, event: Partial<Event>, pending: unknown) => Promise<void>;
+    /** A query for the new event's dispatch page (e.g. "mci=declare"), from the pack's settings. */
+    openWith?: (pending: unknown) => string | undefined;
   };
   auth?: {
     /** A hint under the sign-in box's email field (e.g. that another kind of username works too). */

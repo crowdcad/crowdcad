@@ -14,6 +14,12 @@ export function parseEventDate(value: string | undefined | null): Date | null {
   return isNaN(date.getTime()) ? null : date;
 }
 
+/** Today's calendar day where the user is, as "YYYY-MM-DD" (a new event's default date). */
+export function todayCalendarDay(now = new Date()): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+}
+
 /** Locale-formatted event day ("9/27/2026"), or `fallback` when missing/invalid. */
 export function formatEventDate(value: string | undefined | null, fallback = ''): string {
   return parseEventDate(value)?.toLocaleDateString() ?? fallback;

@@ -193,6 +193,9 @@ async function globalSetup(): Promise<void> {
   // ensureBaseCollection only sets fields at creation time, not on existing collections.
   await ensureField(headers, 'venues', { name: 'isOrgVenue', type: 'bool' });
   await ensureField(headers, 'events', { name: 'ended', type: 'bool' });
+  // Vehicles (src/lib/vehicles.ts).
+  for (const field of [{ name: 'vehiclesEnabled', type: 'bool' }, { name: 'vehicles', type: 'json' }]) await ensureField(headers, 'venues', field);
+  for (const field of [{ name: 'vehiclesEnabled', type: 'bool' }, { name: 'eventVehicles', type: 'json' }]) await ensureField(headers, 'events', field);
   // Legal hold (tests/e2e/features/records.feature).
   for (const field of [{ name: 'legalHold', type: 'bool' }, { name: 'legalHoldAt', type: 'number' }, { name: 'legalHoldBy', type: 'text' }]) {
     await ensureField(headers, 'events', field);

@@ -43,7 +43,8 @@ import SurgeToggleButton from '@/components/dispatch/surgetogglebutton';
 import PanelTab from '@/components/dispatch/paneltab';
 import DuplicateCallModal from '@/components/modals/event/duplicatecallmodal';
 import { CallSortButton, CallZoneFilterButton, TeamActionButtonGroup, type LeftPanelTab } from '@/components/dispatch/dispatchcontrols';
-import { TeamList, SupervisorList, EquipmentList, type TeamListProps, type SupervisorListProps, type EquipmentListProps } from '@/components/dispatch/leftpanellists';
+import { TeamList, SupervisorList, EquipmentList, VehicleList, type TeamListProps, type SupervisorListProps, type EquipmentListProps, type VehicleListProps } from '@/components/dispatch/leftpanellists';
+import { eventVehicles, setEquipmentVehicle } from '@/lib/vehicles';
 import { TrackingInsightsRow } from '@/components/dispatch/trackinginsights';
 import { getTeamAvailabilitySummary, getSurgeLimitPercent, isSurging, getPendingTransportSurgeThreshold, getUnassignedCallSurgeSeconds, countPendingTransport } from '@/lib/teamAvailability';
 import LoadingScreen from '@/components/ui/loading-screen';
@@ -125,8 +126,10 @@ interface DispatchRoutePageProps {
 //   );
 // }
 
-const LEFT_PANEL_TABS: LeftPanelTab[] = ['teams', 'supervisors', 'equipment', 'log'];
-const LEFT_PANEL_LABELS: Record<LeftPanelTab, string> = { teams: 'Teams', supervisors: 'Supervisors', equipment: 'Equipment', log: 'Log' };
+const LEFT_PANEL_TABS: LeftPanelTab[] = ['teams', 'supervisors', 'equipment', 'vehicles', 'log'];
+const LEFT_PANEL_LABELS: Record<LeftPanelTab, string> = { teams: 'Teams', supervisors: 'Supervisors', equipment: 'Equipment', vehicles: 'Vehicles', log: 'Log' };
+/** The left panel's tabs: Vehicles only while vehicles are on for the event. */
+const leftPanelTabsFor = (event: Pick<Event, 'vehiclesEnabled'> | undefined) => LEFT_PANEL_TABS.filter((tab) => tab !== 'vehicles' || !!event?.vehiclesEnabled);
 
 
 export default function DispatchPage({ params }: DispatchRoutePageProps) {
@@ -1222,6 +1225,54 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     }
   }, [event, updateEvent]);
 
+  // Vehicles (#176): added, moved, loaded and removed from the Vehicles tab.
+  const handleAddVehicle = useCallback(async (name: string, location: string) => {
+    if (!event) return;
+    if (eventVehicles(event).some((v) => v.name.toLowerCase() === name.toLowerCase())) {
+      toast.error(`A vehicle named "${name}" already exists.`);
+      return;
+    }
+    await updateEvent((current) => ({
+      eventVehicles: [...(current.eventVehicles ?? []), { id: `veh_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`, name, ...(location ? { location } : {}) }],
+    }));
+    toast.success(`Added vehicle: ${name}`);
+  }, [event, updateEvent]);
+
+  const handleVehicleLocationChange = useCallback((vehicleId: string, location: string) => {
+    void updateEvent((current) => ({
+      eventVehicles: (current.eventVehicles ?? []).map((v) => (v.id === vehicleId ? { ...v, location: location || undefined } : v)),
+    }));
+  }, [updateEvent]);
+
+  const handleVehicleEquipmentChange = useCallback((vehicleId: string, equipmentNames: string[]) => {
+    void saveEquipmentChange((fleet, current, t) => {
+      const vehicle = eventVehicles(current).find((v) => v.id === vehicleId);
+      if (!vehicle) return fleet;
+      let next = fleet;
+      for (const eq of fleet.eventEquipment) {
+        const on = eq.defaultLocation === vehicle.name || eq.location === vehicle.name;
+        const wanted = equipmentNames.includes(eq.name);
+        if (wanted && !on) next = setEquipmentVehicle(next, current, eq.name, vehicle, t);
+        else if (!wanted && on) next = setEquipmentVehicle(next, current, eq.name, null, t);
+      }
+      return next;
+    });
+  }, [saveEquipmentChange]);
+
+  const handleVehicleDelete = useCallback(async (vehicleId: string) => {
+    if (!event) return;
+    const vehicle = eventVehicles(event).find((v) => v.id === vehicleId);
+    if (!vehicle || !window.confirm(`Delete vehicle "${vehicle.name}" from this event?`)) return;
+    // Its equipment stays where the vehicle was.
+    await saveEquipmentChange((fleet, current, t) =>
+      fleet.eventEquipment
+        .filter((eq) => eq.defaultLocation === vehicle.name || eq.location === vehicle.name)
+        .reduce((acc, eq) => setEquipmentVehicle(acc, current, eq.name, null, t), fleet)
+    );
+    await updateEvent((current) => ({ eventVehicles: (current.eventVehicles ?? []).filter((v) => v.id !== vehicleId) }));
+    toast.success(`Deleted vehicle: ${vehicle.name}`);
+  }, [event, saveEquipmentChange, updateEvent]);
+
   const handleResetEquipmentLocations = useCallback(async () => {
     await saveEquipmentChange((fleet, current, t) =>
       settleReturningUnits({
@@ -1977,6 +2028,19 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
   // Controlled so picking "All Calls" can close the dropdown itself while
   // picking a zone leaves it open for further multi-select picks.
   const [mobileTeamsSubTab, setMobileTeamsSubTab] = useState<'teams' | 'supervisors' | 'log'>('teams');
+  // The phone's Equipment tab also holds Vehicles, while vehicles are on.
+  const [mobileEquipmentSubTab, setMobileEquipmentSubTab] = useState<'equipment' | 'vehicles'>('equipment');
+  const [showAddVehicleModal, setShowAddVehicleModal] = useState(false);
+  const vehiclesOn = !!event?.vehiclesEnabled;
+  const leftPanelTabs = leftPanelTabsFor(event);
+  const leftPanelTabsRef = useRef(leftPanelTabs);
+  leftPanelTabsRef.current = leftPanelTabs;
+  // Vehicles turned off while their tab was showing.
+  useEffect(() => {
+    if (vehiclesOn) return;
+    setSelectedLeftTab((tab) => (tab === 'vehicles' ? 'teams' : tab));
+    setMobileEquipmentSubTab('equipment');
+  }, [vehiclesOn]);
   const [mobileActiveTab, setMobileActiveTab] = useState<string>('teams');
   const [mobileSelectedClinicId, setMobileSelectedClinicId] = useState<string>('');
   // Set alongside switching to the Map tab from a team card's "view on
@@ -1999,6 +2063,33 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
   const viewEquipmentOnMap = (equipmentName: string) => {
     setMapEquipmentFocusRequest({ equipmentName, requestId: Date.now() });
     showRightTab('map');
+  };
+  // A call marker on the map (#94): shows the call on the Calls tab (all zones), opened, and scrolls to it.
+  const openCallFromMap = (callId: string) => {
+    const n = callDisplayNumberMap.get(callId);
+    setCallZoneFilter(new Set(['all']));
+    if (isMobile) {
+      setMobileActiveTab('calls');
+    } else {
+      setOpenCallId(callId);
+      showRightTab('calls');
+    }
+    setTimeout(() => {
+      document.querySelector(`[data-testid="call-row-${n}"], [data-testid="call-card-${n}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }, 50);
+  };
+  // A piece of equipment on the map: shows it in the Equipment list and scrolls to it.
+  const openEquipmentFromMap = (equipmentName: string) => {
+    if (isMobile) {
+      setMobileActiveTab('equipment');
+      setMobileEquipmentSubTab('equipment');
+    } else {
+      setSelectedLeftTab('equipment');
+      setFocusedPane((pane) => (pane === 'right' ? null : pane));
+    }
+    setTimeout(() => {
+      document.querySelector(`[data-testid="equipment-card-${CSS.escape(equipmentName)}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }, 50);
   };
 
   // Matches the lg breakpoint used by the desktop/mobile CSS split below —
@@ -2036,7 +2127,8 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
         const active = document.activeElement;
         if (active && ['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'].includes(active.tagName)) return;
         e.preventDefault();
-        setSelectedLeftTab((current) => LEFT_PANEL_TABS[(LEFT_PANEL_TABS.indexOf(current as LeftPanelTab) + 1) % LEFT_PANEL_TABS.length]);
+        const tabs = leftPanelTabsRef.current;
+        setSelectedLeftTab((current) => tabs[(tabs.indexOf(current as LeftPanelTab) + 1) % tabs.length]!);
       }
     };
     // Single keydown listener for all page-level hotkeys.
@@ -3470,6 +3562,12 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     onConfirmArrival: confirmArrival,
     onDismissArrival: dismissArrival,
   };
+  const vehicleListProps: VehicleListProps = {
+    event,
+    onLocationChange: handleVehicleLocationChange,
+    onEquipmentChange: handleVehicleEquipmentChange,
+    onDelete: handleVehicleDelete,
+  };
 
   // The Log view (left panel on desktop, under Teams on mobile), and its filter in the panel header.
   const renderEventLog = () => <EventLog event={event} filter={logFilter} />;
@@ -3483,6 +3581,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
       onAddTeam={handleAddNewTeam}
       onAddSupervisor={handleAddNewSupervisor}
       onAddEquipment={handleAddNewEquipment}
+      onAddVehicle={vehiclesOn ? () => setShowAddVehicleModal(true) : undefined}
       onRefreshPosts={refreshAllPostsFromSchedule}
       hasPostingTimes={(event.postingTimes?.length ?? 0) > 0}
       cardViewMode={cardViewMode}
@@ -3526,8 +3625,29 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     if (mobileActiveTab === 'equipment') {
       return (
         <>
-          <h2 className="text-xl font-bold text-surface-light">{t('Equipment')}</h2>
-          {renderTeamActions('equipment')}
+          {vehiclesOn ? (
+            <Select
+              data-testid="mobile-equipment-subtab"
+              selectedKeys={[mobileEquipmentSubTab]}
+              onSelectionChange={(keys) => {
+                const selected = Array.from(keys)[0] as 'equipment' | 'vehicles';
+                if (selected) setMobileEquipmentSubTab(selected);
+              }}
+              aria-label="Select equipment or vehicles"
+              className="w-auto min-w-[160px]"
+              classNames={{
+                trigger: "bg-surface-deep border border-surface-liner rounded-lg hover:bg-surface-liner h-10 min-h-10",
+                value: "text-surface-light",
+                popoverContent: "bg-surface-deep border-surface-liner",
+              }}
+            >
+              <SelectItem key="equipment">{t('Equipment')}</SelectItem>
+              <SelectItem key="vehicles">{t('Vehicles')}</SelectItem>
+            </Select>
+          ) : (
+            <h2 className="text-xl font-bold text-surface-light">{t('Equipment')}</h2>
+          )}
+          {renderTeamActions(mobileEquipmentSubTab)}
         </>
       );
     }
@@ -3787,10 +3907,9 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
             popoverContent: "bg-surface-deep border-surface-liner",
           }}
         >
-          <SelectItem key="teams" data-testid="left-panel-option-teams">{t('Teams')}</SelectItem>
-          <SelectItem key="supervisors" data-testid="left-panel-option-supervisors">{t('Supervisors')}</SelectItem>
-          <SelectItem key="equipment" data-testid="left-panel-option-equipment">{t('Equipment')}</SelectItem>
-          <SelectItem key="log" data-testid="left-panel-option-log">{t('Log')}</SelectItem>
+          {leftPanelTabs.map((tab) => (
+            <SelectItem key={tab} data-testid={`left-panel-option-${tab}`}>{t(LEFT_PANEL_LABELS[tab])}</SelectItem>
+          ))}
         </Select>
 
         <div className="flex items-center gap-1.5">
@@ -3826,6 +3945,11 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
           {/* EQUIPMENT CONTENT */}
           {selectedLeftTab === 'equipment' && (
             <EquipmentList {...equipmentListProps} emptyText={t('No equipment configured')} />
+          )}
+
+          {/* VEHICLES CONTENT (only while vehicles are on) */}
+          {selectedLeftTab === 'vehicles' && vehiclesOn && (
+            <VehicleList {...vehicleListProps} emptyText={t('No vehicles configured')} />
           )}
 
           {/* LOG: every log and note in one timeline */}
@@ -4062,6 +4186,9 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
               onSupervisorFocusHandled={() => setMapSupervisorFocusRequest(null)}
               onEquipmentFocusHandled={() => setMapEquipmentFocusRequest(null)}
               overlay={takOverlay}
+              onOpenCall={openCallFromMap}
+              onOpenEquipment={openEquipmentFromMap}
+              vehicles={eventVehicles(event)}
             />
           </div>
         )}
@@ -4177,7 +4304,17 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
         isOpen={showAddEquipmentModal}
         onClose={() => setShowAddEquipmentModal(false)}
         onSubmit={(name, location) => handleAddTemporaryEquipment(name, location)}
-        locations={(event?.venue?.posts || []).map(p => (typeof p === 'string' ? p : p.name))}
+        locations={[...(event?.venue?.posts || []).map(p => (typeof p === 'string' ? p : p.name)), ...eventVehicles(event).map(v => v.name)]}
+      />
+      <AddEquipmentModal
+        noun="Vehicle"
+        isOpen={showAddVehicleModal}
+        onClose={() => setShowAddVehicleModal(false)}
+        onSubmit={(name, location) => handleAddVehicle(name, location)}
+        locations={[
+          ...[...(event?.staff || []), ...(event?.supervisor || [])].map(u => u.team),
+          ...(event?.venue?.posts || []).map(p => (typeof p === 'string' ? p : p.name)),
+        ]}
       />
       <DebugModal
         isOpen={showDebugModal}
@@ -4288,7 +4425,11 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
                 <div className="space-y-6 pb-20">
                   <div>
                     <div className="space-y-3">
-                      <EquipmentList {...equipmentListProps} emptyText={t('No equipment configured')} />
+                      {vehiclesOn && mobileEquipmentSubTab === 'vehicles' ? (
+                        <VehicleList {...vehicleListProps} emptyText={t('No vehicles configured')} />
+                      ) : (
+                        <EquipmentList {...equipmentListProps} emptyText={t('No equipment configured')} />
+                      )}
                     </div>
                   </div>
                 </div>
@@ -4412,6 +4553,9 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
                       onSupervisorFocusHandled={() => setMapSupervisorFocusRequest(null)}
                       onEquipmentFocusHandled={() => setMapEquipmentFocusRequest(null)}
                       overlay={takOverlay}
+                      onOpenCall={openCallFromMap}
+                      onOpenEquipment={openEquipmentFromMap}
+                      vehicles={eventVehicles(event)}
                     />
                   </FillToTabBar>
                 </Tab>

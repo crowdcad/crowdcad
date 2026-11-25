@@ -46,14 +46,14 @@ const surgeAndLog: TrainingModule = {
     {
       id: 'intro',
       section: 'Check availability',
-      title: 'Read the scenario',
+      title: 'Look at the scenario',
       body: "Three of your five {{teams}} are out on calls. Check how many you have left.",
       estSec: 15,
     },
     {
       id: 'strip',
       section: 'Check availability',
-      title: 'Read the availability bar',
+      title: 'Look at the availability bar',
       body: "**3** teams are on calls and **2** are available, so 60% are busy. At 70% the bar turns red and surge turns on by itself.",
       anchor: 'availability-surge-strip',
       placement: 'right',

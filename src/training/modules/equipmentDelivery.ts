@@ -34,7 +34,7 @@ const equipmentDelivery: TrainingModule = {
     {
       id: 'intro',
       section: 'Send equipment',
-      title: 'Read the scenario',
+      title: 'Look at the scenario',
       body: "MRC1 is on scene at **Lower Sproul** with a patient who can't walk on an injured ankle. They radio for a wheelchair. You will send a helper {{team}} to bring it while MRC1 stays with the patient.",
       estSec: 20,
     },
@@ -65,7 +65,7 @@ const equipmentDelivery: TrainingModule = {
     {
       id: 'retrieving',
       section: 'Send equipment',
-      title: 'Read the helper team card',
+      title: 'Look at the helper team card',
       body: "MRC3's card shows it is retrieving equipment, and its {{location}} is where the wheelchair is kept. On the call, MRC3's status names the equipment run, so you can tell it apart from MRC1, the care team.",
       anchors: helperCard,
       placement: 'right',

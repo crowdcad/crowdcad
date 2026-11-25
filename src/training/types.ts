@@ -1,3 +1,4 @@
+import type { ComponentType } from 'react';
 import type { Event } from '@/app/types';
 import type { LiteEventDraft } from '@/lib/liteEventStore';
 import type { UnitTracking } from '@/lib/unitTracking';
@@ -39,6 +40,11 @@ export interface TrainingStep {
    * is a value to type, shown as a chip.
    */
   body: string;
+  /**
+   * A picture under the instruction, for a screen the sandbox can't open (e.g. the event builder): usually
+   * the real component, read-only, with the part to use highlighted.
+   */
+  figure?: ComponentType;
   /** What the coachmark points at. Unset: the instruction card shows on its own. */
   anchor?: Anchor;
   /** Optional more specific anchor tried first (e.g. a row that may not be rendered yet). */

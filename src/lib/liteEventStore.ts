@@ -2,6 +2,7 @@
 
 import type { Call, Clinic, DispatchZone, Equipment, EventEquipment, PostAssignment, Post, Staff, Supervisor, SurgePeriod, TeamLogEntry, Zone } from '@/app/types';
 import type { MapArea } from '@/lib/geo/types';
+import { todayCalendarDay } from '@/lib/eventDate';
 
 const DB_NAME = 'crowdcad-lite';
 const DB_VERSION = 1;
@@ -159,7 +160,7 @@ export function createDefaultLiteEventDraft(eventId: string, eventName = ''): Li
     id: eventId,
     mode: 'lite',
     name: eventName,
-    date: now.split('T')[0],
+    date: todayCalendarDay(),
     postingScheduleEnabled: true,
     scheduleConfig: {
       from: '16:00',

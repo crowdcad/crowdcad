@@ -8,7 +8,7 @@
 
 export type FocusPane = 'left' | 'right';
 
-export const LEFT_FOCUS_TABS = ['teams', 'supervisors', 'equipment'] as const;
+export const LEFT_FOCUS_TABS = ['teams', 'supervisors', 'equipment', 'vehicles'] as const;
 
 export const FOCUS_PARAM = 'focus';
 

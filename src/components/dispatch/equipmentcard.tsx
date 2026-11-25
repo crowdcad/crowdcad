@@ -17,6 +17,7 @@ import { getEquipmentIconType } from '@/lib/equipmentIcon';
 import { staticSelectorButtonProps } from '@/lib/heroStatic';
 import { describeCustody } from '@/lib/equipmentCustody';
 import { arrivalQuestion, type EquipmentArrival } from '@/lib/equipmentArrivals';
+import { eventVehicles } from '@/lib/vehicles';
 
 type EquipmentCardProps = {
   equipment: EquipmentItem;
@@ -289,7 +290,8 @@ export default function EquipmentCard({
                 {(() => {
                   const posts = (event.venue?.posts || []).map(p => (typeof p === 'string' ? p : p.name));
                   const teams = [...(event.staff || []), ...(event.supervisor || [])].map(s => s.team);
-                  const opts = Array.from(new Set(['Clinic', ...posts, ...teams, equipment.stagingLocation].filter(Boolean)));
+                  const vehicles = eventVehicles(event).map(v => v.name);
+                  const opts = Array.from(new Set(['Clinic', ...posts, ...vehicles, ...teams, equipment.stagingLocation].filter(Boolean)));
                   return opts.map(p => <AutocompleteItem key={p}>{t(p)}</AutocompleteItem>);
                 })()}
               </Autocomplete>

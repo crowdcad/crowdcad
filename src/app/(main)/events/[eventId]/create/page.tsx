@@ -17,6 +17,9 @@ import TeamStaffingSection from '@/components/event-create/TeamStaffingSection';
 import SupervisorStaffingSection from '@/components/event-create/SupervisorStaffingSection';
 import PostingScheduleSection from '@/components/event-create/PostingScheduleSection';
 import { EquipmentSelectionSection, PostsSelectionSection } from '@/components/event-create/PostsEquipmentSection';
+import { VehiclesSection } from '@/components/event-create/VehiclesSection';
+import { eventVehicles, throughVehicle, venueVehicles } from '@/lib/vehicles';
+import { todayCalendarDay } from '@/lib/eventDate';
 import { WizardShell, StepProgress, ReviewColumns, type WizardStep, type ReviewColumn } from '@/components/wizard';
 import { countLabel, eventConfigReviewFields, staffReviewFields, postScheduleReviewValue, getStepNavigation, primaryStepLabel } from '@/components/wizard/eventReview';
 import { randomId, stripUndefined } from '@/lib/utils';
@@ -73,7 +76,7 @@ export default function EventCreation() {
   const [loading, setLoading] = useState(true);
   const [eventData, setEventData] = useState<Partial<Event> & { eventEquipment: EventEquipment[] }>({
     name: '',
-    date: new Date().toISOString().split('T')[0],
+    date: todayCalendarDay(),
     venue: {} as Venue,
     staff: [],
     supervisor: [],
@@ -87,12 +90,18 @@ export default function EventCreation() {
     unassignedCallSurgeSeconds: 120,
   });
 
-  // A venue with no equipment of its own skips the Equipment step entirely.
+  // A venue with no equipment of its own skips the Equipment step entirely, and one without vehicles the Vehicles step.
   const hasVenueEquipment = (eventData.venue?.equipment?.length ?? 0) > 0;
-  type StepId = 'basics' | 'teams' | 'equipment' | 'postschedule' | 'review';
-  const STEP_ORDER: StepId[] = hasVenueEquipment
-    ? ['basics', 'teams', 'equipment', 'postschedule', 'review']
-    : ['basics', 'teams', 'postschedule', 'review'];
+  const hasVenueVehicles = !!eventData.venue?.vehiclesEnabled;
+  type StepId = 'basics' | 'teams' | 'equipment' | 'vehicles' | 'postschedule' | 'review';
+  const STEP_ORDER: StepId[] = [
+    'basics',
+    'teams',
+    ...(hasVenueEquipment ? (['equipment'] as const) : []),
+    ...(hasVenueVehicles ? (['vehicles'] as const) : []),
+    'postschedule',
+    'review',
+  ];
   const [currentStepId, setCurrentStepId] = useState<string>('basics');
   const [currentLayer, setCurrentLayer] = useState(0);
   const [isTeamModalOpen, setIsTeamModalOpen] = useState(false);
@@ -175,7 +184,7 @@ export default function EventCreation() {
   // page's analytics window) independent of whether auto-posting is
   // enabled — in sync with the Schedule section's From/To fields.
   useEffect(() => {
-    const { start, end } = scheduleTimesToWindow(eventData.date || new Date().toISOString(), scheduleFrom, scheduleTo);
+    const { start, end } = scheduleTimesToWindow(eventData.date || todayCalendarDay(), scheduleFrom, scheduleTo);
     setEventData(prev => ({ ...prev, scheduleStart: start, scheduleEnd: end }));
   }, [scheduleFrom, scheduleTo, eventData.date]);
 
@@ -322,6 +331,10 @@ export default function EventCreation() {
         // Populate clinics and dispatch zones from the venue's designated posts right before save.
         clinics: syncClinicsFromVenue(eventData.venue, eventData.clinics),
         dispatchZones: syncDispatchZonesFromVenue(eventData.venue, eventData.dispatchZones),
+        // With vehicles off, equipment the venue keeps on a vehicle starts where that vehicle is kept.
+        eventEquipment: eventData.vehiclesEnabled
+          ? eventData.eventEquipment
+          : eventData.eventEquipment.map((e) => ({ ...e, defaultLocation: throughVehicle({ location: e.defaultLocation }, venueVehicles(eventData.venue)).location })),
         userId: user.uid,
         date: dateValue.toISOString(),
         status: 'active' as const,
@@ -356,8 +369,12 @@ export default function EventCreation() {
           }
         }
       }
+      const query = withMember('eventCreate')
+        .map((x) => x.eventCreate.openWith?.(pendingByExtension[x.id]))
+        .filter(Boolean)
+        .join('&');
       // Replace, so Back from dispatch can't return to the builder and create the event twice.
-      router.replace(`/events/${eventDocId}/dispatch`);
+      router.replace(`/events/${eventDocId}/dispatch${query ? `?${query}` : ''}`);
     } catch (error) {
       console.error('Creation failed:', error);
       alert(`Creation failed: ${(error as Error).message}`);
@@ -476,6 +493,21 @@ export default function EventCreation() {
         selectClassNames={selectClassNames}
         allPosts={allPosts}
         getPostName={getPostName}
+        vehicleNames={eventVehicles(eventData).map((v) => v.name)}
+      />
+    </div>
+  );
+
+  const vehiclesStep = (
+    <div className="flex flex-col h-full overflow-hidden px-3 pt-4">
+      <div className="flex-shrink-0 pb-3 pl-3 flex items-center justify-between">
+        <h3 className="text-surface-light font-semibold text-xl">Vehicles</h3>
+      </div>
+      <VehiclesSection
+        eventData={eventData as Partial<Event> & { venue: Venue; eventEquipment: EventEquipment[] }}
+        setEventData={setEventData as React.Dispatch<React.SetStateAction<Partial<Event> & { venue: Venue; eventEquipment: EventEquipment[] }>>}
+        locations={allPosts.map(getPostName)}
+        selectClassNames={selectClassNames}
       />
     </div>
   );
@@ -554,6 +586,17 @@ export default function EventCreation() {
           },
         ]
       : []),
+    ...(hasVenueVehicles
+      ? [
+          {
+            id: 'vehicles',
+            label: 'Vehicles',
+            fields: [
+              { label: 'Vehicles', value: eventData.vehiclesEnabled ? countLabel(eventVehicles(eventData).length, 'vehicle') : 'Off' },
+            ],
+          },
+        ]
+      : []),
     {
       id: 'postschedule',
       label: 'Post schedule',
@@ -585,11 +628,14 @@ export default function EventCreation() {
     ...(hasVenueEquipment
       ? [{ id: 'equipment', label: 'Equipment', component: equipmentStep, isComplete: hasRequiredBasics }]
       : []),
+    ...(hasVenueVehicles
+      ? [{ id: 'vehicles', label: 'Vehicles', component: vehiclesStep, isComplete: hasRequiredBasics }]
+      : []),
     { id: 'postschedule', label: 'Post schedule', component: postScheduleStep, isComplete: hasRequiredBasics },
     { id: 'review', label: 'Review', component: reviewStep, isComplete: hasRequiredBasics },
   ];
 
-  const showMapPanel = currentStepId === 'equipment' || currentStepId === 'postschedule';
+  const showMapPanel = currentStepId === 'equipment' || currentStepId === 'vehicles' || currentStepId === 'postschedule';
   const showMapColumn = showMapPanel && hasMap;
 
   const { isFirstStep, isLastStep, goNext, goBack } = getStepNavigation(STEP_ORDER, currentStepId, setCurrentStepId);
@@ -599,6 +645,7 @@ export default function EventCreation() {
     basics: true,
     teams: (eventData.staff ?? []).length > 0 || (eventData.supervisor ?? []).length > 0,
     equipment: eventData.eventEquipment.length > 0,
+    vehicles: !!eventData.vehiclesEnabled,
     postschedule: postsEnabled || (eventData.eventPosts ?? []).length > 0,
     review: true,
   };
@@ -658,7 +705,7 @@ export default function EventCreation() {
             <GeoLayerMap
               className="absolute inset-0"
               layer={currentVenueLayer}
-              extraPins={geoEquipmentPins(currentVenueLayer, (eventData.eventEquipment || []).map((e) => ({ ...e, location: e.defaultLocation })))}
+              extraPins={geoEquipmentPins(currentVenueLayer, (eventData.eventEquipment || []).map((e) => ({ ...e, location: e.defaultLocation })), eventVehicles(eventData))}
             />
           </div>
           ) : (
@@ -668,6 +715,7 @@ export default function EventCreation() {
               currentLayer={currentLayer}
               staff={eventData.staff || []}
               equipment={(eventData.eventEquipment || []).map((e) => ({ ...e, location: e.defaultLocation }))}
+              vehicles={eventVehicles(eventData)}
               teamTimers={{}}
               calls={eventData.calls || []}
               clinics={eventData.clinics || []}

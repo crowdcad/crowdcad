@@ -14,7 +14,7 @@ import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
 
 import type { TeamSortMode } from '@/lib/teamSort';
 export type CardViewMode = 'normal' | 'condensed';
-export type LeftPanelTab = 'teams' | 'supervisors' | 'equipment' | 'log';
+export type LeftPanelTab = 'teams' | 'supervisors' | 'equipment' | 'vehicles' | 'log';
 
 const SORT_MENU_CLASSNAMES = { content: 'min-w-[140px] w-[140px] max-w-[140px]' };
 const selectedItemClass = (selected: boolean) => (selected ? 'bg-surface-liner' : '');
@@ -131,6 +131,7 @@ export function TeamActionButtonGroup({
   onAddTeam,
   onAddSupervisor,
   onAddEquipment,
+  onAddVehicle,
   onRefreshPosts,
   hasPostingTimes,
   cardViewMode,
@@ -142,6 +143,8 @@ export function TeamActionButtonGroup({
   onAddTeam: () => void;
   onAddSupervisor: () => void;
   onAddEquipment: () => void;
+  /** Set while vehicles are on for the event. */
+  onAddVehicle?: () => void;
   onRefreshPosts: () => void;
   hasPostingTimes: boolean;
   cardViewMode: CardViewMode;
@@ -151,7 +154,10 @@ export function TeamActionButtonGroup({
 }) {
   const { t } = useDispatchTerms();
   const addLabel =
-    selectedTab === 'teams' ? t('Add Team') : selectedTab === 'supervisors' ? t('Add Supervisor') : t('Add Equipment');
+    selectedTab === 'teams' ? t('Add Team')
+    : selectedTab === 'supervisors' ? t('Add Supervisor')
+    : selectedTab === 'vehicles' ? t('Add Vehicle')
+    : t('Add Equipment');
   const sortOptions: { key: TeamSortMode; label: string }[] = [
     { key: 'asc', label: 'Ascending' },
     { key: 'desc', label: 'Descending' },
@@ -180,11 +186,13 @@ export function TeamActionButtonGroup({
                 if (key === 'team') onAddTeam();
                 else if (key === 'supervisor') onAddSupervisor();
                 else if (key === 'equipment') onAddEquipment();
+                else if (key === 'vehicle') onAddVehicle?.();
               }}
             >
               <DropdownItem key="team">{t('Add Team')}</DropdownItem>
               <DropdownItem key="supervisor">{t('Add Supervisor')}</DropdownItem>
               <DropdownItem key="equipment">{t('Add Equipment')}</DropdownItem>
+              {onAddVehicle ? <DropdownItem key="vehicle">{t('Add Vehicle')}</DropdownItem> : null}
             </DropdownMenu>
           </Dropdown>
         </div>
