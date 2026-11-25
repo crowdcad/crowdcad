@@ -12,6 +12,8 @@ import MapZoomControls from '@/components/ui/map-zoom-controls';
 import { useScheduleGeneration } from '@/hooks/useScheduleGeneration';
 import { scheduleTimesToWindow } from '@/lib/scheduleUtils';
 import { useCertifications } from '@/hooks/useCertifications';
+import { useRoster } from '@/hooks/useRoster';
+import { recordStaffed, staffedNames } from '@/lib/roster';
 import MetadataSection from '@/components/event-create/MetadataSection';
 import TeamStaffingSection from '@/components/event-create/TeamStaffingSection';
 import SupervisorStaffingSection from '@/components/event-create/SupervisorStaffingSection';
@@ -72,6 +74,7 @@ export default function EventCreation() {
   const newEventVenueId = searchParams?.get('venueId') ?? null;
 
   const { certifications } = useCertifications();
+  const { roster, isAdmin: rosterAdmin } = useRoster();
 
   const [loading, setLoading] = useState(true);
   const [eventData, setEventData] = useState<Partial<Event> & { eventEquipment: EventEquipment[] }>({
@@ -358,6 +361,7 @@ export default function EventCreation() {
         }));
       }
       if (!draftExists) void auditLog.record({ action: 'event.create', eventId: eventDocId, target: eventData.name });
+      if (rosterAdmin) void recordStaffed(eventDocId, staffedNames(fields));
       if (!draftExists) {
         for (const x of withMember('eventCreate')) {
           if (!x.eventCreate.afterCreate) continue;
@@ -831,6 +835,7 @@ export default function EventCreation() {
         initialTeam={editingTeamIndex !== null ? teamDraftFromStaff((eventData.staff || [])[editingTeamIndex]) : undefined}
         onSave={(team) => handleSaveTeam(team, editingTeamIndex)}
         roles={certifications.map(name => ({ name, fullName: name }))}
+        roster={roster}
       />
 
       <AddSupervisorModal

@@ -507,6 +507,27 @@ async function main() {
     ['CREATE INDEX idx_audit_t ON audit (t)'],
   );
 
+  // Staff roster (src/lib/roster.ts): names, licensure and contact details of
+  // the organization's staff. Admins only, to read as well as write. Mirrors
+  // firestore.rules.
+  const ROSTER_RULE = `${AUTH_RULE} && @request.auth.isAdmin = true`;
+  await ensureCollection(
+    headers,
+    'roster',
+    [
+      { name: 'name', type: 'text', required: true, max: 80 },
+      { name: 'licensure', type: 'text', max: 40 },
+      { name: 'eventsStaffed', type: 'number' },
+      { name: 'staffedEventIds', type: 'json' },
+      { name: 'region', type: 'text', max: 80 },
+      { name: 'email', type: 'text', max: 120 },
+      { name: 'phone', type: 'text', max: 40 },
+      { name: 'notes', type: 'text', max: 1000 },
+      { name: 'updatedAt', type: 'number' },
+    ],
+    { listRule: ROSTER_RULE, viewRule: ROSTER_RULE, createRule: ROSTER_RULE, updateRule: ROSTER_RULE, deleteRule: ROSTER_RULE },
+  );
+
   await ensureCollection(headers, '_storage', [
     { name: 'path', type: 'text', required: true },
     { name: 'file', type: 'file', options: { maxSelect: 1, maxSize: 52428800 } },

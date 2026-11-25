@@ -29,6 +29,7 @@ await seed('audit/a1', { t: 1, uid: 'owner1', actor: 'owner@x.org', action: 'eve
 await seed('audit/a2', { t: 2, uid: 'admin1', actor: 'admin@x.org', action: 'admin.grant' });
 await seed('settings/certs', { key: 'certifications', list: ['CPR'] });
 await seed('dispatchVocabularyPresets/p1', { createdBy: 'owner1', name: 'Mine' });
+await seed('roster/r1', { name: 'Jane Doe', licensure: 'EMT', phone: '555-0100' });
 
 const patch = (path, data, mask) =>
   [path + (mask ? `?${mask.map((f) => `updateMask.fieldPaths=${f}`).join('&')}` : ''), fields(data)];
@@ -88,6 +89,15 @@ expect('admin reads anyone', await call(admin, 'GET', 'users/stranger1'), true);
 section('dispatch logs');
 expect('owner reads', await call(owner, 'GET', 'dispatchLogs/l1'), true);
 expect("shared user can't read", await call(shared, 'GET', 'dispatchLogs/l1'), false);
+
+section('roster');
+expect('admin reads', await call(admin, 'GET', 'roster/r1'), true);
+expect('admin adds a person', await call(admin, 'POST', 'roster', fields({ name: 'Sam Lee' })), true);
+expect('admin edits', await update(admin, 'roster/r1', { eventsStaffed: 3 }), true);
+for (const [who, auth] of [['owner', owner], ['org member', member], ['stranger', stranger], ['signed out', null]]) {
+  expect(`${who} can't read`, await call(auth, 'GET', 'roster/r1'), false);
+  expect(`${who} can't write`, await update(auth, 'roster/r1', { name: 'x' }), false);
+}
 
 section('settings');
 expect('anyone signed in reads', await call(stranger, 'GET', 'settings/certs'), true);

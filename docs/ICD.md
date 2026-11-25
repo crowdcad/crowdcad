@@ -161,6 +161,23 @@ Small key/value store for org-wide configuration (currently used for the certifi
 | `key` | text | Setting name. Observed value: `"certifications"`. | No (required) | `"certifications"` |
 | `list` | json (`string[]`) | Value for the setting. For `"certifications"`, the list of certification labels offered in the UI. | Yes | `["CPR","EMT-B","EMT-P","RN","MD/DO"]` |
 
+### 3.6.1 `roster`
+
+The organization's staff roster (the Roster page, `src/lib/roster.ts`). Admins only, to read as well as write (Firestore: `roster/{personId}`).
+
+| Field | Type | Description | Nullable | Example |
+|---|---|---|---|---|
+| `id` | text (15-char) | Primary key. | No | `"r1s2t3u4v5w6x7y"` |
+| `name` | text (≤80) | The person's name, matched (case-insensitive) against team member names. | No (required) | `"Jane Doe"` |
+| `licensure` | text (≤40) | Licensure or certification. | Yes | `"EMT"` |
+| `eventsStaffed` | number | Events staffed. Goes up once per event the person is on when the event is saved; admins can edit it. | Yes | `4` |
+| `staffedEventIds` | json (`string[]`) | Events already counted in `eventsStaffed` (the latest 200). | Yes | `["e1f2g3h4i5j6k7l"]` |
+| `region` | text (≤80) | City or region. | Yes | `"Berkeley"` |
+| `email` | text (≤120) | Contact email. | Yes | `"jane@example.org"` |
+| `phone` | text (≤40) | Contact phone. | Yes | `"555-0100"` |
+| `notes` | text (≤1000) | Free-text notes. | Yes | `"Bilingual (Spanish)"` |
+| `updatedAt` | number | Epoch ms of the last edit. | Yes | `1764000000000` |
+
 ### 3.7 Embedded JSON sub-shapes (nested inside `venues` and `events`)
 
 PocketBase stores these as opaque `json` fields with no server-side schema; the TypeScript contracts in `src/app/types.ts` are the only thing enforcing the shapes below.

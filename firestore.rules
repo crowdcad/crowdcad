@@ -159,6 +159,12 @@ service cloud.firestore {
     // may edit or delete one. This collection had no rule at all, so under
     // default-deny the preset list read failed (custom presets vanished from
     // the UI) and creating one was rejected.
+    // Staff roster (src/lib/roster.ts): names, licensure and contact details
+    // of the organization's staff. Admins only, to read as well as write.
+    match /roster/{personId} {
+      allow read, write: if isRequestingUserAdmin();
+    }
+
     match /dispatchVocabularyPresets/{presetId} {
       allow read: if signedIn();
       allow create: if signedIn() &&

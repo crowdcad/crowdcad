@@ -230,41 +230,47 @@ export default function QuickCallModal({
             </ModalHeader>
 
             <ModalBody>
-              <Autocomplete
-                autoFocus={firstEmptyField === "location"}
-                label={t("Location")}
-                labelPlacement="inside"
-                variant="flat"
-                size="lg"
-                radius="lg"
-                inputProps={{ classNames: inputClassNames }}
-                selectorButtonProps={staticSelectorButtonProps}
-                inputValue={quickCall.location}
-                onInputChange={(v) => setQuickCall((p) => ({ ...p, location: v }))}
-                onSelectionChange={(key) => {
-                  if (key) setQuickCall((p) => ({ ...p, location: key as string }));
-                }}
-                allowsCustomValue
-              >
-                {/* 'Unknown' listed first — an unfamiliar location shouldn't
-                    force typing; tabbing past a pile of venue-post suggestions
-                    can land here instead. */}
-                {Array.from(new Set(['Unknown', ...locationOptions])).map((loc) => (
-                  <AutocompleteItem key={loc}>{loc}</AutocompleteItem>
-                ))}
-              </Autocomplete>
-              {firstGeoLayer(venueLayers) && (
-                <Button
-                  size="sm"
+              <div className="flex gap-2">
+                <Autocomplete
+                  className="flex-1"
+                  autoFocus={firstEmptyField === "location"}
+                  label={t("Location")}
+                  labelPlacement="inside"
                   variant="flat"
-                  className="self-start"
-                  startContent={<MapPin className="h-4 w-4" />}
-                  onPress={() => setPinOpen(true)}
-                  data-testid="quick-call-drop-pin"
+                  size="lg"
+                  radius="lg"
+                  inputProps={{ classNames: inputClassNames }}
+                  selectorButtonProps={staticSelectorButtonProps}
+                  inputValue={quickCall.location}
+                  onInputChange={(v) => setQuickCall((p) => ({ ...p, location: v }))}
+                  onSelectionChange={(key) => {
+                    if (key) setQuickCall((p) => ({ ...p, location: key as string }));
+                  }}
+                  allowsCustomValue
                 >
-                  {quickCall.locationPoint ? t('Move pin') : t('Drop pin')}
-                </Button>
-              )}
+                  {/* 'Unknown' listed first — an unfamiliar location shouldn't
+                      force typing; tabbing past a pile of venue-post suggestions
+                      can land here instead. */}
+                  {Array.from(new Set(['Unknown', ...locationOptions])).map((loc) => (
+                    <AutocompleteItem key={loc}>{loc}</AutocompleteItem>
+                  ))}
+                </Autocomplete>
+                {firstGeoLayer(venueLayers) && (
+                  <Button
+                    isIconOnly
+                    variant="flat"
+                    radius="lg"
+                    className="h-auto w-16 min-w-16 shrink-0 self-stretch"
+                    aria-label={quickCall.locationPoint ? t('Move pin') : t('Drop pin')}
+                    title={quickCall.locationPoint ? t('Move pin') : t('Drop pin')}
+                    color={quickCall.locationPoint ? 'primary' : 'default'}
+                    onPress={() => setPinOpen(true)}
+                    data-testid="quick-call-drop-pin"
+                  >
+                    <MapPin className="h-5 w-5" />
+                  </Button>
+                )}
+              </div>
               <PinDropModal
                 isOpen={pinOpen}
                 onClose={() => setPinOpen(false)}

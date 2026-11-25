@@ -45,6 +45,8 @@ export default function AppNavbar() {
   const navItems = [
     { label: "Home", href: "/" },
     { label: "Venues", href: "/venues/selection" },
+    // The staff roster is for admins only (src/lib/roster.ts); not on the dispatch page's own menu.
+    ...(isAdmin ? [{ label: "Roster", href: "/roster" }] : []),
   ];
 
   // Whether the current dispatch event actually has something for these
