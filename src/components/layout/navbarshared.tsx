@@ -179,14 +179,6 @@ export function NavbarEndActions({
 }) {
   return (
     <NavbarContent justify="end" className="gap-1 sm:gap-2 md:gap-2">
-      <div className="lg:hidden">
-        <NavbarMenuToggle
-          aria-label={isMenuOpen ? 'Close menu' : 'Open menu'}
-          className="text-surface-light"
-          icon={(open) => <Menu className={`size-6 transition ${open ? 'rotate-90' : ''} text-surface-light`} />}
-        />
-      </div>
-
       {help && <NavbarItem>{help}</NavbarItem>}
 
       <NavbarItem>
@@ -238,6 +230,15 @@ export function NavbarEndActions({
           </Dropdown>
         </NavbarItem>
       )}
+
+      {/* The menu button always sits at the top-right corner, after the theme and account buttons. */}
+      <div className="lg:hidden">
+        <NavbarMenuToggle
+          aria-label={isMenuOpen ? 'Close menu' : 'Open menu'}
+          className="text-surface-light"
+          icon={(open) => <Menu className={`size-6 transition ${open ? 'rotate-90' : ''} text-surface-light`} />}
+        />
+      </div>
     </NavbarContent>
   );
 }

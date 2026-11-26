@@ -24,6 +24,11 @@ export function isOpenCall(call: Call): boolean {
   return !isCallResolved(call) && call.status !== 'Resolved' && !call.duplicate;
 }
 
+/** Calls a unit worked: on it now, or on it before it was taken off (a detached team). */
+export function callsOfTeam(calls: Call[], team: string): Call[] {
+  return calls.filter((c) => (c.assignedTeam || []).includes(team) || (c.detachedTeams || []).some((d) => d.team === team));
+}
+
 /** The number a call is shown with ("Call #3"): its place among all the event's calls, oldest first. */
 export function callDisplayNumbers(calls: Call[]): Map<string, number> {
   const sorted = [...calls].sort((a, b) => parseInt(a.id) - parseInt(b.id));

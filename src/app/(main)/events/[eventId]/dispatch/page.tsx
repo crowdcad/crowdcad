@@ -764,7 +764,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
       member: memberString,
       status: 'Available',
       location: 'Roaming',
-      log: [{ timestamp: now.getTime(), message: `${hhmm} - supervisor created` }],
+      log: [{ timestamp: now.getTime(), message: `${hhmm} - Supervisor created` }],
       originalPost: 'Roaming',
     };
 
@@ -889,7 +889,8 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
         members: membersStrings,
         status: 'Available',
         location: '',
-        log: [{ timestamp: Date.now(), message: 'Team created' }]
+        // Made during the event: when, as every other log line says.
+        log: [{ timestamp: Date.now(), message: `${hhmmOf(new Date())} - Team created` }]
       };
 
       return { staff: [...(currentEvent.staff || []), staffEntry] };
@@ -4010,9 +4011,18 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
   );
 
   const renderExtensionTab = (tab: (typeof extras.tabs)[number]) => (
-    <PanelTab key={tab.id} active={selectedRightTab === tab.id} onSelect={() => setSelectedRightTab(tab.id)} data-testid={tab.testId}>
-      {tab.label}
-      {tab.badge ? <span className="ml-1.5">{tab.badge}</span> : null}
+    <PanelTab
+      key={tab.id}
+      active={selectedRightTab === tab.id}
+      onSelect={() => setSelectedRightTab(tab.id)}
+      aria-label={tab.icon ? tab.label : undefined}
+      title={tab.icon ? tab.label : undefined}
+      data-testid={tab.testId}
+    >
+      <span className="relative inline-flex items-center">
+        {tab.icon ?? tab.label}
+        {tab.badge}
+      </span>
     </PanelTab>
   );
   const desktopRightPane = (
