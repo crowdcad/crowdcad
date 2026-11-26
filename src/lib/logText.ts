@@ -5,6 +5,12 @@
 
 type LogEntry = { timestamp: number; message: string };
 
+/** Entries oldest first (entries at one time keep their order). Lines added out of turn, e.g. by a field
+ *  phone or an edit, land where their time puts them. */
+export function sortedLog<T extends LogEntry>(log: readonly T[] | undefined): T[] {
+  return [...(log ?? [])].sort((a, b) => a.timestamp - b.timestamp);
+}
+
 /** One line per entry, as shown in the editable log textarea. */
 export function logToText(log: readonly LogEntry[] | undefined): string {
   return log && log.length > 0 ? log.map(entry => entry.message).join('\n') : '';

@@ -996,6 +996,8 @@ export interface VenueMapWithPostsProps {
   overlay?: MapOverlay;
   /** Draw call markers (#94): open calls, or every call (the event summary's map). Off by default. */
   showCalls?: 'open' | 'all' | false;
+  /** "Call #N" numbers when `calls` is only some of the event's (the summary's team filter); counted from `calls` otherwise. */
+  callNumbers?: Map<string, number>;
   /** Clicking a call in a call marker's list opens it. */
   onOpenCall?: (callId: string) => void;
 }
@@ -1035,6 +1037,7 @@ export function VenueMapWithPosts({
   overlay,
   showCalls = false,
   onOpenCall,
+  callNumbers: givenNumbers,
 }: VenueMapWithPostsProps) {
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   const [naturalSize, setNaturalSize] = useState({ width: 0, height: 0 });
@@ -1046,7 +1049,7 @@ export function VenueMapWithPosts({
 
   const mapUrl = layers[currentLayer]?.mapUrl || '';
   const posts = layers[currentLayer]?.posts || [];
-  const callNumbers = callDisplayNumbers(calls);
+  const callNumbers = givenNumbers ?? callDisplayNumbers(calls);
   const shownLayer = layers[currentLayer];
   const callMarkers = showCalls && shownLayer ? callSpots(showCalls === 'all' ? calls : calls.filter(isOpenCall), shownLayer, false) : [];
 

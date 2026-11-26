@@ -23,7 +23,7 @@ import { getEventClinics } from '@/lib/clinics';
 import { useDispatchExtras } from '@/extensions/dispatch';
 import type { StatusDetail } from '@/extensions/types';
 import { getEquipmentIconType, type EquipmentIconType } from '@/lib/equipmentIcon';
-import { textToLog } from '@/lib/logText';
+import { logToText, sortedLog, textToLog } from '@/lib/logText';
 import { parseTimeToMinutes } from '@/lib/postingTimes';
 import { staticSelectorButtonProps } from '@/lib/heroStatic';
 import { hhmmOf } from '@/lib/clock';
@@ -546,8 +546,8 @@ export function TeamPostSchedule({
   );
 }
 
-const joinLog = (log: Staff['log']) =>
-  log && log.length > 0 ? log.map(entry => entry.message).join('\n') : '';
+// In time order: entries added out of turn (a field phone, an edit) go where their time puts them.
+const joinLog = (log: Staff['log']) => logToText(sortedLog(log));
 
 export function TeamActivityLog({
   staff,
@@ -572,7 +572,7 @@ export function TeamActivityLog({
       onBlur={async () => {
         logFocusedRef.current = false;
         // Convert text back to log entries, keeping unchanged lines' timestamps.
-        const newLog = textToLog(logText, staff.log);
+        const newLog = textToLog(logText, sortedLog(staff.log));
         if (!newLog) return;
         const updatedStaff = event.staff.map(s => (s.team === staff.team ? { ...s, log: newLog } : s));
         await updateEvent({ staff: updatedStaff });

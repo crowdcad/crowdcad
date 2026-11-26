@@ -88,8 +88,10 @@ export interface DispatchHost {
 export interface PanelTab {
   id: string;
   label: string;
+  /** Shown in place of the label, which then names the tab for its tooltip and screen readers. */
+  icon?: ReactNode;
   testId?: string;
-  /** Small count beside the label. */
+  /** Over the top-right corner of the label or icon, e.g. an unread dot (position it absolutely). */
   badge?: ReactNode;
   /** Opened once by itself, e.g. when its feature becomes active. */
   autoOpen?: boolean;
@@ -186,6 +188,8 @@ export interface SummaryMapLayer {
   overlay?: MapOverlay;
   /** Shown under the map while the layer is (e.g. a color scale). */
   legend?: ReactNode;
+  /** The layer with only one unit's activity (the map's team filter), or null when it has none. Without it, the layer stays as is. */
+  forTeam?: (team: string) => SummaryMapLayer | null;
 }
 
 /* ---------------------------------------------------------------- pack */

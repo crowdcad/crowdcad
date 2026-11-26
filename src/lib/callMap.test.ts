@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Call, Layer } from '@/app/types';
 import { describePoint } from '@/lib/geo/describePoint';
-import { callDisplayNumbers, callSpots, isOpenCall, unplacedCallCount, withCallPins } from './callMap';
+import { callDisplayNumbers, callsOfTeam, callSpots, isOpenCall, unplacedCallCount, withCallPins } from './callMap';
 
 // A drawn-area (geo) layer with posts about 100 m apart, and an image layer with the same names by x/y.
 const geo = {
@@ -73,5 +73,17 @@ describe('calls on the map', () => {
   it("describes a dropped pin without claiming it is at a location", () => {
     expect(describePoint({ lat: 37.87004, lon: -122.26 }, [geo])).toBe('Near Gate');
     expect(describePoint({ lat: 37.8704, lon: -122.26 }, [geo])).toBe('40 m from Gate');
+  });
+});
+
+describe('callsOfTeam', () => {
+  it('lists calls a unit is on or was taken off', () => {
+    const calls = [
+      { id: '1', assignedTeam: ['Medic 1'] },
+      { id: '2', assignedTeam: [], detachedTeams: [{ team: 'Medic 1', reason: 'Rolled from Scene' }] },
+      { id: '3', assignedTeam: ['Bike 3'] },
+    ] as unknown as Call[];
+    expect(callsOfTeam(calls, 'Medic 1').map((c) => c.id)).toEqual(['1', '2']);
+    expect(callsOfTeam(calls, 'Foot 4')).toEqual([]);
   });
 });

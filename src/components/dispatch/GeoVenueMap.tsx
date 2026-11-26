@@ -41,6 +41,8 @@ export interface GeoVenueMapProps {
   className?: string;
   /** Draw call markers (#94): open calls, or every call (the event summary's map). Off by default. */
   showCalls?: 'open' | 'all' | false;
+  /** "Call #N" numbers when `calls` is only some of the event's (the summary's team filter); counted from `calls` otherwise. */
+  callNumbers?: Map<string, number>;
   /** Clicking a call in a call marker's list opens it. */
   onOpenCall?: (callId: string) => void;
   /** Heat cells drawn over the map (the event summary's map). */
@@ -70,6 +72,7 @@ export default function GeoVenueMap({
   className,
   showCalls = false,
   onOpenCall,
+  callNumbers,
   heat,
 }: GeoVenueMapProps) {
   const placed = placedPosts(layer);
@@ -83,7 +86,7 @@ export default function GeoVenueMap({
       node: <PostMarker post={post} at={AT_PIN} scale={1} isSelected={selectedPostName === name} onAddCall={onAddCallAtPost} />,
     });
   }
-  const numbers = callDisplayNumbers(calls);
+  const numbers = callNumbers ?? callDisplayNumbers(calls);
   for (const spot of showCalls ? callSpots(showCalls === 'all' ? calls : calls.filter(isOpenCall), layer, true) : []) {
     pins.push({
       key: spot.key,

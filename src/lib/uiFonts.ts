@@ -1,4 +1,3 @@
-import { JetBrains_Mono } from 'next/font/google';
 import localFont from 'next/font/local';
 
 // The condensed style's fonts (src/styles/ui-style.css), exposed as CSS
@@ -25,6 +24,20 @@ const rajdhani = localFont({
     { prop: 'size-adjust', value: '115%' },
   ],
 });
-const jetbrainsMono = JetBrains_Mono({ subsets: ['latin'], variable: '--font-jetbrains-mono', display: 'swap' });
+// JetBrains Mono (numbers and times) is bundled too (src/fonts/jetbrains-mono, OFL, the latin variable font)
+// so its baseline can be put exactly where Rajdhani's is. In a box centered on its line, a font's baseline sits
+// (ascent - descent) / 2 below the middle: Rajdhani's is (115% - 31.74%) / 2 = 41.63% of the font size; the
+// overrides give JetBrains Mono the same (107.63% - 24.37%) / 2, keeping its own total height (132%).
+// TO NUDGE BY HAND: raise ascent-override and lower descent-override by the same amount to move numbers
+// down (each 1% moves them 0.5% of the font size, about 0.1px at 16px); the reverse moves them up.
+const jetbrainsMono = localFont({
+  src: [{ path: '../fonts/jetbrains-mono/jetbrains-mono-latin-wght.woff2', weight: '100 800', style: 'normal' }],
+  variable: '--font-jetbrains-mono',
+  display: 'swap',
+  declarations: [
+    { prop: 'ascent-override', value: '107.63%' },
+    { prop: 'descent-override', value: '24.37%' },
+  ],
+});
 
 export const UI_FONT_VARIABLES = `${rajdhani.variable} ${jetbrainsMono.variable}`;
