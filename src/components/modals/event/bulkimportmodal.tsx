@@ -11,7 +11,7 @@ import {
   ModalFooter,
   Button,
 } from "@heroui/react";
-import { Download, Upload } from "lucide-react";
+import { Download, Upload } from "@/components/ui/icons";
 import type { Role, Staff, Supervisor } from "@/app/types";
 import { newTeamId } from '@/lib/teamId';
 

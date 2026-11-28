@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { Button, Checkbox, Popover, PopoverContent, PopoverTrigger } from '@heroui/react';
-import { Layers } from 'lucide-react';
+import { Layers } from '@/components/ui/icons';
 import { MAP_LAYER_KINDS, MAP_LAYER_LABELS, setLayerShown, type MapLayerKind } from '@/lib/mapLayers';
 import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
 

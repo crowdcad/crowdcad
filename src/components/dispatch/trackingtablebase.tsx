@@ -10,8 +10,26 @@ interface TrackingTableBaseProps {
   showTeamAssignmentChips: boolean;
   children: React.ReactNode;
   footer?: React.ReactNode;
+  /** Shown, centered below the column titles, when the table lists nothing (see TrackingEmpty). */
+  empty?: React.ReactNode;
   className?: string;
 }
+
+/**
+ * What a call or clinic list shows when it has nothing to list: a large muted icon over a short line about as wide
+ * as it, centered in the space the rows would fill (`className` sizes that space on the phone).
+ */
+export function TrackingEmpty({ icon: Icon, text, className = '' }: { icon: React.ComponentType<{ className?: string }>; text: string; className?: string }) {
+  return (
+    <div className={`flex flex-col items-center justify-center gap-3 px-4 py-10 text-center text-surface-faint ${className}`} data-testid="tracking-empty">
+      <Icon className="h-24 w-24 opacity-60" />
+      <span className="text-lg">{text}</span>
+    </div>
+  );
+}
+
+// The line under the column titles: the same thin line as under each row.
+const TH = 'px-3 py-2.5 text-surface-faint border-b border-surface-liner';
 
 // The editable text cells (chief complaint, A/S, location) are a box the height of a team chip (h-8),
 // with the table's own surface-deep fill, so inside an open (highlighted) row they read as fields. The
@@ -98,28 +116,30 @@ export default function TrackingTableBase({
   showTeamAssignmentChips,
   children,
   footer,
+  empty,
   className,
 }: TrackingTableBaseProps) {
   const { t } = useDispatchTerms();
   return (
     <div className={`w-full h-full flex flex-col min-h-0 ${className || ''}`.trim()} data-team-chips={showTeamAssignmentChips ? 'on' : 'off'}>
-      <div className="tab-scroll flex-1 min-h-0 overflow-auto">
+      <div className={`tab-scroll flex-1 min-h-0 overflow-auto ${empty ? 'flex flex-col' : ''}`}>
         <table className="min-w-[870px] w-full text-[14px] sm:text-[15px] text-surface-light table-fixed border-separate border-spacing-0">
           {TableColGroup ? <TableColGroup /> : <FittedColGroup showStatusColumn={showStatusColumn} />}
           <thead className="sticky top-0 z-10 bg-surface-deep">
-            <tr className="border-b border-surface-liner">
-              <th className="px-3 py-2.5 text-left text-surface-faint whitespace-nowrap">{t('Call #')}</th>
-              <th className="px-3 py-2.5 text-left text-surface-faint whitespace-nowrap">{t('Chief Complaint')}</th>
-              <th className="px-3 py-2.5 text-left text-surface-faint whitespace-nowrap">{t('A/S')}</th>
-              <th className="px-3 py-2.5 text-left text-surface-faint whitespace-nowrap">{t('Location')}</th>
-              {showStatusColumn && <th className="px-3 py-2.5 text-left text-surface-faint whitespace-nowrap">{t('Status')}</th>}
-              <th className="px-3 py-2.5 text-left text-surface-faint whitespace-nowrap">{t('Team')}</th>
-              <th className="px-3 py-2.5 text-right text-surface-faint"></th>
+            <tr>
+              <th className={`${TH} text-left whitespace-nowrap`}>{t('Call #')}</th>
+              <th className={`${TH} text-left whitespace-nowrap`}>{t('Chief Complaint')}</th>
+              <th className={`${TH} text-left whitespace-nowrap`}>{t('A/S')}</th>
+              <th className={`${TH} text-left whitespace-nowrap`}>{t('Location')}</th>
+              {showStatusColumn && <th className={`${TH} text-left whitespace-nowrap`}>{t('Status')}</th>}
+              <th className={`${TH} text-left whitespace-nowrap`}>{t('Team')}</th>
+              <th className={`${TH} text-right`}></th>
             </tr>
           </thead>
 
           <tbody className="[&>tr>td]:border-b [&>tr>td]:border-surface-liner">{children}</tbody>
         </table>
+        {empty && <div className="flex flex-1 items-center justify-center">{empty}</div>}
       </div>
 
       {footer && <div className="shrink-0">{footer}</div>}

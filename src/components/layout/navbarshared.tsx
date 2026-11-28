@@ -7,7 +7,7 @@ import dynamic from 'next/dynamic';
 import Image from 'next/image';
 import Link from 'next/link';
 import { Button, Dropdown, DropdownItem, DropdownMenu, DropdownTrigger, NavbarContent, NavbarItem, NavbarMenuItem, NavbarMenuToggle } from '@heroui/react';
-import { LogOut, Menu, Moon, Sun, UserRound } from 'lucide-react';
+import { LogOut, Menu, Moon, Sun, UserRound } from '@/components/ui/icons';
 
 export const LoginModalLazy = dynamic(() => import('@/components/modals/auth/loginmodal'), { ssr: false });
 

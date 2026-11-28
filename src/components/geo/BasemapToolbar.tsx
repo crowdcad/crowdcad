@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { Input, Select, SelectItem } from '@heroui/react';
-import { Map as MapIcon } from 'lucide-react';
+import { Map as MapIcon } from '@/components/ui/icons';
 import { basemapChoices } from '@/lib/geo/basemaps';
 
 /**

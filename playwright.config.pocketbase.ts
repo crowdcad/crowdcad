@@ -4,6 +4,8 @@ import path from 'path';
 import dotenv from 'dotenv';
 
 dotenv.config({ path: path.join(__dirname, '.env.test.local') });
+// Steps that write to the backend directly (tests/e2e/helpers/settings.ts) check this.
+process.env.E2E_BACKEND = 'pocketbase';
 
 // E2E_PORT and E2E_PB_PORT move the app and PocketBase off 3000 and 8090 (when something else serves there locally).
 const PORT = process.env.E2E_PORT || '3000';

@@ -5,7 +5,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Event, Venue, Staff, Supervisor, Post, EventEquipment } from '@/app/types';
 import { auditLog, authService, dbService } from '@/lib/services';
 import { Button, Card, ScrollShadow } from '@heroui/react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight } from '@/components/ui/icons';
 import { syncClinicsFromVenue } from '@/lib/clinics';
 import { syncDispatchZonesFromVenue } from '@/lib/zones';
 import MapZoomControls from '@/components/ui/map-zoom-controls';
@@ -126,7 +126,8 @@ export default function EventCreation() {
     maxScale: 3,
   });
 
-  const [postsEnabled, setPostsEnabled] = useState(false);
+  // On by default (as in Lite); unchecking Enable Posts leaves the event without a posting schedule.
+  const [postsEnabled, setPostsEnabled] = useState(true);
 
   // enabled must track postsEnabled — without it, postingTimes is always
   // generated regardless of whether "Enable Posts" is checked, which made
@@ -223,7 +224,8 @@ export default function EventCreation() {
         const venueSnap = await dbService.getDocument<Venue>('venues', newEventVenueId);
         if (venueSnap.exists && venueSnap.data) {
           const venue = withLayers({ ...venueSnap.data, id: newEventVenueId });
-          setEventData(prev => ({ ...prev, venue }));
+          // Every piece of the venue's equipment starts selected, at the venue's own default location.
+          setEventData(prev => ({ ...prev, venue, eventEquipment: (venue.equipment || []).map((e) => ({ ...e, defaultLocation: e.location })) }));
         } else {
           console.error('Venue document does not exist!');
         }
@@ -373,12 +375,9 @@ export default function EventCreation() {
           }
         }
       }
-      const query = withMember('eventCreate')
-        .map((x) => x.eventCreate.openWith?.(pendingByExtension[x.id]))
-        .filter(Boolean)
-        .join('&');
+      for (const x of withMember('eventCreate')) x.eventCreate.onOpen?.(eventDocId, pendingByExtension[x.id]);
       // Replace, so Back from dispatch can't return to the builder and create the event twice.
-      router.replace(`/events/${eventDocId}/dispatch${query ? `?${query}` : ''}`);
+      router.replace(`/events/${eventDocId}/dispatch`);
     } catch (error) {
       console.error('Creation failed:', error);
       alert(`Creation failed: ${(error as Error).message}`);
@@ -844,7 +843,6 @@ export default function EventCreation() {
         mode="create"
         onSubmit={handleAddSamUnit}
         titleOverride="Add New Supervisor"
-        submitLabelOverride="Add Supervisor"
         teamName={samName}
         setTeamName={setSamName}
         existingNames={(eventData.supervisor || []).map((s) => s.team)}

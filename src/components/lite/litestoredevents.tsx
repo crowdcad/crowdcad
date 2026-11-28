@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Button } from '@heroui/react';
-import { Trash2 } from 'lucide-react';
+import { Trash2 } from '@/components/ui/icons';
 import { deleteLiteEvent, listLiteEvents, type LiteEventDraft } from '@/lib/liteEventStore';
 import { useConfirmDialog } from '@/components/ui/confirmdialog';
 

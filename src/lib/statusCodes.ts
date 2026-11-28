@@ -5,9 +5,9 @@ export const STATUS_CODES: Record<string, string> = {
   AMA: 'Refusal',
 };
 
-/** The code for a status, when it isn't just the status's own name. */
+/** The code for a status, shown beside it in the status menu (NMM too: the menu spells it out as No Medical Merit). */
 export function codeForStatus(status: string): string | undefined {
-  return Object.entries(STATUS_CODES).find(([code, s]) => s === status && code !== s)?.[0];
+  return Object.entries(STATUS_CODES).find(([, s]) => s === status)?.[0];
 }
 
 /** The status a typed run of letters ends in a code for, among `options`. */

@@ -2,7 +2,7 @@
 
 import React, { useMemo, useState } from 'react';
 import { Button, Dropdown, DropdownItem, DropdownMenu, DropdownSection, DropdownTrigger, Input } from '@heroui/react';
-import { ListFilter, Search } from 'lucide-react';
+import { ListFilter, Search } from '@/components/ui/icons';
 import type { Event } from '@/app/types';
 import { ALL_EVENT_LOG, EVENT_LOG_WINDOWS, eventLogKinds, eventLogRows, filterEventLog, type EventLogFilter, type EventLogKind } from '@/lib/eventLog';
 import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';

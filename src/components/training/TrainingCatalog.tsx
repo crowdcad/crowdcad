@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Check, ChevronRight, Clock } from 'lucide-react';
+import { Check, ChevronRight, Clock } from '@/components/ui/icons';
 import { moduleProgress, onProgressChange, readProgress, resetProgress, type TrainingProgress } from '@/training/progress';
 import { moduleNumber, moduleSeconds, previewModulesShown, trackSeconds, visibleModules, visibleTracks } from '@/training/registry';
 import { formatDuration } from '@/training/text';

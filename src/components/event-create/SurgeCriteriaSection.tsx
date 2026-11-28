@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { Input, Tooltip } from '@heroui/react';
-import { CircleHelp } from 'lucide-react';
+import { CircleHelp } from '@/components/ui/icons';
 import type { Event } from '@/app/types';
 
 type Props = {

@@ -3,6 +3,7 @@
 
 import React, { useState, useMemo } from 'react';
 import CallRowFooters from './callrowfooter';
+import { CallAddButton, CallAddMenuExtras, CallNumberMarks } from './callextras';
 import {
   CardBody,
   Chip,
@@ -14,7 +15,7 @@ import {
   Autocomplete,
   AutocompleteItem,
 } from '@heroui/react';
-import { Plus, RotateCw } from 'lucide-react';
+import { RotateCw } from '@/components/ui/icons';
 import {
   Dropdownmenu,
   DropdownMenuContent,
@@ -141,7 +142,12 @@ export default function CallTrackingCard({
   return (
     <TrackingCardShell
       testId={`call-card-${callDisplayNumber}`}
-      title={`${t('Call')} ${callDisplayNumber}`}
+      title={
+        <span className="inline-flex items-center gap-1">
+          {`${t('Call')} ${callDisplayNumber}`}
+          <CallNumberMarks call={call} />
+        </span>
+      }
       timer={timer}
       indicators={<CallIndicatorIcons call={call} />}
       actions={cardActions}
@@ -365,18 +371,10 @@ export default function CallTrackingCard({
               reopening it via handleRevertDetachment re-enables this. */}
           <Dropdownmenu>
             <DropdownMenuTrigger asChild>
-              <Button
-                isIconOnly
-                size="sm"
-                variant="flat"
-                aria-label="Add"
-                isDisabled={isResolved}
-                className={`w-8 h-8 rounded-full hover:bg-surface-liner ${isResolved ? TRACKING_RESOLVED_CHIP_CLASS : ''}`}
-              >
-                <Plus className="h-4 w-4" />
-              </Button>
+              <CallAddButton call={call} disabled={isResolved} className={isResolved ? TRACKING_RESOLVED_CHIP_CLASS : ''} />
             </DropdownMenuTrigger>
             <DropdownMenuContent className="bg-surface-deep border-surface-liner text-surface-light">
+              <CallAddMenuExtras call={call} />
               {/* Add Team Submenu */}
               <DropdownMenuSub>
                 <DropdownMenuSubTrigger className="hover:bg-surface-liner focus:bg-surface-liner cursor-pointer">
@@ -405,7 +403,7 @@ export default function CallTrackingCard({
                 </DropdownMenuSubContent>
               </DropdownMenuSub>
 
-              <AddEquipmentSubmenu call={call} event={event} callNumber={callDisplayNumber} updateEvent={updateEvent} />
+              <AddEquipmentSubmenu call={call} event={event} callNumber={callDisplayNumber} updateEvent={updateEvent} layers={venueLayers} tracking={unitTracking} />
             </DropdownMenuContent>
           </Dropdownmenu>
         </div>

@@ -5,7 +5,7 @@ import {
   Modal, ModalContent, ModalHeader, ModalBody,
   Button, Select, SelectItem, ButtonGroup,
 } from '@heroui/react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight } from '@/components/ui/icons';
 import { Event, PostAssignment } from '@/app/types';
 import { computeAutofillAssignments } from '@/lib/postingAutofill';
 

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Button } from '@heroui/react';
-import { MapPin, MousePointer2 } from 'lucide-react';
+import { MapPin, MousePointer2 } from '@/components/ui/icons';
 
 interface MarkerModeToggleButtonProps {
   isAddMarkerMode: boolean;

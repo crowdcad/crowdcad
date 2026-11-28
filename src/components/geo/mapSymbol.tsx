@@ -5,7 +5,7 @@ import type { EquipmentIconType } from '@/lib/equipmentIcon';
 
 /**
  * Map symbols: one sharp-cornered SVG per thing on the venue map. The frame's
- * shape says what it is (octagon: a unit; square: equipment; diamond: a call;
+ * shape says what it is (decagon: a unit; square: equipment; diamond: a call;
  * a flag pointing at its spot: a post or clinic), its fill says its status,
  * and the glyph inside says its type. A 1px white edge over a 1px dark one
  * keeps it readable on any basemap.
@@ -52,10 +52,11 @@ function luminance(hex: string): number {
 const glyphOn = (fill: string) => (luminance(fill) > 0.3 ? INK : '#ffffff');
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
-function octagon(r: number): string {
+/** A unit's frame: ten sides, flat top and bottom, points left and right (an octagon read as a stop sign). */
+function decagon(r: number): string {
   const pts: string[] = [];
-  for (let i = 0; i < 8; i++) {
-    const a = Math.PI / 8 + (i * Math.PI) / 4;
+  for (let i = 0; i < 10; i++) {
+    const a = (i * Math.PI) / 5;
     pts.push(`${r2(r * Math.cos(a))} ${r2(r * Math.sin(a))}`);
   }
   return `M${pts.join(' L')}Z`;
@@ -72,8 +73,8 @@ function octagonAt(cx: number, cy: number, r: number): string {
 export type MapSymbolKind = 'unit' | 'supervisor' | 'equipment' | 'call' | 'post' | 'clinic';
 
 const FRAMES: Record<MapSymbolKind, string> = {
-  unit: octagon(14),
-  supervisor: octagon(14),
+  unit: decagon(14),
+  supervisor: decagon(14),
   equipment: 'M-10 -10 H10 V10 H-10 Z',
   call: 'M0 -15 L15 0 L0 15 L-15 0 Z',
   post: 'M-9 -23 H9 V-9 L0 0 L-9 -9 Z',
@@ -81,8 +82,8 @@ const FRAMES: Record<MapSymbolKind, string> = {
 };
 /** Each frame's bounds: [left, top, right, bottom]. */
 const BOUNDS: Record<MapSymbolKind, [number, number, number, number]> = {
-  unit: [-13, -13, 13, 13],
-  supervisor: [-13, -13, 13, 13],
+  unit: [-14, -13.3, 14, 13.3],
+  supervisor: [-14, -13.3, 14, 13.3],
   equipment: [-10, -10, 10, 10],
   call: [-15, -15, 15, 15],
   post: [-9, -23, 9, 0],
@@ -159,6 +160,18 @@ function Glyph({ name, c }: { name: GlyphName; c: string }) {
     case 'check':
       return line('M-4.6 0 L-1.4 3.2 L4.6 -3.2', 2.2, c);
   }
+}
+
+/**
+ * An equipment type's map glyph in a 24px icon box, drawn in currentColor: the condensed style's equipment icons
+ * (EquipmentTypeIcon, CrowdcadRadioIcon), so a team card shows the same wheelchair, gurney or radio as the map.
+ */
+export function EquipmentGlyph({ type }: { type: EquipmentIconType }) {
+  return (
+    <g transform="translate(12 12) scale(1.4)">
+      <Glyph name={type} c="currentColor" />
+    </g>
+  );
 }
 
 /**

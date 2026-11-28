@@ -5,7 +5,7 @@ import dynamic from 'next/dynamic';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button, Card, Input, ScrollShadow, Select, SelectItem, Tooltip } from '@heroui/react';
 import { Time } from '@internationalized/date';
-import { CircleHelp, Pencil, Trash2 } from 'lucide-react';
+import { CircleHelp, Pencil, Trash2 } from '@/components/ui/icons';
 import { equipmentHolderUnit, setupEquipmentHolder } from '@/lib/equipmentCustody';
 import EquipmentTeamSelect from '@/components/event-create/EquipmentTeamSelect';
 import type { Equipment, Event, EventEquipment, Post, Staff, Supervisor, Venue, Zone } from '@/app/types';
@@ -1061,7 +1061,6 @@ function LiteCreateContent() {
         mode="create"
         onSubmit={handleAddSamUnit}
         titleOverride="Add New Supervisor"
-        submitLabelOverride="Add Supervisor"
         teamName={samName}
         setTeamName={setSamName}
         existingNames={eventDraft.supervisor.map((s) => s.team)}

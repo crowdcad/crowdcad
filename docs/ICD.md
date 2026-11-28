@@ -161,6 +161,7 @@ Small key/value store for org-wide configuration (currently used for the certifi
 | `key` | text | Setting name. Observed value: `"certifications"`. | No (required) | `"certifications"` |
 | `list` | json (`string[]`) | Value for the setting. For `"certifications"`, the list of certification labels offered in the UI. | Yes | `["CPR","EMT-B","EMT-P","RN","MD/DO"]` |
 
+
 ### 3.6.1 `roster`
 
 The organization's staff roster (the Roster page, `src/lib/roster.ts`). Admins only, to read as well as write (Firestore: `roster/{personId}`).

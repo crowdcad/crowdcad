@@ -1,6 +1,6 @@
 // components/debugmodal.tsx
 import React from 'react';
-import { X, ShieldAlert, Users, RotateCcw, Trash2, Copy } from 'lucide-react';
+import { X, ShieldAlert, Users, RotateCcw, Trash2, Copy } from '@/components/ui/icons';
 import type { Event } from '@/app/types';
 
 interface DebugModalProps {

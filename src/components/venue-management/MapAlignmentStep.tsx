@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { Button } from '@heroui/react';
-import { CheckCircle2, Circle } from 'lucide-react';
+import { CheckCircle2, Circle } from '@/components/ui/icons';
 import type { Layer } from '@/app/types';
 import { alignmentFromBounds, layerAlignment, layerArea } from '@/lib/geo/layers';
 import type { MapAlignment } from '@/lib/geo/types';

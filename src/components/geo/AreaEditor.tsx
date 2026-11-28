@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { Button } from '@heroui/react';
-import { Redo2, Trash2, Undo2, X } from 'lucide-react';
+import { Redo2, Trash2, Undo2, X } from '@/components/ui/icons';
 import { usePolygonDraft } from '@/hooks/usePolygonDraft';
 import { areaBounds } from '@/lib/geo/layers';
 import { DEFAULT_BASEMAP_ID, validChoice } from '@/lib/geo/basemaps';

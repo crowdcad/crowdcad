@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Button, Input } from '@heroui/react';
 import HomePageStreaks from '@/components/layout/homepagestreaks';
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight } from '@/components/ui/icons';
 import LiteStoredEvents, { LiteStorageNotice } from '@/components/lite/litestoredevents';
 
 /**

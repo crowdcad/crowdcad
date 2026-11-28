@@ -1,6 +1,6 @@
 import React from 'react';
 import { Input, Chip, Tooltip } from '@heroui/react';
-import { CircleHelp } from 'lucide-react';
+import { CircleHelp } from '@/components/ui/icons';
 
 type ScheduleChip = { id: string; time: string; editable: boolean };
 

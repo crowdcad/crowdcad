@@ -42,7 +42,7 @@ Feature: Event creation
     And I click the add event supervisor button
     And I fill the supervisor call sign with "Lead-1"
     And I select event supervisor certification "EMT-B"
-    And I click the "Add Supervisor" button in the modal
+    And I click the "Save & close" button in the modal
     Then I should see the text "Lead-1"
 
   Scenario: Event name field accepts input

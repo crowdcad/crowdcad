@@ -1,6 +1,6 @@
 import React from 'react';
 import { Checkbox, Tooltip } from '@heroui/react';
-import { CircleHelp } from 'lucide-react';
+import { CircleHelp } from '@/components/ui/icons';
 
 /** "Mark as Dispatch Zone", with a hover explanation; shared by the new-area dialog and the area edit modal. */
 export default function DispatchZoneCheckbox({

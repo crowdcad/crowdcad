@@ -23,20 +23,20 @@ import { useAuth } from '@/hooks/useauth';
 import { useAdmin } from '@/hooks/useAdmin';
 import { useCertifications } from '@/hooks/useCertifications';
 import { useLiteMode } from '@/lib/LiteContext';
-import { Map as MapIcon, Users, BriefcaseMedical, HousePlus } from "lucide-react";
+import { Map as MapIcon, Users, BriefcaseMedical, HousePlus } from "@/components/ui/icons";
 import CrowdcadRadioIcon from "@/components/ui/crowdcad-radio-icon";
 import DispatchMotionCell from '@/components/dispatch/motioncell';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { CallTrackingTable } from '@/components/dispatch/calltracking';
-import ClinicTrackingTable from '@/components/dispatch/clinictracking';
+import ClinicTrackingTable, { clinicEmptyText } from '@/components/dispatch/clinictracking';
 import CallTrackingCard from '@/components/dispatch/calltrackingcard';
 import ClinicTrackingCard from '@/components/dispatch/clinictrackingcard';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable"
 import DebugModal from '@/components/modals/debugmodal';
-import { ShieldAlert } from 'lucide-react';
+import { ShieldAlert } from '@/components/ui/icons';
 import { Select, SelectItem, Tabs, Tab, Button, Tooltip } from "@heroui/react"
 import AvailabilitySurgeStrip from '@/components/dispatch/availabilitysurgestrip';
-import { isRowToggleClick } from '@/components/dispatch/trackingtablebase';
+import { TrackingEmpty, isRowToggleClick } from '@/components/dispatch/trackingtablebase';
 import EventLog, { EventLogFilterButton } from '@/components/dispatch/eventlog';
 import { ALL_EVENT_LOG, type EventLogFilter } from '@/lib/eventLog';
 import SurgeToggleButton from '@/components/dispatch/surgetogglebutton';
@@ -3502,6 +3502,8 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
         .filter(zone => callZoneFilter.has(zone.id))
         .map(zone => zone.name)
         .join(', ') || t('All Calls');
+  // An empty Calls list names the zone it's filtered to.
+  const callsEmptyText = callZoneFilter.has('all') ? t('No active calls') : `${t('No active calls in')} ${callZoneFilterLabel}`;
 
   // Shared by the desktop dropdown and the mobile Select — "All Calls" is
   // exclusive with every zone: picking it clears any zone selection,
@@ -4010,21 +4012,30 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
     </div>
   );
 
-  const renderExtensionTab = (tab: (typeof extras.tabs)[number]) => (
-    <PanelTab
-      key={tab.id}
-      active={selectedRightTab === tab.id}
-      onSelect={() => setSelectedRightTab(tab.id)}
-      aria-label={tab.icon ? tab.label : undefined}
-      title={tab.icon ? tab.label : undefined}
-      data-testid={tab.testId}
-    >
-      <span className="relative inline-flex items-center">
-        {tab.icon ?? tab.label}
-        {tab.badge}
-      </span>
-    </PanelTab>
-  );
+  const renderExtensionTab = (tab: (typeof extras.tabs)[number]) => {
+    const button = (
+      <PanelTab
+        key={tab.id}
+        active={selectedRightTab === tab.id}
+        onSelect={() => setSelectedRightTab(tab.id)}
+        aria-label={tab.icon ? tab.label : undefined}
+        data-testid={tab.testId}
+      >
+        <span className="relative inline-flex items-center">
+          {tab.icon ?? tab.label}
+          {tab.badge}
+        </span>
+      </PanelTab>
+    );
+    // An icon tab names itself in the same tooltip as the Map tab.
+    return tab.icon ? (
+      <Tooltip key={tab.id} content={tab.label} placement="top">
+        {button}
+      </Tooltip>
+    ) : (
+      button
+    );
+  };
   const desktopRightPane = (
     <div className="h-full flex flex-col overflow-hidden pt-2 pb-2" data-testid="right-panel">
       <div className="w-full flex flex-col flex-1 min-h-0">
@@ -4134,6 +4145,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
                 unitTracking={unitTracking}
                 event={event}
                 filterCalls={isAllCalls ? undefined : (call) => getCallZoneIds(call, venueLayers).some(id => callZoneFilter.has(id))}
+                emptyText={callsEmptyText}
                 callDisplayNumberMap={callDisplayNumberMap}
                 showResolvedCalls={showResolvedCalls}
                 setShowResolvedCalls={setShowResolvedCalls}
@@ -4525,10 +4537,8 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
                         <>
                           <div className="dispatch-shell-list">
                             {isMobile && activeMobileCalls.map(renderMobileCallCard)}
-                            {(!event.calls || event.calls.length === 0) && (
-                              <div className="text-center text-surface-light/50 py-8">
-                                {t('No calls')}
-                              </div>
+                            {activeMobileCalls.length === 0 && (!showResolvedCalls || resolvedMobileCalls.length === 0) && (
+                              <TrackingEmpty icon={CrowdcadRadioIcon} text={callsEmptyText} className="min-h-[55vh]" />
                             )}
                           </div>
                           <DispatchMotionCell isOpen={showResolvedCalls} animate>
@@ -4544,14 +4554,17 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
                         </>
                       );
                     })()}
+                    {event.calls.some((c: Call) => isCallResolved(c)) && (
                     <div className="flex justify-center pt-3">
                       <button
                         onClick={() => setShowResolvedCalls(prev => !prev)}
                         className="text-surface-faint text-base hover:text-surface-light"
                         aria-label="Toggle resolved calls"
-                      >                        {showResolvedCalls ? t('Hide Resolved Calls') : t('Show Resolved Calls')}
+                      >
+                        {showResolvedCalls ? t('Hide Resolved Calls') : t('Show Resolved Calls')}
                       </button>
                     </div>
+                    )}
                   </div>
                 </div>
               </Tab>
@@ -4573,10 +4586,8 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
                         <>
                           <div className="dispatch-shell-list">
                             {isMobile && activeMobileClinicCalls.map(renderMobileClinicCard)}
-                            {getClinicCalls(mobileClinicId).length === 0 && (
-                              <div className="text-center text-surface-light/50 py-8">
-                                {t('No clinic calls')}
-                              </div>
+                            {activeMobileClinicCalls.length === 0 && (!showResolvedClinicCalls || resolvedMobileClinicCalls.length === 0) && (
+                              <TrackingEmpty icon={HousePlus} text={clinicEmptyText(clinics.find(c => c.id === mobileClinicId)?.name, t)} className="min-h-[55vh]" />
                             )}
                           </div>
                           <DispatchMotionCell isOpen={showResolvedClinicCalls} animate>
@@ -4589,6 +4600,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
                         </>
                       );
                     })()}
+                    {(event.calls || []).some(c => isClinicCallResolved(c) && (clinics.length <= 1 || (c.clinicId ?? clinics[0]?.id) === mobileClinicId)) && (
                     <div className="flex justify-center pt-3">
                       <button
                         onClick={() => setShowResolvedClinicCalls(prev => !prev)}
@@ -4598,6 +4610,7 @@ export default function DispatchPage({ params }: DispatchRoutePageProps) {
                         {showResolvedClinicCalls ? t('Hide Resolved Clinic Calls') : t('Show Resolved Clinic Calls')}
                       </button>
                     </div>
+                    )}
                   </div>
                 </div>
               </Tab>

@@ -3,7 +3,7 @@
 
 import { LABELED_FIELD_CLASSNAMES } from '@/components/ui/fieldClassNames';
 import * as React from "react";
-import { Upload, Trash2 } from "lucide-react";
+import { Upload, Trash2 } from "@/components/ui/icons";
 import {
   Modal,
   ModalContent,

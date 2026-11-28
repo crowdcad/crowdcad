@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { Card, CardHeader, CardBody } from '@heroui/react';
-import { ChevronDown, ChevronUp } from 'lucide-react';
+import { ChevronDown, ChevronUp } from '@/components/ui/icons';
 import DispatchMotionCell from './motioncell';
 import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
 import { useMMSS } from '@/hooks/useMMSS';
@@ -10,9 +10,10 @@ import {
   type TeamCardProps,
   useTeamStatusModel,
   TeamControlsRow,
-  TeamMapButton,
+  TeamExtensionActions,
   TeamActionsMenu,
   TeamMemberList,
+  TeamExtensionFields,
   TeamPostSchedule,
   TeamActivityLog,
   TeamCarrying,
@@ -24,7 +25,7 @@ import {
 // teamcard-condensed.tsx for the compact layout; shared pieces live in
 // teamcardparts.tsx.
 export default function TeamCard(props: TeamCardProps) {
-  const { staff, event, sinceMs, onStatusChange, onLocationChange, updateEvent, hasVenueMap, locationTracked, onPostAssignment } = props;
+  const { staff, event, sinceMs, onStatusChange, onLocationChange, updateEvent, locationTracked, canLocateOnMap, onViewOnMap, onPostAssignment } = props;
   const { t } = useDispatchTerms();
   const [expanded, setExpanded] = useState(false);
   const timer = useMMSS(sinceMs);
@@ -46,16 +47,16 @@ export default function TeamCard(props: TeamCardProps) {
             <div className="text-[15px] sm:text-base font-semibold text-surface-light truncate">
               {staff.team}
             </div>
+            <TeamCarrying staff={staff} event={event} />
             <TeamExtensionChips staff={staff} event={event} compact />
           </div>
-          <TeamCarrying staff={staff} event={event} />
         </div>
 
         <div className="absolute top-0 right-0 pt-3 pr-3 flex items-center gap-2 box-content h-6">
           <div className="text-surface-light/70">
             {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
           </div>
-          {hasVenueMap && <TeamMapButton {...props} />}
+          <TeamExtensionActions staff={staff} event={event} />
           <div className="ui-timer text-sm sm:text-[15px] font-semibold text-surface-light">
             {timer}
           </div>
@@ -71,6 +72,8 @@ export default function TeamCard(props: TeamCardProps) {
           onStatusChange={onStatusChange}
           onLocationChange={onLocationChange}
           locationTracked={locationTracked}
+          canLocateOnMap={canLocateOnMap}
+          onViewOnMap={onViewOnMap}
         />
 
         <DispatchMotionCell isOpen={expanded} animate={true} className="mt-3" overflowVisibleWhenOpen>
@@ -81,6 +84,7 @@ export default function TeamCard(props: TeamCardProps) {
                 <div className="min-w-0">
                   <div className="text-xs font-bold text-surface-light mb-1">{t('Team')}</div>
                   <TeamMemberList staff={staff} className="space-y-1" />
+                  <TeamExtensionFields staff={staff} labelClassName="text-xs font-bold text-surface-light mb-1" className="mt-3" />
                 </div>
                 <div className="min-w-0 text-right">
                   <div className="text-xs font-bold text-surface-light mb-1">{t('Post')}</div>
@@ -91,6 +95,7 @@ export default function TeamCard(props: TeamCardProps) {
               <>
                 <div className="text-xs font-bold text-surface-light mb-1">{t('Team')}</div>
                 <TeamMemberList staff={staff} className="space-y-1 mb-3" />
+                <TeamExtensionFields staff={staff} labelClassName="text-xs font-bold text-surface-light mb-1" className="mb-3" />
               </>
             )}
 

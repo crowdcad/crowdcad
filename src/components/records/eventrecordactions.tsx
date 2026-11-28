@@ -5,7 +5,7 @@
  */
 import { useState } from 'react';
 import { Button, Chip } from '@heroui/react';
-import { Download, Lock, LockOpen } from 'lucide-react';
+import { Download, Lock, LockOpen } from '@/components/ui/icons';
 import type { Event } from '@/app/types';
 import { useAuth } from '@/hooks/useauth';
 import { useAdmin } from '@/hooks/useAdmin';

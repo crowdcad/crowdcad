@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { Tooltip } from '@heroui/react';
-import { ExternalLink, Maximize2, Minimize2 } from 'lucide-react';
+import { ExternalLink, Maximize2, Minimize2 } from '@/components/ui/icons';
 
 /**
  * Full-screen (focus) controls for one side of the dispatch board (#138): a

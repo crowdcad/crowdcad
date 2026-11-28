@@ -7,7 +7,7 @@
 import { createContext, useContext, type ComponentType, type ReactNode } from 'react';
 import type { Call, Event, Staff } from '@/app/types';
 import type { MapOverlay } from '@/components/modals/event/venuemapmodal';
-import type { DispatchContribution, LogRow, PanelTab, StatusDetail } from './types';
+import type { DispatchContribution, LogRow, PanelTab, StatusDetail, UnitField } from './types';
 
 export interface DispatchExtras {
   tabs: PanelTab[];
@@ -22,8 +22,13 @@ export interface DispatchExtras {
   /** Every pack's fields and log lines for a status change, combined. */
   statusPatch: (event: Event, unit: Staff, status: string, detail?: string) => { patch: Partial<Staff>; logMessages: string[] };
   UnitChips: ComponentType<{ unit: Staff; event: Event; compact?: boolean }>[];
+  unitFields: (unit: Staff) => UnitField[];
+  UnitActions: ComponentType<{ unit: Staff; event: Event }>[];
   CallChips: ComponentType<{ call: Call }>[];
   CallRowFooters: ComponentType<{ call: Call }>[];
+  CallNumberMarks: ComponentType<{ call: Call }>[];
+  CallAddMenuItems: ComponentType<{ call: Call }>[];
+  callAddAttention: (call: Call) => boolean;
   locations: string[];
 }
 
@@ -51,8 +56,13 @@ export function mergeDispatch(parts: DispatchContribution[]): DispatchExtras {
       };
     },
     UnitChips: parts.flatMap((p) => (p.UnitChip ? [p.UnitChip] : [])),
+    unitFields: (unit) => parts.flatMap((p) => p.unitFields?.(unit) ?? []),
+    UnitActions: parts.flatMap((p) => (p.UnitAction ? [p.UnitAction] : [])),
     CallChips: parts.flatMap((p) => (p.CallChip ? [p.CallChip] : [])),
     CallRowFooters: parts.flatMap((p) => (p.CallRowFooter ? [p.CallRowFooter] : [])),
+    CallNumberMarks: parts.flatMap((p) => (p.CallNumberMark ? [p.CallNumberMark] : [])),
+    CallAddMenuItems: parts.flatMap((p) => (p.CallAddMenuItems ? [p.CallAddMenuItems] : [])),
+    callAddAttention: (call) => parts.some((p) => p.callAddAttention?.(call)),
     locations: parts.flatMap((p) => p.locations ?? []),
   };
 }

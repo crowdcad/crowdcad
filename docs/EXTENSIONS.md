@@ -24,13 +24,16 @@ Packs install after modules load. **Read the registry inside a function, a hook 
   - `mapOverlay` and `background` work;
   - `logRows`, with undo;
   - unit `statusOptions`, `statusDetail` (a detail picked with a status, like the built-in clinic for Transporting) and `statusPatch`;
-  - a `UnitChip` (team cards), a `CallChip` (call cards) and extra `locations`;
+  - a `UnitChip` (team cards), `unitFields` (labeled fields in a team card's dropdown, under its members), a `CallChip` (call cards) and extra `locations`;
   - a `CallRowFooter`: a line under a call's row on the desktop table and inside its mobile card. It must render nothing when it has nothing to show, since the row's footer space is hidden only while it is empty.
+  - a `UnitAction`: a small button in a unit card's top-right corner;
+  - a `CallNumberMark`: a small mark beside a call's number;
+  - `CallAddMenuItems` and `callAddAttention`: items at the top of a call's + menu, and whether the + button flashes because they hold something for dispatch.
 
   `host` gives a pack the event, the write path (`updateEvent`, `setLocalEvent`), `showTab`, `setUnitStatus` and live tracking.
 - **Summary page** (`useSummary`): `sections`, step `charts` and `csvLines`.
 - **Elsewhere:**
-  - `eventCreate` (settings on the basics step, saved by `afterCreate` once the event exists);
+  - `eventCreate` (settings on the basics step, saved by `afterCreate` once the event exists; `onOpen` as the builder opens the event's dispatch page);
   - `adminSections`;
   - `auth` (`signInEmail` maps a typed username to an account; `confinedTo` keeps an account on its own pages);
   - `postMarker` (a medical map pin);

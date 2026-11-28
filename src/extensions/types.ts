@@ -61,6 +61,13 @@ export interface EventDataStore<S = unknown> {
 /* ------------------------------------------------------------ dispatch */
 
 /** What the dispatch page gives packs. */
+/** A labeled value in a unit card's dropdown. */
+export interface UnitField {
+  label: string;
+  value: ReactNode;
+  testId?: string;
+}
+
 export interface DispatchHost {
   /** Sets a unit's status as if picked on its card (`detail` as the card would pass it). */
   setUnitStatus: (unit: string, status: string, detail?: string) => Promise<void>;
@@ -149,10 +156,20 @@ export interface DispatchContribution {
   statusPatch?: (event: Event, unit: Staff, status: string, detail?: string) => { patch: Partial<Staff>; logMessage?: string } | null;
   /** A chip on a unit's card. */
   UnitChip?: ComponentType<{ unit: Staff; event: Event; compact?: boolean }>;
+  /** Fields in a unit card's dropdown, under its members, labeled like Team (e.g. where it works during an MCI). */
+  unitFields?: (unit: Staff) => UnitField[];
+  /** A small button in a unit card's top-right corner (e.g. message the unit). Renders nothing when there is none. */
+  UnitAction?: ComponentType<{ unit: Staff; event: Event }>;
   /** A chip on a call's card, beside its indicators. */
   CallChip?: ComponentType<{ call: Call }>;
   /** A line under a call's row (desktop) and in its card (mobile), e.g. a change waiting for dispatch. Renders nothing when there is none. */
   CallRowFooter?: ComponentType<{ call: Call }>;
+  /** A small mark beside a call's number, e.g. where its details came from. Renders nothing when there is none. */
+  CallNumberMark?: ComponentType<{ call: Call }>;
+  /** Items at the top of a call's + menu (shadcn DropdownMenu items), e.g. something asked for on the call. Renders nothing when there is none. */
+  CallAddMenuItems?: ComponentType<{ call: Call }>;
+  /** True when the call's + menu holds something for dispatch: the + button flashes until it doesn't. */
+  callAddAttention?: (call: Call) => boolean;
   /** Extra location names to suggest. */
   locations?: string[];
 }
@@ -234,8 +251,8 @@ export interface CrowdcadExtension {
       onPendingChange: (pending: unknown) => void;
     }>;
     afterCreate?: (eventId: string, event: Partial<Event>, pending: unknown) => Promise<void>;
-    /** A query for the new event's dispatch page (e.g. "mci=declare"), from the pack's settings. */
-    openWith?: (pending: unknown) => string | undefined;
+    /** Called as the builder opens the event's dispatch page (in the same tab), whether it was new or a saved draft. */
+    onOpen?: (eventId: string, pending: unknown) => void;
   };
   auth?: {
     /** A hint under the sign-in box's email field (e.g. that another kind of username works too). */

@@ -59,3 +59,26 @@ export function getActivePostingTime(postingTimes: string[] | undefined, now: Da
   }
   return active;
 }
+
+export interface TeamPostSlot {
+  time: string;
+  /** The next posting time, where this one's shift ends (none for the last). */
+  until?: string;
+  post: string | null;
+}
+
+/** A team's post for each posting time, in time order (D66). */
+export function teamPostSlots(event: { postingTimes?: string[]; postAssignments?: Record<string, Record<string, string>> }, team: string): TeamPostSlot[] {
+  const times = sortedValidTimes(event.postingTimes || []).map((t) => t.time);
+  return times.map((time, i) => {
+    const slot = event.postAssignments?.[time] || {};
+    return { time, until: times[i + 1], post: Object.keys(slot).find((p) => slot[p] === team) ?? null };
+  });
+}
+
+/** The slot running at `minutes` past midnight (none before the schedule starts), and the one after it. */
+export function currentPostSlot(slots: TeamPostSlot[], minutes: number): { current: TeamPostSlot | null; next: TeamPostSlot | null } {
+  let i = -1;
+  for (let k = 0; k < slots.length; k++) if ((parseTimeToMinutes(slots[k].time) ?? 0) <= minutes) i = k;
+  return { current: slots[i] ?? null, next: slots[i + 1] ?? null };
+}

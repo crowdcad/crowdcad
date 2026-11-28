@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Button } from '@heroui/react';
-import { ChevronDown, ChevronUp, RotateCcw, Undo2, X } from 'lucide-react';
+import { ChevronDown, ChevronUp, RotateCcw, Undo2, X } from '@/components/ui/icons';
 import { useDispatchVocabulary } from '@/hooks/useDispatchVocabulary';
 import { visibleModules } from '@/training/registry';
 import { plainStepText } from '@/training/text';

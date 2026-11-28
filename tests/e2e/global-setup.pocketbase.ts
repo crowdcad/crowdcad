@@ -183,6 +183,11 @@ async function globalSetup(): Promise<void> {
       { name: 'eventId', type: 'text' },
       { name: 'detail', type: 'text' },
     ]),
+    // Organization settings (Profile > Admin), one record per setting.
+    ensureBaseCollection(headers, 'settings', [
+      { name: 'key', type: 'text' },
+      { name: 'value', type: 'json' },
+    ]),
     ensureBaseCollection(headers, 'dispatchLogs', [
       { name: 'eventId', type: 'text' },
       { name: 'data', type: 'json' },

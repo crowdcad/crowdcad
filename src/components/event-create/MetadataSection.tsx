@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { getLocalTimeZone, parseDate, Time, today, type CalendarDate } from '@internationalized/date';
 import { DatePicker, Input, TimeInput, Tooltip } from '@heroui/react';
-import { ChevronDown, CircleHelp } from 'lucide-react';
+import { ChevronDown, CircleHelp } from '@/components/ui/icons';
 import type { Event } from '@/app/types';
 import SurgeCriteriaSection from './SurgeCriteriaSection';
 import { EVENT_INPUT_CLASSNAMES } from './fieldClassNames';

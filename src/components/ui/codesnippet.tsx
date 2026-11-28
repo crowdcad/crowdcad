@@ -1,7 +1,7 @@
 "use client";
 
 import { Card, CardBody, Button } from "@heroui/react";
-import { Copy } from "lucide-react";
+import { Copy } from "@/components/ui/icons";
 import { useState } from "react";
 
 export default function CodeSnippet({ code, label }: { code: string; label?: string }) {

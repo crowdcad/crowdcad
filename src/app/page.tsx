@@ -8,7 +8,7 @@ import LoginModal from '@/components/modals/auth/loginmodal';
 import { useAuth } from '@/hooks/useauth';
 import { Button } from '@heroui/react';
 import HomePageStreaks from '@/components/layout/homepagestreaks';
-import { Github, ExternalLink } from 'lucide-react';
+import { Github, ExternalLink } from '@/components/ui/icons';
 
 function AuthQueryEffects({
   onOpen,

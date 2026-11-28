@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Button, Card, CardBody, Input } from '@heroui/react';
 import { authService, dbService, ServiceError, type ServiceUser } from '@/lib/services';
-import { Eye, EyeOff, LogOut, Trash2, Download } from 'lucide-react';
+import { Eye, EyeOff, LogOut, Trash2, Download } from '@/components/ui/icons';
 import { PROFILE_ACTION_BUTTON } from './buttonStyles';
 import { FIELD_CLASSNAMES } from '@/components/ui/fieldClassNames';
 import TwoStepCard from './two-step-card';

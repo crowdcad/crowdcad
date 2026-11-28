@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { Button, Dropdown, DropdownTrigger, DropdownMenu, DropdownItem, Tooltip, Tabs, Tab } from '@heroui/react';
-import { Plus, RotateCw, ArrowDownWideNarrow, Rows2, Rows4, ListFilter } from 'lucide-react';
+import { Plus, RotateCw, ArrowDownWideNarrow, Rows2, Rows4, ListFilter } from '@/components/ui/icons';
 import type { CallSortMode } from '@/lib/callSort';
 import type { DispatchZone } from '@/app/types';
 import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';

@@ -3,7 +3,7 @@
 
 import * as React from "react";
 import Image from "next/image";
-import { AlertTriangle, MapPin, Shapes, Trash2, Upload } from "lucide-react";
+import { AlertTriangle, MapPin, Shapes, Trash2, Upload } from "@/components/ui/icons";
 import {
   Modal,
   ModalContent,

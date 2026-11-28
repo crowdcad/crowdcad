@@ -5,7 +5,7 @@
  */
 import React, { useMemo, useRef, useState } from 'react';
 import { Button, Modal, ModalBody, ModalContent, ModalFooter, ModalHeader, Select, SelectItem } from '@heroui/react';
-import { Upload } from 'lucide-react';
+import { Upload } from '@/components/ui/icons';
 import { saveRosterPerson, type RosterPerson } from '@/lib/roster';
 import { guessRosterMapping, parseCsv, ROSTER_IMPORT_FIELDS, rosterImport, type RosterImportField, type RosterMapping } from '@/lib/rosterCsv';
 

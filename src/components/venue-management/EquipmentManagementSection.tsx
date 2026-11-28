@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { Button, Input, ScrollShadow, Select, SelectItem, Tooltip } from '@heroui/react';
-import { CircleHelp, Edit2, Plus, Trash2 } from 'lucide-react';
+import { CircleHelp, Edit2, Plus, Trash2 } from '@/components/ui/icons';
 import type { Equipment } from '@/app/types';
 import { SMALL_FIELD_CLASSNAMES } from '@/components/ui/fieldClassNames';
 

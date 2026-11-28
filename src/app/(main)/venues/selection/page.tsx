@@ -13,7 +13,7 @@ import { useAdmin } from '@/hooks/useAdmin';
 import LoadingScreen from '@/components/ui/loading-screen';
 import { newEventCreatePath } from '@/lib/newEvent';
 import ShareModal from '@/components/modals/sharemodal';
-import { Share2, Building2 } from "lucide-react";
+import { Share2, Building2 } from "@/components/ui/icons";
 import { 
   Card, 
   CardBody, 
@@ -39,7 +39,7 @@ import {
   Play,
   Search,
   ChevronLeft
-} from "lucide-react";
+} from "@/components/ui/icons";
 
 export default function VenueSelection() {
   const router = useRouter();
@@ -410,7 +410,6 @@ export default function VenueSelection() {
                         <div className="flex justify-between items-start w-full">
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-1">
-                              <MapPin className="w-4 h-4 text-status-blue flex-shrink-0" />
                               <h3 className="font-semibold text-lg truncate min-w-0">{venue.name}</h3>
                               {venue.isOrgVenue && (
                                 <Chip size="sm" variant="flat" className="bg-accent/20 text-accent flex-shrink-0">
@@ -736,7 +735,6 @@ export default function VenueSelection() {
                         <CardBody className="pl-3 pr-1 relative">
                         <div className="pr-8">
                           <div className="flex items-center gap-2 mb-1">
-                            <MapPin className={`w-4 h-4 flex-shrink-0 ${isSelected ? 'text-status-blue' : 'text-surface-light'}`} />
                             <h3 className="font-semibold text-sm truncate min-w-0">{venue.name}</h3>
                             {venue.isOrgVenue && (
                               <Chip size="sm" variant="flat" className="bg-accent/20 text-accent flex-shrink-0">

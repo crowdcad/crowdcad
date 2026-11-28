@@ -3,7 +3,7 @@
 import React, { useMemo, useRef, useState, type CSSProperties } from 'react';
 import dynamic from 'next/dynamic';
 import { Button, Dropdown, DropdownItem, DropdownMenu, DropdownTrigger } from '@heroui/react';
-import { Layers, Map as MapIcon, Users } from 'lucide-react';
+import { Layers, Map as MapIcon, Users } from '@/components/ui/icons';
 import type { Event } from '@/app/types';
 import type { SummaryMapLayer } from '@/extensions/types';
 import { useZoomPan } from '@/hooks/useZoomPan';

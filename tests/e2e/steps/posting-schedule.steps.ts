@@ -24,15 +24,10 @@ Given('I have created an event with posts enabled and am on the dispatch page', 
   const eventName = `PostSched-Event-${uniqueSuffix()}`;
   await page.getByPlaceholder('Enter event name').fill(eventName);
 
-  // Enable posts so a posting schedule gets generated — the Posting
-  // Schedule nav item only appears once postingTimes is actually
-  // non-empty. Targets the checkbox role itself, not its label text: the
-  // label's <span> is what getByText finds, but HeroUI's real (invisible,
-  // absolutely-positioned, full-size) <input type="checkbox"> sits on top
-  // of it and intercepts the click, so clicking the text directly just
-  // spins retrying against an element something else is covering.
+  // Posts are on by default, so a posting schedule gets generated: the Posting Schedule nav item only appears
+  // once postingTimes is non-empty. Check it rather than click it (a click would turn posts off).
   await page.getByRole('button', { name: /^Post schedule:/ }).click();
-  await page.getByRole('checkbox', { name: 'Enable Posts' }).click();
+  await expect(page.getByRole('checkbox', { name: 'Enable Posts' })).toBeChecked();
 
   await page.getByRole('button', { name: /^Review:/ }).click();
   await page.getByRole('button', { name: 'Create Event' }).click();

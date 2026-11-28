@@ -11,7 +11,7 @@
 import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { Button } from '@heroui/react';
-import { ShieldCheck } from 'lucide-react';
+import { ShieldCheck } from '@/components/ui/icons';
 import { authService, type SecondFactorStatus } from '@/lib/services';
 import { useAuth } from '@/hooks/useauth';
 import { useAdmin } from '@/hooks/useAdmin';

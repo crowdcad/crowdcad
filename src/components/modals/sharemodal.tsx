@@ -12,7 +12,7 @@ import {
   Input,
   Chip
 } from "@heroui/react";
-import { Users, Plus } from "lucide-react";
+import { Users, Plus } from "@/components/ui/icons";
 import { STATIC_CLOSE_BUTTON_CLASS } from "@/lib/heroStatic";
 
 interface ShareModalProps {
