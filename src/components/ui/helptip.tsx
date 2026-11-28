@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { Tooltip } from '@heroui/react';
-import { CircleHelp } from 'lucide-react';
+import { CircleHelp } from '@/components/ui/icons';
 
 /**
  * A small circled question mark that explains something on hover or tap, so

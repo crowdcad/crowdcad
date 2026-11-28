@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { Tooltip } from '@heroui/react';
-import { CircleHelp } from 'lucide-react';
+import { CircleHelp } from '@/components/ui/icons';
 
 /** A hoverable question mark beside a title, as in core's FieldLabel; holds what used to be a subtitle. */
 export default function HelpTip({ text, label = 'More information' }: { text: React.ReactNode; label?: string }) {

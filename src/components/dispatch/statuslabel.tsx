@@ -2,7 +2,7 @@
 'use client';
 
 import React from 'react';
-import { HousePlus, Ambulance } from 'lucide-react';
+import { HousePlus, Ambulance } from '@/components/ui/icons';
 
 /**
  * Icon shown alongside a status/outcome's translated label, keyed by the

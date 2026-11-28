@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { Button, Card } from '@heroui/react';
-import { ChevronLeft, ChevronRight, Map as MapIcon, MapPinned, Plus, Trash2, Upload } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Map as MapIcon, MapPinned, Plus, Trash2, Upload } from '@/components/ui/icons';
 
 interface LayerControlBarProps {
   mapFileName: string;

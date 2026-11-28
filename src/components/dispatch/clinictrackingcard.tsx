@@ -11,7 +11,7 @@ import {
   DropdownMenu,
   DropdownItem,
 } from '@heroui/react';
-import { RotateCw } from 'lucide-react';
+import { RotateCw } from '@/components/ui/icons';
 import type { Event, Call } from '@/app/types';
 import StatusLabel, { getMenuLabel } from '@/components/dispatch/statuslabel';
 import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';

@@ -15,10 +15,17 @@ const eslintConfig = [
   {
     // Discourage direct Firebase imports outside the service adapters.
     // Use '@/lib/services' instead so the backend stays swappable.
+    // Icons come from '@/components/ui/icons', not lucide-react.
     rules: {
       "no-restricted-imports": [
         "warn",
         {
+          paths: [
+            {
+              name: "lucide-react",
+              message: "Import icons from '@/components/ui/icons' (same names) so they switch to the compact glyphs in condensed mode.",
+            },
+          ],
           patterns: [
             {
               group: ["firebase/firestore", "firebase/auth", "firebase/storage"],
@@ -31,6 +38,11 @@ const eslintConfig = [
       ],
     },
     ignores: ["src/lib/services/firebase/**"],
+  },
+  {
+    // The icon module is the one place that wraps lucide-react.
+    files: ["src/components/ui/icons/**"],
+    rules: { "no-restricted-imports": "off" },
   },
   {
     // No HeroUI press feedback (ripple, press scale, hover/press background)

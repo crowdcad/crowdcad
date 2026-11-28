@@ -3,6 +3,7 @@
 
 import React, {} from 'react';
 import CallRowFooters from './callrowfooter';
+import { CallAddButton, CallAddMenuExtras, CallNumberMarks } from './callextras';
 import { 
   Button, 
   Chip, 
@@ -11,14 +12,15 @@ import {
   DropdownMenu, 
   DropdownItem,
 } from '@heroui/react';
-import { Plus, MoreVertical, RotateCw } from "lucide-react";
+import { MoreVertical, RotateCw } from "@/components/ui/icons";
 import type { Event, Call, Supervisor, DetachedTeam } from '@/app/types';
 import { useCallTrackingState } from '@/hooks/useCallTrackingState';
 import CallTrackingDetails from '@/components/dispatch/calltrackingdetails';
 import DispatchMotionCell from './motioncell';
 import StatusLabel, { getMenuLabel } from './statuslabel';
 import EquipmentTypeIcon, { getEquipmentStatusMenuLabel, getEquipmentStatusWord, isEquipmentIconStatus } from './equipmenttypeicon';
-import TrackingTableBase, { INLINE_CELL_INPUT_CLASS, INLINE_CELL_PLACEHOLDER, InlineCellBox } from './trackingtablebase';
+import TrackingTableBase, { INLINE_CELL_INPUT_CLASS, INLINE_CELL_PLACEHOLDER, InlineCellBox, TrackingEmpty } from './trackingtablebase';
+import CrowdcadRadioIcon from '@/components/ui/crowdcad-radio-icon';
 import PendingCallChip from './pendingcallchip';
 import StatusCodeKeys from './statuscodekeys';
 import { codeForStatus } from '@/lib/statusCodes';
@@ -60,6 +62,8 @@ interface CallTrackingTableProps {
   unitTracking?: UnitTracking | null;
   /** Restricts which calls this table displays (e.g. a dispatch zone's tab, scoped to calls whose location falls in that zone) — mutations still always operate on the full `event.calls`, only the resolved/active lists rendered below are filtered. Omit to show every call, as "All Calls"/"Calls" does. */
   filterCalls?: (call: Call) => boolean;
+  /** What the table says when no calls show, e.g. naming the zone it's filtered to. Defaults to "No active calls". */
+  emptyText?: string;
   callDisplayNumberMap: Map<string, number>;
   showResolvedCalls: boolean;
   setShowResolvedCalls: (value: boolean | ((prev: boolean) => boolean)) => void;
@@ -102,6 +106,7 @@ export const CallTrackingTable: React.FC<CallTrackingTableProps> = ({
   event,
   unitTracking,
   filterCalls,
+  emptyText,
   callDisplayNumberMap,
   showResolvedCalls,
   setShowResolvedCalls,
@@ -263,7 +268,8 @@ export const CallTrackingTable: React.FC<CallTrackingTableProps> = ({
   }, [closingCallId, openCallId]);
 
 
-  const resolvedToggleFooter = (
+  // Only when there are resolved calls to show.
+  const resolvedToggleFooter = resolvedCalls.length > 0 && (
     <div className="flex justify-center pt-3">
       <button
         onClick={() => setShowResolvedCalls(prev => !prev)}
@@ -277,7 +283,13 @@ export const CallTrackingTable: React.FC<CallTrackingTableProps> = ({
 
   return (
     <div className="col-span-2 text-black w-full h-full min-h-0">
-      <TrackingTableBase TableColGroup={TableColGroup} showStatusColumn={false} showTeamAssignmentChips={true} footer={resolvedToggleFooter}>
+      <TrackingTableBase
+        TableColGroup={TableColGroup}
+        showStatusColumn={false}
+        showTeamAssignmentChips={true}
+        footer={resolvedToggleFooter}
+        empty={activeCalls.length === 0 && (!showResolvedCalls || resolvedCalls.length === 0) && <TrackingEmpty icon={CrowdcadRadioIcon} text={emptyText ?? t('No active calls')} />}
+      >
               {[
                 // Active calls first
                 ...activeCalls,
@@ -306,7 +318,10 @@ export const CallTrackingTable: React.FC<CallTrackingTableProps> = ({
                   >
                         <td className="p-0">
                           <DispatchMotionCell isOpen={isMotionVisible} animate={isResolvedCall} delayMs={motionDelayMs} className="px-3 py-2.5">
-                            {callDisplayNumberMap.get(call.id)}
+                            <span className="inline-flex items-center gap-1">
+                              {callDisplayNumberMap.get(call.id)}
+                              <CallNumberMarks call={call} />
+                            </span>
                           </DispatchMotionCell>
                         </td>
                         
@@ -630,20 +645,11 @@ export const CallTrackingTable: React.FC<CallTrackingTableProps> = ({
                                 re-enables this. */}
                             <Dropdownmenu>
                               <DropdownMenuTrigger asChild>
-                                <Button
-                                  isIconOnly
-                                  size="sm"
-                                  variant="flat"
-                                  aria-label="Add"
-                                  data-testid="call-add-menu"
-                                  isDisabled={isResolvedCall}
-                                  className={`w-8 h-8 rounded-full hover:bg-surface-liner shrink-0 ${isResolvedCall ? TRACKING_RESOLVED_CHIP_CLASS : ''}`}
-                                >
-                                  <Plus className="h-4 w-4" />
-                                </Button>
+                                <CallAddButton call={call} disabled={isResolvedCall} className={`shrink-0 ${isResolvedCall ? TRACKING_RESOLVED_CHIP_CLASS : ''}`} testId="call-add-menu" />
                               </DropdownMenuTrigger>
                               <DropdownMenuContent className="bg-surface-deep border-surface-liner text-surface-light">
-                                
+                                <CallAddMenuExtras call={call} />
+
                                 {/* A point on the map for a place that isn't a venue location (venues with a geo map). */}
                                 {canDropPin && (
                                   <DropdownMenuItem
@@ -747,7 +753,7 @@ export const CallTrackingTable: React.FC<CallTrackingTableProps> = ({
                                   </DropdownMenuSubContent>
                                 </DropdownMenuSub>
 
-                                <AddEquipmentSubmenu call={call} event={event} callNumber={callDisplayNumberMap.get(call.id)} updateEvent={updateEvent} />
+                                <AddEquipmentSubmenu call={call} event={event} callNumber={callDisplayNumberMap.get(call.id)} updateEvent={updateEvent} layers={venueLayers} tracking={unitTracking} />
                               </DropdownMenuContent>
                             </Dropdownmenu>
                             </div>

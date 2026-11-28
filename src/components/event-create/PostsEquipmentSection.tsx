@@ -1,6 +1,6 @@
 import React from 'react';
 import { Button, Checkbox, Chip, Input, ScrollShadow, Select, SelectItem, Tooltip } from '@heroui/react';
-import { CircleHelp, Plus, Trash2 } from 'lucide-react';
+import { CircleHelp, Plus, Trash2 } from '@/components/ui/icons';
 import type { Event, Post, Venue, EventEquipment } from '@/app/types';
 import { randomId } from '@/lib/utils';
 import { equipmentHolderUnit, setupEquipmentHolder } from '@/lib/equipmentCustody';
@@ -233,136 +233,124 @@ export function EquipmentSelectionSection({
     }));
   };
 
+  const venueEquipment = eventData.venue?.equipment || [];
+  const selectedIds = new Set(eventData.eventEquipment.map((e) => e.id));
+  const allSelected = venueEquipment.length > 0 && venueEquipment.every((e) => selectedIds.has(e.id));
+  // Picking venue equipment inherits the venue's own default location, adjustable per event.
+  const setVenueSelected = (items: typeof venueEquipment, checked: boolean) =>
+    setEventData((prev) => {
+      const ids = new Set(items.map((e) => e.id));
+      const kept = prev.eventEquipment.filter((e) => !ids.has(e.id));
+      const had = new Set(prev.eventEquipment.map((e) => e.id));
+      return { ...prev, eventEquipment: checked ? [...prev.eventEquipment, ...items.filter((e) => !had.has(e.id)).map((e) => ({ ...e, defaultLocation: e.location }))] : kept };
+    });
+
+  const locationSelect = (equip: EventEquipment) => (
+    <Select
+      aria-label={`Default location for ${equip.name}`}
+      variant="flat"
+      color="default"
+      placeholder="Default Location"
+      selectedKeys={equip.defaultLocation ? [equip.defaultLocation] : []}
+      onSelectionChange={(keys) => setCustomEquipmentLocation(equip.id, Array.from(keys)[0] as string)}
+      classNames={{ ...selectClassNames, base: 'w-48' }}
+      size="sm"
+    >
+      {locationNames.map((name) => (
+        <SelectItem key={name}>{name}</SelectItem>
+      ))}
+    </Select>
+  );
+
+  const cell = 'px-3 py-1.5';
   return (
     <div className="flex-1 min-h-0 py-3 flex flex-col">
       {hasVenue && (
-        <>
-          <div className="flex-shrink-0 pb-3 flex gap-2">
-            <Input
-              placeholder="Add equipment for this event only"
-              value={newEquipName}
-              onValueChange={setNewEquipName}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  addCustomEquipment();
-                }
-              }}
-              variant="flat"
-              size="lg"
-              classNames={SMALL_FIELD_CLASSNAMES}
-            />
-            <Button
-              isIconOnly
-              size="lg"
-              onPress={addCustomEquipment}
-              className="flex-shrink-0 bg-accent hover:bg-accent/90 text-surface-light"
-            >
-              <Plus className="h-5 w-5" />
-            </Button>
-          </div>
-
-          <ScrollShadow className="space-y-1.5 pr-2 scrollbar-hide flex-1 min-h-0" hideScrollBar style={{ overflow: 'auto' }}>
-            {customEquipment.map((equip) => (
-              <div key={equip.id} className="rounded-sm p-3 bg-default/40">
-                <div className="flex items-center gap-3">
-                  <span className="text-surface-light font-medium flex-shrink-0">{equip.name}</span>
-                  <Chip size="sm" variant="flat" className="bg-accent/20 text-accent">
-                    Event only
-                  </Chip>
-                  <Select
-                    variant="flat"
-                    color="default"
-                    placeholder="Select Default Location"
-                    selectedKeys={equip.defaultLocation ? [equip.defaultLocation] : []}
-                    onSelectionChange={(keys) => {
-                      const locName = Array.from(keys)[0] as string;
-                      setCustomEquipmentLocation(equip.id, locName);
-                    }}
-                    classNames={{
-                      ...selectClassNames,
-                      base: 'max-w-[200px]',
-                    }}
-                    size="sm"
-                    className="ml-auto"
-                  >
-                    {locationNames.map((name) => (
-                      <SelectItem key={name}>{name}</SelectItem>
-                    ))}
-                  </Select>
-                  {teamSelect(equip)}
-                  <button
-                    type="button"
-                    onClick={() => removeCustomEquipment(equip.id)}
-                    className="p-1 rounded bg-transparent flex-shrink-0"
-                    aria-label="Remove equipment"
-                  >
-                    <Trash2 className="h-4 w-4 text-status-red" />
-                  </button>
-                </div>
-              </div>
-            ))}
-
-            {eventData.venue?.equipment?.map((equip) => {
-              const selectedEquip = eventData.eventEquipment.find((e) => e.id === equip.id);
-              const isSelected = !!selectedEquip;
-              return (
-                <div key={equip.id} className="rounded-sm p-3 bg-default/40">
-                  <div className="flex items-center gap-3">
+        <ScrollShadow className="flex-1 min-h-0 border border-surface-liner" hideScrollBar style={{ overflow: 'auto' }}>
+          <table className="w-full border-collapse text-left text-sm" data-testid="event-equipment-table">
+            <thead className="sticky top-0 z-10 bg-surface-deep text-xs uppercase tracking-wider text-surface-faint">
+              <tr>
+                <th className="w-10 px-3 py-2">
+                  {venueEquipment.length > 0 && (
                     <Checkbox
-                      isSelected={isSelected}
+                      aria-label="Select all equipment"
+                      size="sm"
+                      isSelected={allSelected}
+                      isIndeterminate={!allSelected && venueEquipment.some((e) => selectedIds.has(e.id))}
                       classNames={{ wrapper: 'after:bg-accent' }}
-                      onValueChange={(checked) => {
-                        if (checked) {
-                          setEventData((prev) => ({
-                            ...prev,
-                            // Inherits the venue's own configured default location (if any) —
-                            // still just a starting point, adjustable per event via the Select below.
-                            eventEquipment: [...prev.eventEquipment, { ...equip, defaultLocation: equip.location }],
-                          }));
-                        } else {
-                          setEventData((prev) => ({
-                            ...prev,
-                            eventEquipment: prev.eventEquipment.filter((e) => e.id !== equip.id),
-                          }));
-                        }
-                      }}
+                      onValueChange={(checked) => setVenueSelected(venueEquipment, checked)}
                     />
-                    <span className="text-surface-light font-medium flex-shrink-0">{equip.name}</span>
-                    {isSelected && (
-                      <Select
-                        variant="flat"
-                        color="default"
-                        placeholder="Select Default Location"
-                        selectedKeys={selectedEquip?.defaultLocation ? [selectedEquip.defaultLocation] : []}
-                        onSelectionChange={(keys) => {
-                          const locName = Array.from(keys)[0] as string;
-                          setEventData((prev) => ({
-                            ...prev,
-                            eventEquipment: prev.eventEquipment.map((e) =>
-                              e.id === equip.id ? { ...e, defaultLocation: locName } : e
-                            ),
-                          }));
-                        }}
-                        classNames={{
-                          ...selectClassNames,
-                          base: 'max-w-[200px]',
-                        }}
-                        size="sm"
-                        className="ml-auto"
-                      >
-                        {locationNames.map((name) => (
-                          <SelectItem key={name}>{name}</SelectItem>
-                        ))}
-                      </Select>
-                    )}
-                    {selectedEquip && teamSelect(selectedEquip)}
-                  </div>
-                </div>
-              );
-            })}
-          </ScrollShadow>
-        </>
+                  )}
+                </th>
+                <th className="px-3 py-2 font-semibold">Equipment</th>
+                <th className="px-3 py-2 font-semibold">Default Location</th>
+                {units.length > 0 && <th className="px-3 py-2 font-semibold">Team</th>}
+                <th className="w-10 px-3 py-2" />
+              </tr>
+            </thead>
+            <tbody>
+              {venueEquipment.map((equip) => {
+                const selected = eventData.eventEquipment.find((e) => e.id === equip.id);
+                return (
+                  <tr key={equip.id} className={`border-t border-surface-liner ${selected ? '' : 'text-surface-faint'}`} data-testid={`event-equipment-row-${equip.name}`}>
+                    <td className={cell}>
+                      <Checkbox aria-label={`Use ${equip.name}`} size="sm" isSelected={!!selected} classNames={{ wrapper: 'after:bg-accent' }} onValueChange={(checked) => setVenueSelected([equip], checked)} />
+                    </td>
+                    <td className={`${cell} font-medium`}>{equip.name}</td>
+                    <td className={cell}>{selected && locationSelect(selected)}</td>
+                    {units.length > 0 && <td className={cell}>{selected && teamSelect(selected)}</td>}
+                    <td className={cell} />
+                  </tr>
+                );
+              })}
+              {customEquipment.map((equip) => (
+                <tr key={equip.id} className="border-t border-surface-liner" data-testid={`event-equipment-row-${equip.name}`}>
+                  <td className={cell} />
+                  <td className={`${cell} font-medium`}>
+                    {equip.name}
+                    <Tooltip content="Event only. Add this equipment in the venue builder to make it permanent." placement="top">
+                      <span className="ml-0.5 cursor-help text-accent" aria-label="Event only">
+                        *
+                      </span>
+                    </Tooltip>
+                  </td>
+                  <td className={cell}>{locationSelect(equip)}</td>
+                  {units.length > 0 && <td className={cell}>{teamSelect(equip)}</td>}
+                  <td className={cell}>
+                    <button type="button" onClick={() => removeCustomEquipment(equip.id)} className="p-1 bg-transparent" aria-label={`Remove ${equip.name}`}>
+                      <Trash2 className="h-4 w-4 text-status-red" />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              <tr className="border-t border-surface-liner">
+                <td className={cell} />
+                <td className={cell} colSpan={units.length > 0 ? 3 : 2}>
+                  <Input
+                    placeholder="Add equipment for this event"
+                    aria-label="Add equipment for this event"
+                    value={newEquipName}
+                    onValueChange={setNewEquipName}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        addCustomEquipment();
+                      }
+                    }}
+                    variant="flat"
+                    size="sm"
+                    classNames={SMALL_FIELD_CLASSNAMES}
+                  />
+                </td>
+                <td className={cell}>
+                  <Button isIconOnly size="sm" onPress={addCustomEquipment} aria-label="Add equipment" className="bg-accent text-surface-light hover:bg-accent/90" isDisabled={!newEquipName.trim()}>
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </ScrollShadow>
       )}
     </div>
   );

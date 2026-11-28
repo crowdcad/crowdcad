@@ -2,7 +2,7 @@
 "use client";
 
 import * as React from "react";
-import { X, Plus, CircleHelp } from "lucide-react";
+import { X, Plus, CircleHelp } from "@/components/ui/icons";
 import {
   Modal,
   ModalContent,

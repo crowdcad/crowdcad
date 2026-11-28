@@ -15,10 +15,10 @@ describe('status codes', () => {
     expect(statusForTyped('UT', OPTIONS)).toBeUndefined();
   });
 
-  it('label a menu item with its code unless the code is its name', () => {
+  it('label a menu item with its code', () => {
     expect(codeForStatus('Unable to Locate')).toBe('UTL');
     expect(codeForStatus('Refusal')).toBe('AMA');
-    expect(codeForStatus('NMM')).toBeUndefined();
+    expect(codeForStatus('NMM')).toBe('NMM');
     expect(codeForStatus('On Scene')).toBeUndefined();
   });
 });

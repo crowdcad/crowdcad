@@ -2,7 +2,7 @@
 
 import React, { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { X } from 'lucide-react';
+import { X } from '@/components/ui/icons';
 import DispatchPage from '@/app/(main)/events/[eventId]/dispatch/page';
 import { LiteProvider, type LiteTrackingFeed } from '@/lib/LiteContext';
 import { useIsMobile } from '@/hooks/use-mobile';

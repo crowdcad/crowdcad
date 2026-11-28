@@ -8,7 +8,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Card, CardBody, Input, Spinner } from '@heroui/react';
-import { Download, RefreshCw } from 'lucide-react';
+import { Download, RefreshCw } from '@/components/ui/icons';
 import { auditCsv, auditLog, type AuditEntry } from '@/lib/services';
 import { FIELD_CLASSNAMES } from '@/components/ui/fieldClassNames';
 import { downloadTextFile } from '@/lib/downloadFile';

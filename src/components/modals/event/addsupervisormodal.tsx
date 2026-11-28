@@ -6,7 +6,7 @@ import {
   Modal, ModalContent, ModalHeader, ModalBody, ModalFooter,
   Button, Input, Select, SelectItem, Tooltip,
 } from "@heroui/react";
-import { CircleHelp } from "lucide-react";
+import { CircleHelp } from "@/components/ui/icons";
 import { Role } from "@/app/types";
 import { useDispatchTerms } from "@/lib/dispatchVocabulary/context";
 import { getNextTeamName } from "./addteammodal";
@@ -78,7 +78,7 @@ export default function AddSupervisorModal({
   } as const;
 
   const title = titleOverride ?? (mode === "edit" ? t("Edit Supervisor") : t("Add New Supervisor"));
-  const submitLabel = submitLabelOverride ?? (mode === "edit" ? t("Save Changes") : t("Create Supervisor"));
+  const submitLabel = submitLabelOverride ?? (mode === "edit" ? t("Save Changes") : t("Save & close"));
 
   const canSubmit = teamName.trim().length > 0;
 

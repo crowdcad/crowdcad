@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { createPortal } from 'react-dom';
 import { Button, Input, Popover, PopoverContent, PopoverTrigger } from '@heroui/react';
-import { CircleHelp, GraduationCap, MousePointerClick, Search } from 'lucide-react';
+import { CircleHelp, GraduationCap, MousePointerClick, Search } from '@/components/ui/icons';
 import { NAVBAR_ICON_BUTTON_CLASS } from '@/components/layout/navbarshared';
 import { useDispatchVocabulary } from '@/hooks/useDispatchVocabulary';
 import { findAnchor, findStepTarget } from '@/training/anchors';

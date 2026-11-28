@@ -31,6 +31,17 @@ export function callPoint(call: Pick<Call, 'location' | 'locationPoint'>, layers
   return placePoint(call.location, layers);
 }
 
+/** Where a unit is: its live position when tracked and fresh, else its Location field's coordinates. */
+export function unitPoint(unit: { team: string; location?: string }, layers: Layer[], tracking: UnitTracking | null | undefined): { at: LatLon | null; live: boolean } {
+  const livePos = tracking?.positions[unit.team];
+  if (livePos && !livePos.stale) return { at: { lat: livePos.lat, lon: livePos.lon }, live: true };
+  return { at: placePoint(unit.location, layers), live: false };
+}
+
+/** Nearest first; places without a distance keep their order after the ones with one. */
+export const byDistance = <T extends { distance?: number }>(a: T, b: T) =>
+  a.distance === undefined ? (b.distance === undefined ? 0 : 1) : b.distance === undefined ? -1 : a.distance - b.distance;
+
 export interface UnitOption {
   name: string;
   /** How the list names it: the team, or a supervisor's member and team ("Kim (Sup 1)"). */
@@ -52,8 +63,8 @@ const INACTIVE = ['In Clinic', 'On Break'];
 
 /**
  * The teams (or supervisors) free to send to a call, with where they are and how far: units on no active call
- * with status Available, then In Clinic / On Break. Each group is nearest first; units without a distance keep
- * their board order after the ones with one.
+ * with status Available, In Clinic or On Break (those two tinted in the list), nearest first. Units without a
+ * distance keep their board order after the ones with one.
  */
 export function unitOptions(
   event: Pick<Event, 'staff' | 'supervisor' | 'calls'>,
@@ -73,8 +84,7 @@ export function unitOptions(
     const free = FREE.includes(u.status);
     const inactive = INACTIVE.includes(u.status);
     if (!free && !inactive) continue;
-    const livePos = tracking?.positions[u.team];
-    const at = livePos && !livePos.stale ? { lat: livePos.lat, lon: livePos.lon } : placePoint(u.location, layers);
+    const { at, live } = unitPoint(u, layers, tracking);
     const member = kind === 'supervisor' ? ((u as { member?: string }).member ?? '') : '';
     const memberName = member.match(/^(.+?)\s\[(.+?)\]/)?.[1] ?? member;
     options.push({
@@ -84,11 +94,21 @@ export function unitOptions(
       status: u.status,
       location: u.location ?? '',
       ...(target && at ? { distance: distanceM(target, at) } : {}),
-      live: !!(livePos && !livePos.stale),
+      live,
       inactive,
     });
   }
-  const byDistance = (a: UnitOption, b: UnitOption) =>
-    a.distance === undefined ? (b.distance === undefined ? 0 : 1) : b.distance === undefined ? -1 : a.distance - b.distance;
-  return [...options.filter((o) => !o.inactive).sort(byDistance), ...options.filter((o) => o.inactive).sort(byDistance)];
+  return options.sort(byDistance);
+}
+
+/**
+ * Where a piece of equipment is: with the unit holding it (that unit's place), else at its post or clinic. A unit
+ * still fetching it hasn't got it yet, so it is still where it was.
+ */
+export function equipmentPoint(holder: { kind: string; name: string }, units: { team: string; location?: string }[], layers: Layer[], tracking: UnitTracking | null | undefined): LatLon | null {
+  if (holder.kind === 'team') {
+    const unit = units.find((u) => u.team === holder.name);
+    return unit ? unitPoint(unit, layers, tracking).at : null;
+  }
+  return placePoint(holder.name, layers);
 }

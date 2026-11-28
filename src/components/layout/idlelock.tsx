@@ -9,7 +9,7 @@
  */
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { Button, Input } from '@heroui/react';
-import { Lock } from 'lucide-react';
+import { Lock } from '@/components/ui/icons';
 import { auditLog, authService, SecondFactorRequiredError } from '@/lib/services';
 import { FIELD_CLASSNAMES } from '@/components/ui/fieldClassNames';
 import { LAST_ACTIVITY_KEY, LOCKED_KEY, readNumber, shouldLock, writeValue } from '@/lib/idleLock';

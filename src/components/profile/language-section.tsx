@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { Card, CardBody, Select, SelectItem, Input, Button } from '@heroui/react';
-import { Check, Circle, Pencil, Trash2 } from 'lucide-react';
+import { Check, Circle, Pencil, Trash2 } from '@/components/ui/icons';
 import { useDispatchVocabulary } from '@/hooks/useDispatchVocabulary';
 import {
   DISPATCH_TERMS,

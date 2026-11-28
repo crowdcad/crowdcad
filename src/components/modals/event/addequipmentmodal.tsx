@@ -6,7 +6,7 @@ import {
   Modal, ModalContent, ModalHeader, ModalBody, ModalFooter,
   Button, Input, Autocomplete, AutocompleteItem, Tooltip,
 } from "@heroui/react";
-import { CircleHelp } from "lucide-react";
+import { CircleHelp } from "@/components/ui/icons";
 import { useDispatchTerms } from "@/lib/dispatchVocabulary/context";
 import { staticSelectorButtonProps } from "@/lib/heroStatic";
 import { LABELED_FIELD_CLASSNAMES } from '@/components/ui/fieldClassNames';

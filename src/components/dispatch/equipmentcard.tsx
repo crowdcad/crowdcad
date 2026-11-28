@@ -7,7 +7,7 @@ import {
   Card, Dropdown, DropdownTrigger, DropdownMenu, DropdownItem,
   Select, SelectItem, Autocomplete, AutocompleteItem
 } from '@heroui/react';
-import { ChevronDown, ChevronUp, MapPin, MoreVertical, Map as MapIcon, X } from 'lucide-react';
+import { ChevronDown, ChevronUp, MapPin, MoreVertical, Map as MapIcon, X } from '@/components/ui/icons';
 import type { Event, EquipmentItem } from '@/app/types';
 import TrackingTextEntry from '@/components/dispatch/trackingtextentry';
 import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';

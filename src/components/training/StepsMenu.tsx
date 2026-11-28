@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { Button, Popover, PopoverContent, PopoverTrigger } from '@heroui/react';
-import { Check, ListOrdered } from 'lucide-react';
+import { Check, ListOrdered } from '@/components/ui/icons';
 import { sectionsOf } from '@/training/registry';
 import { formatDuration } from '@/training/text';
 import type { TrainingModule } from '@/training/types';

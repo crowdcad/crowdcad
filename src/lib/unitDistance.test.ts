@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Call, Event, Layer, Staff, Supervisor } from '@/app/types';
 import { distanceM, formatMeters } from '@/lib/geo/distance';
-import { callPoint, placePoint, unitOptions } from './unitDistance';
+import { callPoint, equipmentPoint, placePoint, unitOptions } from './unitDistance';
 
 // A drawn-area (geo) layer with three posts about 100 m and 400 m apart.
 const layer = {
@@ -26,17 +26,17 @@ describe('unit distances for a call', () => {
     expect(callPoint(call('Somewhere', { locationPoint: { lat: 1, lng: 2 } }), [layer])).toEqual({ lat: 1, lon: 2 });
   });
 
-  it('lists free units nearest first, then those on break or in clinic, skipping busy ones', () => {
+  it('lists free units, on break and in clinic included, nearest first, skipping busy ones', () => {
     const event = {
       staff: [staff('MRC1', 'Available', 'Field'), staff('MRC2', 'Available', 'Steps'), staff('MRC3', 'On Break', 'Gate'), staff('MRC4', 'En Route', 'Gate'), staff('MRC5', 'Available', 'Unknown spot')],
       supervisor: [],
       calls: [],
     } as unknown as Event;
     const options = unitOptions(event, call('Gate'), 'team', [layer], null);
-    expect(options.map((o) => o.name)).toEqual(['MRC2', 'MRC1', 'MRC5', 'MRC3']);
-    expect(Math.round(options[0].distance!)).toBe(100);
-    expect(options[2].distance).toBeUndefined();
-    expect(options[3]).toMatchObject({ inactive: true, distance: 0 });
+    expect(options.map((o) => o.name)).toEqual(['MRC3', 'MRC2', 'MRC1', 'MRC5']);
+    expect(options[0]).toMatchObject({ inactive: true, distance: 0 });
+    expect(Math.round(options[1].distance!)).toBe(100);
+    expect(options[3].distance).toBeUndefined();
   });
 
   it('uses a live position over the Location field, but not a stale one', () => {
@@ -51,6 +51,13 @@ describe('unit distances for a call', () => {
   it('names supervisors by member and team', () => {
     const event = { staff: [], supervisor: [{ team: 'Sup 1', member: 'Kim Lee [EMT]', status: 'Available', location: 'Gate' } as unknown as Supervisor], calls: [] } as unknown as Event;
     expect(unitOptions(event, call('Steps'), 'supervisor', [layer], null)[0].label).toBe('Kim Lee (Sup 1)');
+  });
+
+  it('places equipment at its post, or with the unit holding it', () => {
+    const units = [staff('MRC1', 'En Route', 'Field')];
+    expect(equipmentPoint({ kind: 'post', name: 'Steps' }, units, [layer], null)).toEqual({ lat: 37.8709, lon: -122.26 });
+    expect(equipmentPoint({ kind: 'team', name: 'MRC1' }, units, [layer], null)).toEqual({ lat: 37.8736, lon: -122.26 });
+    expect(equipmentPoint({ kind: 'team', name: 'Gone' }, units, [layer], null)).toBeNull();
   });
 
   it('formats meters and kilometers', () => {

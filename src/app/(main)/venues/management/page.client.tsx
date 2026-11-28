@@ -59,7 +59,7 @@ import {
   MapPinned,
   CircleHelp,
   HousePlus,
-} from 'lucide-react';
+} from '@/components/ui/icons';
 import { SMALL_FIELD_CLASSNAMES } from '@/components/ui/fieldClassNames';
 
 

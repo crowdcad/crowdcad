@@ -9,11 +9,11 @@ import {
   DropdownMenu, 
   DropdownItem
 } from '@heroui/react';
-import { MoreVertical, RotateCw } from 'lucide-react';
+import { HousePlus, MoreVertical, RotateCw } from '@/components/ui/icons';
 import type { Event, Call, CallLogEntry, Clinic } from '@/app/types';
 import DispatchMotionCell from './motioncell';
 import StatusLabel, { getMenuLabel } from './statuslabel';
-import TrackingTableBase, { INLINE_CELL_INPUT_CLASS, INLINE_CELL_PLACEHOLDER, InlineCellBox, isRowToggleClick } from './trackingtablebase';
+import TrackingTableBase, { INLINE_CELL_INPUT_CLASS, INLINE_CELL_PLACEHOLDER, InlineCellBox, TrackingEmpty, isRowToggleClick } from './trackingtablebase';
 import { TRACKING_RESOLVED_CLASS, TRACKING_ROW_HOVER_CLASS, TRACKING_ROW_OPEN_CLASS } from '@/lib/statusColors';
 import TrackingTextEntry from '@/components/dispatch/trackingtextentry';
 import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
@@ -25,6 +25,11 @@ import { textToLog } from '@/lib/logText';
 import { hhmmOf } from '@/lib/clock';
 
 type EditableCallField = keyof Call | 'ageSex';
+
+/** "No patients in Clinic 2": the clinic's name when it has one. */
+export function clinicEmptyText(name: string | undefined, t: (key: string) => string): string {
+  return name?.trim() ? `${t('No patients in')} ${name.trim()}` : t('No patients in clinic');
+}
 
 interface ClinicTrackingTableProps {
   event: Event;
@@ -202,7 +207,8 @@ export default function ClinicTrackingTable({
 
   
 
-  const resolvedToggleFooter = (
+  // Only when there are resolved clinic calls to show.
+  const resolvedToggleFooter = resolvedClinicCalls.length > 0 && (
     <div className="flex justify-center pt-3">
       <button
         onClick={() => setShowResolvedClinicCalls(prev => !prev)}
@@ -226,6 +232,10 @@ export default function ClinicTrackingTable({
         showStatusColumn={true}
         showTeamAssignmentChips={false}
         footer={resolvedToggleFooter}
+        empty={
+          unresolvedClinicCalls.length === 0 &&
+          (!showResolvedClinicCalls || resolvedClinicCalls.length === 0) && <TrackingEmpty icon={HousePlus} text={clinicEmptyText(clinics?.find((c) => c.id === clinicId)?.name, t)} />
+        }
       >
             {[
               // Unresolved clinic (Delivered with no outcome)

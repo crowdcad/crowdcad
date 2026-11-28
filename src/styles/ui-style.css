@@ -81,3 +81,15 @@ html[data-ui='condensed'] .ui-timer {
   padding-inline: 0.25rem;
   white-space: nowrap;
 }
+
+/* Icons (src/components/ui/icons): each <svg> holds Lucide's paths and a
+   sharp compact glyph in g.ui-icon-compact; show the one for this style. */
+html[data-ui='condensed'] svg.ui-icon > :not(.ui-icon-compact),
+html[data-ui='classic'] svg.ui-icon > .ui-icon-compact {
+  display: none;
+}
+/* An icon that can't share one <svg> (e.g. the radio, a mask in classic) renders both, marked with these. */
+html[data-ui='condensed'] .ui-classic-only,
+html[data-ui='classic'] .ui-condensed-only {
+  display: none;
+}

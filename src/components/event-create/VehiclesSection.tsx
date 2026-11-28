@@ -1,6 +1,6 @@
 import React from 'react';
 import { Button, Checkbox, Chip, Input, ScrollShadow, Select, SelectItem } from '@heroui/react';
-import { Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2 } from '@/components/ui/icons';
 import type { Event, EventEquipment, Vehicle, Venue } from '@/app/types';
 import { randomId } from '@/lib/utils';
 import { venueVehicles } from '@/lib/vehicles';

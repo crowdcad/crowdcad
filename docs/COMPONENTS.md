@@ -115,7 +115,7 @@ HeroUI gives neither button a stable `data-slot`, so a global CSS rule can't tar
 ## Third-party UI libraries
 
 - HeroUI for higher-level components
-- `lucide-react` for icons
+- Icons from `@/components/ui/icons`: lucide-react's icons under the same names, each with a sharp compact-mode glyph that `src/styles/ui-style.css` swaps in under `data-ui="condensed"`. Don't import `lucide-react` directly (ESLint flags it).
 
 ## Accessibility
 

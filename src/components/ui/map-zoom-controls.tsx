@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { Button, ButtonGroup } from '@heroui/react';
-import { RotateCcw, ZoomIn, ZoomOut } from 'lucide-react';
+import { RotateCcw, ZoomIn, ZoomOut } from '@/components/ui/icons';
 
 interface MapZoomControlsProps {
   onZoomIn: () => void;

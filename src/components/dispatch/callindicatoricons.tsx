@@ -1,6 +1,6 @@
 // components/dispatch/callindicatoricons.tsx
 import { Tooltip } from '@heroui/react';
-import { TriangleAlert, Pin } from 'lucide-react';
+import { TriangleAlert, Pin } from '@/components/ui/icons';
 import type { Call } from '@/app/types';
 import { useDispatchExtras } from '@/extensions/dispatch';
 

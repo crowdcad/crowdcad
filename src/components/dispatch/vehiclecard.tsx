@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Autocomplete, AutocompleteItem, Card, Dropdown, DropdownItem, DropdownMenu, DropdownTrigger, Select, SelectItem } from '@heroui/react';
-import { MapPin, MoreVertical, Truck } from 'lucide-react';
+import { MapPin, MoreVertical, Truck } from '@/components/ui/icons';
 import type { Event, Vehicle } from '@/app/types';
 import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
 import { staticSelectorButtonProps } from '@/lib/heroStatic';

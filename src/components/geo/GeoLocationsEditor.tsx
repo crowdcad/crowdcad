@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
-import { MapPin } from 'lucide-react';
+import { MapPin } from '@/components/ui/icons';
 import type { Layer, Post, Zone } from '@/app/types';
 import { randomId } from '@/lib/utils';
 import { getNextZoneColor } from '@/lib/zoneColors';

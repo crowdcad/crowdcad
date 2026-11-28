@@ -24,7 +24,7 @@ import PinDropModal, { firstGeoLayer } from '@/components/geo/PinDropModal';
 import { callPoint, placePoint } from '@/lib/unitDistance';
 import { distanceM, formatMeters } from '@/lib/geo/distance';
 import { getEventVenueLayers } from '@/lib/zones';
-import { MapPin } from 'lucide-react';
+import { MapPin } from '@/components/ui/icons';
 
 type QuickCallState = {
   location: string;

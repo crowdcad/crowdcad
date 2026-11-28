@@ -10,7 +10,7 @@ import {
   Dropdown, DropdownTrigger, DropdownMenu, DropdownItem,
   Select, SelectItem, Autocomplete, AutocompleteItem, Button,
 } from '@heroui/react';
-import { MapPin, MoreVertical, Map as MapIcon, Radio } from 'lucide-react';
+import { MapPin, MoreVertical, Radio } from '@/components/ui/icons';
 import type { Clinic, Event, Staff } from '@/app/types';
 import TrackingTextEntry from '@/components/dispatch/trackingtextentry';
 import { deriveTeamVisualStatus, getStatusColor } from '@/lib/statusColors';
@@ -24,7 +24,7 @@ import { useDispatchExtras } from '@/extensions/dispatch';
 import type { StatusDetail } from '@/extensions/types';
 import { getEquipmentIconType, type EquipmentIconType } from '@/lib/equipmentIcon';
 import { logToText, sortedLog, textToLog } from '@/lib/logText';
-import { parseTimeToMinutes } from '@/lib/postingTimes';
+import { teamPostSlots } from '@/lib/postingTimes';
 import { staticSelectorButtonProps } from '@/lib/heroStatic';
 import { hhmmOf } from '@/lib/clock';
 
@@ -89,10 +89,10 @@ export function useTeamStatusModel(staff: Staff, event: Event): TeamStatusModel 
 
 /**
  * Equipment the unit has in hand (it is the holder), e.g. a care team left
- * with a wheelchair, or a unit still carrying something on another call.
- * `compact` shows only the icons, with the names as a tooltip.
+ * with a wheelchair, or a unit still carrying something on another call:
+ * one icon per piece, beside the unit's name, with the names as a tooltip.
  */
-export function TeamCarrying({ staff, event, compact = false }: { staff: Staff; event: Event; compact?: boolean }) {
+export function TeamCarrying({ staff, event }: { staff: Staff; event: Event }) {
   const { t } = useDispatchTerms();
   const items = heldBy(fleetOf(event), event, staff.team);
   if (!items.length) return null;
@@ -104,7 +104,6 @@ export function TeamCarrying({ staff, event, compact = false }: { staff: Staff; 
       data-testid={`team-carrying-${staff.team}`}
     >
       {items.map(eq => <EquipmentTypeIcon key={eq.id} type={getEquipmentIconType(eq.name)} className="w-3.5 h-3.5 shrink-0" />)}
-      {!compact && <span className="truncate">{t('Carrying')} {names}</span>}
     </span>
   );
 }
@@ -116,6 +115,33 @@ export function TeamExtensionChips({ staff, event, compact = false }: { staff: S
     <>
       {UnitChips.map((Chip, i) => (
         <Chip key={i} unit={staff} event={event} compact={compact} />
+      ))}
+    </>
+  );
+}
+
+/** Extension packs' fields in a unit card's dropdown, each labeled like the card's Team heading. */
+export function TeamExtensionFields({ staff, labelClassName, className = '' }: { staff: Staff; labelClassName: string; className?: string }) {
+  const { unitFields } = useDispatchExtras();
+  return (
+    <>
+      {unitFields(staff).map((field) => (
+        <div key={field.label} className={className} data-testid={field.testId}>
+          <div className={labelClassName}>{field.label}</div>
+          <div className="text-xs text-surface-faint">{field.value}</div>
+        </div>
+      ))}
+    </>
+  );
+}
+
+/** Extension packs' buttons in a unit card's top-right corner (e.g. message the unit). */
+export function TeamExtensionActions({ staff, event }: { staff: Staff; event: Event }) {
+  const { UnitActions } = useDispatchExtras();
+  return (
+    <>
+      {UnitActions.map((Action, i) => (
+        <Action key={i} unit={staff} event={event} />
       ))}
     </>
   );
@@ -244,8 +270,36 @@ export function TeamStatusSelect({
   );
 }
 
+type LocateProps = Pick<TeamCardProps, 'canLocateOnMap' | 'onViewOnMap'>;
+
+/**
+ * The icon at the left of a unit's Location: shows the unit on the map. White, turning blue on hover, when its
+ * location is on the map; grey and inert when it isn't.
+ */
+function LocateIcon({ staff, canLocateOnMap, onViewOnMap, children }: LocateProps & { staff: Staff; children: React.ReactNode }) {
+  const can = !!canLocateOnMap && !!onViewOnMap;
+  return (
+    <button
+      type="button"
+      disabled={!can}
+      // Keep the field from taking focus (or opening its list) when the icon is pressed.
+      onMouseDown={(e) => e.preventDefault()}
+      onClick={(e) => {
+        e.stopPropagation();
+        if (can) onViewOnMap!(staff.team);
+      }}
+      className={`flex h-[18px] w-[18px] shrink-0 items-center justify-center ${can ? 'cursor-pointer text-surface-light transition-colors hover:text-status-blue' : 'cursor-default text-surface-faint'}`}
+      aria-label="View on map"
+      title={can ? 'View on map' : `${staff.location || 'This location'} isn't on the map`}
+      data-testid={`team-locate-${staff.team}`}
+    >
+      {children}
+    </button>
+  );
+}
+
 /** Read-only Location while live tracking writes it (D66), shaped like the editable field. */
-function TrackedLocation({ location }: { location: string }) {
+function TrackedLocation({ staff, location, canLocateOnMap, onViewOnMap }: LocateProps & { staff: Staff; location: string }) {
   const { t } = useDispatchTerms();
   return (
     <div
@@ -254,7 +308,9 @@ function TrackedLocation({ location }: { location: string }) {
       aria-label="Location (live)"
       data-testid="unit-live-location"
     >
-      <Radio className="h-[18px] w-[18px] shrink-0 text-status-green" aria-hidden />
+      <LocateIcon staff={staff} canLocateOnMap={canLocateOnMap} onViewOnMap={onViewOnMap}>
+        <Radio className="h-[18px] w-[18px] shrink-0 text-status-green" aria-hidden />
+      </LocateIcon>
       <span className="min-w-0 truncate pl-1">{location || t('No location')}</span>
     </div>
   );
@@ -265,21 +321,25 @@ export function TeamLocationInput({
   event,
   onLocationChange,
   tracked,
-}: {
+  canLocateOnMap,
+  onViewOnMap,
+}: LocateProps & {
   staff: Staff;
   event: Event;
   onLocationChange: TeamCardProps['onLocationChange'];
   tracked?: boolean;
 }) {
-  if (tracked) return <TrackedLocation location={staff.location} />;
-  return <EditableTeamLocation staff={staff} event={event} onLocationChange={onLocationChange} />;
+  if (tracked) return <TrackedLocation staff={staff} location={staff.location} canLocateOnMap={canLocateOnMap} onViewOnMap={onViewOnMap} />;
+  return <EditableTeamLocation staff={staff} event={event} onLocationChange={onLocationChange} canLocateOnMap={canLocateOnMap} onViewOnMap={onViewOnMap} />;
 }
 
 function EditableTeamLocation({
   staff,
   event,
   onLocationChange,
-}: {
+  canLocateOnMap,
+  onViewOnMap,
+}: LocateProps & {
   staff: Staff;
   event: Event;
   onLocationChange: TeamCardProps['onLocationChange'];
@@ -309,9 +369,9 @@ function EditableTeamLocation({
     <Autocomplete
       aria-label="Location"
       startContent={(
-        <span className="flex h-[18px] w-[18px] shrink-0 items-center justify-center">
-          <MapPin className="h-[18px] w-[18px] shrink-0 text-surface-faint" />
-        </span>
+        <LocateIcon staff={staff} canLocateOnMap={canLocateOnMap} onViewOnMap={onViewOnMap}>
+          <MapPin className="h-[18px] w-[18px] shrink-0" aria-hidden />
+        </LocateIcon>
       )}
       inputValue={locationInput}
       onInputChange={setLocationInput}
@@ -364,6 +424,8 @@ export function TeamControlsRow(props: {
   onStatusChange: TeamCardProps['onStatusChange'];
   onLocationChange: TeamCardProps['onLocationChange'];
   locationTracked?: boolean;
+  canLocateOnMap?: boolean;
+  onViewOnMap?: TeamCardProps['onViewOnMap'];
 }) {
   const { locationTracked } = props;
   return (
@@ -372,7 +434,14 @@ export function TeamControlsRow(props: {
         <TeamStatusSelect {...props} />
       </div>
       <div onClick={stopPropagation} onKeyDown={stopPropagation} className="min-w-0 flex-[1.5]">
-        <TeamLocationInput staff={props.staff} event={props.event} onLocationChange={props.onLocationChange} tracked={locationTracked} />
+        <TeamLocationInput
+          staff={props.staff}
+          event={props.event}
+          onLocationChange={props.onLocationChange}
+          tracked={locationTracked}
+          canLocateOnMap={props.canLocateOnMap}
+          onViewOnMap={props.onViewOnMap}
+        />
       </div>
     </div>
   );
@@ -380,25 +449,6 @@ export function TeamControlsRow(props: {
 
 const iconButtonClass =
   'p-0 m-0 border-0 bg-transparent text-surface-light hover:text-status-blue transition-colors cursor-pointer flex items-center justify-center';
-
-export function TeamMapButton({ staff, canLocateOnMap, onViewOnMap }: Pick<TeamCardProps, 'staff' | 'canLocateOnMap' | 'onViewOnMap'>) {
-  return (
-    <button
-      type="button"
-      disabled={!canLocateOnMap}
-      onClick={(e) => {
-        e.stopPropagation();
-        if (!canLocateOnMap) return;
-        onViewOnMap?.(staff.team);
-      }}
-      className={`${iconButtonClass} disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-surface-light`}
-      aria-label="View on map"
-      title={canLocateOnMap ? 'View on map' : `${staff.location || 'This location'} isn't on the map`}
-    >
-      <MapIcon className="h-4 w-4" />
-    </button>
-  );
-}
 
 export function TeamActionsMenu({ staff, onEdit, onDelete, onRefreshPost, onNewCall }: Pick<TeamCardProps, 'staff' | 'onEdit' | 'onDelete' | 'onRefreshPost' | 'onNewCall'>) {
   const { t } = useDispatchTerms();
@@ -464,23 +514,7 @@ export function TeamMemberList({ staff, className }: { staff: Staff; className?:
   );
 }
 
-export interface TeamPostSlot {
-  time: string;
-  /** The next posting time, where this one's shift ends (none for the last). */
-  until?: string;
-  post: string | null;
-}
-
-/** A team's post for each posting time, in time order (D66). */
-export function teamPostSlots(event: Pick<Event, 'postingTimes' | 'postAssignments'>, team: string): TeamPostSlot[] {
-  const times = [...(event.postingTimes || [])]
-    .filter((time) => parseTimeToMinutes(time) !== null)
-    .sort((a, b) => parseTimeToMinutes(a)! - parseTimeToMinutes(b)!);
-  return times.map((time, i) => {
-    const slot = event.postAssignments?.[time] || {};
-    return { time, until: times[i + 1], post: Object.keys(slot).find((p) => slot[p] === team) ?? null };
-  });
-}
+export { teamPostSlots, type TeamPostSlot } from '@/lib/postingTimes';
 
 const UNASSIGNED_POST = '__unassigned__';
 

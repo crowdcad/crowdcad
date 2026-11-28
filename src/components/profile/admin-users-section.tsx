@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { Button, Card, CardBody, Input, Spinner, Switch } from '@heroui/react';
-import { RefreshCw, Trash2 } from 'lucide-react';
+import { RefreshCw, Trash2 } from '@/components/ui/icons';
 import { auditLog, dbService, isPocketbaseBackend } from '@/lib/services';
 import type { Event } from '@/app/types';
 import { deleteEvent } from '@/lib/records/client';

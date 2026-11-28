@@ -1,6 +1,6 @@
 import React from 'react';
 import { Button, ButtonGroup, Card, Dropdown, DropdownTrigger, DropdownMenu, DropdownItem, ScrollShadow } from '@heroui/react';
-import { Trash2, ChevronDown, Pencil } from 'lucide-react';
+import { Trash2, ChevronDown, Pencil } from '@/components/ui/icons';
 import type { Staff } from '@/app/types';
 import TutorialTip from '@/components/ui/TutorialTip';
 

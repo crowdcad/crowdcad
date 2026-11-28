@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { Card, CardHeader, CardBody } from '@heroui/react';
-import { ChevronDown, ChevronUp } from 'lucide-react';
+import { ChevronDown, ChevronUp } from '@/components/ui/icons';
 import DispatchMotionCell from './motioncell';
 import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';
 import { useMMSS } from '@/hooks/useMMSS';
@@ -11,9 +11,10 @@ import {
   useTeamStatusModel,
   TeamStatusText,
   TeamControlsRow,
-  TeamMapButton,
+  TeamExtensionActions,
   TeamActionsMenu,
   TeamMemberList,
+  TeamExtensionFields,
   TeamPostSchedule,
   TeamActivityLog,
   TeamCarrying,
@@ -24,7 +25,7 @@ import {
 // members, timer and activity log all revealed on expand. Shared pieces live
 // in teamcardparts.tsx.
 export default function TeamCardCondensed(props: TeamCardProps) {
-  const { staff, event, sinceMs, onStatusChange, onLocationChange, updateEvent, hasVenueMap, locationTracked, onPostAssignment } = props;
+  const { staff, event, sinceMs, onStatusChange, onLocationChange, updateEvent, locationTracked, canLocateOnMap, onViewOnMap, onPostAssignment } = props;
   const { t } = useDispatchTerms();
   const [expanded, setExpanded] = useState(false);
   const timer = useMMSS(sinceMs);
@@ -44,7 +45,7 @@ export default function TeamCardCondensed(props: TeamCardProps) {
           <span className="text-sm font-semibold text-surface-light truncate">
             {staff.team}
           </span>
-          <TeamCarrying staff={staff} event={event} compact />
+          <TeamCarrying staff={staff} event={event} />
           <TeamExtensionChips staff={staff} event={event} compact />
           <span className={`text-sm font-bold truncate flex items-center gap-1 min-w-0 ${model.statusTone.textClass}`}>
             <TeamStatusText status={staff.status} iconType={model.teamEquipmentIconType} />
@@ -57,7 +58,7 @@ export default function TeamCardCondensed(props: TeamCardProps) {
         <div className="text-surface-light/70">
           {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
         </div>
-        {hasVenueMap && <TeamMapButton {...props} />}
+        <TeamExtensionActions staff={staff} event={event} />
         <TeamActionsMenu {...props} />
       </CardHeader>
 
@@ -70,6 +71,8 @@ export default function TeamCardCondensed(props: TeamCardProps) {
             onStatusChange={onStatusChange}
             onLocationChange={onLocationChange}
             locationTracked={locationTracked}
+            canLocateOnMap={canLocateOnMap}
+            onViewOnMap={onViewOnMap}
           />
 
           {/* Team members and timer row */}
@@ -77,6 +80,7 @@ export default function TeamCardCondensed(props: TeamCardProps) {
             <div className="flex-1 min-w-0">
               <div className="text-xs font-semibold text-surface-light pt-2 mb-1">{t('Team Members')}</div>
               <TeamMemberList staff={staff} className="space-y-0.5" />
+              <TeamExtensionFields staff={staff} labelClassName="text-xs font-semibold text-surface-light pt-2 mb-1" />
             </div>
             {onPostAssignment && (
               <div className="flex-1 min-w-0">

@@ -6,7 +6,7 @@
  */
 import React from 'react';
 import { Card, CardHeader, Dropdown, DropdownItem, DropdownMenu, DropdownTrigger } from '@heroui/react';
-import { MoreVertical } from 'lucide-react';
+import { MoreVertical } from '@/components/ui/icons';
 import { dropdownMotionProps } from './trackingcardparts';
 import { TRACKING_RESOLVED_CARD_CLASS } from '@/lib/statusColors';
 import { useDispatchTerms } from '@/lib/dispatchVocabulary/context';

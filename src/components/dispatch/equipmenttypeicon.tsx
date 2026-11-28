@@ -2,7 +2,7 @@
 'use client';
 
 import React from 'react';
-import { Briefcase } from 'lucide-react';
+import { EquipmentGlyph } from '@/components/geo/mapSymbol';
 import CrowdcadRadioIcon from '@/components/ui/crowdcad-radio-icon';
 import type { EquipmentIconType } from '@/lib/equipmentIcon';
 
@@ -11,33 +11,57 @@ type Props = {
   className?: string;
 };
 
+/** An icon <svg> holding the classic drawing and the map's glyph, shown by UI style (src/styles/ui-style.css). */
+function DualIcon({ type, label, className, classicProps, children }: { type: EquipmentIconType; label: string; className: string; classicProps?: React.SVGProps<SVGSVGElement>; children: React.ReactNode }) {
+  return (
+    <svg viewBox="0 0 24 24" className={`ui-icon ${className}`} role="img" aria-label={label} {...classicProps}>
+      {children}
+      <g className="ui-icon-compact">
+        <EquipmentGlyph type={type} />
+      </g>
+    </svg>
+  );
+}
+
+const STROKED = { fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' } as const;
+
 /**
- * An equipment type's icon: a wheelchair, a gurney, a radio, or a medical
- * briefcase for 'aed' and anything else. All three are drawn in `currentColor`, so they
- * take the color of the text around them (a team card's status color, a
- * pill's text, white on the map's badges).
+ * An equipment type's icon: a wheelchair, a gurney, a radio, an AED or a medical bag. Condensed draws the map's
+ * glyphs (components/geo/mapSymbol.tsx), so cards, chips and menus match the map; classic keeps its rounded
+ * drawings. All are in `currentColor`, so they take the color of the text around them (a team card's status
+ * color, a pill's text, white on the map's badges).
  */
 export default function EquipmentTypeIcon({ type, className = 'w-4 h-4 shrink-0' }: Props) {
   if (type === 'wheelchair') {
     return (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className={className} role="img" aria-label="Wheelchair">
-        <path d="M12 16a5 5 0 1 1-10 0a5 5 0 0 1 10 0Zm6 3.5a1.5 1.5 0 1 1-3 0a1.5 1.5 0 0 1 3 0Z" />
-        <path d="M7.008 16h-.009" />
-        <path d="m6 11l-.628-5.023c-.145-1.159-.217-1.738-.522-2.155a2 2 0 0 0-.647-.572C3.751 3 3.167 3 2 3m4 4h5.5c2.357 0 3.536 0 4.268.732S16.5 9.643 16.5 12v6" />
-        <path d="M12 14h4.024c.885 0 1.328 0 1.713.189q.14.068.267.158c.356.25.601.659 1.092 1.474c.393.653.59.98.884 1.107q.105.044.215.063c.312.052.629-.124 1.263-.475l.542-.3" />
-      </svg>
+      <DualIcon type={type} label="Wheelchair" className={className}>
+        <g {...STROKED}>
+          <path d="M12 16a5 5 0 1 1-10 0a5 5 0 0 1 10 0Zm6 3.5a1.5 1.5 0 1 1-3 0a1.5 1.5 0 0 1 3 0Z" />
+          <path d="M7.008 16h-.009" />
+          <path d="m6 11l-.628-5.023c-.145-1.159-.217-1.738-.522-2.155a2 2 0 0 0-.647-.572C3.751 3 3.167 3 2 3m4 4h5.5c2.357 0 3.536 0 4.268.732S16.5 9.643 16.5 12v6" />
+          <path d="M12 14h4.024c.885 0 1.328 0 1.713.189q.14.068.267.158c.356.25.601.659 1.092 1.474c.393.653.59.98.884 1.107q.105.044.215.063c.312.052.629-.124 1.263-.475l.542-.3" />
+        </g>
+      </DualIcon>
     );
   }
   if (type === 'stretcher') {
     return (
-      <svg viewBox="0 0 24 24" fill="currentColor" className={className} role="img" aria-label="Gurney">
-        <path d="M18 4.5h3a1 1 0 0 0 0-2h-3a1 1 0 0 0 0 2m3 2H3a1 1 0 0 0-1 1v4a1 1 0 0 0 1 1h1.55l5.11 2.56l-2.58 1.29A3 3 0 0 0 5 15.5a3 3 0 1 0 3 3a2 2 0 0 0 0-.36l3.94-2l4.06 2.1a2 2 0 0 0 0 .26a3 3 0 1 0 3-3a3 3 0 0 0-2.15.92l-2.72-1.36l5.11-2.56H21a1 1 0 0 0 1-1v-4a1 1 0 0 0-1-1m-16 13a1 1 0 1 1 1-1a1 1 0 0 1-1 1m14-2a1 1 0 1 1-1 1a1 1 0 0 1 1-1m-7.1-3.56L9 12.5h5.75ZM20 10.5H4v-2h16Z" />
-      </svg>
+      <DualIcon type={type} label="Gurney" className={className}>
+        <path fill="currentColor" d="M18 4.5h3a1 1 0 0 0 0-2h-3a1 1 0 0 0 0 2m3 2H3a1 1 0 0 0-1 1v4a1 1 0 0 0 1 1h1.55l5.11 2.56l-2.58 1.29A3 3 0 0 0 5 15.5a3 3 0 1 0 3 3a2 2 0 0 0 0-.36l3.94-2l4.06 2.1a2 2 0 0 0 0 .26a3 3 0 1 0 3-3a3 3 0 0 0-2.15.92l-2.72-1.36l5.11-2.56H21a1 1 0 0 0 1-1v-4a1 1 0 0 0-1-1m-16 13a1 1 0 1 1 1-1a1 1 0 0 1-1 1m14-2a1 1 0 1 1-1 1a1 1 0 0 1 1-1m-7.1-3.56L9 12.5h5.75ZM20 10.5H4v-2h16Z" />
+      </DualIcon>
     );
   }
-  // The same radio as the phone's Calls tab.
+  // The same radio as the phone's Calls tab (it switches by style itself).
   if (type === 'radio') return <CrowdcadRadioIcon className={className} />;
-  return <Briefcase className={className} aria-hidden="true" />;
+  // Classic: Lucide's briefcase, for an AED and anything else (as before).
+  return (
+    <DualIcon type={type} label={type === 'aed' ? 'AED' : 'Equipment'} className={className}>
+      <g {...STROKED}>
+        <path d="M16 20V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
+        <rect width="20" height="14" x="2" y="6" rx="2" />
+      </g>
+    </DualIcon>
+  );
 }
 
 /**

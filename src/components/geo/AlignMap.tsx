@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Input, Slider } from '@heroui/react';
-import { Crosshair, LocateFixed, Trash2 } from 'lucide-react';
+import { Crosshair, LocateFixed, Trash2 } from '@/components/ui/icons';
 import { useZoomPan } from '@/hooks/useZoomPan';
 import { MAP_CHECKER_BG } from '@/lib/mapStyles';
 import MapZoomControls from '@/components/ui/map-zoom-controls';

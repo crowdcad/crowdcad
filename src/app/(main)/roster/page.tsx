@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Autocomplete, AutocompleteItem, Button, Input, Textarea } from '@heroui/react';
-import { Pencil, Plus, Trash2, Upload } from 'lucide-react';
+import { Pencil, Plus, Trash2, Upload } from '@/components/ui/icons';
 import { useAuth } from '@/hooks/useauth';
 import { useAdmin } from '@/hooks/useAdmin';
 import { useCertifications } from '@/hooks/useCertifications';
@@ -154,7 +154,7 @@ export default function RosterPage() {
                       </span>
                     </td>
                     <td className="max-w-[18rem] px-3 py-2 text-surface-faint">
-                      <span className="line-clamp-2" title={p.notes}>
+                      <span className="block truncate" title={p.notes}>
                         {p.notes}
                       </span>
                     </td>
